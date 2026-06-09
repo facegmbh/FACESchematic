@@ -2,6 +2,23 @@
 @import "@xyflow/react/dist/style.css";
 @import "./theme.css";
 
+/* FACE branding: remap Tailwind's `blue` accent ramp to the FACE red ramp
+   (anchor #CC0000 = blue-600). Every `*-blue-*` utility used as the UI accent
+   becomes FACE red without touching individual components. Signal-type colors
+   live in theme.css as --color-* tokens and are unaffected. */
+@theme {
+  --color-blue-50:  #fdeaea;
+  --color-blue-100: #fad4d4;
+  --color-blue-200: #f5a7a7;
+  --color-blue-300: #ee7373;
+  --color-blue-400: #e34040;
+  --color-blue-500: #d61f1f;
+  --color-blue-600: #cc0000;
+  --color-blue-700: #a30000;
+  --color-blue-800: #7a0000;
+  --color-blue-900: #520000;
+}
+
 /* Enable class-based dark mode for Tailwind dark: utilities */
 @variant dark (&:where(.dark, .dark *));
 

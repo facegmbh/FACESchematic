@@ -25,7 +25,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
 
   const copyDebugInfo = async () => {
     const info = [
-      `EasySchematic v${version} (${shortHash}) \u00b7 ${env}`,
+      `FACESchematic v${version} (${shortHash}) \u00b7 ${env}`,
       `UA: ${navigator.userAgent}`,
       `Viewport: ${window.innerWidth}\u00d7${window.innerHeight}`,
       `Date: ${new Date().toISOString().split("T")[0]}`,
@@ -58,7 +58,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            About EasySchematic
+            About FACESchematic
           </span>
           <button
             onClick={onClose}
@@ -73,7 +73,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           <img src="/favicon.svg" alt="" className="w-12 h-12" />
           <div>
             <div className="text-base font-semibold text-[var(--color-text-heading)]">
-              EasySchematic
+              FACESchematic
             </div>
             <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
               Version {version} ({shortHash}) ·{" "}
@@ -106,10 +106,10 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             {[
               { label: "Website", href: "https://easyschematic.live" },
               { label: "Docs", href: "https://docs.easyschematic.live" },
-              { label: "GitHub", href: "https://github.com/duremovich/EasySchematic" },
+              { label: "GitHub", href: "https://github.com/facegmbh/FACESchematic" },
               { label: "Device Database", href: "https://devices.easyschematic.live" },
               { label: "Support", href: "mailto:support@easyschematic.live" },
-              { label: "Report a Bug", href: "https://github.com/duremovich/EasySchematic/issues" },
+              { label: "Report a Bug", href: "https://github.com/facegmbh/FACESchematic/issues" },
               { label: "Discord", href: "https://discord.gg/dxXn3Jk2a6" },
             ].map((link) => (
               <a
@@ -127,7 +127,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           <div className="w-full h-px bg-[var(--color-border)]" />
 
           <div className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
-            <div>AGPL-3.0 &middot; &copy; 2025–2026 EasySchematic</div>
+            <div>AGPL-3.0 &middot; &copy; 2025–2026 FACESchematic</div>
             <div className="mt-0.5">Built with React, React Flow, and Zustand</div>
           </div>
         </div>

@@ -101,17 +101,17 @@ describe("layers helpers", () => {
     const layers = buildLayerDefs(sigs as Set<never>, undefined);
     const names = layers.map((l) => l.name);
     expect(names).toContain("0");
-    expect(names).toContain("EasySchematic-Rooms");
-    expect(names).toContain("EasySchematic-Rooms-Fill");
-    expect(names).toContain("EasySchematic-Devices");
-    expect(names).toContain("EasySchematic-Connections-HDMI");
-    expect(names).toContain("EasySchematic-Connections-SDI");
+    expect(names).toContain("FACESchematic-Rooms");
+    expect(names).toContain("FACESchematic-Rooms-Fill");
+    expect(names).toContain("FACESchematic-Devices");
+    expect(names).toContain("FACESchematic-Connections-HDMI");
+    expect(names).toContain("FACESchematic-Connections-SDI");
   });
 
   it("sanitizes signal layer names — never spaces", () => {
-    expect(signalLayerName("analog-audio")).toBe("EasySchematic-Connections-ANALOG-AUDIO");
-    expect(signalLayerName("power-l1")).toBe("EasySchematic-Connections-POWER-L1");
-    expect(signalLayerName("s-video")).toBe("EasySchematic-Connections-S-VIDEO");
+    expect(signalLayerName("analog-audio")).toBe("FACESchematic-Connections-ANALOG-AUDIO");
+    expect(signalLayerName("power-l1")).toBe("FACESchematic-Connections-POWER-L1");
+    expect(signalLayerName("s-video")).toBe("FACESchematic-Connections-S-VIDEO");
     for (const sig of ["analog-audio", "power-l1", "s-video"] as const) {
       expect(signalLayerName(sig)).not.toContain(" ");
     }

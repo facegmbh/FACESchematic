@@ -1631,7 +1631,7 @@ function PrintTitleBlock() {
       <div className="text-[10px] text-gray-400 text-right leading-relaxed">
         <div>{titleBlock.designer && `Designer: ${titleBlock.designer}`}</div>
         <div>{titleBlock.date || today}</div>
-        <div>EasySchematic</div>
+        <div>FACESchematic</div>
       </div>
     </div>
   );
@@ -1649,7 +1649,7 @@ function DemoBanner() {
     <div className="bg-slate-700 text-slate-200 text-sm px-4 py-2 flex items-center justify-between gap-4" data-print-hide>
       <span>
         You&apos;re viewing a demo schematic. Start fresh with{" "}
-        <strong>File &gt; New</strong>, or explore to see what EasySchematic can do.
+        <strong>File &gt; New</strong>, or explore to see what FACESchematic can do.
       </span>
       <button
         className="text-slate-400 hover:text-white shrink-0"
