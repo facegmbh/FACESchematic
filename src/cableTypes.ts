@@ -73,6 +73,8 @@ export const SIGNAL_TO_CABLE: Record<SignalType, string> = {
   pots: "Phone (RJ11)",
   "blu-link": "BLU link",
   cresnet: "Cresnet",
+  dali: "DALI (2-core)",
+  knx: "KNX TP (J-Y(St)Y)",
   sensor: "Sensor",
   custom: "Other",
 };

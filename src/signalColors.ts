@@ -71,6 +71,8 @@ export const DEFAULT_SIGNAL_COLORS: Record<SignalType, string> = {
   pots: "#3f3f46",
   "blu-link": "#0284c7",
   cresnet: "#a21caf",
+  dali: "#9d174d",
+  knx: "#0f766e",
   sensor: "#71717a",
   custom: "#64748b",
 };

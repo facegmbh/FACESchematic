@@ -112,6 +112,18 @@ export const DEVICE_TYPE_TO_CATEGORY: Record<string, string> = {
   "mtr-pc": "Codecs",
   "touch-controller": "Control",
   "occupancy-sensor": "Control",
+  "knx-power-supply": "Building Automation",
+  "knx-ip-router": "Building Automation",
+  "knx-ip-interface": "Building Automation",
+  "knx-actuator": "Building Automation",
+  "knx-dimmer": "Building Automation",
+  "knx-blind-actuator": "Building Automation",
+  "knx-sensor": "Building Automation",
+  "knx-dali-gateway": "Building Automation",
+  "dali-power-supply": "Building Automation",
+  "dali-gateway": "Building Automation",
+  "dali-driver": "Building Automation",
+  "dali-sensor": "Building Automation",
 };
 
 /** Human-readable labels for device types (kebab-case → Title Case with known acronyms) */
@@ -123,7 +135,7 @@ export const DEVICE_TYPE_LABELS: Record<string, string> = Object.fromEntries(
       .map((word) => {
         const upper = word.toUpperCase();
         // Preserve known acronyms
-        if (["ptz", "ccu", "da", "tv", "ndi", "dsp", "kvm", "led", "nas", "usb", "hdmi"].includes(word)) return upper;
+        if (["ptz", "ccu", "da", "tv", "ndi", "dsp", "kvm", "led", "nas", "usb", "hdmi", "knx", "dali"].includes(word)) return upper;
         if (word === "av") return "AV";
         if (word === "ip") return "IP";
         if (word === "wifi") return "Wi-Fi";

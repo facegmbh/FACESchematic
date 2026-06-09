@@ -120,6 +120,8 @@ export type SignalType =
   | "pots"
   | "blu-link"
   | "cresnet"
+  | "dali"
+  | "knx"
   | "sensor"
   | "custom";
 
@@ -893,6 +895,8 @@ export const SIGNAL_COLORS: Record<SignalType, string> = {
   pots: "var(--color-pots)",
   "blu-link": "var(--color-blu-link)",
   cresnet: "var(--color-cresnet)",
+  dali: "var(--color-dali)",
+  knx: "var(--color-knx)",
   sensor: "var(--color-sensor)",
   custom: "var(--color-custom)",
 };
@@ -1060,6 +1064,8 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   pots: "POTS",
   "blu-link": "BLU link",
   cresnet: "Cresnet",
+  dali: "DALI",
+  knx: "KNX",
   sensor: "Sensor",
   custom: "Custom",
 };
@@ -1071,6 +1077,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
   "Audio": ["analog-audio", "speaker-level", "bluetooth", "aes", "dante", "avb", "aes67", "madi", "spdif", "adat", "ultranet", "aes50", "stageconnect", "ydif", "soundgrid", "gigaace", "dx5", "dsnake", "slink", "fibreace", "digilink", "extron-exp", "pots", "blu-link"],
   "Network": ["ethernet", "fiber"],
   "Control / Data": ["dmx", "artnet", "sacn", "rs422", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "sensor"],
+  "Building Automation": ["dali", "knx"],
   "Sync / Clock": ["genlock", "wordclock", "timecode", "dars", "gps"],
   "Power": ["power", "power-l1", "power-l2", "power-l3", "power-neutral", "power-ground"],
   "Streaming": ["rtmp", "rtsp", "mpeg-ts", "rf"],

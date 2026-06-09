@@ -71,6 +71,8 @@ export const DEFAULT_CONNECTOR: Record<SignalType, ConnectorType> = {
   pots: "rj11",
   "blu-link": "rj45",
   cresnet: "terminal-block",
+  dali: "terminal-block",
+  knx: "terminal-block",
   sensor: "phoenix",
   custom: "other",
 };
@@ -475,6 +477,8 @@ export const VIDEO_SIGNAL_TYPES: Set<SignalType> = new Set([
 /** Signal types whose new ports default to multi-connect — logical/streaming signals where fan-in is the norm. */
 export const MULTI_CONNECT_DEFAULT_SIGNALS: Set<SignalType> = new Set([
   "srt", "custom",
+  // Bus topologies — many devices share one line, fan-in/out is the norm
+  "dali", "knx",
 ]);
 
 /** Connector types whose new ports default to multi-connect — wireless/RF carriers where many TX → one RX. */
