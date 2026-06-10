@@ -468,7 +468,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
         relative rounded-lg border bg-white
         ${isOverlapping ? "border-red-400 shadow-lg shadow-red-400/30" : selected ? "border-blue-500 shadow-lg shadow-blue-500/20" : "border-[var(--color-border)]"}
       `}
-      style={{ width: 180 }}
+      style={{ width: 180, backgroundColor: data.color }}
     >
       {/* Header band — merged name strip + header aux rows. Height is always a 20-multiple
            (min 40) so the first port below stays on the pathfinding grid. */}

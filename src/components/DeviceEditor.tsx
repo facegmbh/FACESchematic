@@ -944,6 +944,25 @@ export default function DeviceEditor() {
             )}
           </div>
 
+          {/* Background (body) color picker */}
+          <div className="flex items-center gap-2 -mt-1">
+            <span className="text-[10px] text-[var(--color-text-muted)]">Background Color</span>
+            <input
+              type="color"
+              className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
+              value={color ?? "#ffffff"}
+              onChange={(e) => setColor(e.target.value)}
+            />
+            {color && (
+              <button
+                className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
+                onClick={() => setColor(undefined)}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
           {(() => {
             const tpl = node.data.templateId
               ? getBundledTemplates().find((t) => t.id === node.data.templateId)
