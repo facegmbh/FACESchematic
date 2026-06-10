@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { useSchematicStore } from "../store";
 import type { TitleBlock, TitleBlockLayout, TitleBlockCell } from "../types";
-import { getCoveredPositions, nextCellId, createDefaultLayout, getFieldValue, getFieldLabel } from "../titleBlockLayout";
+import { getCoveredPositions, nextCellId, createDefaultLayout, createFaceLayout, getFieldValue, getFieldLabel } from "../titleBlockLayout";
 
 interface TitleBlockDialogProps {
   onClose: () => void;
@@ -631,6 +631,12 @@ function LayoutTab({
     setSelectedCells(new Set());
   }, [setDraft]);
 
+  const applyFaceTemplate = useCallback(() => {
+    // The FACE layout carries the brand as a static "FACE GmbH" cell, so no field edit needed.
+    setDraft(createFaceLayout());
+    setSelectedCells(new Set());
+  }, [setDraft]);
+
   // --- Resize handlers ---
 
   const handleResizePointerDown = useCallback((
@@ -871,8 +877,15 @@ function LayoutTab({
         </button>
 
         <button
+          onClick={applyFaceTemplate}
+          title="FACE-Standard-Titelblock anwenden"
+          className="px-2 py-0.5 text-[10px] rounded border border-blue-400 text-blue-600 hover:bg-blue-50 cursor-pointer ml-auto"
+        >
+          FACE-Vorlage
+        </button>
+        <button
           onClick={resetLayout}
-          className="px-2 py-0.5 text-[10px] rounded border border-[var(--color-border)] text-red-500 hover:bg-red-50 cursor-pointer ml-auto"
+          className="px-2 py-0.5 text-[10px] rounded border border-[var(--color-border)] text-red-500 hover:bg-red-50 cursor-pointer"
         >
           Reset Default
         </button>

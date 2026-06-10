@@ -180,3 +180,34 @@ export function createDefaultLayout(): TitleBlockLayout {
     ],
   };
 }
+
+/** FACE GmbH branded title block — red brand row, German field labels. */
+export function createFaceLayout(): TitleBlockLayout {
+  cellIdCounter = 0;
+  const FACE_RED = "#CC0000";
+  const FACE_DARK = "#33332B";
+  const h = 1 / 7;
+  return {
+    columns: [0.32, 0.68],
+    rows: [h, h, h, h, h, h, h],
+    widthIn: 3.2,
+    heightIn: 1.15,
+    cells: [
+      // Brand row
+      cell(0, 0, { type: "static", text: "FACE GmbH" }, { colSpan: 2, fontSize: 12, fontWeight: "bold", align: "center", color: FACE_RED }),
+      // Drawing title
+      cell(1, 0, { type: "field", field: "drawingTitle" }, { colSpan: 2, fontSize: 9, fontWeight: "bold", align: "center", color: FACE_DARK }),
+      // Project / customer / responsible / date / revision
+      cell(2, 0, { type: "static", text: "Projekt:" }, { fontSize: 7, fontWeight: "bold", color: FACE_DARK }),
+      cell(2, 1, { type: "field", field: "showName" }, { fontSize: 7 }),
+      cell(3, 0, { type: "static", text: "Kunde:" }, { fontSize: 7, fontWeight: "bold", color: FACE_DARK }),
+      cell(3, 1, { type: "field", field: "venue" }, { fontSize: 7 }),
+      cell(4, 0, { type: "static", text: "Bearbeiter:" }, { fontSize: 7, fontWeight: "bold", color: FACE_DARK }),
+      cell(4, 1, { type: "field", field: "designer" }, { fontSize: 7 }),
+      cell(5, 0, { type: "static", text: "Datum:" }, { fontSize: 7, fontWeight: "bold", color: FACE_DARK }),
+      cell(5, 1, { type: "field", field: "date" }, { fontSize: 7 }),
+      cell(6, 0, { type: "static", text: "Rev.:" }, { fontSize: 7, fontWeight: "bold", color: FACE_DARK }),
+      cell(6, 1, { type: "pageNumber" }, { fontSize: 7, fontWeight: "bold", align: "right", color: FACE_DARK }),
+    ],
+  };
+}
