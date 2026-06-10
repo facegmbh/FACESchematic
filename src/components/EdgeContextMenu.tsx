@@ -379,6 +379,7 @@ export default function EdgeContextMenu() {
   const isStubbed = !!edge?.data?.linkedConnectionId;
   const isCableIdHidden = edge?.data?.hideCableId === true;
   const edgeCableIdMode = (edge?.data?.cableIdLabelMode as string) ?? useSchematicStore.getState().cableIdLabelMode;
+  const hasLabelOffset = !!edge?.data?.labelOffset;
   // NOTE: Stub label show-port / page-mode overrides moved to StubLabelNode.data
   // (per-stub, not per-edge). Right-click on a stub label node will surface these
   // options in a future menu; for now they fall back to the global setting.
@@ -505,6 +506,15 @@ export default function EdgeContextMenu() {
         label={edgeCableIdMode === "endpoint" ? "Cable ID at Midpoint" : "Cable ID at Endpoints"}
         onClick={toggleEdgeCableIdMode}
       />
+      {hasLabelOffset && (
+        <MenuItem
+          label="Reset Label Position"
+          onClick={() => {
+            useSchematicStore.getState().patchEdgeData(menu.edgeId, { labelOffset: undefined });
+            useSchematicStore.setState({ edgeContextMenu: null });
+          }}
+        />
+      )}
       <MenuItem
         label={isStubbed ? "Show Full Connection" : "Stub Connection"}
         onClick={toggleStubbed}

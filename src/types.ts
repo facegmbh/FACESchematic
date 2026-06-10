@@ -441,6 +441,10 @@ export interface ConnectionData {
   lineStyle?: LineStyle;
   /** Per-connection color override (CSS color). Falls back to signal-type color. Ignored for direct-attach. */
   color?: string;
+  /** User-dragged cable-ID label position, stored as an offset (in flow units) relative to the
+   *  routed path midpoint. The midpoint is recomputed on every re-route, so the label follows the
+   *  cable when it moves while keeping the user's displacement. Cleared to revert to auto-placement. */
+  labelOffset?: { x: number; y: number };
 }
 
 export type ConnectionEdge = Edge<ConnectionData>;

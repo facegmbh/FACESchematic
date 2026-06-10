@@ -2,6 +2,7 @@ import { memo, useState, useRef, useEffect } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
+  useReactFlow,
   type EdgeProps,
 } from "@xyflow/react";
 import { useSchematicStore } from "../store";
@@ -25,6 +26,55 @@ function OffsetEdgeComponent({
   const [isHovered, setIsHovered] = useState(false);
   // Tooltip state — tracks which updater circle the mouse is over
   const [tooltipType, setTooltipType] = useState<"source" | "target" | null>(null);
+
+  // --- Cable-ID label "pick up & place" ---
+  // Double-click the cable-ID label to grab it; it then follows the cursor until the next
+  // click drops it (Escape cancels). The position is persisted as an offset from the path
+  // midpoint (see cidBaseRef), so the label tracks the cable when it re-routes.
+  const { screenToFlowPosition } = useReactFlow();
+  const patchEdgeData = useSchematicStore((s) => s.patchEdgeData);
+  const [placingLabel, setPlacingLabel] = useState(false);
+  const [livePos, setLivePos] = useState<{ x: number; y: number } | null>(null);
+  const livePosRef = useRef<{ x: number; y: number } | null>(null);
+  const cidBaseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!placingLabel) return;
+    const onMove = (e: MouseEvent) => {
+      const p = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      livePosRef.current = p;
+      setLivePos(p);
+    };
+    const onClick = (e: MouseEvent) => {
+      // Ignore the click that ends the grab until the mouse has actually moved, so the
+      // trailing click of the initiating double-click doesn't drop it instantly.
+      if (!livePosRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const base = cidBaseRef.current;
+      patchEdgeData(id, {
+        labelOffset: { x: livePosRef.current.x - base.x, y: livePosRef.current.y - base.y },
+      });
+      setPlacingLabel(false);
+      setLivePos(null);
+      livePosRef.current = null;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPlacingLabel(false);
+        setLivePos(null);
+        livePosRef.current = null;
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("click", onClick, true); // capture: beat the canvas pane handlers
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("click", onClick, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [placingLabel, id, screenToFlowPosition, patchEdgeData]);
 
   useEffect(() => {
     const el = document.querySelector(`.react-flow__edge[data-id="${id}"]`);
@@ -134,6 +184,12 @@ function OffsetEdgeComponent({
   const edgeCableIdLabelMode = useSchematicStore((s) => {
     const edge = s.edges.find((e) => e.id === id);
     return edge?.data?.cableIdLabelMode as "endpoint" | "midpoint" | undefined;
+  });
+  // User-dragged cable-ID label offset (serialized for a stable primitive selector)
+  const labelOffsetStr = useSchematicStore((s) => {
+    const edge = s.edges.find((e) => e.id === id);
+    const o = edge?.data?.labelOffset as { x: number; y: number } | undefined;
+    return o ? `${o.x},${o.y}` : "";
   });
 
   // Endpoint cable-ID labels are suppressed at any stub-label endpoint — the stub box
@@ -398,6 +454,8 @@ function OffsetEdgeComponent({
     text: string, labelStyle: React.CSSProperties, key: string,
     // Fallbacks when no routed path is available
     fallbackX: number, fallbackY: number, fallbackDx: number, fallbackDy: number,
+    onDoubleClick?: (e: React.MouseEvent) => void,
+    title?: string,
   ) => {
     let px: number, py: number, dirDx: number, dirDy: number;
     if (totalLen > 0) {
@@ -424,6 +482,8 @@ function OffsetEdgeComponent({
     return (
       <div
         key={key}
+        onDoubleClick={onDoubleClick}
+        title={title}
         style={{
           ...labelStyle,
           transform: `translate(${anchorX}, ${anchorY}) translate(${px}px, ${py}px)`,
@@ -468,20 +528,62 @@ function OffsetEdgeComponent({
   const cidMidPt = totalLen > 0 ? pointAtDistance(totalLen / 2 + cidMidOff) : { x: lx, y: ly };
   const customMidPt = totalLen > 0 ? pointAtDistance(totalLen / 2) : { x: lx, y: ly };
 
-  // Cable ID labels — at endpoints or midpoint depending on mode (unchanged)
+  // Cable ID labels — at endpoints or midpoint depending on mode. The badge can be "picked up"
+  // by double-clicking it: while grabbed it follows the cursor (livePos); once an offset is
+  // stored it renders as a single free-positioned badge at midpoint+offset and tracks the cable
+  // on re-route. cidBaseRef holds the offset anchor (the pure path midpoint, recomputed each route).
+  const labelOffset = labelOffsetStr
+    ? (() => { const [ox, oy] = labelOffsetStr.split(",").map(Number); return { x: ox, y: oy }; })()
+    : null;
+  cidBaseRef.current = customMidPt;
+  const startPlacingLabel = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    livePosRef.current = null; // require a mouse move before the drop click counts
+    setLivePos(null);
+    setPlacingLabel(true);
+  };
+  const interactiveCid: React.CSSProperties = {
+    pointerEvents: "auto",
+    cursor: placingLabel ? "grabbing" : "grab",
+  };
+  const cidGrabTitle = "Doppelklick: Label aufnehmen, dann klicken zum Ablegen (Esc bricht ab)";
+  const freeCidPos = placingLabel
+    ? (livePos ?? customMidPt)
+    : labelOffset
+      ? { x: customMidPt.x + labelOffset.x, y: customMidPt.y + labelOffset.y }
+      : null;
+
   const cableIdLabels = showCableId ? (
-    cableIdLabelMode === "endpoint" ? (
+    freeCidPos ? (
+      <div
+        key="cid-free"
+        onDoubleClick={startPlacingLabel}
+        title={cidGrabTitle}
+        style={{
+          ...cableIdLabelStyle,
+          ...interactiveCid,
+          ...(placingLabel ? { outline: `1px dashed ${signalColor}`, outlineOffset: 1 } : {}),
+          transform: `translate(-50%, -50%) translate(${freeCidPos.x}px, ${freeCidPos.y}px)`,
+        }}
+      >
+        {labelText}
+      </div>
+    ) : cableIdLabelMode === "endpoint" ? (
       <>
-        {!sourceIsStub && makeEndpointLabel(true, cableIdGap, labelText, cableIdLabelStyle, "cid-src",
-          sourceX, sourceY, srcDx, srcDy)}
-        {!targetIsStub && makeEndpointLabel(false, cableIdGap, labelText, cableIdLabelStyle, "cid-tgt",
-          tgtLabelX, tgtLabelY, -tgtDx, -tgtDy)}
+        {!sourceIsStub && makeEndpointLabel(true, cableIdGap, labelText, { ...cableIdLabelStyle, ...interactiveCid }, "cid-src",
+          sourceX, sourceY, srcDx, srcDy, startPlacingLabel, cidGrabTitle)}
+        {!targetIsStub && makeEndpointLabel(false, cableIdGap, labelText, { ...cableIdLabelStyle, ...interactiveCid }, "cid-tgt",
+          tgtLabelX, tgtLabelY, -tgtDx, -tgtDy, startPlacingLabel, cidGrabTitle)}
       </>
     ) : (
       <div
         key="cid-mid"
+        onDoubleClick={startPlacingLabel}
+        title={cidGrabTitle}
         style={{
           ...cableIdLabelStyle,
+          ...interactiveCid,
           transform: `translate(-50%, -50%) translate(${cidMidPt.x}px, ${cidMidPt.y}px)`,
         }}
       >
