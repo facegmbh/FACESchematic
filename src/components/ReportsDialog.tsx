@@ -37,8 +37,9 @@ import { formatCurrency } from "../auxiliaryData";
 import { useSpreadsheetSelection } from "../spreadsheet/useSpreadsheetSelection";
 import type { SpreadsheetColumn } from "../spreadsheet/types";
 import FillSeriesDialog from "../spreadsheet/FillSeriesDialog";
+import { computeBusSegments, BUS_DEVICE_LIMIT } from "../busValidation";
 
-export type ReportsTab = "network" | "devices" | "packList" | "cableSchedule" | "patchPanel" | "power";
+export type ReportsTab = "network" | "devices" | "packList" | "cableSchedule" | "patchPanel" | "power" | "bus";
 
 interface ReportsDialogProps {
   initialTab: ReportsTab;
@@ -118,6 +119,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
     packList: "Pack List",
     network: "Network",
     power: "Power",
+    bus: "KNX/DALI Bus",
   };
 
   return (
@@ -140,9 +142,11 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
               Reports
             </h2>
             <div className="flex-1" />
-            <button onClick={handleCsvExport} className={btnClass}>
-              CSV
-            </button>
+            {tab !== "bus" && (
+              <button onClick={handleCsvExport} className={btnClass}>
+                CSV
+              </button>
+            )}
             {tab === "network" && (
               <button onClick={() => setShowNetworkPreview(true)} className={btnClass}>
                 PDF
@@ -209,6 +213,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
             {tab === "cableSchedule" && <CableScheduleTabInline />}
             {tab === "patchPanel" && <PatchPanelScheduleTabInline />}
             {tab === "power" && <PowerReportTab />}
+            {tab === "bus" && <BusReportTab />}
           </div>
         </div>
       </div>
@@ -2745,4 +2750,71 @@ function downloadCsv(content: string, filename: string) {
   a.download = filename.replace(/[^a-zA-Z0-9-_ .]/g, "");
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function BusReportTab() {
+  const nodes = useSchematicStore((s) => s.nodes);
+  const edges = useSchematicStore((s) => s.edges);
+  const segments = useMemo(() => computeBusSegments(nodes, edges), [nodes, edges]);
+
+  if (segments.length === 0) {
+    return (
+      <div className="text-xs text-[var(--color-text-muted)] p-4 text-center">
+        Keine KNX- oder DALI-Busse im Schema. Verbinde Geräte über KNX-/DALI-Ports,
+        um die Bus-Validierung zu sehen.
+      </div>
+    );
+  }
+
+  const overCount = segments.filter((s) => s.overLimit).length;
+  const th = "border-b border-[var(--color-border)] py-1 pr-3 text-left font-medium";
+  const td = "border-b border-[var(--color-border)] py-1 pr-3 align-top";
+
+  return (
+    <div className="text-xs">
+      <div className="mb-3 text-[var(--color-text-muted)]">
+        Regel: max. {BUS_DEVICE_LIMIT} Bus-Teilnehmer pro Linie (KNX-TP-Linie ohne Repeater
+        bzw. DALI-Linie).{" "}
+        {overCount > 0 ? (
+          <span className="text-red-600 font-semibold">
+            {overCount} Linie(n) über dem Limit.
+          </span>
+        ) : (
+          <span className="text-green-600 font-semibold">Alle Linien innerhalb des Limits.</span>
+        )}
+      </div>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="text-[var(--color-text-muted)]">
+            <th className={th}>Bus</th>
+            <th className={th}>Linie</th>
+            <th className={th}>Geräte</th>
+            <th className={th}>Status</th>
+            <th className={`${th} pr-0`}>Teilnehmer</th>
+          </tr>
+        </thead>
+        <tbody>
+          {segments.map((seg) => (
+            <tr key={`${seg.busType}-${seg.index}`} className={seg.overLimit ? "bg-red-50" : ""}>
+              <td className={`${td} font-semibold uppercase`}>{seg.busType}</td>
+              <td className={td}>{seg.index}</td>
+              <td className={`${td} ${seg.overLimit ? "text-red-700 font-semibold" : ""}`}>
+                {seg.deviceCount} / {BUS_DEVICE_LIMIT}
+              </td>
+              <td className={td}>
+                {seg.overLimit ? (
+                  <span className="text-red-600 font-semibold">Limit überschritten</span>
+                ) : (
+                  <span className="text-green-600">OK</span>
+                )}
+              </td>
+              <td className={`${td} pr-0 text-[var(--color-text-muted)]`}>
+                {seg.devices.map((d) => d.label).join(", ")}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
