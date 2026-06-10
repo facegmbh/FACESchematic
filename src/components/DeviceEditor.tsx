@@ -146,6 +146,8 @@ export default function DeviceEditor() {
   const [category, setCategory] = useState("");
   const [color, setColor] = useState<string | undefined>(undefined);
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
+  const [knxAddress, setKnxAddress] = useState("");
+  const [daliAddress, setDaliAddress] = useState("");
   const [ports, setPorts] = useState<PortDraft[]>([]);
 
   // Port visibility local state
@@ -226,6 +228,8 @@ export default function DeviceEditor() {
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
+    setKnxAddress(node.data.knxAddress ?? "");
+    setDaliAddress(node.data.daliAddress ?? "");
     setPorts(
       node.data.ports.map((p) => ({
         id: p.id,
@@ -327,6 +331,8 @@ export default function DeviceEditor() {
       ...(existing?.templateVersion ? { templateVersion: existing.templateVersion } : {}),
       ...(color ? { color } : {}),
       ...(headerColor ? { headerColor } : {}),
+      ...(knxAddress.trim() ? { knxAddress: knxAddress.trim() } : {}),
+      ...(daliAddress.trim() ? { daliAddress: daliAddress.trim() } : {}),
       ...(existing?.model ? { model: existing.model } : {}),
       ...(showAllPorts ? { showAllPorts: true } : {}),
       ...(finalHiddenPorts.length > 0 ? { hiddenPorts: finalHiddenPorts } : {}),
@@ -923,6 +929,26 @@ export default function DeviceEditor() {
                 placeholder="https://…"
               />
             </Field>
+            {ports.some((p) => p.signalType === "knx") && (
+              <Field label="KNX-Adresse">
+                <input
+                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                  value={knxAddress}
+                  onChange={(e) => setKnxAddress(e.target.value)}
+                  placeholder="z. B. 1.1.5"
+                />
+              </Field>
+            )}
+            {ports.some((p) => p.signalType === "dali") && (
+              <Field label="DALI-Adresse">
+                <input
+                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                  value={daliAddress}
+                  onChange={(e) => setDaliAddress(e.target.value)}
+                  placeholder="z. B. 0–7 oder 12"
+                />
+              </Field>
+            )}
           </div>
 
           {/* Header color picker */}

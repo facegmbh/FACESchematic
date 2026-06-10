@@ -236,6 +236,10 @@ export interface DeviceData {
   color?: string;
   /** Custom header background color (#9) */
   headerColor?: string;
+  /** KNX physical (individual) address for documentation/commissioning, e.g. "1.1.5". */
+  knxAddress?: string;
+  /** DALI short address (0–63) or address range for documentation/commissioning. */
+  daliAddress?: string;
   /** Original template label — present while device participates in auto-numbering.
    *  Cleared when the user gives the device a custom name. */
   baseLabel?: string;
