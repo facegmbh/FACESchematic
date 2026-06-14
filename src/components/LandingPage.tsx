@@ -28,15 +28,16 @@ export default function LandingPage() {
       className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 bg-[#1A1A1A]"
       style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}
     >
-      <h1
-        className="text-5xl md:text-6xl font-extrabold tracking-tight"
-        style={{ letterSpacing: "0.01em" }}
-      >
-        <span style={{ color: "#CC0000" }}>FACE</span>
-        <span className="text-white">Schematic</span>
-      </h1>
+      <img
+        src="/face-logo.png"
+        alt="FACE GmbH"
+        className="w-[260px] max-w-[78vw] h-auto"
+      />
+      <div className="mt-4 text-sm md:text-base uppercase tracking-[0.4em] text-[#d4d4d4] pl-[0.4em]">
+        Schematic
+      </div>
 
-      <div className="mt-6 mb-10 h-0.5 w-14 rounded-full bg-[#CC0000]" />
+      <div className="mt-7 mb-10 h-0.5 w-14 rounded-full bg-[#CC0000]" />
 
       <button
         onClick={openEditor}
@@ -44,10 +45,6 @@ export default function LandingPage() {
       >
         Editor öffnen
       </button>
-
-      <div className="absolute bottom-6 text-[11px] uppercase tracking-[0.25em] text-[#666666]">
-        FACE GmbH
-      </div>
     </div>
   );
 }
