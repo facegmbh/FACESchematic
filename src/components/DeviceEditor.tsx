@@ -27,7 +27,7 @@ import TemplateSyncDialog from "./TemplateSyncDialog";
 import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from "../networkValidation";
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
-import type { FacePlateLayout } from "../types";
+import type { FacePlateLayout, OdooDeviceLink } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
 
@@ -148,6 +148,9 @@ export default function DeviceEditor() {
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
   const [knxAddress, setKnxAddress] = useState("");
   const [daliAddress, setDaliAddress] = useState("");
+  const [assetCode, setAssetCode] = useState("");
+  // Preserves import-managed Odoo fields (productRef, orderRef, …) across an edit.
+  const [odooLink, setOdooLink] = useState<OdooDeviceLink | undefined>(undefined);
   const [ports, setPorts] = useState<PortDraft[]>([]);
 
   // Port visibility local state
@@ -230,6 +233,8 @@ export default function DeviceEditor() {
     setHeaderColor(node.data.headerColor);
     setKnxAddress(node.data.knxAddress ?? "");
     setDaliAddress(node.data.daliAddress ?? "");
+    setOdooLink(node.data.odoo);
+    setAssetCode(node.data.odoo?.assetCode ?? "");
     setPorts(
       node.data.ports.map((p) => ({
         id: p.id,
@@ -333,6 +338,13 @@ export default function DeviceEditor() {
       ...(headerColor ? { headerColor } : {}),
       ...(knxAddress.trim() ? { knxAddress: knxAddress.trim() } : {}),
       ...(daliAddress.trim() ? { daliAddress: daliAddress.trim() } : {}),
+      ...(() => {
+        // Merge the editable asset code back into the preserved Odoo link; drop if empty.
+        const merged: OdooDeviceLink = { ...(odooLink ?? {}) };
+        if (assetCode.trim()) merged.assetCode = assetCode.trim();
+        else delete merged.assetCode;
+        return Object.keys(merged).length > 0 ? { odoo: merged } : {};
+      })(),
       ...(existing?.model ? { model: existing.model } : {}),
       ...(showAllPorts ? { showAllPorts: true } : {}),
       ...(finalHiddenPorts.length > 0 ? { hiddenPorts: finalHiddenPorts } : {}),
@@ -948,6 +960,20 @@ export default function DeviceEditor() {
                   placeholder="z. B. 0–7 oder 12"
                 />
               </Field>
+            )}
+            <Field label="FACE Asset-ID (Odoo)">
+              <input
+                className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                value={assetCode}
+                onChange={(e) => setAssetCode(e.target.value)}
+                placeholder="z. B. FACE-2026/00284"
+              />
+            </Field>
+            {(odooLink?.productRef || odooLink?.orderRef) && (
+              <div className="text-[10px] text-[var(--color-text-muted)] -mt-1">
+                {odooLink?.productRef ? `Odoo-Produkt: ${odooLink.productRef}` : ""}
+                {odooLink?.orderRef ? ` · Auftrag ${odooLink.orderRef}` : ""}
+              </div>
             )}
           </div>
 

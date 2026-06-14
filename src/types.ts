@@ -218,6 +218,22 @@ export interface InstalledSlot {
   portIds: string[];            // tracks which ports in device.ports belong to this slot
 }
 
+/**
+ * Link from a placed device to its Odoo counterpart (face.device / product.product / sale.order).
+ * `assetCode` (FACE Asset-ID, e.g. "FACE-2026/00284") is the universal cross-system key. The
+ * order-* fields capture provenance for devices imported from a sale order before an asset code
+ * exists. See ODOO_INTEGRATION_PLAN.md.
+ */
+export interface OdooDeviceLink {
+  assetCode?: string;
+  productRef?: string;   // default_code / x_Hersteller_Nummer
+  productId?: number;    // product.product id
+  deviceId?: number;     // face.device id (set after write-back)
+  orderRef?: string;     // sale.order name (provenance)
+  orderLineId?: number;  // sale.order.line id
+  unitIndex?: number;    // unit number within an order line's quantity
+}
+
 export interface DeviceData {
   [key: string]: unknown;
   label: string;
@@ -240,6 +256,8 @@ export interface DeviceData {
   knxAddress?: string;
   /** DALI short address (0–63) or address range for documentation/commissioning. */
   daliAddress?: string;
+  /** Link to the Odoo counterpart (FACE Asset-ID, product, sale-order provenance). */
+  odoo?: OdooDeviceLink;
   /** Original template label — present while device participates in auto-numbering.
    *  Cleared when the user gives the device a custom name. */
   baseLabel?: string;

@@ -474,6 +474,17 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
            (min 40) so the first port below stays on the pathfinding grid. */}
       {renderHeaderBand(headerAuxRows)}
 
+      {/* FACE Asset-ID caption (Odoo link) — absolute overlay below the node so it never
+           affects the grid-aligned layout. */}
+      {data.odoo?.assetCode && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 top-full mt-0.5 px-1 rounded text-[8px] font-mono leading-tight text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)] whitespace-nowrap pointer-events-none"
+          title={`FACE Asset-ID: ${data.odoo.assetCode}`}
+        >
+          {data.odoo.assetCode}
+        </div>
+      )}
+
       {/* Port area — 8px top padding lands handle centers on the 20px grid:
            1px (outer top border) + headerBand(20-mult) + 1px (header border-b)
            + 8px (pt) + 10px (half row) ≡ 0 mod 20.
