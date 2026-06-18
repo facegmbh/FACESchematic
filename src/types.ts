@@ -72,6 +72,7 @@ export type SignalType =
   | "gpio"
   | "contact-closure"
   | "rs422"
+  | "rs485"
   | "serial"
   | "thunderbolt"
   | "composite"
@@ -410,7 +411,26 @@ export interface WaypointData {
 
 export type WaypointNode = Node<WaypointData, "waypoint">;
 
-export type SchematicNode = DeviceNode | RoomNode | NoteNode | AnnotationNode | StubLabelNode | WaypointNode;
+/** A bundle's break-in / break-out junction. POSITION ANCHOR only — no edges attach to it.
+ *  Each bundle owns exactly two (role "in" = where members gather into the trunk, role "out"
+ *  = where they fan back out). The router reads these positions as the comb's entry/exit
+ *  (in place of the auto-computed computeBundleTrunk). Members stay single source→target
+ *  connections, so the per-cable / schedule-row count is unaffected. */
+export interface BundleJunctionData {
+  [key: string]: unknown;
+  /** The bundle this junction anchors. Matches each member connection's data.bundleId
+   *  and the BundleMeta.id key. */
+  bundleId: string;
+  /** Which end of the trunk this anchor controls. */
+  role: "in" | "out";
+  /** True once the user has dragged it. Until then the heal pass may reposition it from
+   *  member device geometry (sticky-after-drag, mirroring StubLabelData.placed). */
+  placed?: boolean;
+}
+
+export type BundleJunctionNode = Node<BundleJunctionData, "bundle-junction">;
+
+export type SchematicNode = DeviceNode | RoomNode | NoteNode | AnnotationNode | StubLabelNode | WaypointNode | BundleJunctionNode;
 
 export interface ConnectionData {
   [key: string]: unknown;
@@ -431,6 +451,10 @@ export interface ConnectionData {
   /** When set, this edge is one half of a logical cable that has been split into two
    *  stub-leg edges connected via stub-label nodes. Both halves share the same id. */
   linkedConnectionId?: string;
+  /** Bundle membership — connections sharing a bundleId route along one shared physical
+   *  trunk (a snake/multicore) that gathers at one end and fans out at the other. Each
+   *  member stays its own cable in the schedule. */
+  bundleId?: string;
   /** @deprecated v31+: stubs are real nodes now. Kept on the type so the v30→v31 migration can read it. */
   stubbed?: boolean;
   /** @deprecated v31+: replaced by StubLabelNode position. */
@@ -700,6 +724,16 @@ export interface PrintSheetPage {
 
 export type SchematicPage = RackElevationPage | PrintSheetPage;
 
+/** Per-bundle metadata. Membership is on each connection's `data.bundleId`; this holds
+ *  the label, an optional user-dragged trunk override, and collapse state. */
+export interface BundleMeta {
+  id: string;
+  label?: string;
+  /** Optional trunk override polyline (absolute points); absent → trunk is auto-computed. */
+  trunkWaypoints?: { x: number; y: number }[];
+  collapsed?: boolean;
+}
+
 export interface SchematicFile {
   version: number;
   name: string;
@@ -776,6 +810,9 @@ export interface SchematicFile {
   showFacePlateDetail?: boolean;
   /** Cable unit costs keyed by "cableType|signalType|cableLength" */
   cableCosts?: Record<string, number>;
+  /** Connection bundles — each groups ≥2 connections that share one physical trunk.
+   *  Membership lives on each connection's data.bundleId; this map holds per-bundle meta. */
+  bundles?: Record<string, BundleMeta>;
   /** Force-case device/port/slot labels on write (normal = leave as-typed) */
   labelCase?: LabelCaseMode;
   /** Pairwise distances between top-level rooms; key is canonical pairKey("idA","idB"). */
@@ -873,6 +910,7 @@ export const SIGNAL_COLORS: Record<SignalType, string> = {
   gpio: "var(--color-gpio)",
   "contact-closure": "var(--color-contact-closure)",
   rs422: "var(--color-rs422)",
+  rs485: "var(--color-rs485)",
   serial: "var(--color-serial)",
   thunderbolt: "var(--color-thunderbolt)",
   composite: "var(--color-composite)",
@@ -955,7 +993,7 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "terminal-block": "Terminal Block",
   powercon: "powerCON",
   edison: "Edison",
-  iec: "IEC C14",
+  iec: "IEC C13/C14",
   "iec-c5": "IEC C5",
   "iec-c7": "IEC C7",
   "iec-c15": "IEC C15",
@@ -1042,6 +1080,7 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   gpio: "GPIO",
   "contact-closure": "Contact Closure",
   rs422: "RS-422",
+  rs485: "RS-485",
   serial: "Serial",
   thunderbolt: "Thunderbolt",
   composite: "Composite",
@@ -1102,7 +1141,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
   "Video over IP": ["ndi", "srt", "hdbaset", "st2110"],
   "Audio": ["analog-audio", "speaker-level", "bluetooth", "aes", "dante", "avb", "aes67", "madi", "spdif", "adat", "ultranet", "aes50", "stageconnect", "ydif", "soundgrid", "gigaace", "dx5", "dsnake", "slink", "fibreace", "digilink", "extron-exp", "pots", "blu-link"],
   "Network": ["ethernet", "fiber"],
-  "Control / Data": ["dmx", "artnet", "sacn", "rs422", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "sensor"],
+  "Control / Data": ["dmx", "artnet", "sacn", "rs422", "rs485", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "sensor"],
   "Building Automation": ["dali", "knx"],
   "Sync / Clock": ["genlock", "wordclock", "timecode", "dars", "gps"],
   "Power": ["power", "power-l1", "power-l2", "power-l3", "power-neutral", "power-ground"],
