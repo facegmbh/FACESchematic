@@ -507,6 +507,7 @@ export interface DeviceTemplate {
   hostname?: string;
   ports: Port[];
   color?: string;
+  headerColor?: string;
   searchTerms?: string[];
   manufacturer?: string;
   modelNumber?: string;
@@ -547,6 +548,7 @@ export interface TemplatePreset {
   ports: Port[];
   hiddenPorts?: string[];
   color?: string;
+  headerColor?: string;
 }
 
 export interface OwnedGearItem {

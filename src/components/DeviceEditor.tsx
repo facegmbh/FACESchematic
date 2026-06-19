@@ -406,6 +406,7 @@ export default function DeviceEditor() {
       ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
       ports: finalPorts,
       ...(color ? { color } : {}),
+      ...(headerColor ? { headerColor } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
       ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
@@ -439,7 +440,7 @@ export default function DeviceEditor() {
       ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     });
-  }, [ports, label, shortName, hostname, addCustomTemplate, node, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, hostname, addCustomTemplate, node, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw]);
 
   const handleUpdateUserTemplate = useCallback(() => {
     if (!node?.data.templateId) return;
@@ -459,6 +460,7 @@ export default function DeviceEditor() {
       ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
       ports: finalPorts,
       ...(color ? { color } : {}),
+      ...(headerColor ? { headerColor } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
       ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
@@ -491,7 +493,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     });
     handleSave();
-  }, [node, ports, label, shortName, hostname, updateCustomTemplate, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw, handleSave]);
+  }, [node, ports, label, shortName, hostname, updateCustomTemplate, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw, handleSave]);
 
   const handleSubmitToCommunity = useCallback(async () => {
     const finalPorts: Port[] = ports
@@ -516,6 +518,7 @@ export default function DeviceEditor() {
       deviceType: dt,
       ports: finalPorts,
       ...(color ? { color } : {}),
+      ...(headerColor ? { headerColor } : {}),
       ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
       ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
@@ -563,7 +566,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, thermalBtuh, heightMm, widthMm, depthMm, weightKg, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, thermalBtuh, heightMm, widthMm, depthMm, weightKg, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -585,11 +588,12 @@ export default function DeviceEditor() {
       ports: presetPorts,
       ...(presetHidden.length > 0 ? { hiddenPorts: presetHidden } : {}),
       ...(color ? { color } : {}),
+      ...(headerColor ? { headerColor } : {}),
     });
 
     // Also apply changes to current device
     handleSave();
-  }, [editingNodeId, node, ports, hiddenPorts, color, setTemplatePreset, handleSave]);
+  }, [editingNodeId, node, ports, hiddenPorts, color, headerColor, setTemplatePreset, handleSave]);
 
   const handleRevertToTemplate = useCallback(() => {
     if (!node) return;
@@ -620,6 +624,7 @@ export default function DeviceEditor() {
     })));
     setHiddenPorts([]);
     setColor(tpl.color);
+    setHeaderColor(tpl.headerColor);
 
     // For user templates, also revert all editable metadata fields
     if (customTemplates.some((t) => t.id === templateId)) {
@@ -671,6 +676,7 @@ export default function DeviceEditor() {
     })));
     setHiddenPorts(preset.hiddenPorts ?? []);
     setColor(preset.color);
+    setHeaderColor(preset.headerColor);
   }, [node, templatePresets]);
 
   const addPort = (direction: PortDirection) => {
@@ -769,6 +775,7 @@ export default function DeviceEditor() {
       !portsMatch(ports, tpl.ports) ||
       hiddenPorts.length > 0 ||
       (color ?? undefined) !== (tpl.color ?? undefined) ||
+      (headerColor ?? undefined) !== (tpl.headerColor ?? undefined) ||
       // For user templates, also check all editable metadata fields
       (isUserTemplate && (
         label !== (tpl.label ?? "") ||
@@ -795,11 +802,12 @@ export default function DeviceEditor() {
     const dirtyVsPreset = !!preset && (
       !portsMatch(ports, preset.ports) ||
       JSON.stringify([...hiddenPorts].sort()) !== JSON.stringify([...(preset.hiddenPorts ?? [])].sort()) ||
-      (color ?? undefined) !== (preset.color ?? undefined)
+      (color ?? undefined) !== (preset.color ?? undefined) ||
+      (headerColor ?? undefined) !== (preset.headerColor ?? undefined)
     );
 
     return { dirtyVsPreset, dirtyVsTemplate };
-  }, [templateId, ports, hiddenPorts, color, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided]);
+  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided]);
 
   if (!editingNodeId || !node) return null;
 

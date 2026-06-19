@@ -58,6 +58,7 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     modelNumber: str(raw.modelNumber),
     referenceUrl: str(raw.referenceUrl),
     color: str(raw.color),
+    headerColor: str(raw.headerColor),
     imageUrl: str(raw.imageUrl),
     searchTerms: Array.isArray(raw.searchTerms)
       ? raw.searchTerms.filter((s): s is string => typeof s === "string")

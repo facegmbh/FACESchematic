@@ -1472,6 +1472,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     let ports: Port[];
     let hiddenPorts: string[] | undefined;
     let color = template.color;
+    let headerColor = template.headerColor;
 
     if (preset) {
       // Clone preset ports, then map preset hiddenPorts through old→new ID mapping
@@ -1485,6 +1486,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ports = cloned;
       hiddenPorts = preset.hiddenPorts?.map((id) => idMap.get(id) ?? id).filter((id) => cloned.some((p) => p.id === id));
       color = preset.color ?? template.color;
+      headerColor = preset.headerColor ?? template.headerColor;
     } else {
       ports = clonePorts(template.ports);
       // Stamp templatePortId so sync can reconcile even if port IDs drift.
@@ -1508,6 +1510,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         deviceType: template.deviceType,
         ports,
         color,
+        ...(headerColor ? { headerColor } : {}),
         baseLabel: template.label,
         model: template.label,
         ...(template.shortName ? { shortName: template.shortName } : {}),
@@ -3401,6 +3404,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     let adapterPorts: Port[];
     let hiddenPorts: string[] | undefined;
     let color = template.color;
+    let headerColor = template.headerColor;
 
     if (preset) {
       const cloned = clonePorts(preset.ports);
@@ -3409,6 +3413,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       adapterPorts = cloned;
       hiddenPorts = preset.hiddenPorts?.map((id) => idMap.get(id) ?? id).filter((id) => cloned.some((p) => p.id === id));
       color = preset.color ?? template.color;
+      headerColor = preset.headerColor ?? template.headerColor;
     } else {
       adapterPorts = clonePorts(template.ports);
     }
@@ -3424,6 +3429,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         deviceType: template.deviceType,
         ports: adapterPorts,
         color,
+        ...(headerColor ? { headerColor } : {}),
         baseLabel: template.label,
         model: template.label,
         ...(template.shortName ? { shortName: template.shortName } : {}),

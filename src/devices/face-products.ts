@@ -63,6 +63,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0fac-4000-8000-000000000f03",
     deviceType: "amplifier",
+    headerColor: "#006aff",
     label: "Blaze PowerZone Connect 1004",
     manufacturer: "Blaze Audio",
     modelNumber: "PowerZone Connect 1004",
@@ -85,6 +86,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0fac-4000-8000-000000000f04",
     deviceType: "amplifier",
+    headerColor: "#006aff",
     label: "Blaze PowerZone Connect 504D",
     manufacturer: "Blaze Audio",
     modelNumber: "PowerZone Connect 504D",
