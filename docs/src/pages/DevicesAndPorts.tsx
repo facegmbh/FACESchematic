@@ -137,6 +137,8 @@ export default function DevicesAndPortsPage() {
         <li>Each card contributes its own ports to the parent device</li>
         <li>Slots show the currently installed card name (or "Empty" if unoccupied)</li>
         <li>Swapping a card removes the old card's ports and adds the new card's ports</li>
+        <li>In the device editor, <strong>+ Add Slot</strong> adds one bay; <strong>+ Bulk Add</strong>
+          creates a numbered range at once (e.g. Slot 1–16) for large modular frames</li>
       </ul>
       <p>
         Some expansion cards have their own <strong>sub-slots</strong> — for example, a network
@@ -174,7 +176,8 @@ export default function DevicesAndPortsPage() {
           <tr><td>XLR-5</td><td>XLR-5</td></tr>
           <tr><td>Mini XLR</td><td>Mini XLR</td></tr>
           <tr><td>XLR/TRS Combo</td><td>XLR</td></tr>
-          <tr><td>{"1/4\" TRS"}</td><td>{"1/4\" TRS"}</td></tr>
+          <tr><td>{"1/4\" TRS (6.35mm)"}</td><td>{"1/4\" TRS"}</td></tr>
+          <tr><td>{"1/4\" TS (6.35mm)"}</td><td>{"1/4\" TS"}</td></tr>
           <tr><td>3.5mm TRS</td><td>3.5mm TRS</td></tr>
           <tr><td>RCA</td><td>RCA</td></tr>
           <tr><td>TOSLINK</td><td>TOSLINK</td></tr>
@@ -499,6 +502,13 @@ export default function DevicesAndPortsPage() {
       <p>
         Network config is entered in the device editor under each port's settings. This data feeds
         into the <a href="/pack-list">Network Report</a>.
+      </p>
+      <p>
+        <strong>USB-C Power Delivery.</strong> Ports with a USB-C connector get two per-port wattage
+        fields — how much the port <em>delivers</em> (a charger, dock, or laptop port) and how much it
+        <em>draws</em> (a bus-powered device). Unlike PoE, USB-C doesn't share one budget across ports,
+        so the rating lives on each port rather than the device. When a connection's source delivers
+        less than the connected device draws, the cable is flagged with an amber undersupply warning.
       </p>
     </>
   );

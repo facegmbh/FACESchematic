@@ -85,7 +85,7 @@ export interface ConnectorAcceptance {
 }
 
 export const CONNECTOR_ACCEPTS: Partial<Record<ConnectorType, ConnectorAcceptance>> = {
-  "combo-xlr-trs": { native: ["xlr-3", "trs-quarter"] },
+  "combo-xlr-trs": { native: ["xlr-3", "trs-quarter", "ts-quarter"] },
   "ethercon":      { native: ["rj45"] },
   "opticalcon":    { native: ["lc"] },
   "binding-post-banana": { native: ["binding-post", "banana"] },
@@ -106,8 +106,11 @@ export const CONNECTOR_ACCEPTS: Partial<Record<ConnectorType, ConnectorAcceptanc
   "l21-30":        { adapter: ["edison", "powercon"] },
   "xlr-3":         { adapter: ["xlr-4", "trs-quarter", "rca"] },
   "xlr-4":         { adapter: ["xlr-3"] },
-  "trs-quarter":   { adapter: ["xlr-3", "trs-eighth"] },
-  "trs-eighth":    { adapter: ["trs-quarter"] },
+  "trs-quarter":   { native: ["ts-quarter"], adapter: ["xlr-3", "trs-eighth"] },
+  // 1/4" TS is the same physical barrel as TRS — they mate without an adapter
+  // (a TS plug just ties ring to sleeve). Electrically mono/unbalanced.
+  "ts-quarter":    { native: ["trs-quarter"], adapter: ["xlr-3", "trs-eighth"] },
+  "trs-eighth":    { adapter: ["trs-quarter", "ts-quarter"] },
   "rca":           { adapter: ["xlr-3"] },
   "edison":        { adapter: ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "l5-20", "l6-20", "l6-30", "l21-30"] },
 };
@@ -169,6 +172,7 @@ export const CONNECTOR_TO_CABLE: Record<ConnectorType, string> = {
   "xlr-4": "XLR-4",
   "xlr-5": "XLR-5",
   "trs-quarter": '1/4" TRS',
+  "ts-quarter": '1/4" TS',
   "trs-eighth": "3.5mm TRS",
   "combo-xlr-trs": "XLR",
   rj45: "Cat6",
@@ -348,6 +352,7 @@ export const CONNECTOR_GENDER: Partial<Record<ConnectorType, Gender | { input: G
   db25: "female",
   db37: "female",
   "trs-quarter": "female",
+  "ts-quarter": "female",
   "trs-eighth": "female",
   "trs-2.5mm": "female",
   "combo-xlr-trs": "female",
@@ -401,7 +406,7 @@ export const CONNECTORS_WITH_GENDER_VARIATION: Set<ConnectorType> = new Set([
   "cam-lok", "socapex", "multipin",
   "speakon", "banana", "binding-post", "binding-post-banana",
   "bnc",
-  "trs-quarter", "trs-eighth", "trs-2.5mm",
+  "trs-quarter", "ts-quarter", "trs-eighth", "trs-2.5mm",
 ]);
 
 /** Resolve a port's gender: explicit override → convention from connector + direction → undefined. */
@@ -463,6 +468,30 @@ export function effectiveSignalType(
     )?.data?.signalType ??
     port.signalType
   );
+}
+
+/**
+ * USB-C Power Delivery shortfall (in watts) for a connection between two ports,
+ * or null when it doesn't apply (missing data) or the source covers the sink.
+ *
+ * Either end may be the source — USB-C PD's power role is independent of data
+ * direction — so both orientations are checked and the worst deficit wins.
+ */
+export function usbcPowerShortfallW(
+  a: Pick<Port, "usbcPowerSourceW" | "usbcPowerDrawW"> | undefined,
+  b: Pick<Port, "usbcPowerSourceW" | "usbcPowerDrawW"> | undefined,
+): number | null {
+  if (!a || !b) return null;
+  const deficits: number[] = [];
+  if (a.usbcPowerSourceW != null && b.usbcPowerDrawW != null) {
+    deficits.push(b.usbcPowerDrawW - a.usbcPowerSourceW);
+  }
+  if (b.usbcPowerSourceW != null && a.usbcPowerDrawW != null) {
+    deficits.push(a.usbcPowerDrawW - b.usbcPowerSourceW);
+  }
+  if (deficits.length === 0) return null;
+  const worst = Math.max(...deficits);
+  return worst > 0 ? worst : null;
 }
 
 /** Signal types that can have network configuration */

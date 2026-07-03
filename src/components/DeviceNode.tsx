@@ -17,7 +17,16 @@ import { resolveDeviceLabel } from "../displayName";
 
 type ColumnItem =
   | { type: "port"; port: Port }
-  | { type: "section"; name: string };
+  | { type: "section"; name: string }
+  | { type: "divider" };
+
+/** Hover-tooltip suffix surfacing a USB-C port's Power Delivery rating, if set. */
+function usbcPowerSuffix(port: Port): string {
+  const parts: string[] = [];
+  if (port.usbcPowerSourceW != null) parts.push(`delivers ${port.usbcPowerSourceW}W`);
+  if (port.usbcPowerDrawW != null) parts.push(`draws ${port.usbcPowerDrawW}W`);
+  return parts.length ? ` — USB-C PD: ${parts.join(", ")}` : "";
+}
 
 /** Build a list of ports interleaved with section headers where section changes. */
 function buildColumnItems(ports: Port[]): ColumnItem[] {
@@ -26,6 +35,12 @@ function buildColumnItems(ports: Port[]): ColumnItem[] {
   for (const port of ports) {
     if (port.section && port.section !== lastSection) {
       items.push({ type: "section", name: port.section });
+    } else if (!port.section && lastSection) {
+      // A section just ended into unsectioned ports — emit a closing divider so
+      // the following ports don't read as part of the section. (A section
+      // followed by ANOTHER section needs nothing; that section's own header is
+      // the boundary.)
+      items.push({ type: "divider" });
     }
     items.push({ type: "port", port });
     lastSection = port.section;
@@ -244,6 +259,13 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
     [passthroughPorts],
   );
 
+  /** A thin closing line marking the end of a section that runs into unsectioned ports. */
+  const renderDivider = (key: string) => (
+    <div key={key} className="h-1.5 flex items-center px-2" aria-hidden>
+      <div className="border-b border-[var(--color-border)]/30 w-full" />
+    </div>
+  );
+
   /** Render a port row for a column (left or right). */
   const renderColumnPort = (port: Port, side: "left" | "right") => {
     const h = handleProps(port, side);
@@ -268,7 +290,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
         <span
           className="text-[10px] leading-4 truncate"
           style={{ color: SIGNAL_COLORS[port.signalType] }}
-          title={`${displayLabel(port.label)} (${SIGNAL_LABELS[port.signalType]})`}
+          title={`${displayLabel(port.label)} (${SIGNAL_LABELS[port.signalType]})${usbcPowerSuffix(port)}`}
         >
           {displayLabel(port.label)}
         </span>
@@ -505,6 +527,8 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                       {item.name}
                     </span>
                   </div>
+                ) : item.type === "divider" ? (
+                  renderDivider(`ldiv-${i}`)
                 ) : renderColumnPort(item.port, "left"),
               )}
             </div>
@@ -518,6 +542,8 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                       {item.name}
                     </span>
                   </div>
+                ) : item.type === "divider" ? (
+                  renderDivider(`rdiv-${i}`)
                 ) : renderColumnPort(item.port, "right"),
               )}
             </div>
@@ -547,7 +573,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                         <span
                           className="text-[10px] leading-4 truncate"
                           style={{ color: SIGNAL_COLORS[left.signalType] }}
-                          title={`${displayLabel(left.label)} (${SIGNAL_LABELS[left.signalType]})`}
+                          title={`${displayLabel(left.label)} (${SIGNAL_LABELS[left.signalType]})${usbcPowerSuffix(left)}`}
                         >
                           {displayLabel(left.label)}
                         </span>
@@ -560,7 +586,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                         <span
                           className="text-[10px] leading-4 truncate"
                           style={{ color: SIGNAL_COLORS[right.signalType] }}
-                          title={`${displayLabel(right.label)} (${SIGNAL_LABELS[right.signalType]})`}
+                          title={`${displayLabel(right.label)} (${SIGNAL_LABELS[right.signalType]})${usbcPowerSuffix(right)}`}
                         >
                           {displayLabel(right.label)}
                         </span>
@@ -583,10 +609,11 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
         )
       )}
 
-      {/* Empty Expansion Slots — hidden when slot.hideWhenEmpty (storage media etc.) */}
-      {data.slots?.some((s) => !s.cardTemplateId && !s.hideWhenEmpty) && (
+      {/* Empty Expansion Slots — hidden when slot.hideWhenEmpty (template, storage media
+          etc.) or slot.hidden (per-instance user toggle, #211). */}
+      {data.slots?.some((s) => !s.cardTemplateId && !s.hideWhenEmpty && !s.hidden) && (
         <div>
-          {data.slots.filter((s) => !s.cardTemplateId && !s.hideWhenEmpty).map((slot) => (
+          {data.slots.filter((s) => !s.cardTemplateId && !s.hideWhenEmpty && !s.hidden).map((slot) => (
             <div key={slot.slotId} className="flex justify-center items-center h-4 mx-1">
               <span className="text-[9px] text-[var(--color-text-muted)] opacity-40 truncate text-center italic">
                 {displayLabel(slot.label)} (empty)
@@ -618,6 +645,8 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                   {item.name}
                 </span>
               </div>
+            ) : item.type === "divider" ? (
+              renderDivider(`pdiv-${i}`)
             ) : renderPassthroughPort(item.port),
           )}
         </div>
@@ -635,6 +664,9 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                   </span>
                 </div>
               );
+            }
+            if (item.type === "divider") {
+              return renderDivider(`bdiv-${i}`);
             }
 
             const port = item.port;
@@ -663,7 +695,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                 <span
                   className="text-[10px] leading-4 truncate"
                   style={{ color: SIGNAL_COLORS[port.signalType] }}
-                  title={`${displayLabel(port.label)} (${SIGNAL_LABELS[port.signalType]}) — bidirectional`}
+                  title={`${displayLabel(port.label)} (${SIGNAL_LABELS[port.signalType]}) — bidirectional${usbcPowerSuffix(port)}`}
                 >
                   ↔ {displayLabel(port.label)}
                 </span>

@@ -34,14 +34,14 @@ import type {
   BundleMeta,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
-import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode } from "./types";
+import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
 import { defaultStubPlacement, healStubPortAlignment } from "./stubPlacement";
 import { getPortAbsolutePositions } from "./snapUtils";
 import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE } from "./types";
 import { pairKey } from "./roomDistance";
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
-import { CURRENT_SCHEMA_VERSION, migrateSchematic } from "./migrations";
+import { CURRENT_SCHEMA_VERSION, STUB_LABEL_Z_INDEX, migrateSchematic } from "./migrations";
 import { healStaleWaypoints } from "./waypointHealing";
 import { newBundleId, gcBundles, reconcileBundleJunctions, bundleJunctionsFor, splitMemberWaypoints } from "./bundles";
 import { computeBundleTrunk, type BundleEndpoint } from "./routing/bundleRoute";
@@ -95,6 +95,17 @@ const STORAGE_KEY = "easyschematic-autosave";
 const TEMPLATES_KEY = "easyschematic-custom-templates";
 const TEMPLATE_META_KEY = "easyschematic-custom-template-meta";
 const CATEGORY_ORDER_KEY = "easyschematic-category-order";
+const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
+
+/** Minimap visibility is an editor preference (not document data), persisted to
+ *  localStorage and shared across schematics/sessions. Default visible. (#210) */
+function loadShowMinimap(): boolean {
+  try {
+    return localStorage.getItem(MINIMAP_PREF_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 
 export const CATEGORY_ORDER_DEFAULT: string[] = [
   "Sources",
@@ -288,8 +299,9 @@ interface SchematicState {
   swapCard: (nodeId: string, slotId: string, cardTemplateId: string | null) => void;
   /** Add a new empty expansion slot to a device. */
   addSlot: (nodeId: string, slot: { label: string; slotFamily: string }) => void;
+  addSlots: (nodeId: string, slots: { label: string; slotFamily: string }[]) => void;
   /** Update label / slotFamily on an existing installed slot. */
-  updateSlot: (nodeId: string, slotId: string, patch: { label?: string; slotFamily?: string }) => void;
+  updateSlot: (nodeId: string, slotId: string, patch: { label?: string; slotFamily?: string; hidden?: boolean }) => void;
   /** Remove a slot, its ports, descendant slots, and any edges connected to their ports. */
   removeSlot: (nodeId: string, slotId: string) => void;
   setEditingNodeId: (id: string | null) => void;
@@ -486,6 +498,8 @@ interface SchematicState {
   // Report layouts (pack list PDF settings, etc.)
   reportLayouts: Record<string, unknown>;
   setReportLayout: (key: string, layout: unknown) => void;
+  reportHiddenColumns: Record<string, string[]>;
+  setReportHiddenColumns: (tableId: string, columnIds: string[]) => void;
   globalReportHeaderLayout: TitleBlockLayout | null;
   globalReportFooterLayout: TitleBlockLayout | null;
   setGlobalReportHeaderLayout: (layout: TitleBlockLayout) => void;
@@ -532,6 +546,10 @@ interface SchematicState {
   currency: string;
   setCurrency: (code: string) => void;
 
+  // Project lifecycle status (#P2-007). undefined = treated as Active.
+  status: ProjectStatus | undefined;
+  setProjectStatus: (status: ProjectStatus | undefined) => void;
+
   // Incompatible connection dialog (#6)
   pendingIncompatibleConnection: {
     connection: Connection;
@@ -556,6 +574,10 @@ interface SchematicState {
   // Line jumps (#18)
   showLineJumps: boolean;
   setShowLineJumps: (show: boolean) => void;
+
+  /** Canvas minimap visibility — editor preference, persisted to localStorage. (#210) */
+  showMinimap: boolean;
+  setShowMinimap: (show: boolean) => void;
 
   /** Rack: show connector-level face-plate detail (default off; advanced) */
   showFacePlateDetail: boolean;
@@ -744,7 +766,10 @@ function syncRackCounters(pages: SchematicPage[]) {
     const pm = page.id.match(/^rackpage-(\d+)$/);
     if (pm) rackPageIdCounter = Math.max(rackPageIdCounter, Number(pm[1]));
     if (page.type === "print-sheet") {
-      for (const vp of page.viewports) {
+      // Arrays default to [] — an older/partial page missing these would throw
+      // "not iterable" here, AFTER importFromJSON already loaded the schematic,
+      // surfacing to callers as a false "Invalid schematic file." (#176)
+      for (const vp of page.viewports ?? []) {
         const vm = vp.id.match(/^viewport-(\d+)$/);
         if (vm) viewportIdCounter = Math.max(viewportIdCounter, Number(vm[1]));
         const sm = page.id.match(/^printsheet-(\d+)$/);
@@ -752,15 +777,15 @@ function syncRackCounters(pages: SchematicPage[]) {
       }
       continue;
     }
-    for (const rack of page.racks) {
+    for (const rack of page.racks ?? []) {
       const rm = rack.id.match(/^rack-(\d+)$/);
       if (rm) rackIdCounter = Math.max(rackIdCounter, Number(rm[1]));
     }
-    for (const p of page.placements) {
+    for (const p of page.placements ?? []) {
       const pm2 = p.id.match(/^rp-(\d+)$/);
       if (pm2) placementIdCounter = Math.max(placementIdCounter, Number(pm2[1]));
     }
-    for (const a of page.accessories) {
+    for (const a of page.accessories ?? []) {
       const am = a.id.match(/^ra-(\d+)$/);
       if (am) accessoryIdCounter = Math.max(accessoryIdCounter, Number(am[1]));
     }
@@ -1246,6 +1271,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   signalColors: undefined,
   signalLineStyles: undefined,
   reportLayouts: {},
+  reportHiddenColumns: {},
   globalReportHeaderLayout: null,
   globalReportFooterLayout: null,
   hiddenSignalTypes: "",
@@ -1259,7 +1285,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   cableNamingScheme: "type-prefix" as "sequential" | "type-prefix",
   labelCase: DEFAULT_LABEL_CASE,
   currency: "USD",
+  status: undefined,
   showLineJumps: true,
+  showMinimap: loadShowMinimap(),
   showFacePlateDetail: false,
   showConnectionLabels: true,
   showCableIdLabels: true,
@@ -2701,6 +2729,34 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  addSlots: (nodeId, slots) => {
+    if (slots.length === 0) return;
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+
+    const nodeIdx = state.nodes.findIndex((n) => n.id === nodeId && n.type === "device");
+    if (nodeIdx === -1) return;
+    const node = state.nodes[nodeIdx] as DeviceNode;
+    const data = node.data;
+    const existing = data.slots ?? [];
+
+    const stamp = Date.now();
+    const newSlots: InstalledSlot[] = slots.map((s, i) => ({
+      slotId: `slot-${stamp}-${Math.random().toString(36).slice(2, 6)}-${i}`,
+      label: s.label,
+      slotFamily: s.slotFamily,
+      portIds: [],
+    }));
+
+    const newNode = {
+      ...node,
+      data: { ...data, slots: [...existing, ...newSlots] },
+    } as DeviceNode;
+
+    set({ nodes: state.nodes.map((n, i) => (i === nodeIdx ? newNode : n)) });
+    get().saveToLocalStorage();
+  },
+
   updateSlot: (nodeId, slotId, patch) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
@@ -2718,6 +2774,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             ...s,
             ...(patch.label !== undefined ? { label: patch.label } : {}),
             ...(patch.slotFamily !== undefined ? { slotFamily: patch.slotFamily } : {}),
+            ...(patch.hidden !== undefined ? { hidden: patch.hidden } : {}),
           }
         : s,
     );
@@ -3647,6 +3704,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  setReportHiddenColumns: (tableId, columnIds) => {
+    set({ reportHiddenColumns: { ...get().reportHiddenColumns, [tableId]: columnIds } });
+    get().saveToLocalStorage();
+  },
+
   setGlobalReportHeaderLayout: (layout) => {
     set({ globalReportHeaderLayout: layout });
     get().saveToLocalStorage();
@@ -3711,9 +3773,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  setProjectStatus: (status) => {
+    set({ status });
+    get().saveToLocalStorage();
+  },
+
   setShowLineJumps: (show) => {
     set({ showLineJumps: show });
     get().saveToLocalStorage();
+  },
+
+  setShowMinimap: (show) => {
+    // Persisted to localStorage (editor preference), not the schematic file. (#210)
+    try { localStorage.setItem(MINIMAP_PREF_KEY, show ? "1" : "0"); } catch { /* ignore */ }
+    set({ showMinimap: show });
   },
 
   setShowFacePlateDetail: (show) => {
@@ -4512,12 +4585,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       templatePresets: Object.keys(state.templatePresets).length > 0 ? state.templatePresets : undefined,
       favoriteTemplates: state.favoriteTemplates.length > 0 ? state.favoriteTemplates : undefined,
       reportLayouts: Object.keys(state.reportLayouts).length > 0 ? state.reportLayouts : undefined,
+      reportHiddenColumns: Object.keys(state.reportHiddenColumns).length > 0 ? state.reportHiddenColumns : undefined,
       globalReportHeaderLayout: state.globalReportHeaderLayout ?? undefined,
       globalReportFooterLayout: state.globalReportFooterLayout ?? undefined,
       scrollConfig: isDefaultScrollConfig(state.scrollConfig) ? undefined : state.scrollConfig,
       cableNamingScheme: state.cableNamingScheme !== "type-prefix" ? state.cableNamingScheme : undefined,
       labelCase: state.labelCase !== "as-typed" ? state.labelCase : undefined,
       currency: state.currency !== "USD" ? state.currency : undefined,
+      status: state.status,
       panMode: state.panMode !== "select-first" ? state.panMode : undefined,
       showLineJumps: !state.showLineJumps ? false : undefined,
       showFacePlateDetail: state.showFacePlateDetail ? true : undefined,
@@ -4606,12 +4681,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             templatePresets: data.templatePresets ?? {},
             favoriteTemplates: data.favoriteTemplates ?? [],
             reportLayouts: data.reportLayouts ?? {},
+            reportHiddenColumns: data.reportHiddenColumns ?? {},
             globalReportHeaderLayout: data.globalReportHeaderLayout ?? null,
             globalReportFooterLayout: data.globalReportFooterLayout ?? null,
             scrollConfig: resolveScrollConfig(data),
             cableNamingScheme: data.cableNamingScheme ?? "type-prefix",
             labelCase: resolveLabelCase(data.labelCase),
             currency: data.currency ?? "USD",
+            status: data.status,
             panMode: (data.panMode === "pan-first" ? "pan-first" : "select-first") as PanMode,
             showLineJumps: data.showLineJumps ?? true,
             showFacePlateDetail: data.showFacePlateDetail ?? false,
@@ -4687,12 +4764,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         templatePresets: data.templatePresets ?? {},
         favoriteTemplates: data.favoriteTemplates ?? [],
         reportLayouts: data.reportLayouts ?? {},
+        reportHiddenColumns: data.reportHiddenColumns ?? {},
         globalReportHeaderLayout: data.globalReportHeaderLayout ?? null,
         globalReportFooterLayout: data.globalReportFooterLayout ?? null,
         scrollConfig: resolveScrollConfig(data),
         cableNamingScheme: data.cableNamingScheme ?? "type-prefix",
         labelCase: resolveLabelCase(data.labelCase),
         currency: data.currency ?? "USD",
+        status: data.status,
         panMode: (data.panMode === "pan-first" ? "pan-first" : "select-first") as PanMode,
         showLineJumps: data.showLineJumps ?? true,
         showFacePlateDetail: data.showFacePlateDetail ?? false,
@@ -4765,12 +4844,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       templatePresets: Object.keys(state.templatePresets).length > 0 ? state.templatePresets : undefined,
       favoriteTemplates: state.favoriteTemplates.length > 0 ? state.favoriteTemplates : undefined,
       reportLayouts: Object.keys(state.reportLayouts).length > 0 ? state.reportLayouts : undefined,
+      reportHiddenColumns: Object.keys(state.reportHiddenColumns).length > 0 ? state.reportHiddenColumns : undefined,
       globalReportHeaderLayout: state.globalReportHeaderLayout ?? undefined,
       globalReportFooterLayout: state.globalReportFooterLayout ?? undefined,
       scrollConfig: isDefaultScrollConfig(state.scrollConfig) ? undefined : state.scrollConfig,
       cableNamingScheme: state.cableNamingScheme !== "type-prefix" ? state.cableNamingScheme : undefined,
       labelCase: state.labelCase !== "as-typed" ? state.labelCase : undefined,
       currency: state.currency !== "USD" ? state.currency : undefined,
+      status: state.status,
       panMode: state.panMode !== "select-first" ? state.panMode : undefined,
       showLineJumps: !state.showLineJumps ? false : undefined,
       showFacePlateDetail: state.showFacePlateDetail ? true : undefined,
@@ -4861,12 +4942,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       templatePresets: data.templatePresets ?? {},
       favoriteTemplates: data.favoriteTemplates ?? [],
       reportLayouts: data.reportLayouts ?? {},
+      reportHiddenColumns: data.reportHiddenColumns ?? {},
       globalReportHeaderLayout: data.globalReportHeaderLayout ?? null,
       globalReportFooterLayout: data.globalReportFooterLayout ?? null,
       scrollConfig: resolveScrollConfig(data),
       cableNamingScheme: data.cableNamingScheme ?? "type-prefix",
       labelCase: resolveLabelCase(data.labelCase),
       currency: data.currency ?? "USD",
+      status: data.status,
       panMode: (data.panMode === "pan-first" ? "pan-first" : "select-first") as PanMode,
       showLineJumps: data.showLineJumps ?? true,
       showFacePlateDetail: data.showFacePlateDetail ?? false,
@@ -4903,9 +4986,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       fileHandle: null,
       loadSeq: get().loadSeq + 1,
     });
-    if (data.pages?.length) syncRackCounters(data.pages);
-    saveCategoryOrder(data.categoryOrder ?? null);
-    get().saveToLocalStorage();
+    // Post-load side-effects (ID counters + persistence). The schematic is
+    // already committed to state above; a failure here must NOT propagate, or a
+    // caller's try/catch mislabels a successfully-loaded file as invalid (#176).
+    try {
+      if (data.pages?.length) syncRackCounters(data.pages);
+      saveCategoryOrder(data.categoryOrder ?? null);
+      get().saveToLocalStorage();
+    } catch (err) {
+      console.error("Post-import side-effect failed (schematic still loaded):", err);
+    }
   },
 
   importCsvData: (newNodes, newEdges) => {
@@ -4961,6 +5051,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         templatePresets: {},
         favoriteTemplates: [],
         reportLayouts: {},
+        reportHiddenColumns: {},
         globalReportHeaderLayout: null,
         globalReportFooterLayout: null,
         scrollConfig: { ...DEFAULT_SCROLL_CONFIG },
@@ -5137,6 +5228,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       type: "stub-label",
       position: { x: srcStubAbs.x - srcParentAbs.x, y: srcStubAbs.y - srcParentAbs.y },
       ...(srcParentId ? { parentId: srcParentId } : {}),
+      zIndex: STUB_LABEL_Z_INDEX, // paint above connection lines (#178)
       data: { signalType: sigType, linkedConnectionId, side: "source" },
     } as SchematicNode;
     const tgtStubNode: SchematicNode = {
@@ -5144,6 +5236,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       type: "stub-label",
       position: { x: tgtStubAbs.x - tgtParentAbs.x, y: tgtStubAbs.y - tgtParentAbs.y },
       ...(tgtParentId ? { parentId: tgtParentId } : {}),
+      zIndex: STUB_LABEL_Z_INDEX, // paint above connection lines (#178)
       data: { signalType: sigType, linkedConnectionId, side: "target" },
     } as SchematicNode;
 
@@ -5294,18 +5387,48 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   clearManualWaypoints: (edgeId) => {
     const state = get();
     const edge = state.edges.find((e) => e.id === edgeId);
-    if (!edge?.data?.manualWaypoints) return;
+    if (!edge) return;
+
+    const hasManual = !!edge.data?.manualWaypoints;
+
+    // If this is a leg of a stubbed connection, "Reset Route" should also re-place its
+    // stub labels: clear `placed`/`userMoved` so StubLabelNode.tryPlace re-anchors them
+    // to their ports. This is the escape hatch for #182 — a stub frozen out of alignment
+    // (e.g. left behind after a device move) previously couldn't be corrected because
+    // Reset Route only touched edge waypoints (and bailed entirely when there were none).
+    const linkedId = edge.data?.linkedConnectionId;
+    const stubIdsToReset = new Set<string>();
+    if (linkedId) {
+      for (const n of state.nodes) {
+        if (n.type !== "stub-label") continue;
+        const d = n.data as import("./types").StubLabelData;
+        if (d.linkedConnectionId !== linkedId) continue;
+        if (d.placed === true || d.userMoved === true) stubIdsToReset.add(n.id);
+      }
+    }
+
+    if (!hasManual && stubIdsToReset.size === 0) return;
+
     pushUndo({ nodes: state.nodes, edges: state.edges });
-    const { manualWaypoints: _, ...restData } = edge.data;
-    const newEdges = state.edges.map((e) =>
-      e.id === edgeId
-        ? { ...e, data: restData as ConnectionEdge["data"] }
-        : e,
-    );
-    set({
-      edges: newEdges,
-      nodes: reconcileWaypointNodes(state.nodes, newEdges),
-    });
+
+    const newEdges = hasManual
+      ? state.edges.map((e) => {
+          if (e.id !== edgeId) return e;
+          const { manualWaypoints: _mw, ...restData } = e.data!;
+          return { ...e, data: restData as ConnectionEdge["data"] };
+        })
+      : state.edges;
+
+    let newNodes = hasManual ? reconcileWaypointNodes(state.nodes, newEdges) : state.nodes;
+    if (stubIdsToReset.size > 0) {
+      newNodes = newNodes.map((n) => {
+        if (!stubIdsToReset.has(n.id) || n.type !== "stub-label") return n;
+        const d = n.data as import("./types").StubLabelData;
+        return { ...n, data: { ...d, placed: false, userMoved: false } };
+      });
+    }
+
+    set({ edges: newEdges, nodes: newNodes });
     get().saveToLocalStorage();
   },
 

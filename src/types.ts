@@ -2,7 +2,7 @@ import type { Node, Edge } from "@xyflow/react";
 
 export type ConnectorType =
   | "bnc" | "hdmi" | "displayport" | "vga"
-  | "xlr-3" | "xlr-4" | "xlr-5" | "trs-quarter" | "trs-eighth" | "combo-xlr-trs"
+  | "xlr-3" | "xlr-4" | "xlr-5" | "trs-quarter" | "ts-quarter" | "trs-eighth" | "combo-xlr-trs"
   | "rj45" | "ethercon" | "sfp" | "lc" | "sc"
   | "usb-a" | "usb-b" | "usb-c"
   | "db7w2" | "db9" | "db15" | "db25" | "din-5" | "phoenix" | "terminal-block" | "powercon" | "edison" | "iec" | "iec-c5" | "iec-c7" | "iec-c15" | "iec-c20"
@@ -186,6 +186,11 @@ export interface Port {
   notes?: string;
   /** PoE power draw in watts for this port (consumed when powered by switch) */
   poeDrawW?: number;
+  /** USB-C Power Delivery watts this port can DELIVER (source side — charger, dock, laptop).
+   *  Per-port, not a shared device budget: unlike PoE, USB-C doesn't pool power across ports. */
+  usbcPowerSourceW?: number;
+  /** USB-C Power Delivery watts this port CONSUMES (sink side — bus-powered device). */
+  usbcPowerDrawW?: number;
   /** Link speed for network ports */
   linkSpeed?: string;
   /** Stable link back to the template port this was cloned from — used for template-sync reconciliation. */
@@ -216,6 +221,9 @@ export interface InstalledSlot {
   /** Denormalized from SlotDefinition.hideWhenEmpty so the canvas renderer doesn't have
    *  to walk the template tree on every paint. */
   hideWhenEmpty?: boolean;
+  /** User toggle (per instance) to hide this slot's empty-bay row on the canvas, the way
+   *  a port can be hidden. Distinct from the template-derived hideWhenEmpty. (#211) */
+  hidden?: boolean;
   portIds: string[];            // tracks which ports in device.ports belong to this slot
 }
 
@@ -290,6 +298,14 @@ export interface DeviceData {
   poeDrawW?: number;
   /** Unit cost in dollars (optional, for BOM/quoting) */
   unitCost?: number;
+  /** Per-instance serial number, carried into the pack list / device report (#P2-025) */
+  serialNumber?: string;
+  /** Free-text device-level note, carried into the pack list / device report (#P2-032) */
+  note?: string;
+  /** Marks this device as a (cold) spare — flagged in reports, not part of the active signal path (#P2-014) */
+  isSpare?: boolean;
+  /** Where this device is coming from — own stock, being procured, or another contractor (#P2-028) */
+  procurementSource?: "stock" | "procuring" | "contractor";
   isVenueProvided?: boolean;
   /** Physical height in millimeters — reserved for future rack management */
   heightMm?: number;
@@ -358,6 +374,8 @@ export interface NoteData {
   [key: string]: unknown;
   /** HTML content from contentEditable */
   html: string;
+  /** Background color for the note card (#P3-013). Defaults to the standard yellow note style. */
+  color?: string;
 }
 
 export type NoteNode = Node<NoteData, "note">;
@@ -397,6 +415,10 @@ export interface StubLabelData {
    *  survive page refresh. New stubs from convertEdgeToStubs get auto-placed once and
    *  flipped to true; legacy stubs are flipped true wholesale by the v33→v34 migration. */
   placed?: boolean;
+  /** True once the user has dragged this stub to a custom position. Such stubs are NOT
+   *  auto-re-placed when their device moves (the user's placement wins); cleared by
+   *  "Reset Route" so the stub re-anchors to its port. (#182) */
+  userMoved?: boolean;
 }
 
 export type StubLabelNode = Node<StubLabelData, "stub-label">;
@@ -491,6 +513,16 @@ export interface ConnectionData {
    *  routed path midpoint. The midpoint is recomputed on every re-route, so the label follows the
    *  cable when it moves while keeping the user's displacement. Cleared to revert to auto-placement. */
   labelOffset?: { x: number; y: number };
+  /** Whether this cable is a patch lead or part of the fixed field / infrastructure install (#P2-019) */
+  cableUse?: "patch" | "field";
+  /** Conductor gauge in AWG — free text to allow values like "12", "18", "2/0" (#P2-015) */
+  gaugeAwg?: string;
+  /** Alternate / contractor name for this cable, shown alongside the internal cable ID (#P2-023) */
+  cableAlias?: string;
+  /** Marks the cable as tested / certified (#P2-031) */
+  tested?: boolean;
+  /** ISO date (YYYY-MM-DD) the cable was tested / certified (#P2-031) */
+  testedDate?: string;
 }
 
 export type ConnectionEdge = Edge<ConnectionData>;
@@ -633,6 +665,8 @@ export interface RackData {
   /** Position on the rack page canvas */
   position: { x: number; y: number };
   linkedRoomId?: string;
+  /** Unit cost of the rack enclosure itself, so it appears as a purchasable line item (#P2-024) */
+  unitCost?: number;
 }
 
 export interface RackDevicePlacement {
@@ -766,6 +800,8 @@ export interface SchematicFile {
   favoriteTemplates?: string[];
   // Report layout preferences (pack list PDF, etc.) keyed by report ID
   reportLayouts?: Record<string, unknown>;
+  // Per-table hidden-column preferences keyed by table ID (e.g. "cableSchedule")
+  reportHiddenColumns?: Record<string, string[]>;
   globalReportHeaderLayout?: TitleBlockLayout;
   globalReportFooterLayout?: TitleBlockLayout;
   /** @deprecated Use scrollConfig instead. Kept for backwards compatibility on import. */
@@ -837,7 +873,17 @@ export interface SchematicFile {
   /** Wrap long device labels across two lines instead of truncating with ellipsis.
    *  New files default true; undefined on loaded files = legacy single-line truncate. */
   wrapDeviceLabels?: boolean;
+  /** Project lifecycle status, surfaced in project metadata / file lists (#P2-007) */
+  status?: ProjectStatus;
 }
+
+export type ProjectStatus = "active" | "dormant" | "cancelled" | "pending";
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: "Active",
+  dormant: "Dormant",
+  cancelled: "Cancelled",
+  pending: "Pending",
+};
 
 export type LabelCaseMode = "as-typed" | "uppercase" | "lowercase" | "capitalize";
 export const DEFAULT_LABEL_CASE: LabelCaseMode = "as-typed";
@@ -975,7 +1021,8 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "xlr-3": "XLR-3",
   "xlr-4": "XLR-4",
   "xlr-5": "XLR-5",
-  "trs-quarter": '1/4" TRS',
+  "trs-quarter": '1/4" TRS (6.35mm)',
+  "ts-quarter": '1/4" TS (6.35mm)',
   "trs-eighth": '3.5mm TRS',
   "combo-xlr-trs": "XLR/TRS Combo",
   rj45: "RJ45",
@@ -1154,7 +1201,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
 /** Connector types organized by functional group (for searchable dropdowns) */
 export const CONNECTOR_GROUPS: Record<string, ConnectorType[]> = {
   "Video": ["bnc", "hdmi", "mini-hdmi", "displayport", "mini-displayport", "dvi", "vga"],
-  "Audio": ["xlr-3", "xlr-4", "xlr-5", "mini-xlr", "combo-xlr-trs", "trs-quarter", "trs-eighth", "trs-2.5mm", "rca", "din-5", "mini-din-4", "mini-din-7", "mini-din-8", "toslink"],
+  "Audio": ["xlr-3", "xlr-4", "xlr-5", "mini-xlr", "combo-xlr-trs", "trs-quarter", "ts-quarter", "trs-eighth", "trs-2.5mm", "rca", "din-5", "mini-din-4", "mini-din-7", "mini-din-8", "toslink"],
   "Network / Data": ["rj45", "ethercon", "sfp", "lc", "sc", "opticalcon", "qsfp", "qsfp28", "mpo", "rj11", "rj12"],
   "USB": ["usb-a", "usb-b", "usb-c", "usb-mini", "usb-micro"],
   "D-Sub / Serial": ["db9", "db15", "db25", "db37", "db7w2", "lemo-5pin"],

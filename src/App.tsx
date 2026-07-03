@@ -4,6 +4,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   BackgroundVariant,
   ConnectionLineType,
   ConnectionMode,
@@ -53,7 +54,7 @@ import PageTabs from "./components/PageTabs";
 import RackPage from "./components/RackPage";
 import PrintSheetPage from "./components/PrintSheetPage";
 import { computeSnap, enforceMinSpacing, detectOverlap, speculativeReparent, type GuideLine } from "./snapUtils";
-import type { ConnectionEdge, DeviceData, DeviceTemplate, SchematicFile, SchematicNode } from "./types";
+import type { ConnectionEdge, DeviceData, DeviceTemplate, SchematicFile, SchematicNode, StubLabelData } from "./types";
 import { findAdaptersForSignalBridge, findAdaptersForConnectorBridge, areConnectorsCompatible } from "./connectorTypes";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { loadSharedSchematic, checkSession } from "./templateApi";
@@ -545,6 +546,8 @@ function SchematicCanvas() {
   const isDragging = useSchematicStore((s) => s.isDragging);
   const debugEdges = useSchematicStore((s) => s.debugEdges);
   const printView = useSchematicStore((s) => s.printView);
+  const showMinimap = useSchematicStore((s) => s.showMinimap);
+  const setShowMinimap = useSchematicStore((s) => s.setShowMinimap);
   const hiddenSignalTypesStr = useSchematicStore((s) => s.hiddenSignalTypes);
   const hideAdapters = useSchematicStore((s) => s.hideAdapters);
   const adapterVisibilityDigest = useSchematicStore((s) =>
@@ -781,14 +784,17 @@ function SchematicCanvas() {
         return;
       }
 
+      // Normalize letter keys so shortcuts still fire with Caps Lock on (#179):
+      // e.key is uppercase under Caps Lock, which broke the lowercase comparisons.
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (e.key === "Delete" || e.key === "Backspace") {
         removeSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "c") {
         copySelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "v") {
         e.preventDefault();
         pasteClipboard();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "a") {
         e.preventDefault();
         useSchematicStore.getState().selectAll();
       }
@@ -1372,6 +1378,44 @@ function SchematicCanvas() {
       if (draggedNode.type === "room") {
         reparentAllDevices({ skipUndo: true });
       }
+
+      // #182: keep stub labels glued to their device. When a device moves, re-anchor its
+      // connected (non-user-positioned) stubs to the moved port by clearing `placed` —
+      // StubLabelNode.tryPlace then re-runs and follows the device instead of leaving the
+      // stub stranded with a dogleg. When a stub itself is dragged, mark it `userMoved` so
+      // later device moves leave the user's placement alone.
+      if (draggedNode.type === "device") {
+        const st = useSchematicStore.getState();
+        const stubIds = new Set(st.nodes.filter((n) => n.type === "stub-label").map((n) => n.id));
+        const followStubs = new Set<string>();
+        for (const e of st.edges) {
+          const srcStub = stubIds.has(e.source);
+          const tgtStub = stubIds.has(e.target);
+          if (srcStub === tgtStub) continue; // not a stub leg
+          const devEnd = srcStub ? e.target : e.source;
+          if (devEnd === draggedNode.id) followStubs.add(srcStub ? e.source : e.target);
+        }
+        if (followStubs.size > 0) {
+          useSchematicStore.setState((prev) => ({
+            nodes: prev.nodes.map((n) => {
+              if (!followStubs.has(n.id) || n.type !== "stub-label") return n;
+              const d = n.data as StubLabelData;
+              if (d.userMoved || d.placed !== true) return n; // respect manual placement / pending
+              return { ...n, data: { ...d, placed: false } };
+            }),
+          }));
+        }
+      } else if (draggedNode.type === "stub-label") {
+        useSchematicStore.setState((prev) => ({
+          nodes: prev.nodes.map((n) =>
+            n.id === draggedNode.id && n.type === "stub-label"
+              ? { ...n, data: { ...(n.data as StubLabelData), userMoved: true, placed: true } }
+              : n,
+          ),
+        }));
+        useSchematicStore.getState().saveToLocalStorage();
+      }
+
       flushPendingSnapshot();
     },
     [reparentNode, reparentAllDevices, flushPendingSnapshot],
@@ -1599,12 +1643,45 @@ function SchematicCanvas() {
       <Controls position="bottom-right" />
       <AutoRouteChip />
       <AutoRouteConfirmDialog />
-      <MiniMap
-        position="bottom-left"
-        pannable
-        zoomable
-        nodeColor={(node) => node.type === "room" ? (isDark ? "#334155" : "#e5e7eb") : "#3b82f6"}
-      />
+      {showMinimap && (
+        <>
+          <MiniMap
+            position="bottom-left"
+            pannable
+            zoomable
+            style={{ width: 200, height: 150 }}
+            nodeColor={(node) => node.type === "room" ? (isDark ? "#334155" : "#e5e7eb") : "#3b82f6"}
+          />
+          {/* ✕ to dismiss the minimap; restore via View ▸ Minimap. Sits at the
+              minimap's top-right corner (both anchored bottom-left, 15px margin;
+              the 200×150 box puts its top-right at +182/-132 from that origin). (#210) */}
+          <Panel position="bottom-left">
+            <button
+              onClick={() => setShowMinimap(false)}
+              title="Hide minimap (restore via View ▸ Minimap)"
+              aria-label="Hide minimap"
+              style={{
+                transform: "translate(182px, -132px)",
+                width: 18,
+                height: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 0,
+                borderRadius: 4,
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-text)",
+                fontSize: 12,
+                lineHeight: 1,
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </Panel>
+        </>
+      )}
       <RoutingDebugOverlay />
     </ReactFlow>
     <RoutingTuningPanel />
@@ -1684,6 +1761,15 @@ export default function App() {
   const undo = useSchematicStore((s) => s.undo);
   const redo = useSchematicStore((s) => s.redo);
 
+  // Keep the browser tab title in sync with the current schematic name, so it
+  // reflects the active file (incl. after Save As / Open / rename). (#174)
+  const schematicName = useSchematicStore((s) => s.schematicName);
+  useEffect(() => {
+    document.title = schematicName
+      ? `${schematicName} — EasySchematic`
+      : "EasySchematic — AV Signal Flow Diagram Tool";
+  }, [schematicName]);
+
   // Handle /s/{token} URLs for shared schematics
   useEffect(() => {
     const match = window.location.pathname.match(/^\/s\/([a-f0-9-]+)$/);
@@ -1705,25 +1791,27 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement).isContentEditable) return;
 
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Z") {
+      // Normalize letter keys so shortcuts still fire with Caps Lock on (#179).
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === "z") {
         e.preventDefault();
         redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "z") {
         e.preventDefault();
         undo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "y") {
         e.preventDefault();
         redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "b") {
         e.preventDefault();
         useSchematicStore.getState().toggleDebugEdges();
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === "s") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("easyschematic:save-as"));
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "s") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("easyschematic:save"));
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "o") {
+      } else if ((e.ctrlKey || e.metaKey) && k === "o") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("easyschematic:open"));
       } else if (e.key === "F9") {
