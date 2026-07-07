@@ -876,7 +876,7 @@ export default function DeviceEditor() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }} onKeyDownCapture={onCtrlEnter}>
       <div
-        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-2xl w-[560px] max-h-[85vh] flex flex-col"
+        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-2xl w-[760px] max-w-[92vw] max-h-[85vh] flex flex-col"
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -2403,7 +2403,7 @@ function PortRow({
         />
 
         <input
-          className="flex-1 min-w-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+          className="flex-1 min-w-[140px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
           value={port.label}
           onChange={(e) => onUpdate({ label: e.target.value })}
           placeholder="Port label"
