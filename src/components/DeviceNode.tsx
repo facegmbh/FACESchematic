@@ -12,6 +12,7 @@ import {
   HEADER_LABEL_ZONE_2_PX,
 } from "../auxiliaryData";
 import type { AuxRow } from "../types";
+import { DEVICE_NODE_WIDTH } from "../gridConstants";
 import { useDisplayLabel } from "../labelCaseUtils";
 import { resolveDeviceLabel } from "../displayName";
 
@@ -490,7 +491,7 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
         relative rounded-lg border bg-white
         ${isOverlapping ? "border-red-400 shadow-lg shadow-red-400/30" : selected ? "border-blue-500 shadow-lg shadow-blue-500/20" : "border-[var(--color-border)]"}
       `}
-      style={{ width: 144, backgroundColor: data.color }}
+      style={{ width: DEVICE_NODE_WIDTH, backgroundColor: data.color }}
     >
       {/* Header band — merged name strip + header aux rows. Height is always a 16-multiple
            (min 32) so the first port below stays on the pathfinding grid. */}

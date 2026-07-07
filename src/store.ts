@@ -174,7 +174,7 @@ let hydrated = false;
 // snapUtils) must import directly from "./gridConstants" — pulling it through
 // the store causes a TDZ error on first load because of the cycle.
 export { GRID_SIZE } from "./gridConstants";
-import { GRID_SIZE } from "./gridConstants";
+import { GRID_SIZE, DEVICE_NODE_WIDTH } from "./gridConstants";
 
 /** Snap all node positions to the grid. Mutates the array in place.
  *  Stub labels are skipped — they store sub-grid Y to center the box on a
@@ -3502,7 +3502,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     // Nudge adapter position if it overlaps existing devices
     const MIN_GAP = GRID_SIZE * 5; // 80px — enough for stubs + routing
-    const adapterW = 144; // approximate width before measurement
+    const adapterW = DEVICE_NODE_WIDTH; // approximate width before measurement
     const adapterH = 48;
     let posX = adapterNode.position.x;
     const posY = adapterNode.position.y;

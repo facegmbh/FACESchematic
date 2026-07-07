@@ -7,6 +7,7 @@ import type { SignalType, Port, DeviceTemplate, SchematicNode, DeviceNode, Conne
 import { SIGNAL_LABELS, SIGNAL_COLORS } from "./types";
 import { DEFAULT_CONNECTOR } from "./connectorTypes";
 import { scoreTemplate } from "./templateSearch";
+import { DEVICE_NODE_WIDTH } from "./gridConstants";
 
 // ---------- Types ----------
 
@@ -376,8 +377,8 @@ function estimateHeight(ports: Port[]): number {
   return 48 + (Math.max(inputs, outputs) + bidirs) * 16;
 }
 
-const DEVICE_WIDTH = 144;
-const COLUMN_SPACING = 320; // 144px device + 176px gap (generous for routing stubs)
+const DEVICE_WIDTH = DEVICE_NODE_WIDTH;
+const COLUMN_SPACING = DEVICE_WIDTH + 176; // device width + 176px gap (generous for routing stubs)
 const VERTICAL_GAP = 32;   // 2 grid steps between devices
 const ROOM_GAP = 64;       // gap between room bands
 

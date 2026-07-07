@@ -3,6 +3,7 @@ import { getBundledTemplates, fetchTemplates } from "../templateApi";
 import { SIGNAL_LABELS } from "../types";
 import type { DeviceTemplate } from "../types";
 import { useSchematicStore, GRID_SIZE } from "../store";
+import { DEVICE_NODE_WIDTH } from "../gridConstants";
 import { scoreTemplate } from "../templateSearch";
 
 const MAX_RESULTS = 12;
@@ -162,7 +163,7 @@ export default function QuickAddDevice({
 
   const placeDevice = useCallback(
     (template: DeviceTemplate) => {
-      const w = 144;
+      const w = DEVICE_NODE_WIDTH;
       const portRows = Math.max(
         template.ports.filter((p) => p.direction === "input").length,
         template.ports.filter((p) => p.direction === "output").length,
