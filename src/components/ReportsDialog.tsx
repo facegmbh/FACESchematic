@@ -27,10 +27,10 @@ import {
   getPatchPanelScheduleTableData,
   type PatchPanelScheduleRow,
 } from "../patchPanelSchedule";
-import { createDefaultPackListLayout, createDefaultNetworkReportLayout, createDefaultCableScheduleLayout, createDefaultPatchPanelScheduleLayout, createDefaultPatchPanelDiagramLayout, createDefaultPowerReportLayout } from "../reportLayout";
-import { computePatchPanelDiagram } from "../patchPanelDiagram";
-import { renderPatchPanelDiagramPdf } from "../patchPanelDiagramPdf";
-import PatchPanelDiagram from "./PatchPanelDiagram";
+import { createDefaultPackListLayout, createDefaultNetworkReportLayout, createDefaultCableScheduleLayout, createDefaultPatchPanelScheduleLayout, createDefaultRackPlanLayout, createDefaultPowerReportLayout } from "../reportLayout";
+import { computeRackPlan } from "../rackPlan";
+import { renderRackPlanPdf } from "../rackPlanPdf";
+import RackPlan from "./RackPlan";
 import { getNetworkReportTableData } from "../networkReport";
 import { computePowerReport, exportPowerReportCsv, getPowerReportTableData } from "../powerReport";
 import ReportPreviewDialog from "./ReportPreviewDialog";
@@ -112,17 +112,17 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
     }
   }, [tab, nodes, edges, schematicName]);
 
-  const handlePatchPanelDiagramPdf = useCallback(async () => {
+  const handleRackPlanPdf = useCallback(async () => {
     const s = useSchematicStore.getState();
-    const panels = computePatchPanelDiagram(nodes, edges, s.cableNamingScheme, {
+    const racks = computeRackPlan(nodes, edges, s.pages, s.cableNamingScheme, {
       roomDistances: s.roomDistances,
       distanceSettings: s.distanceSettings,
     });
-    await renderPatchPanelDiagramPdf(
-      createDefaultPatchPanelDiagramLayout(),
+    await renderRackPlanPdf(
+      createDefaultRackPlanLayout(),
       titleBlock,
-      panels,
-      `${schematicName.replace(/[^a-zA-Z0-9-_ ]/g, "")} - Patch Panel Diagram.pdf`,
+      racks,
+      `${schematicName.replace(/[^a-zA-Z0-9-_ ]/g, "")} - Rack Plan.pdf`,
     );
   }, [nodes, edges, titleBlock, schematicName]);
 
@@ -182,7 +182,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
                       : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   }`}
                 >
-                  Diagram
+                  Rack Plan
                 </button>
               </div>
             )}
@@ -210,7 +210,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
               <button
                 onClick={() =>
                   patchPanelView === "diagram"
-                    ? handlePatchPanelDiagramPdf()
+                    ? handleRackPlanPdf()
                     : setShowPatchPanelPreview(true)
                 }
                 className={btnClass}
@@ -263,7 +263,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
             {tab === "packList" && <PackListTabInline />}
             {tab === "cableSchedule" && <CableScheduleTabInline />}
             {tab === "patchPanel" && (
-              patchPanelView === "diagram" ? <PatchPanelDiagramTabInline /> : <PatchPanelScheduleTabInline />
+              patchPanelView === "diagram" ? <RackPlanTabInline /> : <PatchPanelScheduleTabInline />
             )}
             {tab === "power" && <PowerReportTab />}
             {tab === "bus" && <BusReportTab />}
@@ -2459,21 +2459,22 @@ function PatchPanelScheduleTabInline() {
   );
 }
 
-// ─── Patch Panel Diagram Tab (graphical front view) ────────────
+// ─── Rack Plan Tab (graphical cabinet / network front view) ────
 
-function PatchPanelDiagramTabInline() {
+function RackPlanTabInline() {
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
+  const pages = useSchematicStore((s) => s.pages);
   const cableNamingScheme = useSchematicStore((s) => s.cableNamingScheme);
   const roomDistances = useSchematicStore((s) => s.roomDistances);
   const distanceSettings = useSchematicStore((s) => s.distanceSettings);
 
-  const panels = useMemo(
-    () => computePatchPanelDiagram(nodes, edges, cableNamingScheme, { roomDistances, distanceSettings }),
-    [nodes, edges, cableNamingScheme, roomDistances, distanceSettings],
+  const racks = useMemo(
+    () => computeRackPlan(nodes, edges, pages, cableNamingScheme, { roomDistances, distanceSettings }),
+    [nodes, edges, pages, cableNamingScheme, roomDistances, distanceSettings],
   );
 
-  return <PatchPanelDiagram panels={panels} />;
+  return <RackPlan racks={racks} />;
 }
 
 // ─── Pack List Tab (inline, reusing packList.ts logic) ─────────

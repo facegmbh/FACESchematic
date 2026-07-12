@@ -1,0 +1,213 @@
+import { memo } from "react";
+import { SIGNAL_LABELS } from "../types";
+import type { RackPlanDevice, RackPlanRack } from "../rackPlan";
+import { collectRackPlanSignals } from "../rackPlan";
+
+/**
+ * On-screen cabinet / network rack plan. Each rack is drawn as a stack of
+ * realistic 19" device fronts in rack-unit order; devices with jacks (patch
+ * panels, switches) show their ports in a single row with a vertical
+ * destination + cable-ID label under each connected port.
+ *
+ * The PDF export in `rackPlanPdf.ts` mirrors this layout — keep the two in
+ * sync when changing geometry.
+ */
+
+// ─── Geometry (px) ───
+const GUTTER = 34; // left lane for the U position
+const EAR_W = 11; // rack-ear width
+const JACK_W = 30;
+const JACK_H = 20;
+const FACE_PAD = 8;
+const LABEL_LANE = 122; // vertical label lane under a faceplate with connections
+const ROW_GAP = 7;
+const FACE_BG = "#1f2937";
+const EAR_BG = "#374151";
+const EMPTY_JACK = "#4b5563";
+
+function trunc(s: string, n: number): string {
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+function faceHeight(dev: RackPlanDevice): number {
+  return Math.max(26, dev.heightU * 22);
+}
+function rowHeight(dev: RackPlanDevice): number {
+  const hasLabels = dev.ports.some((p) => p.connected);
+  return faceHeight(dev) + (hasLabels ? LABEL_LANE : 0);
+}
+function uLabel(dev: RackPlanDevice): string {
+  const top = dev.uPosition + dev.heightU - 1;
+  return dev.heightU > 1 ? `${dev.uPosition}–${top}` : `${dev.uPosition}`;
+}
+
+function DeviceRow({ dev, y, faceW }: { dev: RackPlanDevice; y: number; faceW: number }) {
+  const fh = faceHeight(dev);
+  const x0 = GUTTER;
+  const portsX = x0 + EAR_W + FACE_PAD;
+  const labelTop = y + fh + 4;
+
+  return (
+    <g>
+      {/* U position */}
+      <text x={GUTTER - 6} y={y + fh / 2} textAnchor="end" dominantBaseline="central" fontSize={9} fill="#64748b" fontFamily="sans-serif">
+        {uLabel(dev)}
+      </text>
+
+      {/* Faceplate */}
+      <rect x={x0} y={y} width={faceW} height={fh} rx={3} fill={FACE_BG} stroke="#0f172a" strokeWidth={1} />
+      {/* Rack ears with screw holes */}
+      {[x0, x0 + faceW - EAR_W].map((ex, i) => (
+        <g key={i}>
+          <rect x={ex} y={y} width={EAR_W} height={fh} rx={2} fill={EAR_BG} />
+          <circle cx={ex + EAR_W / 2} cy={y + 5} r={1.5} fill="#111827" />
+          <circle cx={ex + EAR_W / 2} cy={y + fh - 5} r={1.5} fill="#111827" />
+        </g>
+      ))}
+      {/* Accent stripe in the device color */}
+      <rect x={x0 + EAR_W} y={y + 2} width={3} height={fh - 4} fill={dev.color} />
+
+      {dev.ports.length === 0 ? (
+        <text x={x0 + faceW / 2} y={y + fh / 2} textAnchor="middle" dominantBaseline="central" fontSize={10} fill="#e5e7eb" fontFamily="sans-serif">
+          {trunc(dev.label, Math.floor(faceW / 7))}
+        </text>
+      ) : (
+        <>
+          {/* Device label above the ports */}
+          <text x={portsX} y={y - 3} fontSize={9} fontWeight={600} fill="#334155" fontFamily="sans-serif">
+            {trunc(dev.label, 40)}
+            <tspan fill="#94a3b8" fontWeight={400}>
+              {"   "}
+              {dev.connectedCount}/{dev.ports.length}
+            </tspan>
+          </text>
+          {dev.ports.map((p, i) => {
+            const jx = portsX + i * JACK_W;
+            const jcx = jx + JACK_W / 2;
+            const jackY = y + (fh - JACK_H) / 2;
+            return (
+              <g key={p.portId}>
+                <rect
+                  x={jx + 2}
+                  y={jackY}
+                  width={JACK_W - 4}
+                  height={JACK_H}
+                  rx={2.5}
+                  fill={p.connected ? p.color : EMPTY_JACK}
+                  stroke={p.connected ? "#0f172a" : "#374151"}
+                  strokeWidth={0.75}
+                />
+                {/* Port number */}
+                <text x={jcx} y={jackY + JACK_H / 2 + 0.5} textAnchor="middle" dominantBaseline="central" fontSize={7.5} fontWeight={600} fill={p.connected ? "#fff" : "#9ca3af"} fontFamily="sans-serif">
+                  {trunc(p.position, 4)}
+                </text>
+                {/* Gender tick */}
+                {p.connected && p.gender !== "—" && (
+                  <text x={jx + JACK_W - 3} y={jackY - 1.5} textAnchor="end" fontSize={6} fill="#94a3b8" fontFamily="sans-serif">
+                    {p.gender}
+                  </text>
+                )}
+                {/* Vertical destination + cable-ID label */}
+                {p.connected && (
+                  <text
+                    x={jcx}
+                    y={labelTop}
+                    fontSize={8}
+                    fill="#334155"
+                    fontFamily="sans-serif"
+                    transform={`rotate(90 ${jcx} ${labelTop})`}
+                  >
+                    {trunc(
+                      [p.cableId, [p.remoteRoom, p.remoteDevice].filter(Boolean).join(" · "), p.remotePort]
+                        .filter(Boolean)
+                        .join("  "),
+                      Math.floor(LABEL_LANE / 4.6),
+                    )}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </>
+      )}
+    </g>
+  );
+}
+
+function RackSvg({ rack }: { rack: RackPlanRack }) {
+  const maxPorts = Math.max(8, ...rack.devices.map((d) => d.ports.length));
+  const faceW = EAR_W * 2 + FACE_PAD * 2 + maxPorts * JACK_W;
+  const width = GUTTER + faceW + 16;
+
+  // Stack rows top-down.
+  const TITLE_H = 34;
+  const rows: { dev: RackPlanDevice; y: number }[] = [];
+  let cursor = TITLE_H;
+  for (const dev of rack.devices) {
+    // Reserve headroom above ports for the device label (only when it has ports).
+    const y = cursor + (dev.ports.length > 0 ? 12 : 4);
+    rows.push({ dev, y });
+    cursor = y + rowHeight(dev) + ROW_GAP;
+  }
+  const height = cursor + 6;
+
+  const usedU = rack.devices.reduce((s, d) => s + d.heightU, 0);
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="shrink-0"
+      style={{ background: "#ffffff", border: "1px solid var(--color-border)", borderRadius: 8 }}
+    >
+      <text x={GUTTER} y={16} fontSize={13} fontWeight={700} fill="#0f172a" fontFamily="sans-serif">
+        {rack.label}
+      </text>
+      <text x={GUTTER} y={28} fontSize={9} fill="#64748b" fontFamily="sans-serif">
+        {[rack.room, `${rack.heightU} HE`, `${usedU} HE belegt`].filter(Boolean).join("   ·   ")}
+      </text>
+      {rows.map(({ dev, y }) => (
+        <DeviceRow key={dev.nodeId} dev={dev} y={y} faceW={faceW} />
+      ))}
+    </svg>
+  );
+}
+
+function RackPlanComponent({ racks }: { racks: RackPlanRack[] }) {
+  if (racks.length === 0) {
+    return (
+      <div className="text-sm text-[var(--color-text-muted)] text-center py-8 leading-relaxed">
+        Keine Rack-Elevation in diesem Schaltplan.
+        <br />
+        Lege im Rack-Editor einen Schrank an und platziere die Geräte darin, um den Rack-Plan zu sehen.
+      </div>
+    );
+  }
+
+  const signals = collectRackPlanSignals(racks);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {signals.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+          {signals.map((s) => (
+            <div key={s.signalType} className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: s.color }} />
+              {SIGNAL_LABELS[s.signalType] ?? s.signalType}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-6 items-start">
+        {racks.map((r) => (
+          <RackSvg key={r.rackId} rack={r} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const RackPlan = memo(RackPlanComponent);
+export default RackPlan;
