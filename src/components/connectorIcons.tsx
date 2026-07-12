@@ -82,17 +82,22 @@ function dSubPath(width: number, height: number): string {
 
 // ── HDMI shape — rectangle with two chamfered bottom corners ────
 
-function hdmiPath(width: number, height: number, chamfer: number): string {
+function hdmiPath(width: number, height: number, taper: number): string {
   const hw = width / 2;
   const hh = height / 2;
-  // Flat top, vertical sides, small 45° cuts at bottom corners, flat bottom
+  const bw = hw - taper; // bottom half-width (< top): the HDMI trapezoid taper
+  const r = 0.3;
+  // Wide flat top, sides angling inward to a narrower flat bottom (HDMI Type A silhouette).
   return [
-    `M ${-hw} ${-hh}`,
-    `L ${hw} ${-hh}`,
-    `L ${hw} ${hh - chamfer}`,
-    `L ${hw - chamfer} ${hh}`,
-    `L ${-hw + chamfer} ${hh}`,
-    `L ${-hw} ${hh - chamfer}`,
+    `M ${-hw + r} ${-hh}`,
+    `L ${hw - r} ${-hh}`,
+    `A ${r} ${r} 0 0 1 ${hw} ${-hh + r}`,
+    `L ${bw} ${hh - r}`,
+    `A ${r} ${r} 0 0 1 ${bw - r} ${hh}`,
+    `L ${-bw + r} ${hh}`,
+    `A ${r} ${r} 0 0 1 ${-bw} ${hh - r}`,
+    `L ${-hw} ${-hh + r}`,
+    `A ${r} ${r} 0 0 1 ${-hw + r} ${-hh}`,
     "Z",
   ].join(" ");
 }
