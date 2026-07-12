@@ -3,6 +3,7 @@ import type { TitleBlock } from "./types";
 import type { ReportLayout } from "./reportLayout";
 import { getPageDimensions, REPORT_MARGIN_MM } from "./reportLayout";
 import { loadInterFont, drawGridBlock } from "./reportPdf";
+import { rasterizeConnector, type RasterizedConnector } from "./connectorRaster";
 import type { RackPlanDevice, RackPlanRack } from "./rackPlan";
 
 /**
@@ -15,15 +16,22 @@ import type { RackPlanDevice, RackPlanRack } from "./rackPlan";
 const GUTTER = 9;
 const EAR_W = 3;
 const JACK_W = 8;
-const JACK_H = 5.5;
+const NUM_H = 2.6;
+const HOUSING_H = 5.5;
+const CHIP_H = 0.9;
 const FACE_PAD = 2;
 const LABEL_LANE = 32;
 const ROW_GAP = 2;
 const DEVICE_HEAD = 3.5;
 
-const FACE_BG: [number, number, number] = [31, 41, 55];
+/** Icon colors (mirror RackPlan.tsx): light "metal" when connected, muted when free. */
+const ICON_CONNECTED = "#e5e7eb";
+const ICON_FREE = "#64748b";
+
+const FACE_BG: [number, number, number] = [17, 24, 39];
 const EAR_BG: [number, number, number] = [55, 65, 81];
-const EMPTY_JACK: [number, number, number] = [75, 85, 99];
+const HOUSING_BG: [number, number, number] = [11, 18, 32];
+const HOUSING_STROKE: [number, number, number] = [51, 65, 85];
 
 function hexToRgb(hex: string): [number, number, number] {
   const m = hex.trim().match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
@@ -35,7 +43,13 @@ function trunc(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 function faceHeight(dev: RackPlanDevice): number {
+  if (dev.ports.length > 0) return Math.max(NUM_H + HOUSING_H + CHIP_H + 1.5, dev.heightU * 5);
   return Math.max(6, dev.heightU * 5);
+}
+
+/** Cache key for a rasterized connector (mirrors icon color choice in drawDevice). */
+function rasterKey(connectorType: string | undefined, connected: boolean): string {
+  return `${connectorType ?? "none"}|${connected ? ICON_CONNECTED : ICON_FREE}`;
 }
 function hasLabels(dev: RackPlanDevice): boolean {
   return dev.ports.some((p) => p.connected);
@@ -49,7 +63,14 @@ function uLabel(dev: RackPlanDevice): string {
   return dev.heightU > 1 ? `${dev.uPosition}-${top}` : `${dev.uPosition}`;
 }
 
-function drawDevice(doc: jsPDF, dev: RackPlanDevice, xLeft: number, yTop: number, faceW: number) {
+function drawDevice(
+  doc: jsPDF,
+  dev: RackPlanDevice,
+  xLeft: number,
+  yTop: number,
+  faceW: number,
+  rasters: Map<string, RasterizedConnector>,
+) {
   const head = dev.ports.length > 0 ? DEVICE_HEAD : 1;
   const y = yTop + head;
   const fh = faceHeight(dev);
@@ -94,24 +115,45 @@ function drawDevice(doc: jsPDF, dev: RackPlanDevice, xLeft: number, yTop: number
   doc.setFont("Inter", "normal");
 
   const labelTop = y + fh + 1.5;
+  const housingY = y + NUM_H;
+  const housingW = JACK_W - 1.2;
   dev.ports.forEach((p, i) => {
     const jx = portsX + i * JACK_W;
-    const jackY = y + (fh - JACK_H) / 2;
+    const jcx = jx + JACK_W / 2;
+
+    // Port number on the faceplate
+    doc.setFontSize(5);
+    doc.setTextColor(203, 213, 225);
+    doc.text(trunc(p.position, 4), jcx, y + NUM_H / 2 + 1, { align: "center" });
+
+    // Jack cutout
+    doc.setFillColor(...HOUSING_BG);
+    doc.setDrawColor(...HOUSING_STROKE);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(jx + 0.6, housingY, housingW, HOUSING_H, 0.5, 0.5, "FD");
+
+    // Real connector icon (rasterized), fit inside the cutout preserving aspect
+    const raster = rasters.get(rasterKey(p.connectorType, p.connected));
+    if (raster) {
+      const availW = housingW - 1.2;
+      const availH = HOUSING_H - 1.2;
+      let iw = availW;
+      let ih = iw / raster.aspect;
+      if (ih > availH) {
+        ih = availH;
+        iw = ih * raster.aspect;
+      }
+      doc.addImage(raster.dataUrl, "PNG", jcx - iw / 2, housingY + (HOUSING_H - ih) / 2, iw, ih);
+    }
+
+    // Signal-color label strip under the jack
     if (p.connected) {
       const [r, g, b] = hexToRgb(p.color);
       doc.setFillColor(r, g, b);
-      doc.setDrawColor(15, 23, 42);
     } else {
-      doc.setFillColor(...EMPTY_JACK);
-      doc.setDrawColor(55, 65, 81);
+      doc.setFillColor(51, 65, 85);
     }
-    doc.setLineWidth(0.2);
-    doc.roundedRect(jx + 0.6, jackY, JACK_W - 1.2, JACK_H, 0.6, 0.6, "FD");
-
-    // Port number
-    doc.setFontSize(5.5);
-    doc.setTextColor(p.connected ? 255 : 156, p.connected ? 255 : 163, p.connected ? 255 : 175);
-    doc.text(trunc(p.position, 4), jx + JACK_W / 2, jackY + JACK_H / 2 + 1, { align: "center" });
+    doc.rect(jx + 0.6, housingY + HOUSING_H + 0.4, housingW, CHIP_H, "F");
 
     // Vertical destination + cable-ID label
     if (p.connected) {
@@ -120,7 +162,7 @@ function drawDevice(doc: jsPDF, dev: RackPlanDevice, xLeft: number, yTop: number
         .join("  ");
       doc.setFontSize(6);
       doc.setTextColor(51, 65, 85);
-      doc.text(trunc(label, Math.floor(LABEL_LANE / 1.7)), jx + JACK_W / 2 + 1.8, labelTop, { angle: -90 });
+      doc.text(trunc(label, Math.floor(LABEL_LANE / 1.7)), jcx + 1.8, labelTop, { angle: -90 });
     }
   });
 }
@@ -134,6 +176,27 @@ export async function renderRackPlanPdf(
   const { widthMm, heightMm } = getPageDimensions(layout.paperSize, layout.orientation);
   const doc = new jsPDF({ orientation: layout.orientation, unit: "mm", format: layout.paperSize });
   await loadInterFont(doc);
+
+  // Pre-rasterize every distinct connector shape once (a plan has only a few).
+  const rasters = new Map<string, RasterizedConnector>();
+  const wanted = new Map<string, { connectorType: RackPlanRack["devices"][number]["ports"][number]["connectorType"]; connected: boolean }>();
+  for (const rack of racks) {
+    for (const dev of rack.devices) {
+      for (const p of dev.ports) {
+        const key = rasterKey(p.connectorType, p.connected);
+        if (!wanted.has(key)) wanted.set(key, { connectorType: p.connectorType, connected: p.connected });
+      }
+    }
+  }
+  await Promise.all(
+    Array.from(wanted.entries()).map(async ([key, { connectorType, connected }]) => {
+      try {
+        rasters.set(key, await rasterizeConnector(connectorType, connected ? ICON_CONNECTED : ICON_FREE, 2));
+      } catch {
+        /* fall back to an empty jack if rasterization is unavailable */
+      }
+    }),
+  );
 
   const contentW = widthMm - 2 * REPORT_MARGIN_MM;
   const topLimit = REPORT_MARGIN_MM + layout.headerHeightMm + 4;
@@ -180,7 +243,7 @@ export async function renderRackPlanPdf(
         doc.setFont("Inter", "normal");
         y += 6;
       }
-      drawDevice(doc, dev, REPORT_MARGIN_MM + GUTTER, y, faceW);
+      drawDevice(doc, dev, REPORT_MARGIN_MM + GUTTER, y, faceW, rasters);
       y += rh;
     }
     y += 5;

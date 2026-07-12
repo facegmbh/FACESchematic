@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { SIGNAL_LABELS } from "../types";
+import { ConnectorIcon, getConnectorSpec } from "./connectorIcons";
 import type { RackPlanDevice, RackPlanRack } from "../rackPlan";
 import { collectRackPlanSignals } from "../rackPlan";
 
@@ -16,14 +17,18 @@ import { collectRackPlanSignals } from "../rackPlan";
 // ─── Geometry (px) ───
 const GUTTER = 34; // left lane for the U position
 const EAR_W = 11; // rack-ear width
-const JACK_W = 30;
-const JACK_H = 20;
+const JACK_W = 34;
+const NUM_H = 11; // port-number strip at the top of the faceplate
+const HOUSING_H = 26; // jack cutout height
+const CHIP_H = 3; // signal-color label strip under each jack
 const FACE_PAD = 8;
 const LABEL_LANE = 122; // vertical label lane under a faceplate with connections
 const ROW_GAP = 7;
-const FACE_BG = "#1f2937";
+const FACE_BG = "#111827";
 const EAR_BG = "#374151";
-const EMPTY_JACK = "#4b5563";
+const HOUSING_BG = "#0b1220";
+const HOUSING_STROKE = "#334155";
+const EMPTY_METAL = "#64748b";
 
 function trunc(s: string, n: number): string {
   if (!s) return "";
@@ -31,7 +36,8 @@ function trunc(s: string, n: number): string {
 }
 
 function faceHeight(dev: RackPlanDevice): number {
-  return Math.max(26, dev.heightU * 22);
+  if (dev.ports.length > 0) return Math.max(NUM_H + HOUSING_H + CHIP_H + 6, dev.heightU * 22);
+  return Math.max(24, dev.heightU * 22);
 }
 function rowHeight(dev: RackPlanDevice): number {
   const hasLabels = dev.ports.some((p) => p.connected);
@@ -85,29 +91,34 @@ function DeviceRow({ dev, y, faceW }: { dev: RackPlanDevice; y: number; faceW: n
           {dev.ports.map((p, i) => {
             const jx = portsX + i * JACK_W;
             const jcx = jx + JACK_W / 2;
-            const jackY = y + (fh - JACK_H) / 2;
+            const housingX = jx + 2;
+            const housingW = JACK_W - 4;
+            const housingY = y + NUM_H;
+            const housingCy = housingY + HOUSING_H / 2;
+            // Fit the real connector icon inside the jack cutout, preserving aspect.
+            const spec = getConnectorSpec(p.connectorType);
+            const scale = Math.min((housingW - 6) / spec.widthMm, (HOUSING_H - 7) / spec.heightMm);
+            const iconColor = p.connected ? "#e5e7eb" : EMPTY_METAL;
             return (
               <g key={p.portId}>
-                <rect
-                  x={jx + 2}
-                  y={jackY}
-                  width={JACK_W - 4}
-                  height={JACK_H}
-                  rx={2.5}
-                  fill={p.connected ? p.color : EMPTY_JACK}
-                  stroke={p.connected ? "#0f172a" : "#374151"}
-                  strokeWidth={0.75}
-                />
-                {/* Port number */}
-                <text x={jcx} y={jackY + JACK_H / 2 + 0.5} textAnchor="middle" dominantBaseline="central" fontSize={7.5} fontWeight={600} fill={p.connected ? "#fff" : "#9ca3af"} fontFamily="sans-serif">
+                {/* Port number printed on the faceplate */}
+                <text x={jcx} y={y + NUM_H / 2 + 1} textAnchor="middle" dominantBaseline="central" fontSize={7} fontWeight={600} fill="#cbd5e1" fontFamily="sans-serif">
                   {trunc(p.position, 4)}
                 </text>
-                {/* Gender tick */}
-                {p.connected && p.gender !== "—" && (
-                  <text x={jx + JACK_W - 3} y={jackY - 1.5} textAnchor="end" fontSize={6} fill="#94a3b8" fontFamily="sans-serif">
-                    {p.gender}
-                  </text>
-                )}
+                {/* Jack cutout (recessed port opening) */}
+                <rect x={housingX} y={housingY} width={housingW} height={HOUSING_H} rx={2} fill={HOUSING_BG} stroke={HOUSING_STROKE} strokeWidth={0.75} />
+                {/* Real connector icon */}
+                <ConnectorIcon x={jcx} y={housingCy} connectorType={p.connectorType} scale={scale} color={iconColor} detail={2} />
+                {/* Signal-color label strip under the jack */}
+                <rect
+                  x={housingX}
+                  y={housingY + HOUSING_H + 1}
+                  width={housingW}
+                  height={CHIP_H}
+                  rx={1}
+                  fill={p.connected ? p.color : "#334155"}
+                  opacity={p.connected ? 1 : 0.5}
+                />
                 {/* Vertical destination + cable-ID label */}
                 {p.connected && (
                   <text
