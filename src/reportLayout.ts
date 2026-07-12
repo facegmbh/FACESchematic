@@ -404,6 +404,35 @@ export function createDefaultPatchPanelScheduleLayout(): ReportLayout {
   };
 }
 
+// ─── Patch Panel Diagram (graphical front view) Defaults ───
+
+export function createDefaultPatchPanelDiagramHeaderLayout(): TitleBlockLayout {
+  return {
+    columns: normalizeSizes([0.6, 0.4]),
+    rows: normalizeSizes([0.55, 0.45]),
+    widthIn: 8,
+    heightIn: 0.8,
+    cells: [
+      layoutCell(0, 0, { type: "static", text: "Patch Panel Diagram" }, { fontSize: 14, fontWeight: "bold" }),
+      layoutCell(0, 1, { type: "logo" }, { align: "right" }),
+      layoutCell(1, 0, { type: "field", field: "showName" }, { fontSize: 8 }),
+      layoutCell(1, 1, { type: "field", field: "date" }, { fontSize: 8, align: "right", color: "#666666" }),
+    ],
+  };
+}
+
+export function createDefaultPatchPanelDiagramLayout(): ReportLayout {
+  return {
+    headerLayout: createDefaultPatchPanelDiagramHeaderLayout(),
+    headerHeightMm: 22,
+    footerLayout: createDefaultPackListFooterLayout(),
+    footerHeightMm: 8,
+    tables: [],
+    orientation: "landscape",
+    paperSize: "letter",
+  };
+}
+
 // ─── Power Report Defaults ───
 
 export function createDefaultPowerReportHeaderLayout(): TitleBlockLayout {

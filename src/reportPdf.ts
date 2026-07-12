@@ -30,7 +30,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function loadInterFont(doc: jsPDF) {
+export async function loadInterFont(doc: jsPDF) {
   if (!interRegularB64) {
     const [regularRes, boldRes] = await Promise.all([
       fetch("/fonts/Inter-Regular.ttf"),
@@ -62,7 +62,7 @@ export interface ReportTableData {
 
 // ─── Grid Block Renderer (shared by header + footer) ───
 
-function drawGridBlock(
+export function drawGridBlock(
   doc: jsPDF,
   layout: ReportLayout,
   titleBlock: TitleBlock,

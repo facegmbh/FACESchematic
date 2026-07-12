@@ -27,7 +27,10 @@ import {
   getPatchPanelScheduleTableData,
   type PatchPanelScheduleRow,
 } from "../patchPanelSchedule";
-import { createDefaultPackListLayout, createDefaultNetworkReportLayout, createDefaultCableScheduleLayout, createDefaultPatchPanelScheduleLayout, createDefaultPowerReportLayout } from "../reportLayout";
+import { createDefaultPackListLayout, createDefaultNetworkReportLayout, createDefaultCableScheduleLayout, createDefaultPatchPanelScheduleLayout, createDefaultPatchPanelDiagramLayout, createDefaultPowerReportLayout } from "../reportLayout";
+import { computePatchPanelDiagram } from "../patchPanelDiagram";
+import { renderPatchPanelDiagramPdf } from "../patchPanelDiagramPdf";
+import PatchPanelDiagram from "./PatchPanelDiagram";
 import { getNetworkReportTableData } from "../networkReport";
 import { computePowerReport, exportPowerReportCsv, getPowerReportTableData } from "../powerReport";
 import ReportPreviewDialog from "./ReportPreviewDialog";
@@ -60,6 +63,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
   const [showNetworkPreview, setShowNetworkPreview] = useState(false);
   const [showCableSchedulePreview, setShowCableSchedulePreview] = useState(false);
   const [showPatchPanelPreview, setShowPatchPanelPreview] = useState(false);
+  const [patchPanelView, setPatchPanelView] = useState<"table" | "diagram">("table");
   const [showPowerPreview, setShowPowerPreview] = useState(false);
 
   const nodes = useSchematicStore((s) => s.nodes);
@@ -108,6 +112,20 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
     }
   }, [tab, nodes, edges, schematicName]);
 
+  const handlePatchPanelDiagramPdf = useCallback(async () => {
+    const s = useSchematicStore.getState();
+    const panels = computePatchPanelDiagram(nodes, edges, s.cableNamingScheme, {
+      roomDistances: s.roomDistances,
+      distanceSettings: s.distanceSettings,
+    });
+    await renderPatchPanelDiagramPdf(
+      createDefaultPatchPanelDiagramLayout(),
+      titleBlock,
+      panels,
+      `${schematicName.replace(/[^a-zA-Z0-9-_ ]/g, "")} - Patch Panel Diagram.pdf`,
+    );
+  }, [nodes, edges, titleBlock, schematicName]);
+
   const defaultLayout = useMemo(() => createDefaultPackListLayout(), []);
   const networkDefaultLayout = useMemo(() => createDefaultNetworkReportLayout(), []);
   const cableScheduleDefaultLayout = useMemo(() => createDefaultCableScheduleLayout(), []);
@@ -144,6 +162,30 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
               Reports
             </h2>
             <div className="flex-1" />
+            {tab === "patchPanel" && (
+              <div className="flex rounded border border-[var(--color-border)] overflow-hidden text-xs mr-1">
+                <button
+                  onClick={() => setPatchPanelView("table")}
+                  className={`px-2.5 py-1 cursor-pointer transition-colors ${
+                    patchPanelView === "table"
+                      ? "bg-[var(--color-surface-hover)] text-[var(--color-text-heading)] font-semibold"
+                      : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setPatchPanelView("diagram")}
+                  className={`px-2.5 py-1 cursor-pointer transition-colors border-l border-[var(--color-border)] ${
+                    patchPanelView === "diagram"
+                      ? "bg-[var(--color-surface-hover)] text-[var(--color-text-heading)] font-semibold"
+                      : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  Diagram
+                </button>
+              </div>
+            )}
             {tab !== "bus" && (
               <button onClick={handleCsvExport} className={btnClass}>
                 CSV
@@ -165,7 +207,14 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
               </button>
             )}
             {tab === "patchPanel" && (
-              <button onClick={() => setShowPatchPanelPreview(true)} className={btnClass}>
+              <button
+                onClick={() =>
+                  patchPanelView === "diagram"
+                    ? handlePatchPanelDiagramPdf()
+                    : setShowPatchPanelPreview(true)
+                }
+                className={btnClass}
+              >
                 PDF
               </button>
             )}
@@ -213,7 +262,9 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
             {tab === "devices" && <DeviceReportTab />}
             {tab === "packList" && <PackListTabInline />}
             {tab === "cableSchedule" && <CableScheduleTabInline />}
-            {tab === "patchPanel" && <PatchPanelScheduleTabInline />}
+            {tab === "patchPanel" && (
+              patchPanelView === "diagram" ? <PatchPanelDiagramTabInline /> : <PatchPanelScheduleTabInline />
+            )}
             {tab === "power" && <PowerReportTab />}
             {tab === "bus" && <BusReportTab />}
           </div>
@@ -2406,6 +2457,23 @@ function PatchPanelScheduleTabInline() {
       </table>
     </>
   );
+}
+
+// ─── Patch Panel Diagram Tab (graphical front view) ────────────
+
+function PatchPanelDiagramTabInline() {
+  const nodes = useSchematicStore((s) => s.nodes);
+  const edges = useSchematicStore((s) => s.edges);
+  const cableNamingScheme = useSchematicStore((s) => s.cableNamingScheme);
+  const roomDistances = useSchematicStore((s) => s.roomDistances);
+  const distanceSettings = useSchematicStore((s) => s.distanceSettings);
+
+  const panels = useMemo(
+    () => computePatchPanelDiagram(nodes, edges, cableNamingScheme, { roomDistances, distanceSettings }),
+    [nodes, edges, cableNamingScheme, roomDistances, distanceSettings],
+  );
+
+  return <PatchPanelDiagram panels={panels} />;
 }
 
 // ─── Pack List Tab (inline, reusing packList.ts logic) ─────────
