@@ -119,6 +119,7 @@ const MIME = "application/easyschematic-port";
 
 export default function DeviceEditor() {
   const editingNodeId = useSchematicStore((s) => s.editingNodeId);
+  const wrapDeviceLabels = useSchematicStore((s) => s.wrapDeviceLabels);
   const nodes = useSchematicStore((s) => s.nodes);
   const updateDevice = useSchematicStore((s) => s.updateDevice);
   const syncDeviceFromTemplate = useSchematicStore((s) => s.syncDeviceFromTemplate);
@@ -953,12 +954,15 @@ export default function DeviceEditor() {
               })()}
               <label
                 className="flex items-center gap-1.5 text-[11px] text-[var(--color-text)] cursor-pointer"
-                title="Wrap the device label across two lines on this device. Leave unchecked to inherit the schematic-wide default."
+                title={wrapLabel === undefined
+                  ? `Inheriting the schematic-wide default (currently ${wrapDeviceLabels ? "on" : "off"}). Click to set this device explicitly.`
+                  : "Wrap the device label across two lines on this device. Uncheck twice to go back to inheriting the schematic-wide default."}
               >
+                {/* Shows the *effective* state, so an inherited "on" reads as ticked rather than as an
+                    indeterminate dash that looks switched off. The "(inherit)" hint carries the distinction. */}
                 <input
                   type="checkbox"
-                  checked={wrapLabel === true}
-                  ref={(el) => { if (el) el.indeterminate = wrapLabel === undefined; }}
+                  checked={wrapLabel ?? wrapDeviceLabels}
                   onChange={(e) => setWrapLabelState(e.target.checked ? true : (wrapLabel === undefined ? false : undefined))}
                 />
                 Wrap label {wrapLabel === undefined && <span className="text-[var(--color-text-muted)]">(inherit)</span>}
