@@ -5,7 +5,7 @@ export type ConnectorType =
   | "xlr-3" | "xlr-4" | "xlr-5" | "trs-quarter" | "ts-quarter" | "trs-eighth" | "combo-xlr-trs"
   | "rj45" | "ethercon" | "sfp" | "lc" | "sc"
   | "usb-a" | "usb-b" | "usb-c"
-  | "db7w2" | "db9" | "db15" | "db25" | "din-5" | "phoenix" | "terminal-block" | "powercon" | "edison" | "iec" | "iec-c5" | "iec-c7" | "iec-c15" | "iec-c20"
+  | "db7w2" | "db9" | "db15" | "db25" | "din-5" | "phoenix" | "terminal-block" | "powercon" | "edison" | "cee-7-7" | "iec" | "iec-c5" | "iec-c7" | "iec-c15" | "iec-c20"
   | "speakon" | "socapex" | "multipin" | "rca" | "toslink" | "barrel"
   | "banana" | "binding-post" | "binding-post-banana" | "dvi" | "mini-xlr" | "opticalcon"
   | "l5-20" | "l6-20" | "l6-30" | "l21-30" | "cam-lok" | "powercon-true1"
@@ -1042,6 +1042,7 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "terminal-block": "Terminal Block",
   powercon: "powerCON",
   edison: "Edison",
+  "cee-7-7": "CEE 7/7 (Schuko)",
   iec: "IEC C13/C14",
   "iec-c5": "IEC C5",
   "iec-c7": "IEC C7",
@@ -1205,7 +1206,7 @@ export const CONNECTOR_GROUPS: Record<string, ConnectorType[]> = {
   "Network / Data": ["rj45", "ethercon", "sfp", "lc", "sc", "opticalcon", "qsfp", "qsfp28", "mpo", "rj11", "rj12"],
   "USB": ["usb-a", "usb-b", "usb-c", "usb-mini", "usb-micro"],
   "D-Sub / Serial": ["db9", "db15", "db25", "db37", "db7w2", "lemo-5pin"],
-  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "edison", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "d-tap", "v-mount"],
+  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "cee-7-7", "edison", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "d-tap", "v-mount"],
   "Speaker": ["speakon", "banana", "binding-post", "binding-post-banana"],
   "Terminal": ["phoenix", "terminal-block", "multipin", "solder-cup", "punch-down-110", "punch-down-66", "krone-idc"],
   "RF": ["reverse-tnc", "sma", "f-connector"],

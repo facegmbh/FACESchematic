@@ -113,6 +113,9 @@ export const CONNECTOR_ACCEPTS: Partial<Record<ConnectorType, ConnectorAcceptanc
   "trs-eighth":    { adapter: ["trs-quarter", "ts-quarter"] },
   "rca":           { adapter: ["xlr-3"] },
   "edison":        { adapter: ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "l5-20", "l6-20", "l6-30", "l21-30"] },
+  // CEE 7/7 (Schuko) — European mains. Reaches every other mains connector only via a cable/adapter;
+  // acceptance is checked in both directions, so this single row covers the whole power family.
+  "cee-7-7":       { adapter: ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "edison", "l5-20", "l6-20", "l6-30", "l21-30"] },
 };
 
 /** Bare-wire connectors (no physical connector — cable goes straight in) are compatible with anything */
@@ -197,6 +200,7 @@ export const CONNECTOR_TO_CABLE: Record<ConnectorType, string> = {
   "terminal-block": "Terminal Block",
   powercon: "powerCON",
   edison: "Edison",
+  "cee-7-7": "Schuko",
   iec: "IEC",
   "iec-c5": "IEC C5",
   "iec-c7": "IEC C7",
@@ -382,6 +386,7 @@ export const CONNECTOR_GENDER: Partial<Record<ConnectorType, Gender | { input: G
   "iec-c15":          { input: "male",   output: "female" },
   "iec-c20":          { input: "male",   output: "female" },
   edison:             { input: "male",   output: "female" },
+  "cee-7-7":          { input: "male",   output: "female" }, // Geräteeinbau: Eingang = Stecker, Ausgang = Schuko-Buchse
   "l5-20":            { input: "male",   output: "female" },
   "l6-20":            { input: "male",   output: "female" },
   "l6-30":            { input: "male",   output: "female" },
@@ -402,7 +407,7 @@ export const CONNECTORS_WITH_GENDER_VARIATION: Set<ConnectorType> = new Set([
   "xlr-3", "xlr-4", "xlr-5", "mini-xlr",
   "powercon", "powercon-true1",
   "iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20",
-  "edison", "l5-20", "l6-20", "l6-30", "l21-30",
+  "edison", "cee-7-7", "l5-20", "l6-20", "l6-30", "l21-30",
   "cam-lok", "socapex", "multipin",
   "speakon", "banana", "binding-post", "binding-post-banana",
   "bnc",

@@ -853,6 +853,23 @@ const CONNECTOR_SPECS: Partial<Record<ConnectorType, ConnectorSpec>> = {
     if (detail < 2) return outline;
     return (<g>{outline}<rect x={-7} y={-5} width={2.5} height={8} fill={color} rx={0.3} /><rect x={4.5} y={-5} width={1.8} height={6.5} fill={color} rx={0.3} /><path d="M -2.5 5 L -2.5 8 A 2.5 2.5 0 0 0 2.5 8 L 2.5 5" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" /></g>);
   }},
+  // ── CEE 7/7 (Schuko) ──
+  // Round body Ø50 mm, two 4.8 mm pins 19 mm apart, earth clips top and bottom on the rim.
+  "cee-7-7": { widthMm: 50.0, heightMm: 50.0, render: ({ color, detail, strokeWidth }) => {
+    const outline = renderCircle(50.0, { color, detail, strokeWidth });
+    if (detail < 2) return outline;
+    return (
+      <g>
+        {outline}
+        <circle cx={-9.5} cy={0} r={2.4} fill={color} />
+        <circle cx={9.5} cy={0} r={2.4} fill={color} />
+        {/* Schutzkontakt-Bügel oben und unten */}
+        <path d="M -7 -22 A 23 23 0 0 1 7 -22" fill="none" stroke={color} strokeWidth={strokeWidth * 1.5} strokeLinecap="round" />
+        <path d="M 7 22 A 23 23 0 0 1 -7 22" fill="none" stroke={color} strokeWidth={strokeWidth * 1.5} strokeLinecap="round" />
+      </g>
+    );
+  }},
+
   "l5-20": { widthMm: 41.3, heightMm: 41.3, render: ({ color, detail, strokeWidth }) => {
     const outline = renderCircle(41.3, { color, detail, strokeWidth });
     if (detail < 2) return outline;

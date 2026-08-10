@@ -42,6 +42,34 @@ describe("1/4\" TS connector (#208)", () => {
   });
 });
 
+describe("CEE 7/7 (Schuko) connector", () => {
+  it("has a dropdown label and a cable name", () => {
+    expect(CONNECTOR_LABELS["cee-7-7"]).toBe("CEE 7/7 (Schuko)");
+    expect(CONNECTOR_TO_CABLE["cee-7-7"]).toBe("Schuko");
+  });
+
+  it("appears in the Power connector group", () => {
+    expect(CONNECTOR_GROUPS["Power"]).toContain("cee-7-7");
+  });
+
+  it("reaches the IEC family and Edison only via an adapter — in both directions", () => {
+    expect(areConnectorsCompatible("cee-7-7", "iec")).toBe(true);
+    expect(needsAdapter("cee-7-7", "iec")).toBe(true);
+    expect(needsAdapter("iec", "cee-7-7")).toBe(true);
+    expect(needsAdapter("edison", "cee-7-7")).toBe(true);
+  });
+
+  it("mates with itself without an adapter", () => {
+    expect(areConnectorsCompatible("cee-7-7", "cee-7-7")).toBe(true);
+    expect(needsAdapter("cee-7-7", "cee-7-7")).toBe(false);
+  });
+
+  it("is a socket on outputs and a plug on inputs, with a manual override", () => {
+    expect(CONNECTOR_GENDER["cee-7-7"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("cee-7-7")).toBe(true);
+  });
+});
+
 describe("USB-C Power Delivery shortfall (#204)", () => {
   const src = (w: number) => ({ usbcPowerSourceW: w });
   const sink = (w: number) => ({ usbcPowerDrawW: w });
