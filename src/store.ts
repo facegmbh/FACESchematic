@@ -52,6 +52,7 @@ import { orthogonalize, extractSegments, segmentsCross, type RoutedEdge, type Cr
 import { simplifyWaypoints, waypointsToSvgPath, waypointsToSvgPathWithHops } from "./pathfinding";
 import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, effectiveSignalType } from "./connectorTypes";
 import { inferRackHeightU, inferRackForm, shelfFootprintMm, shelfInnerWidthMm } from "./rackUtils";
+import { mergeCustomTemplates } from "./templateExport";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { createDefaultLayout } from "./titleBlockLayout";
 import { sanitizeNoteHtml } from "./sanitizeHtml";
@@ -613,7 +614,9 @@ interface SchematicState {
 
   // Template import/export (#12/#26)
   exportCustomTemplates: () => DeviceTemplate[];
-  importCustomTemplates: (templates: DeviceTemplate[]) => void;
+  /** Merges templates into the library: same key (id) overwrites, unknown key is appended.
+   *  Returns what actually happened so callers can report honest counts. */
+  importCustomTemplates: (templates: DeviceTemplate[]) => { added: number; updated: number };
 
   // Cloud storage
   cloudSchematicId: string | null;
@@ -3902,16 +3905,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   importCustomTemplates: (templates) => {
-    const existing = get().customTemplates;
-    const existingKeys = new Set(existing.map((t) => templateKey(t)));
-    const newTemplates = templates.filter((t) => !existingKeys.has(templateKey(t)));
-    if (newTemplates.length > 0) {
-      const merged = [...existing, ...newTemplates];
-      const order = [...get().customTemplateOrder, ...newTemplates.map((t) => templateKey(t))];
-      set({ customTemplates: merged, customTemplateOrder: order });
-      saveCustomTemplates(merged);
-      saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
-    }
+    const { merged, addedKeys, added, updated } = mergeCustomTemplates(get().customTemplates, templates);
+    if (added === 0 && updated === 0) return { added: 0, updated: 0 };
+
+    const order = [...get().customTemplateOrder, ...addedKeys];
+    set({ customTemplates: merged, customTemplateOrder: order });
+    saveCustomTemplates(merged);
+    saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
+
+    return { added, updated };
   },
 
   setCloudSchematicId: (id) => { set({ cloudSchematicId: id }); get().saveToLocalStorage(); },

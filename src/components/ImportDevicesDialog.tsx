@@ -87,8 +87,11 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
 
   const handleAddToLibrary = () => {
     if (selectedTemplates.length === 0) return;
-    importCustomTemplates(selectedTemplates.map((pt) => pt.template));
-    addToast(`Added ${selectedTemplates.length} template${selectedTemplates.length === 1 ? "" : "s"} to your library`, "success");
+    const { added, updated } = importCustomTemplates(selectedTemplates.map((pt) => pt.template));
+    const parts = [];
+    if (added > 0) parts.push(`${added} added`);
+    if (updated > 0) parts.push(`${updated} updated`);
+    addToast(parts.length > 0 ? `Your library: ${parts.join(", ")}` : "Nothing changed — already in your library", "success");
     close();
   };
 
