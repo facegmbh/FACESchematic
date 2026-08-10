@@ -891,6 +891,11 @@ export const DEFAULT_LABEL_CASE: LabelCaseMode = "as-typed";
 export type PanMode = "select-first" | "pan-first";
 export const DEFAULT_PAN_MODE: PanMode = "select-first";
 
+/** Header colour a device gets when neither its template nor a preset specifies one.
+ *  Written into node.data on placement, so it is visible and editable rather than an
+ *  invisible render-time fallback. Existing nodes are left untouched. */
+export const DEFAULT_HEADER_COLOR = "#ff4747";
+
 export type StubLabelPageMode = "always" | "cross-page" | "never";
 export const DEFAULT_STUB_LABEL_SHOW_PORT = false;
 export const DEFAULT_STUB_LABEL_SHOW_ROOM = true;

@@ -37,7 +37,7 @@ import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
 import { defaultStubPlacement, healStubPortAlignment } from "./stubPlacement";
 import { getPortAbsolutePositions } from "./snapUtils";
-import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE } from "./types";
+import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR } from "./types";
 import { pairKey } from "./roomDistance";
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
@@ -1523,6 +1523,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       // Stamp templatePortId so sync can reconcile even if port IDs drift.
       ports.forEach((p, i) => { p.templatePortId = template.ports[i].id; });
     }
+
+    headerColor = headerColor ?? DEFAULT_HEADER_COLOR;
 
     // Initialize expansion slots from template (recursively handles sub-slots)
     let installedSlots: InstalledSlot[] | undefined;
@@ -3477,6 +3479,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     } else {
       adapterPorts = clonePorts(template.ports);
     }
+
+    headerColor = headerColor ?? DEFAULT_HEADER_COLOR;
 
     const adapterId = nextNodeId();
     let adapterNode: DeviceNode = {

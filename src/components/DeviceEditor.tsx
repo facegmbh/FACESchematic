@@ -7,6 +7,7 @@ import {
   SIGNAL_COLORS,
   CONNECTOR_LABELS,
   CONNECTOR_GROUPS,
+  DEFAULT_HEADER_COLOR,
   type SignalType,
   type ConnectorType,
   type Gender,
@@ -1046,7 +1047,7 @@ export default function DeviceEditor() {
             <input
               type="color"
               className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
-              value={headerColor ?? "#4b5563"}
+              value={headerColor ?? DEFAULT_HEADER_COLOR}
               onChange={(e) => setHeaderColor(e.target.value)}
             />
             {headerColor && (
