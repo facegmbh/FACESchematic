@@ -62,7 +62,7 @@
 - **Stubbed connections** — render as short stubs with destination labels (device name, optional port, room, page) instead of full routed lines; drag labels to reposition, add intermediate waypoints via right-click. Globally toggle port-name display and page-number mode (cross-page only / always / never), or override per connection.
 - **Connector mismatch override** — force-connect ports with incompatible connectors
 - **Bare wire compatibility** — Phoenix and Terminal Block connectors connect to any connector type without adapter warnings
-- **68 signal types**, all color-coded (see below)
+- **72 signal types**, all color-coded (see below)
 - **Connection line styles** — solid, dashed, dotted, or dash-dot per connection or per signal type
 - **Adapters** — automatic adapter insertion between incompatible ports, with direct-attach support, barrels, gender labels, and per-adapter visibility controls
 
@@ -76,6 +76,7 @@
 - **Flip ports** — move any port to the opposite side of the device for flexible signal flow layouts
 - **Connector gender** — auto-derived from connector type and direction, with per-port overrides for connectors where gender varies (XLR, powerCON, IEC, Cam-Lok, BNC, TRS). The cable schedule adds an `M-M` or `F-F` suffix to cables that need two like-gendered plugs, so pack lists reflect what you actually need to buy.
 - **Patch panels** — devices with `patch-panel` type render as front/rear instead of input/output, with column headers on the canvas; built-in templates for RJ45, BNC, XLR, fiber LC, and TT bantam patch bays in common port counts
+- **Patch Bay page** — route any connection through patch panel ports *without* drawing the panel on the schematic. Virtual panels (in reports and racks, never on the canvas), click-to-patch assignment with multi-panel hops, per-segment cable IDs with letter suffixes (`E001-A/-B/-C`) and label overrides, hover circuit tracing, and designation-strip PDFs printed at 100% physical scale for the panel's label holder
 
 ### Organization
 
@@ -140,7 +141,7 @@ Paper-based layout pages for composing rack viewports into a printable drawing.
 
 - **Pack list** — auto-generated bill of materials from your schematic (devices + cables)
 - **Cable schedule** — per-connection wiring report with editable cable IDs, connector info, cable types, signal types, room assignments, and an Est. Length column derived from room positions; fill series support for batch renaming
-- **Patch panel schedule** — per-port inventory of every patch panel in the schematic, including unconnected ports; occupancy badges per panel, group by Panel / Room / Signal / Face; shares cable IDs and estimated lengths with the cable schedule
+- **Patch panel schedule** — per-port inventory of every patch panel in the project (on-schematic and virtual), including unconnected ports; Patch Bay assignments and drawn connections appear side by side; occupancy badges per panel, group by Panel / Room / Signal / Face; shares cable IDs and estimated lengths with the cable schedule. Patched connections expand into per-segment cables (`E001-A/-B`) in the cable schedule and pack list
 - **Owned Gear library** — track inventory of gear you own; the pack list reports used vs. needed counts so a single schematic tells you what to pull from the shop and what to rent or buy
 - **Print preview** — WYSIWYG report editor with interactive header/footer grid, column visibility, grouping, sorting
 - **Multi-page preview** with accurate page breaks, page navigation, zoom, and "Page X of Y" numbering
@@ -155,6 +156,7 @@ Paper-based layout pages for composing rack viewports into a printable drawing.
 ### Community Device Database
 
 - **[devices.easyschematic.live](https://devices.easyschematic.live)** — browse, search, and submit device templates
+- **Works offline** — the devices site is an installable PWA; visit once online and browsing, search, and every device page keep working without a connection, with the saved library refreshing automatically when you're back online
 - **Community submissions** — submit new devices or suggest edits to existing templates via magic-link email auth
 - **Submit from the canvas** — right-click any device and choose "Submit to Community" to seed a submission with all the fields you've already filled in, instead of re-entering them on the devices site
 - **Moderation workflow** — submissions are reviewed by moderators before going live
@@ -301,7 +303,7 @@ The installed app opens in its own window without browser chrome, works fully of
 | Double-click canvas | Quick-add device search dialog |
 | Double-click room background | Quick-add device inside room |
 | Right-click room | Room context menu (edit properties, lock/unlock) |
-| Right-click connection | Connection context menu (waypoints, stub, override connector mismatch, hide label, reset route) |
+| Right-click connection | Connection context menu (waypoints, stub, override connector mismatch, hide cable ID, reset route) |
 | `Ctrl+Shift+S` | Save As |
 | `Shift+click` | Toggle item in selection |
 | `Shift+drag` | Directional toggle selection |
@@ -312,6 +314,12 @@ The installed app opens in its own window without browser chrome, works fully of
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, architecture notes, and guidelines.
+
+### Community Contributors
+
+The device library grows through community submissions — see the full [Contributors hall of fame](https://devices.easyschematic.live/contributors). Special thanks to:
+
+- **HI-T3C** — Alfatron and Atlona device templates (PTZ camera, HDBaseT switchers, touch panel)
 
 ## License
 

@@ -16,8 +16,10 @@ import PrintingPage from "./pages/Printing";
 import PackListPage from "./pages/PackList";
 import ApiPage from "./pages/Api";
 import SelfHostingPage from "./pages/SelfHosting";
+import AiAssistantPage from "./pages/AiAssistant";
 import RacksPage from "./pages/Racks";
 import PrintSheetsPage from "./pages/PrintSheets";
+import PatchPanelsPage from "./pages/PatchPanels";
 
 const routes: Record<string, { title: string; component: React.FC }> = {
   "": { title: "Overview", component: OverviewPage },
@@ -28,6 +30,7 @@ const routes: Record<string, { title: string; component: React.FC }> = {
   "connection-routing": { title: "Connection Routing", component: EdgeRoutingPage },
   "rooms-and-grouping": { title: "Rooms & Grouping", component: RoomsAndGroupingPage },
   racks: { title: "Rack Builder", component: RacksPage },
+  "patch-panels": { title: "Patch Panels & Patch Bay", component: PatchPanelsPage },
   "print-sheets": { title: "Print Sheets", component: PrintSheetsPage },
   notes: { title: "Notes & Annotations", component: NotesPage },
   "device-library": { title: "Device Library", component: DeviceLibraryPage },
@@ -37,6 +40,7 @@ const routes: Record<string, { title: string; component: React.FC }> = {
   "import-devices": { title: "Import Devices", component: ImportDevicesPage },
   "device-template-schema": { title: "Device Template Schema", component: DeviceTemplateSchemaPage },
   "self-hosting": { title: "Self-Hosting", component: SelfHostingPage },
+  "ai-assistant": { title: "AI Assistant (MCP)", component: AiAssistantPage },
   api: { title: "Public API", component: ApiPage },
 };
 

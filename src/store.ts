@@ -32,12 +32,16 @@ import type {
   CustomTemplateGroup,
   CustomTemplateMeta,
   BundleMeta,
+  PatchHop,
+  PatchSegmentOverride,
+  PatchPanelViewPage,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
-import { defaultStubPlacement, healStubPortAlignment } from "./stubPlacement";
+import { defaultStubPlacement, healStubPortAlignment, STUB_W_EST } from "./stubPlacement";
 import { getPortAbsolutePositions } from "./snapUtils";
-import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR } from "./types";
+import { textStubSideForPort, textStubBoxPosition } from "./textStub";
+import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR, portSide } from "./types";
 import { pairKey } from "./roomDistance";
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
@@ -46,21 +50,23 @@ import { healStaleWaypoints } from "./waypointHealing";
 import { newBundleId, gcBundles, reconcileBundleJunctions, bundleJunctionsFor, splitMemberWaypoints } from "./bundles";
 import { computeBundleTrunk, type BundleEndpoint } from "./routing/bundleRoute";
 import { buildHandleSnapshot } from "./routing/handleSnapshot";
-import { requestRoutes, setRoutingResultHandler, type RoutingResult } from "./routing/routingClient";
+import { requestRoutes, setRoutingResultHandler, cancelRouting as cancelRoutingClient, type RoutingResult } from "./routing/routingClient";
 import { reconcileWaypointNodes, syncEdgesFromWaypointNodes, spliceWaypointsForRemovedNodes } from "./waypointSync";
 import { orthogonalize, extractSegments, segmentsCross, type RoutedEdge, type CrossingPoint } from "./edgeRouter";
 import { simplifyWaypoints, waypointsToSvgPath, waypointsToSvgPathWithHops } from "./pathfinding";
-import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, effectiveSignalType } from "./connectorTypes";
+import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, areSignalPairsCompatible, effectiveSignalType } from "./connectorTypes";
 import { inferRackHeightU, inferRackForm, shelfFootprintMm, shelfInnerWidthMm } from "./rackUtils";
 import { mergeCustomTemplates } from "./templateExport";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { createDefaultLayout } from "./titleBlockLayout";
 import { sanitizeNoteHtml } from "./sanitizeHtml";
 import { getTemplateById } from "./templateApi";
+import { DEFAULT_BRIDGE_PORT } from "./mcp/protocol";
 import { syncDeviceWithTemplate, type SyncResult } from "./templateSync";
 import { chooseNewHandleSuffix, type SwapPlan, type NewPortRef } from "./deviceSwap";
 import { getSignalColorOverrides, applySignalColors, loadSignalColors, saveSignalColors } from "./signalColors";
 import { computeCableSchedule } from "./cableSchedule";
+import { getPanelOccupancy, isPortAvailable } from "./patchCircuits";
 import { autoFillSheetForRack } from "./printSheetAutoFill";
 import { allocateEdgeId, maxEdgeCounterFromIds, newLinkedConnectionId, uniquifyEdgeIds } from "./idUtils";
 
@@ -97,6 +103,9 @@ const TEMPLATES_KEY = "easyschematic-custom-templates";
 const TEMPLATE_META_KEY = "easyschematic-custom-template-meta";
 const CATEGORY_ORDER_KEY = "easyschematic-category-order";
 const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
+const MCP_ENABLED_KEY = "easyschematic-mcp-enabled";
+const MCP_TOKEN_KEY = "easyschematic-mcp-token";
+const MCP_PORT_KEY = "easyschematic-mcp-port";
 
 /** Minimap visibility is an editor preference (not document data), persisted to
  *  localStorage and shared across schematics/sessions. Default visible. (#210) */
@@ -105,6 +114,31 @@ function loadShowMinimap(): boolean {
     return localStorage.getItem(MINIMAP_PREF_KEY) !== "0";
   } catch {
     return true;
+  }
+}
+
+/** MCP bridge (Beta) editor preferences — persisted to localStorage, not the
+ *  schematic file. Off by default; the bridge only connects once enabled. */
+function loadMcpEnabled(): boolean {
+  try {
+    return localStorage.getItem(MCP_ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function loadMcpToken(): string {
+  try {
+    return localStorage.getItem(MCP_TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+function loadMcpPort(): number {
+  try {
+    const raw = Number(localStorage.getItem(MCP_PORT_KEY));
+    return Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_BRIDGE_PORT;
+  } catch {
+    return DEFAULT_BRIDGE_PORT;
   }
 }
 
@@ -209,7 +243,8 @@ function snapNodesToGrid(nodes: SchematicNode[]): SchematicNode[] {
     // (healStubPortAlignment in recomputeRoutes) — DOM-measured ports can sit a few px
     // off the model grid, so snapping the stub to the abstract grid here would BREAK
     // colinearity with such ports (kink at the label). Leave their stored Y alone.
-    if (n.type === "stub-label") continue;
+    // Text stubs (#196) store the same sub-grid, port-centred Y for the same reason.
+    if (n.type === "stub-label" || n.type === "text-stub") continue;
     n.position.x = Math.round(n.position.x / GRID_SIZE) * GRID_SIZE;
     n.position.y = Math.round(n.position.y / GRID_SIZE) * GRID_SIZE;
   }
@@ -272,6 +307,13 @@ interface SchematicState {
   removeSelected: () => void;
   deleteNode: (nodeId: string) => void;
   deleteNodeAndChildren: (nodeId: string) => void;
+  /** Reposition a single node within its current parent (one undo step). Does not
+   *  reparent — used by the MCP bridge's move_device tool. */
+  moveDevice: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Remove a single connection by id via the standard removeSelected path (so bundle
+   *  GC, junction + waypoint reconciliation all run). Used by the bridge's
+   *  delete_connection tool. */
+  deleteConnection: (connectionId: string) => void;
   copySelected: () => void;
   pasteClipboard: () => void;
   alignSelectedNodes: (op: AlignOperation) => void;
@@ -296,6 +338,19 @@ interface SchematicState {
   ) => void;
   /** Reconcile a placed device against the latest version of its source template. */
   syncDeviceFromTemplate: (nodeId: string) => SyncResult | null;
+  /**
+   * Propagate an updated (or forked) template definition to every placed device on the
+   * current schematic that references `sourceTemplateId`, reconciling each instance's ports
+   * against `newTemplate` while preserving connections. Instances are re-pointed to
+   * `newTemplate.id` (needed when forking a built-in device into a user template). Skips
+   * `excludeNodeId` (the device being edited, which the editor saves itself). Runs as a
+   * single undo step. Returns how many instances were updated. (#127)
+   */
+  propagateTemplateToInstances: (
+    sourceTemplateId: string,
+    newTemplate: DeviceTemplate,
+    excludeNodeId?: string,
+  ) => { updated: number };
   /** Replace a device in place with a different template, remapping connections per the plan. */
   swapDevice: (nodeId: string, plan: SwapPlan) => void;
   /** UI state: when set, the Swap Device dialog is open targeting this node. */
@@ -312,7 +367,7 @@ interface SchematicState {
   setEditingNodeId: (id: string | null) => void;
   setCreatingNodeId: (id: string | null) => void;
   createAndEditDevice: (template: DeviceTemplate, position: { x: number; y: number }) => void;
-  addRoom: (label: string, position: { x: number; y: number }) => void;
+  addRoom: (label: string, position: { x: number; y: number }, size?: { width: number; height: number }) => void;
   updateRoomLabel: (nodeId: string, label: string) => void;
   updateRoom: (nodeId: string, data: import("./types").RoomData) => void;
   updateAnnotation: (nodeId: string, data: Partial<import("./types").AnnotationData>) => void;
@@ -321,6 +376,15 @@ interface SchematicState {
   addNote: (position: { x: number; y: number }) => void;
   updateNoteHtml: (nodeId: string, html: string) => void;
   reparentNode: (nodeId: string, absolutePosition: { x: number; y: number }, options?: { skipUndo?: boolean }) => void;
+  /** Place a device inside a specific room (set parentId) by routing through
+   *  reparentNode, so parentId stays consistent with geometry. Atomic: if the
+   *  device's center would not land inside `roomId` (outside its bounds, or inside a
+   *  nested room), nothing changes. `relativePosition` is relative to the room's
+   *  top-left and defaults to (16,16). Returns true only if the device was actually
+   *  placed (committed), false on any no-op/reject — so a caller can't mistake an
+   *  unchanged "already in this room" device for a successful placement. Used by the
+   *  bridge's place_device_in_room tool. */
+  placeDeviceInRoom: (nodeId: string, roomId: string, relativePosition?: { x: number; y: number }) => boolean;
   /** Re-evaluate room membership for every non-room node. Used after a room is
    *  created, resized, or moved so devices get parented/unparented to match
    *  the new layout. */
@@ -394,9 +458,10 @@ interface SchematicState {
   /** UI state: the bulk device property panel is open for the current multi-selection. */
   bulkDeviceEditOpen: boolean;
   setBulkDeviceEditOpen: (open: boolean) => void;
-  edgeContextMenu: { edgeId: string; screenX: number; screenY: number; flowX: number; flowY: number } | null;
+  edgeContextMenu: { edgeId: string; screenX: number; screenY: number; flowX: number; flowY: number; initialEdit?: "length" } | null;
   roomContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
   stubLabelContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
+  textStubContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
   portContextMenu: { nodeId: string; portId: string; screenX: number; screenY: number } | null;
 
   // Centralized edge routing
@@ -405,6 +470,8 @@ interface SchematicState {
   routingDebugData: any;
   recomputeRoutes: (rfInstance: ReactFlowInstance) => void;
   computeSimpleRoutes: (rfInstance: ReactFlowInstance) => void;
+  /** Abort the in-flight auto-route pass (#207); keeps already-applied routes, clears isRouting. */
+  cancelRouting: () => void;
 
   // Auto-route toggle
   autoRoute: boolean;
@@ -579,6 +646,29 @@ interface SchematicState {
   /** Map from edge ID to gradient colors for virtual edges bridging different signal types */
   virtualEdgeGradients: Record<string, { sourceColor: string; targetColor: string }>;
 
+  // Patch panel view (#232)
+  /** Transient: edge currently being patched from the Patch Panels page (assign mode). */
+  patchAssignEdgeId: string | null;
+  /** Transient: edge whose circuit is hover-traced on the Patch Panels page. */
+  patchTracedEdgeId: string | null;
+  setPatchAssignEdge: (edgeId: string | null) => void;
+  setPatchTracedEdge: (edgeId: string | null) => void;
+  /** Append a hop. Returns false (no-op) if the port is occupied or args don't resolve. */
+  addEdgePatchHop: (edgeId: string, hop: PatchHop) => boolean;
+  /** Remove all hops + segment overrides from a connection. */
+  clearEdgePatchHops: (edgeId: string) => void;
+  /** Set/merge one segment's override. Empty strings clear the field. */
+  setPatchSegmentOverride: (edgeId: string, segIndex: number, patch: PatchSegmentOverride) => void;
+  /** Create an off-canvas patch panel device from a template. Returns the node id. */
+  addOffCanvasPanel: (template: DeviceTemplate) => string;
+  /** Toggle a patch panel between canvas and off-canvas. Blocked (returns false) when
+   *  moving OFF canvas with wired edges attached. */
+  setPanelOffCanvas: (nodeId: string, offCanvas: boolean) => boolean;
+  /** Single-instance page: returns the existing page id when one already exists. */
+  addPatchPanelPage: () => string;
+  removePatchPanelPage: (pageId: string) => void;
+  renamePatchPanelPage: (pageId: string, label: string) => void;
+
   // Line jumps (#18)
   showLineJumps: boolean;
   setShowLineJumps: (show: boolean) => void;
@@ -586,6 +676,17 @@ interface SchematicState {
   /** Canvas minimap visibility — editor preference, persisted to localStorage. (#210) */
   showMinimap: boolean;
   setShowMinimap: (show: boolean) => void;
+
+  /** MCP bridge (Beta): lets Claude read/edit the schematic live via the local
+   *  MCP server. Persisted editor prefs; status is ephemeral, set by the bridge. */
+  mcpBridgeEnabled: boolean;
+  mcpBridgeToken: string;
+  mcpBridgePort: number;
+  mcpBridgeStatus: "off" | "connecting" | "connected" | "error";
+  mcpBridgeStatusDetail?: string;
+  setMcpBridgeEnabled: (enabled: boolean) => void;
+  setMcpBridgeToken: (token: string) => void;
+  setMcpBridgePort: (port: number) => void;
 
   /** Rack: show connector-level face-plate detail (default off; advanced) */
   showFacePlateDetail: boolean;
@@ -599,6 +700,9 @@ interface SchematicState {
   setShowCableIdLabels: (show: boolean) => void;
   showCustomLabels: boolean;
   setShowCustomLabels: (show: boolean) => void;
+  /** Show cable-length labels on connections (#100). Opt-in; off by default. */
+  showCableLengthLabels: boolean;
+  setShowCableLengthLabels: (show: boolean) => void;
   cableIdGap: number;
   setCableIdGap: (gap: number) => void;
   cableIdMidOffset: number;
@@ -616,6 +720,11 @@ interface SchematicState {
   wrapDeviceLabels: boolean;
   setWrapDeviceLabels: (wrap: boolean) => void;
   patchStubLabelData: (nodeId: string, patch: Partial<import("./types").StubLabelData>) => void;
+  /** Attach a free-text stub to a single device port (#196). No edge/connection is
+   *  created; the new node starts in edit mode. */
+  addTextStub: (nodeId: string, portId: string) => void;
+  /** Update a text stub's free text. */
+  updateTextStubText: (nodeId: string, text: string) => void;
   cableIdMap: Record<string, string>;
   recomputeCableIds: () => void;
 
@@ -654,6 +763,7 @@ interface SchematicState {
     uPosition: number,
     face: "front" | "rear",
     preferredHalfRackSide?: "left" | "right",
+    markShelfCreatedByBridge?: boolean,
   ) => { ok: true; placementId: string; shelfId?: string } | { ok: false; reason: "oversize" | "no-page" | "no-device" };
   removeRackPlacement: (pageId: string, placementId: string) => void;
   updateRackPlacement: (pageId: string, placementId: string, patch: Partial<RackDevicePlacement>) => void;
@@ -686,6 +796,11 @@ interface SchematicState {
   // Local file handle (File System Access API — Chromium only, not persisted)
   fileHandle: FileSystemFileHandle | null;
   setFileHandle: (handle: FileSystemFileHandle | null) => void;
+  // Adopt a local file as the current document: switch the editing session to
+  // `handle`, rename the schematic to the file's name, and detach any cloud
+  // association so subsequent saves target this file. Used by Save, Save As and
+  // Open so the session (and the window title) always follows the active file. (#174)
+  adoptLocalFile: (handle: FileSystemFileHandle) => void;
 
   // Online / offline state
   isOnline: boolean;
@@ -770,6 +885,22 @@ function mapElevationPage(pages: SchematicPage[], pageId: string, fn: (p: RackEl
   return pages.map((p) => (p.id === pageId && p.type === "rack-elevation") ? fn(p) : p);
 }
 
+/** Remove patch hops that reference deleted panel nodes. Segment overrides are dropped
+ *  alongside (their indices shift when the hop list changes). */
+function stripDeadHops(edges: ConnectionEdge[], deadNodeIds: Set<string>): ConnectionEdge[] {
+  if (deadNodeIds.size === 0) return edges;
+  return edges.map((e) => {
+    const hops = e.data?.patchHops;
+    if (!hops?.length || !hops.some((h) => deadNodeIds.has(h.panelNodeId))) return e;
+    const kept = hops.filter((h) => !deadNodeIds.has(h.panelNodeId));
+    const data = { ...e.data! };
+    if (kept.length) data.patchHops = kept;
+    else delete (data as Record<string, unknown>).patchHops;
+    delete (data as Record<string, unknown>).patchSegments;
+    return { ...e, data };
+  });
+}
+
 /** Sync rack-related counters from pages data. */
 function syncRackCounters(pages: SchematicPage[]) {
   for (const page of pages) {
@@ -787,6 +918,7 @@ function syncRackCounters(pages: SchematicPage[]) {
       }
       continue;
     }
+    if (page.type === "patch-panel") continue;
     for (const rack of page.racks ?? []) {
       const rm = rack.id.match(/^rack-(\d+)$/);
       if (rm) rackIdCounter = Math.max(rackIdCounter, Number(rm[1]));
@@ -1123,6 +1255,50 @@ function findBestEnclosingRoom(
   return best;
 }
 
+/** The geometric center of a node placed at `absolutePosition`, using the same
+ *  measured-size fallbacks reparentNode and reparentAllDevices rely on (room
+ *  400x300, device 144x48). Shared so any room-membership pre-check stays in
+ *  lockstep with the reparent that follows it. */
+function nodeCenterFromAbsolute(
+  node: SchematicNode,
+  absolutePosition: { x: number; y: number },
+): { x: number; y: number } {
+  const isRoom = node.type === "room";
+  const w = node.measured?.width ?? (isRoom ? 400 : 144);
+  const h = node.measured?.height ?? (isRoom ? 300 : 48);
+  return { x: absolutePosition.x + w / 2, y: absolutePosition.y + h / 2 };
+}
+
+/** #182: when a device moves, clear `placed` on its connected auto-placed stub
+ *  labels so they re-follow the device's port instead of stranding with a dogleg.
+ *  A stub leg is an edge with exactly one stub-label end; the other end is the
+ *  device. User-positioned stub labels are left alone. Returns a new nodes array
+ *  (or the same array when nothing needs clearing). Shared by moveDevice and
+ *  placeDeviceInRoom so the "which stubs follow" logic lives in one place. */
+function reanchorConnectedStubLabels(
+  nodes: SchematicNode[],
+  edges: ConnectionEdge[],
+  deviceId: string,
+): SchematicNode[] {
+  const stubIds = new Set(nodes.filter((n) => n.type === "stub-label").map((n) => n.id));
+  const followStubs = new Set<string>();
+  for (const e of edges) {
+    const srcStub = stubIds.has(e.source);
+    const tgtStub = stubIds.has(e.target);
+    if (srcStub === tgtStub) continue; // not a stub leg
+    const devEnd = srcStub ? e.target : e.source;
+    if (devEnd === deviceId) followStubs.add(srcStub ? e.source : e.target);
+  }
+  if (followStubs.size === 0) return nodes;
+  return nodes.map((n) => {
+    if (followStubs.has(n.id) && n.type === "stub-label") {
+      const d = n.data as import("./types").StubLabelData;
+      if (!d.userMoved && d.placed === true) return { ...n, data: { ...d, placed: false } };
+    }
+    return n;
+  });
+}
+
 function getPortFromHandle(
   nodes: SchematicNode[],
   nodeId: string,
@@ -1265,6 +1441,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   edgeContextMenu: null,
   roomContextMenu: null,
   stubLabelContextMenu: null,
+  textStubContextMenu: null,
   portContextMenu: null,
   autoRoute: true,
   _edgeWaypointStash: null,
@@ -1324,10 +1501,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   status: undefined,
   showLineJumps: true,
   showMinimap: loadShowMinimap(),
+  mcpBridgeEnabled: loadMcpEnabled(),
+  mcpBridgeToken: loadMcpToken(),
+  mcpBridgePort: loadMcpPort(),
+  mcpBridgeStatus: "off",
+  mcpBridgeStatusDetail: undefined,
   showFacePlateDetail: false,
   showConnectionLabels: true,
   showCableIdLabels: true,
   showCustomLabels: true,
+  showCableLengthLabels: false,
   cableIdGap: 4,
   cableIdMidOffset: 0,
   cableIdLabelMode: "endpoint" as "endpoint" | "midpoint",
@@ -1347,6 +1530,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   hiddenAdapterNodeIds: new Set(),
   hiddenVirtualEdgeIds: new Set(),
   virtualEdgeGradients: {},
+  patchAssignEdgeId: null,
+  patchTracedEdgeId: null,
   pages: [],
   activePage: "schematic",
 
@@ -1418,7 +1603,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         const canSource = srcPort.direction === "output" || srcPort.direction === "bidirectional";
         const canTarget = tgtPort.direction === "input" || tgtPort.direction === "bidirectional";
         const networkBypass = NETWORK_SIGNAL_TYPES.has(srcPort.signalType) && NETWORK_SIGNAL_TYPES.has(tgtPort.signalType);
-        if ((canSource && canTarget || networkBypass) && srcPort.signalType !== tgtPort.signalType) {
+        if ((canSource && canTarget || networkBypass) && srcPort.signalType !== tgtPort.signalType && !areSignalPairsCompatible(srcPort.signalType, tgtPort.signalType)) {
           // Auto-insert if exactly one adapter matches
           const allTemplates = [...DEVICE_TEMPLATES, ...state.customTemplates];
           const adapterMatches = findAdaptersForSignalBridge(srcPort.signalType, tgtPort.signalType, allTemplates);
@@ -1599,6 +1784,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(template.widthMm != null ? { widthMm: template.widthMm } : {}),
         ...(template.depthMm != null ? { depthMm: template.depthMm } : {}),
         ...(template.weightKg != null ? { weightKg: template.weightKg } : {}),
+        ...(template.rackForm ? { rackForm: template.rackForm } : {}),
         ...(template.hostname ? { hostname: template.hostname } : {}),
         ...(hiddenPorts && hiddenPorts.length > 0 ? { hiddenPorts } : {}),
         ...(template.isVenueProvided ? { isVenueProvided: true } : {}),
@@ -1687,6 +1873,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return n;
       });
 
+    // Cascade-remove text stubs (#196) whose anchor device was deleted — they carry no
+    // edge, so the edge-based orphan pruning above never touches them.
+    const survivingNodeIds = new Set(remainingNodes.map((n) => n.id));
+    const remainingNodesPruned = remainingNodes.filter(
+      (n) => n.type !== "text-stub" || survivingNodeIds.has((n.data as import("./types").TextStubData).anchorNodeId),
+    );
+
     // Cascade-remove rack placements for deleted devices; clear room links for deleted rooms
     const pages = state.pages.length > 0 && selectedNodeIds.size > 0
       ? state.pages.map((page): SchematicPage => {
@@ -1715,7 +1908,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     // After deleting nodes/edges, waypoint node ids may be stale (indices shifted
     // or owning edges removed). Reconcile against the new canonical edges.
-    const reconciledNodes = reconcileWaypointNodes(remainingNodes, edgesAfterSplice);
+    const reconciledNodes = reconcileWaypointNodes(remainingNodesPruned, edgesAfterSplice);
 
     // Purge any pairwise distances referencing a deleted room (#146).
     let nextDistances = state.roomDistances;
@@ -1735,10 +1928,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // Drop junction anchors orphaned by a dissolved bundle (and re-heal a live bundle whose
     // anchor was itself in the deleted selection).
     const healedNodes = reconcileBundleJunctions(reconciledNodes, gc.edges);
+    // Deleting a patch panel orphans any hops routed through it — strip them so
+    // schedules and the patch view never chase a dead node id.
+    const edgesAfterHopStrip = stripDeadHops(gc.edges, selectedNodeIds);
 
     set({
       nodes: renumberNodes(healedNodes),
-      edges: gc.edges,
+      edges: edgesAfterHopStrip,
       bundles: gc.bundles,
       pages,
       ...(nextDistances !== state.roomDistances ? { roomDistances: nextDistances } : {}),
@@ -1751,6 +1947,31 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({
       nodes: get().nodes.map((n) => ({ ...n, selected: n.id === nodeId })),
       edges: get().edges.map((e) => ({ ...e, selected: false })),
+    });
+    get().removeSelected();
+  },
+
+  moveDevice: (nodeId, position) => {
+    const state = get();
+    if (!state.nodes.some((n) => n.id === nodeId)) return;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    // #182: keep stub labels glued to the moved device (mirrors the drag-stop path in
+    // App.tsx so an MCP move_device behaves like a drag).
+    const reanchored = reanchorConnectedStubLabels(state.nodes, state.edges, nodeId);
+    set({
+      nodes: reanchored.map((n) => (n.id === nodeId ? { ...n, position } : n)),
+    });
+    get().saveToLocalStorage();
+  },
+
+  deleteConnection: (connectionId: string) => {
+    const state = get();
+    if (!state.edges.some((e) => e.id === connectionId)) return;
+    // Select only this edge, deselect everything else, then removeSelected — the same
+    // path the UI uses, so undo, bundle GC, junction + waypoint reconciliation all run.
+    set({
+      nodes: state.nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+      edges: state.edges.map((e) => ({ ...e, selected: e.id === connectionId })),
     });
     get().removeSelected();
   },
@@ -1896,6 +2117,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       // not inherit the original's (IDs are permanent and label-printable).
       if (data?.cableId) {
         const { cableId: _omitCableId, ...rest } = data;
+        data = rest;
+      }
+      // Patch assignments are per-physical-port — a pasted duplicate would double-book
+      // the same panel ports. The copy starts unpatched.
+      if (data?.patchHops || data?.patchSegments) {
+        const { patchHops: _omitHops, patchSegments: _omitSegs, ...rest } = data;
         data = rest;
       }
       newEdges.push({
@@ -2057,7 +2284,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         const netBypass = NETWORK_SIGNAL_TYPES.has(srcSignal) && NETWORK_SIGNAL_TYPES.has(tgtSignal);
         const bareBypass = BARE_WIRE_CONNECTORS.has(srcConnector ?? "none" as never) ||
           BARE_WIRE_CONNECTORS.has(tgtConnector ?? "none" as never);
-        if (!netBypass && !bareBypass) return false;
+        const pairBypass = areSignalPairsCompatible(srcSignal, tgtSignal);
+        if (!netBypass && !bareBypass && !pairBypass) return false;
       }
 
       // Duplicate-handle guard (same as non-passthrough below)
@@ -2087,7 +2315,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const signalBypass = areSignalsCompatibleViaConnector(
       sourcePort.signalType, sourcePort.connectorType,
       targetPort.signalType, targetPort.connectorType,
-    );
+    ) || areSignalPairsCompatible(sourcePort.signalType, targetPort.signalType);
     if (!networkBypass && !bareWireBypass) {
       const canSource = sourcePort.direction === "output" || sourcePort.direction === "bidirectional";
       const canTarget = targetPort.direction === "input" || targetPort.direction === "bidirectional";
@@ -2431,6 +2659,45 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     return result;
   },
 
+  propagateTemplateToInstances: (sourceTemplateId, newTemplate, excludeNodeId) => {
+    const state = get();
+    const targetIds = new Set(
+      state.nodes
+        .filter(
+          (n) =>
+            n.type === "device" &&
+            (n.data as DeviceData).templateId === sourceTemplateId &&
+            n.id !== excludeNodeId,
+        )
+        .map((n) => n.id),
+    );
+    if (targetIds.size === 0) return { updated: 0 };
+
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+
+    // Reconcile each instance against the new definition. syncDeviceWithTemplate keeps
+    // device-side port IDs stable (so live edges stay attached), adds new template ports,
+    // preserves per-instance overrides, and only orphans removed ports — never touching the
+    // edge list. Re-point templateId/version so a forked built-in now tracks the user copy.
+    const newNodes = state.nodes.map((n) => {
+      if (!targetIds.has(n.id) || n.type !== "device") return n;
+      const dn = n as DeviceNode;
+      const { updatedData } = syncDeviceWithTemplate(dn.data, newTemplate, n.id, state.edges);
+      return {
+        ...dn,
+        data: {
+          ...updatedData,
+          ...(newTemplate.id ? { templateId: newTemplate.id } : {}),
+          ...(newTemplate.version != null ? { templateVersion: newTemplate.version } : {}),
+        },
+      } as DeviceNode;
+    });
+
+    set({ nodes: newNodes });
+    get().saveToLocalStorage();
+    return { updated: targetIds.size };
+  },
+
   swapDevice: (nodeId, plan) => {
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId && n.type === "device") as DeviceNode | undefined;
@@ -2565,6 +2832,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ...(newTemplate.widthMm != null ? { widthMm: newTemplate.widthMm } : {}),
       ...(newTemplate.depthMm != null ? { depthMm: newTemplate.depthMm } : {}),
       ...(newTemplate.weightKg != null ? { weightKg: newTemplate.weightKg } : {}),
+      ...(newTemplate.rackForm ? { rackForm: newTemplate.rackForm } : {}),
       ...(newTemplate.isVenueProvided ? { isVenueProvided: true } : {}),
       ...(newTemplate.deviceType === "cable-accessory" ? { isCableAccessory: true } : {}),
       ...(installedSlots.length > 0 ? { slots: installedSlots } : {}),
@@ -2673,8 +2941,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     const oldSlot = slots[slotIdx];
 
-    // Collect ALL port IDs from this slot and any descendant slots
-    const descendantSlots = slots.filter((s) => s.parentSlotId && s.parentSlotId.startsWith(slotId));
+    // Collect ALL port IDs from this slot and any descendant slots. Match on whole
+    // path segments (slotId itself, or slotId + "/..."), not a raw prefix — otherwise
+    // a sibling whose id merely starts with this one (e.g. "slot1" vs "slot10", or
+    // nested "slot-1/sub" vs "slot-1/sub2") would be wrongly swept in and its card/
+    // ports/edges dropped.
+    const descendantSlots = slots.filter(
+      (s) => s.parentSlotId && (s.parentSlotId === slotId || s.parentSlotId.startsWith(`${slotId}/`)),
+    );
     const allOldPortIds = new Set([
       ...oldSlot.portIds,
       ...descendantSlots.flatMap((s) => s.portIds),
@@ -2856,8 +3130,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const target = slots.find((s) => s.slotId === slotId);
     if (!target) return;
 
-    // Slot and all descendants (nested cards)
-    const descendants = slots.filter((s) => s.parentSlotId && s.parentSlotId.startsWith(slotId));
+    // Slot and all descendants (nested cards). Match whole path segments, not a raw
+    // prefix, so a sibling whose id merely starts with this one (e.g. "slot1" vs
+    // "slot10") isn't swept in. (Mirrors the descendant match in swapCard.)
+    const descendants = slots.filter(
+      (s) => s.parentSlotId && (s.parentSlotId === slotId || s.parentSlotId.startsWith(`${slotId}/`)),
+    );
     const removedSlotIds = new Set<string>([slotId, ...descendants.map((s) => s.slotId)]);
     const removedPortIds = new Set<string>([
       ...target.portIds,
@@ -2903,7 +3181,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ editingNodeId: newNodeId, creatingNodeId: newNodeId });
   },
 
-  addRoom: (label, position) => {
+  addRoom: (label, position, size) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
     const newRoom: SchematicNode = {
@@ -2911,7 +3189,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       type: "room",
       position,
       data: { label },
-      style: { width: 400, height: 300 },
+      style: { width: size?.width ?? 400, height: size?.height ?? 300 },
       selected: true,
       zIndex: -1,
     };
@@ -3067,12 +3345,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
     const isRoom = node.type === "room";
-    const nodeW = node.measured?.width ?? (isRoom ? 400 : 144);
-    const nodeH = node.measured?.height ?? (isRoom ? 300 : 48);
-    const centerX = absolutePosition.x + nodeW / 2;
-    const centerY = absolutePosition.y + nodeH / 2;
+    const center = nodeCenterFromAbsolute(node, absolutePosition);
 
-    const targetRoom = findBestEnclosingRoom(nodeId, isRoom, centerX, centerY, state.nodes, nodeMap);
+    const targetRoom = findBestEnclosingRoom(nodeId, isRoom, center.x, center.y, state.nodes, nodeMap);
 
     const currentParent = node.parentId;
     const newParent = targetRoom?.id;
@@ -3108,6 +3383,52 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     set({ nodes: updated });
     get().saveToLocalStorage();
+  },
+
+  placeDeviceInRoom: (nodeId, roomId, relativePosition) => {
+    const state = get();
+    const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
+    const room = nodeMap.get(roomId);
+    const device = nodeMap.get(nodeId);
+    // Unknown room/device, or the target isn't a room -> no-op. Return false so the
+    // caller never mistakes a non-placement for success (the read-back alone can't tell
+    // a rejected placement of an already-in-this-room device from a real one).
+    if (!room || room.type !== "room" || !device) return false;
+
+    const roomAbs = getAbsolutePosition(roomId, nodeMap);
+    const rel = relativePosition ?? { x: 16, y: 16 };
+    const absPos = { x: roomAbs.x + rel.x, y: roomAbs.y + rel.y };
+
+    // PRE-CHECK (atomicity): will the device's center land in THIS room? Use the same
+    // center math + enclosing-room logic reparentNode will use, so a success here
+    // guarantees the commit below reparents into roomId. If the target room would not
+    // win (the point is outside it, or inside a smaller nested room), change NOTHING —
+    // no undo snapshot, no set, no save — and return false so a rejected placement has
+    // no side effects and is never reported as success.
+    const center = nodeCenterFromAbsolute(device, absPos);
+    const winner = findBestEnclosingRoom(nodeId, false, center.x, center.y, state.nodes, nodeMap);
+    if (winner?.id !== roomId) return false;
+
+    // Idempotent: already in this room at exactly this position -> the desired end state
+    // already holds, so report success without mutating or pushing an empty undo step.
+    if (device.parentId === roomId && device.position.x === rel.x && device.position.y === rel.y) {
+      return true;
+    }
+
+    // COMMIT: re-anchor connected stub labels (as a drag/move would), move the device
+    // to the absolute target as a temporarily top-level node, then let reparentNode do
+    // the geometric reparent + relative-coord conversion + parent-first sort. Clearing
+    // parentId first avoids reparentNode's "parent unchanged" early-return.
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const reanchored = reanchorConnectedStubLabels(state.nodes, state.edges, nodeId);
+    set({
+      nodes: reanchored.map((n) =>
+        n.id === nodeId ? { ...n, parentId: undefined, position: absPos } : n,
+      ),
+    });
+    get().reparentNode(nodeId, absPos, { skipUndo: true });
+    get().saveToLocalStorage();
+    return true;
   },
 
   reparentAllDevices: (options) => {
@@ -3851,6 +4172,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ showMinimap: show });
   },
 
+  setMcpBridgeEnabled: (enabled) => {
+    try { localStorage.setItem(MCP_ENABLED_KEY, enabled ? "1" : "0"); } catch { /* ignore */ }
+    set({ mcpBridgeEnabled: enabled });
+  },
+  setMcpBridgeToken: (token) => {
+    try { localStorage.setItem(MCP_TOKEN_KEY, token); } catch { /* ignore */ }
+    set({ mcpBridgeToken: token });
+  },
+  setMcpBridgePort: (port) => {
+    try { localStorage.setItem(MCP_PORT_KEY, String(port)); } catch { /* ignore */ }
+    set({ mcpBridgePort: port });
+  },
+
   setShowFacePlateDetail: (show) => {
     set({ showFacePlateDetail: show });
     get().saveToLocalStorage();
@@ -3868,6 +4202,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   setShowCustomLabels: (show) => {
     set({ showCustomLabels: show });
+    get().saveToLocalStorage();
+  },
+
+  setShowCableLengthLabels: (show) => {
+    set({ showCableLengthLabels: show });
     get().saveToLocalStorage();
   },
 
@@ -3915,7 +4254,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     const rows = computeCableSchedule(state.nodes, state.edges, state.cableNamingScheme);
     const map: Record<string, string> = {};
-    for (const r of rows) map[r.edgeId] = r.cableId;
+    for (const r of rows) {
+      if (map[r.edgeId]) continue;                // patched edges emit N segment rows — first wins
+      map[r.edgeId] = r.baseCableId ?? r.cableId; // persist/display the BASE id, never a suffixed segment id
+    }
     // Mirror cable IDs to the partner stub-leg edge so both halves render the same
     // cable label. The schedule emits one row per logical connection (source-side leg);
     // the target-side leg shares the same cable ID via linkedConnectionId.
@@ -3959,6 +4301,158 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     }
   },
 
+  setPatchAssignEdge: (edgeId) => set({ patchAssignEdgeId: edgeId }),
+  setPatchTracedEdge: (edgeId) => set({ patchTracedEdgeId: edgeId }),
+
+  addEdgePatchHop: (edgeId, hop) => {
+    const state = get();
+    const edge = state.edges.find((e) => e.id === edgeId);
+    if (!edge?.data) return false;
+    const occ = getPanelOccupancy(state.nodes, state.edges);
+    if (!isPortAvailable(occ, hop.panelNodeId, hop.portId)) return false;
+    const panel = state.nodes.find((n) => n.id === hop.panelNodeId);
+    if (panel?.type !== "device") return false;
+    // Occupancy (the availability source of truth) only tracks patch-panel devices —
+    // a passthrough port on any other device would never surface in views/schedules.
+    if ((panel.data as DeviceData).deviceType !== "patch-panel") return false;
+    const port = (panel.data as DeviceData).ports.find((p) => p.id === hop.portId);
+    if (!port || port.direction !== "passthrough") return false;
+
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      edges: state.edges.map((e) => {
+        if (e.id !== edgeId) return e;
+        const data = { ...e.data!, patchHops: [...(e.data!.patchHops ?? []), hop] };
+        // Hop list changed → per-segment override indices are stale. Drop them.
+        delete (data as Record<string, unknown>).patchSegments;
+        return { ...e, data };
+      }),
+      undoSize: undoStack.length,
+      redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return true;
+  },
+
+  clearEdgePatchHops: (edgeId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      edges: state.edges.map((e) => {
+        if (e.id !== edgeId || !e.data) return e;
+        const data = { ...e.data };
+        delete (data as Record<string, unknown>).patchHops;
+        delete (data as Record<string, unknown>).patchSegments;
+        return { ...e, data };
+      }),
+      undoSize: undoStack.length,
+      redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  setPatchSegmentOverride: (edgeId, segIndex, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      edges: state.edges.map((e) => {
+        if (e.id !== edgeId || !e.data) return e;
+        const segs = [...(e.data.patchSegments ?? [])];
+        while (segs.length <= segIndex) segs.push({});
+        const merged: PatchSegmentOverride = { ...segs[segIndex], ...patch };
+        if (!merged.label?.trim()) delete merged.label;
+        if (!merged.cableLength?.trim()) delete merged.cableLength;
+        segs[segIndex] = merged;
+        return { ...e, data: { ...e.data, patchSegments: segs } };
+      }),
+      undoSize: undoStack.length,
+      redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addOffCanvasPanel: (template) => {
+    // Reuse addDevice for port cloning / presets / numbering, then mark the node
+    // off-canvas. Parked above the top-left of existing content so the minZoom
+    // bounds aren't skewed far from the drawing.
+    const before = get();
+    let anchor = { x: 0, y: 0 };
+    for (const n of before.nodes) {
+      if (n.type !== "device") continue;
+      anchor = { x: Math.min(anchor.x, n.position.x), y: Math.min(anchor.y, n.position.y) };
+    }
+    get().addDevice(template, { x: anchor.x, y: anchor.y - 400 });
+    const after = get();
+    const newNode = after.nodes[after.nodes.length - 1];
+    set({
+      nodes: after.nodes.map((n): SchematicNode =>
+        n.id === newNode.id && n.type === "device"
+          ? { ...n, hidden: true, data: { ...n.data, offCanvas: true } }
+          : n,
+      ),
+    });
+    get().saveToLocalStorage();
+    return newNode.id;
+  },
+
+  setPanelOffCanvas: (nodeId, offCanvas) => {
+    const state = get();
+    const node = state.nodes.find((n) => n.id === nodeId);
+    if (node?.type !== "device") return false;
+    if (offCanvas) {
+      // A physically wired panel must stay on canvas — its edges have nowhere to land.
+      const wired = state.edges.some((e) => e.source === nodeId || e.target === nodeId);
+      if (wired) return false;
+    }
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      nodes: state.nodes.map((n): SchematicNode =>
+        n.id === nodeId && n.type === "device"
+          ? { ...n, hidden: offCanvas, data: { ...n.data, offCanvas: offCanvas || undefined } }
+          : n,
+      ),
+      undoSize: undoStack.length,
+      redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return true;
+  },
+
+  addPatchPanelPage: () => {
+    const state = get();
+    const existing = state.pages.find((p) => p.type === "patch-panel");
+    if (existing) {
+      set({ activePage: existing.id });
+      return existing.id;
+    }
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const page: PatchPanelViewPage = { id: "patchbay-1", label: "Patch Bay", type: "patch-panel" };
+    set({ pages: [...state.pages, page], activePage: page.id, undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+    return page.id;
+  },
+
+  removePatchPanelPage: (pageId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const pages = state.pages.filter((p) => p.id !== pageId);
+    const activePage = state.activePage === pageId ? "schematic" : state.activePage;
+    // The page is gone — its assign/trace state has nothing left to point at.
+    set({ pages, activePage, patchAssignEdgeId: null, patchTracedEdgeId: null, undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+  },
+
+  renamePatchPanelPage: (pageId, label) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: state.pages.map((p) => (p.id === pageId ? { ...p, label } : p)),
+      undoSize: undoStack.length,
+      redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
   exportCustomTemplates: () => {
     return structuredClone(get().customTemplates);
   },
@@ -3984,6 +4478,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setCloudSavedAt: (ts) => { set({ cloudSavedAt: ts }); get().saveToLocalStorage(); },
   setFileHandle: (handle) => set({ fileHandle: handle }),
 
+  adoptLocalFile: (handle) => {
+    const name = handle.name.replace(/\.json$/i, "");
+    set({
+      fileHandle: handle,
+      // Only rename when the filename yields a non-empty name (e.g. not ".json").
+      ...(name ? { schematicName: name } : {}),
+      // A local file is now the document of record — drop any cloud link so
+      // Ctrl+S writes to the file rather than the previously-linked cloud copy.
+      cloudSchematicId: null,
+      cloudSavedAt: null,
+    });
+    get().saveToLocalStorage();
+  },
+
   setIsOnline: (online) => set({ isOnline: online }),
 
   // Toasts
@@ -4003,7 +4511,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   // ── Rack builder actions ──────────────────────────────────────────
 
   setActivePage: (pageId) => {
-    set({ activePage: pageId });
+    const state = get();
+    // Assign/trace state is scoped to the Patch Bay page, so drop it on the way out.
+    // This lives here rather than in a PatchPanelRenderer unmount cleanup because
+    // StrictMode double-invokes effects (mount → cleanup → mount), and that cleanup
+    // wiped an arm set moments earlier by "Patch via Panel..." on the schematic.
+    const target = state.pages.find((p) => p.id === pageId);
+    set(target?.type === "patch-panel"
+      ? { activePage: pageId }
+      : { activePage: pageId, patchAssignEdgeId: null, patchTracedEdgeId: null });
   },
 
   addRackPage: (label) => {
@@ -4095,7 +4611,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     return id;
   },
 
-  addPlacementSmart: (pageId, rackId, deviceNodeId, uPosition, face, preferredHalfRackSide) => {
+  addPlacementSmart: (pageId, rackId, deviceNodeId, uPosition, face, preferredHalfRackSide, markShelfCreatedByBridge) => {
     const state = get();
     const page = state.pages.find((p) => p.id === pageId && p.type === "rack-elevation") as RackElevationPage | undefined;
     if (!page) return { ok: false, reason: "no-page" };
@@ -4123,6 +4639,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         uPosition,
         heightU: 1,
         face,
+        // Bridge-created shelves are stamped with the placement they were made for, atomically
+        // here (same set/pushUndo) so there is no window where the shelf persists unflagged.
+        // Editor drag-drop passes no flag, so user-created shelves stay unmarked.
+        bridgeCreatedForPlacementId: markShelfCreatedByBridge ? placementId : undefined,
       };
       const newW = device.widthMm ?? innerWMm;
       // Center on the shelf when there's room; otherwise pin to the left rail.
@@ -4194,10 +4714,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   updateRackPlacement: (pageId, placementId, patch) => {
     const state = get();
+    // A user editing/moving a shelf-mounted device adopts/detaches the shelves involved, so
+    // drop bridge auto-cleanup provenance on BOTH: the shelf this placement was the bridge's
+    // original occupant of (source detach), AND any shelf it is being (re)mounted onto via a
+    // cross-shelf drag (destination adoption — the user just put a device on it). Same single
+    // chokepoint + non-undoing caveat as updateRackAccessory.
+    const destShelfId = patch.mountedOnShelfId;
     set({
       pages: mapElevationPage(state.pages, pageId, (p) => ({
         ...p,
         placements: p.placements.map((pl) => pl.id === placementId ? { ...pl, ...patch } : pl),
+        accessories: p.accessories.map((a) =>
+          (a.bridgeCreatedForPlacementId === placementId || (destShelfId != null && a.id === destShelfId))
+            ? { ...a, bridgeCreatedForPlacementId: undefined }
+            : a),
       })),
     });
     get().saveToLocalStorage();
@@ -4231,7 +4761,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({
       pages: mapElevationPage(state.pages, pageId, (p) => ({
         ...p,
-        accessories: p.accessories.map((a) => a.id === accessoryId ? { ...a, ...patch } : a),
+        // Any user edit (rename/resize/depth/move) marks the shelf as adopted, so the MCP
+        // bridge will never auto-remove it. Clearing bridgeCreatedForPlacementId here is the
+        // single chokepoint for that (all editor shelf-edit paths route through this action;
+        // the bridge never calls it). NOTE: like the rest of updateRackAccessory this does not
+        // pushUndo, so the provenance clear is not reverted by undo — acceptable because it
+        // only ever loosens auto-cleanup (an un-adopted shelf can still be removed manually).
+        accessories: p.accessories.map((a) => a.id === accessoryId ? { ...a, ...patch, bridgeCreatedForPlacementId: undefined } : a),
       })),
     });
     get().saveToLocalStorage();
@@ -4307,7 +4843,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       shelfOffsetMm: offset,
     };
     set({
-      pages: mapElevationPage(state.pages, pageId, (p) => ({ ...p, placements: [...p.placements, placement] })),
+      pages: mapElevationPage(state.pages, pageId, (p) => ({
+        ...p,
+        placements: [...p.placements, placement],
+        // A user manually stacking a device onto this shelf adopts it — drop the bridge's
+        // auto-cleanup provenance so the shelf is never auto-removed out from under them.
+        accessories: p.accessories.map((a) => a.id === shelfId ? { ...a, bridgeCreatedForPlacementId: undefined } : a),
+      })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();
@@ -4476,15 +5018,27 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       const { linkedRoomId: _dropped, ...rest } = r;
       return { ...rest, id: nid };
     });
+    // Remap accessory IDs first so shelf-mounted placements can re-point at the copied shelf.
+    const accessoryIdMap = new Map<string, string>();
+    const newAccessories = src.accessories.map((a) => {
+      const nid = nextAccessoryId();
+      accessoryIdMap.set(a.id, nid);
+      return {
+        ...a,
+        id: nid,
+        rackId: rackIdMap.get(a.rackId) ?? a.rackId,
+        // The provenance binding points at the source page's placement id, which doesn't exist
+        // on the copy — drop it so a duplicated shelf is a plain (non-bridge) shelf.
+        bridgeCreatedForPlacementId: undefined,
+      };
+    });
     const newPlacements = src.placements.map((pl) => ({
       ...pl,
       id: nextPlacementId(),
       rackId: rackIdMap.get(pl.rackId) ?? pl.rackId,
-    }));
-    const newAccessories = src.accessories.map((a) => ({
-      ...a,
-      id: nextAccessoryId(),
-      rackId: rackIdMap.get(a.rackId) ?? a.rackId,
+      // Re-point shelf-mounted devices at the COPIED shelf; otherwise they'd reference the
+      // source page's shelf id and the renderers would drop them from the duplicated rack.
+      mountedOnShelfId: pl.mountedOnShelfId ? accessoryIdMap.get(pl.mountedOnShelfId) ?? pl.mountedOnShelfId : pl.mountedOnShelfId,
     }));
     const newPage: RackElevationPage = {
       id: newPageId,
@@ -4591,6 +5145,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           ),
         };
       }
+      if (p.type !== "rack-elevation") return p;
       if (p.id === srcPageId) {
         return {
           ...p,
@@ -4664,6 +5219,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       showFacePlateDetail: state.showFacePlateDetail ? true : undefined,
       showCableIdLabels: !state.showCableIdLabels ? false : undefined,
       showCustomLabels: !state.showCustomLabels ? false : undefined,
+      showCableLengthLabels: state.showCableLengthLabels ? true : undefined,
       cableIdGap: state.cableIdGap !== 4 ? state.cableIdGap : undefined,
       cableIdMidOffset: state.cableIdMidOffset !== 0 ? state.cableIdMidOffset : undefined,
       cableIdLabelMode: state.cableIdLabelMode !== "endpoint" ? state.cableIdLabelMode : undefined,
@@ -4763,6 +5319,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             showCableIdLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
             showConnectionLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
             showCustomLabels: data.showCustomLabels ?? true,
+            showCableLengthLabels: data.showCableLengthLabels ?? false,
             cableIdGap: data.cableIdGap ?? 4,
             cableIdMidOffset: data.cableIdMidOffset ?? 0,
             cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
@@ -4844,6 +5401,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         showCableIdLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
         showConnectionLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
         showCustomLabels: data.showCustomLabels ?? true,
+        showCableLengthLabels: data.showCableLengthLabels ?? false,
         cableIdGap: data.cableIdGap ?? 4,
         cableIdMidOffset: data.cableIdMidOffset ?? 0,
         cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
@@ -4923,6 +5481,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       showFacePlateDetail: state.showFacePlateDetail ? true : undefined,
       showCableIdLabels: !state.showCableIdLabels ? false : undefined,
       showCustomLabels: !state.showCustomLabels ? false : undefined,
+      showCableLengthLabels: state.showCableLengthLabels ? true : undefined,
       cableIdGap: state.cableIdGap !== 4 ? state.cableIdGap : undefined,
       cableIdMidOffset: state.cableIdMidOffset !== 0 ? state.cableIdMidOffset : undefined,
       cableIdLabelMode: state.cableIdLabelMode !== "endpoint" ? state.cableIdLabelMode : undefined,
@@ -5025,6 +5584,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       showCableIdLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
       showConnectionLabels: data.showCableIdLabels ?? data.showConnectionLabels ?? true,
       showCustomLabels: data.showCustomLabels ?? true,
+      showCableLengthLabels: data.showCableLengthLabels ?? false,
       cableIdGap: data.cableIdGap ?? 4,
       cableIdMidOffset: data.cableIdMidOffset ?? 0,
       cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
@@ -5129,6 +5689,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         showConnectionLabels: true,
         showCableIdLabels: true,
         showCustomLabels: true,
+        showCableLengthLabels: false,
         cableIdGap: 4,
         cableIdMidOffset: 0,
         cableIdLabelMode: "endpoint" as "endpoint" | "midpoint",
@@ -5197,6 +5758,89 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return { ...n, data: merged };
       }),
     });
+    get().saveToLocalStorage();
+  },
+
+  addTextStub: (nodeId, portId) => {
+    const state = get();
+    const device = state.nodes.find((n) => n.id === nodeId);
+    if (!device || device.type !== "device") return;
+    const port = (device.data as DeviceData).ports.find((p) => p.id === portId);
+    if (!port) return;
+
+    const nodeMap = new Map(state.nodes.map((n) => [n.id, n] as const));
+    const positions = getPortAbsolutePositions(device, nodeMap, {
+      useShortNames: state.useShortNames,
+      wrapDeviceLabels: state.wrapDeviceLabels,
+    });
+    const wanted = portSide(port);
+    // A port can expose two handles (bidirectional in/out, passthrough rear/front) on
+    // opposite sides; anchor to the one on the port's natural outward side.
+    const candidates = positions.filter((p) => p.portId === portId);
+    const portPos =
+      candidates.find((p) => p.side === wanted) ?? candidates[0];
+    if (!portPos) return;
+
+    const side = textStubSideForPort(portPos.side);
+    const absPos = (n: SchematicNode): { x: number; y: number } => {
+      let x = n.position.x;
+      let y = n.position.y;
+      let pid = n.parentId;
+      while (pid) {
+        const p = state.nodes.find((nn) => nn.id === pid);
+        if (!p) break;
+        x += p.position.x;
+        y += p.position.y;
+        pid = p.parentId;
+      }
+      return { x, y };
+    };
+    const boxAbs = textStubBoxPosition({ x: portPos.absX, y: portPos.absY }, side, STUB_W_EST);
+    const parentId = device.parentId;
+    const parentAbs = parentId
+      ? absPos(state.nodes.find((n) => n.id === parentId)!)
+      : { x: 0, y: 0 };
+
+    const id = `text-stub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newNode: SchematicNode = {
+      id,
+      type: "text-stub",
+      position: {
+        x: Math.round(boxAbs.x - parentAbs.x),
+        y: Math.round(boxAbs.y - parentAbs.y),
+      },
+      ...(parentId ? { parentId } : {}),
+      zIndex: STUB_LABEL_Z_INDEX,
+      selected: false,
+      data: {
+        text: "",
+        signalType: port.signalType,
+        anchorNodeId: nodeId,
+        anchorPortId: portId,
+        side,
+        // Leave `placed` unset so the component re-anchors once React Flow has measured
+        // the real box width (a wide text can shift a left-facing box's X).
+      },
+    } as SchematicNode;
+
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({ nodes: renumberNodes([...state.nodes, newNode]), portContextMenu: null });
+    get().saveToLocalStorage();
+    // Drop straight into edit mode so the user can type the note text.
+    get().setEditingNodeId(id);
+  },
+
+  updateTextStubText: (nodeId, text) => {
+    const state = get();
+    let changed = false;
+    const nodes = state.nodes.map((n) => {
+      if (n.id !== nodeId || n.type !== "text-stub") return n;
+      if ((n.data as import("./types").TextStubData).text === text) return n;
+      changed = true;
+      return { ...n, data: { ...n.data, text } };
+    });
+    if (!changed) return;
+    set({ nodes });
     get().saveToLocalStorage();
   },
 
@@ -5327,9 +5971,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     };
     const tgtLegData = { ...baseData, linkedConnectionId } as ConnectionEdge["data"];
     delete (tgtLegData as Record<string, unknown>).cableId;
-    delete (tgtLegData as Record<string, unknown>).label;
     delete (tgtLegData as Record<string, unknown>).cableLength;
     delete (tgtLegData as Record<string, unknown>).multicableLabel;
+    // Patch hops live on the source-side leg ONLY — duplicating them here would
+    // double-book the panel ports and orphan them when the source leg unpatches.
+    delete (tgtLegData as Record<string, unknown>).patchHops;
+    delete (tgtLegData as Record<string, unknown>).patchSegments;
+    // The custom middle label (data.label) is intentionally KEPT on the target
+    // leg (#201): each leg carries the same logical connection's custom label so
+    // it shows on both halves, between the cable ID and the stub-label box. Cable
+    // ID stays source-leg-only (mirrored to the target leg via cableIdMap).
     const tgtLeg: ConnectionEdge = {
       ...edge,
       id: `${edge.id}-tgt`,
@@ -5851,9 +6502,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ];
     }
 
-    // Exclude hidden adapter nodes from obstacle computation
-    const routingNodes = hiddenAdapterNodeIds.size > 0
-      ? state.nodes.filter((n) => !hiddenAdapterNodeIds.has(n.id))
+    // Exclude hidden adapters AND off-canvas devices (virtual patch panels) from
+    // obstacle computation — neither is rendered, so neither should block routes.
+    const offCanvasIds = new Set(
+      state.nodes
+        .filter((n) => n.type === "device" && (n.data as DeviceData).offCanvas)
+        .map((n) => n.id),
+    );
+    const routingNodes = (hiddenAdapterNodeIds.size > 0 || offCanvasIds.size > 0)
+      ? state.nodes.filter((n) => !hiddenAdapterNodeIds.has(n.id) && !offCanvasIds.has(n.id))
       : state.nodes;
 
     // Hand the heavy A* off to the routing worker. Build the DOM-derived handle snapshot here
@@ -5893,6 +6550,17 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       debug: state.debugEdges,
       routingParams: (globalThis as Record<string, unknown>).__routingParams as Record<string, number> | undefined,
     });
+  },
+
+  cancelRouting: () => {
+    // Stop the running portfolio in the worker pool (#207). Drop the pending apply context so any
+    // straggler result is discarded, then clear the indicator. Auto-route stays ON: we abort only
+    // THIS pass; the last committed routedEdges (a complete, consistent map) is kept as-is, and a
+    // later edit re-fires routing normally.
+    if (!get().isRouting) return;
+    cancelRoutingClient();
+    pendingRouteCtx = null;
+    set({ isRouting: false });
   },
 
   toggleAutoRoute: () => {

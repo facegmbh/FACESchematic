@@ -76,6 +76,7 @@ export const SIGNAL_TO_CABLE: Record<SignalType, string> = {
   cresnet: "Cresnet",
   dali: "DALI (2-core)",
   knx: "KNX TP (J-Y(St)Y)",
+  nlight: "Ethernet",
   sensor: "Sensor",
   custom: "Other",
 };

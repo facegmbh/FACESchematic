@@ -199,7 +199,7 @@ app.post("/auth/login", async (c) => {
       ].join("\n"),
       html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px">
 <h2 style="font-size:18px;color:#0f172a;margin:0 0 16px">Log in to EasySchematic</h2>
-<p style="color:#334155;font-size:14px;line-height:1.6;margin:0 0 8px">We received a login request for <strong>${email}</strong>.</p>
+<p style="color:#334155;font-size:14px;line-height:1.6;margin:0 0 8px">We received a login request for <strong>${escapeHtml(email)}</strong>.</p>
 <p style="color:#334155;font-size:14px;line-height:1.6;margin:0 0 24px">Click the button below to sign in:</p>
 <p style="margin:0 0 24px"><a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background:#1e293b;color:white;text-decoration:none;border-radius:8px;font-weight:600;">Log in to EasySchematic</a></p>
 <p style="color:#64748b;font-size:13px;line-height:1.6;margin:0 0 4px">Or copy and paste this URL into your browser:</p>
@@ -283,7 +283,7 @@ app.get("/auth/verify", async (c) => {
     : "/auth/verify";
 
   return c.html(authPage("Confirm Login", `<h1>Confirm Login</h1>
-    <p>Click below to complete your login as <strong>${link.email}</strong>.</p>
+    <p>Click below to complete your login as <strong>${escapeHtml(link.email)}</strong>.</p>
     <form method="POST" action="${formAction}">
       <input type="hidden" name="token" value="${token}">
       <button type="submit" class="btn">Complete Login</button>
@@ -1399,8 +1399,14 @@ app.get("/templates/search-terms", async (c) => {
     .all();
   const allTerms = new Set<string>();
   for (const row of results) {
-    const terms = JSON.parse((row as { search_terms: string }).search_terms) as string[];
-    for (const t of terms) allTerms.add(t.toLowerCase());
+    let terms: unknown;
+    try {
+      terms = JSON.parse((row as { search_terms: string }).search_terms);
+    } catch {
+      continue; // skip a row with malformed JSON rather than 500 the whole endpoint
+    }
+    if (!Array.isArray(terms)) continue;
+    for (const t of terms) if (typeof t === "string") allTerms.add(t.toLowerCase());
   }
   const sorted = [...allTerms].sort();
   return c.json(sorted, 200, CACHE_HEADERS);

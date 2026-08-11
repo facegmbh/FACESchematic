@@ -75,6 +75,7 @@
   --color-cresnet: #a21caf;   /* magenta — Crestron Cresnet control bus */
   --color-dali: #9d174d;      /* deep rose — DALI lighting control bus */
   --color-knx: #0f766e;       /* teal — KNX building automation bus */
+  --color-nlight: #ca8a04;    /* golden amber — Acuity nLight lighting control bus */
   --color-sensor: #71717a;    /* zinc gray — ambient sensor input */
   --color-custom: #64748b;    /* cool gray */
 }

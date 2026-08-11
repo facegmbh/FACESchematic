@@ -11,11 +11,11 @@ export type ConnectorType =
   | "l5-20" | "l6-20" | "l6-30" | "l21-30" | "cam-lok" | "powercon-true1"
   | "qsfp" | "qsfp28" | "mpo" | "digilink" | "pcie-6pin"
   | "mini-din-4" | "mini-din-7" | "mini-din-8"
-  | "mini-hdmi" | "mini-displayport"
+  | "mini-hdmi" | "micro-hdmi" | "mini-displayport"
   | "rj11" | "rj12" | "usb-mini" | "usb-micro" | "trs-2.5mm"
   | "reverse-tnc" | "sma" | "db37"
   | "d-tap" | "v-mount" | "f-connector"
-  | "lemo-2pin" | "lemo-4pin" | "lemo-5pin"
+  | "lemo-2pin" | "lemo-4pin" | "lemo-5pin" | "kycon-4pin"
   | "wireless"
   | "solder-cup" | "punch-down-110" | "punch-down-66" | "krone-idc" | "d-hole-insert"
   | "none" | "other";
@@ -123,6 +123,7 @@ export type SignalType =
   | "cresnet"
   | "dali"
   | "knx"
+  | "nlight"
   | "sensor"
   | "custom";
 
@@ -258,6 +259,10 @@ export interface DeviceData {
   hostname?: string;
   deviceType: string;
   ports: Port[];
+  /** Device exists in the project (BOQ, pack list, racks, patch view) but is not rendered
+   *  on the schematic canvas and is excluded from routing/overlap. v1: patch panels only,
+   *  created from the Patch Panels page. Paired with node.hidden = true (React Flow). */
+  offCanvas?: boolean;
   color?: string;
   /** Custom header background color (#9) */
   headerColor?: string;
@@ -283,6 +288,12 @@ export interface DeviceData {
   category?: string;
   showAllPorts?: boolean;
   hiddenPorts?: string[];
+  /** Per-device "show only connected ports" toggle (#135). When true, ports with no
+   *  active connection are hidden from this device's canvas rendering (stubbed
+   *  connections count as connected). Independent of — and OR-combined with — the
+   *  global SchematicFile.hideUnconnectedPorts view setting. Display-only: reports and
+   *  routing are unaffected. */
+  showOnlyConnectedPorts?: boolean;
   dhcpServer?: DhcpServerConfig;
   isCableAccessory?: boolean;
   integratedWithCable?: boolean;
@@ -423,6 +434,32 @@ export interface StubLabelData {
 
 export type StubLabelNode = Node<StubLabelData, "stub-label">;
 
+/** A free-text "stub" attached to a SINGLE device port (#196). Unlike a stub-label,
+ *  it is NOT backed by any real connection — there is no edge and no linkedConnectionId,
+ *  so it never appears in cable/pack/network reports and does not count a port as
+ *  "connected". Used to note things like "Client LAN" on a port without drawing a device
+ *  for the far end. The node draws its own short leader line to the anchor port. */
+export interface TextStubData {
+  [key: string]: unknown;
+  /** Free text the user types (e.g. "Client LAN"). */
+  text: string;
+  /** Signal type of the anchored port — drives the border/leader colour only. */
+  signalType: SignalType;
+  /** The device this text stub is attached to. */
+  anchorNodeId: string;
+  /** The base port id (not the -in/-out/-rear/-front handle) this stub annotates. */
+  anchorPortId: string;
+  /** Which side of the label box faces the device ("l" = device is to the left of the
+   *  box, "r" = device is to the right). Mirrors defaultStubPlacement's handle. */
+  side: "l" | "r";
+  /** True once one-shot auto-placement has aligned the box with its port (see StubLabelData.placed). */
+  placed?: boolean;
+  /** True once the user has dragged the box; suppresses auto-re-placement on device moves. */
+  userMoved?: boolean;
+}
+
+export type TextStubNode = Node<TextStubData, "text-stub">;
+
 export interface WaypointData {
   [key: string]: unknown;
   /** The connection edge this waypoint belongs to. */
@@ -452,7 +489,22 @@ export interface BundleJunctionData {
 
 export type BundleJunctionNode = Node<BundleJunctionData, "bundle-junction">;
 
-export type SchematicNode = DeviceNode | RoomNode | NoteNode | AnnotationNode | StubLabelNode | WaypointNode | BundleJunctionNode;
+export type SchematicNode = DeviceNode | RoomNode | NoteNode | AnnotationNode | StubLabelNode | TextStubNode | WaypointNode | BundleJunctionNode;
+
+/** One intermediate patch-panel hop on a connection's physical path (source → target order).
+ *  The panel is a real device node (deviceType "patch-panel"), possibly off-canvas. */
+export interface PatchHop {
+  panelNodeId: string;
+  /** Passthrough port id on that panel. */
+  portId: string;
+}
+
+/** Per-segment user overrides for a patched connection. Index i = physical segment i
+ *  (0 = source-side). Cleared wholesale whenever patchHops change (indices would shift). */
+export interface PatchSegmentOverride {
+  label?: string;
+  cableLength?: string;
+}
 
 export interface ConnectionData {
   [key: string]: unknown;
@@ -523,6 +575,12 @@ export interface ConnectionData {
   tested?: boolean;
   /** ISO date (YYYY-MM-DD) the cable was tested / certified (#P2-031) */
   testedDate?: string;
+  /** Intermediate patch-panel hops (source → target). Presence (length > 0) marks the
+   *  connection as "patched": schedules expand it into hops.length+1 physical cables
+   *  with suffix IDs (E001 → E001-A/-B/…). The canvas edge itself is untouched. */
+  patchHops?: PatchHop[];
+  /** Sparse per-segment overrides, parallel to the segment list (patchHops.length + 1). */
+  patchSegments?: PatchSegmentOverride[];
 }
 
 export type ConnectionEdge = Edge<ConnectionData>;
@@ -724,6 +782,14 @@ export interface RackAccessory {
   /** Usable depth for shelf-mounted gear in mm (only meaningful when type === "shelf").
    *  Defaults to ~60% of rack.depthMm when unset. */
   shelfDepthMm?: number;
+  /** Set when the MCP bridge auto-created this shelf to hold a shelf-only device; its value
+   *  is the id of that original placement. Its PRESENCE marks the shelf as bridge-created AND
+   *  not-yet-touched-by-the-user — `remove_device_from_rack` will auto-remove the shelf only
+   *  when unracking that exact placement while it is the shelf's sole occupant. Any user edit
+   *  (rename/resize/depth/move via `updateRackAccessory`, adding a second device via
+   *  `addShelfMountedDevice`, or page duplication) clears this field, so an adopted shelf is
+   *  never auto-removed. */
+  bridgeCreatedForPlacementId?: string;
 }
 
 export interface RackElevationPage {
@@ -759,7 +825,16 @@ export interface PrintSheetPage {
   showTitleBlock: boolean;
 }
 
-export type SchematicPage = RackElevationPage | PrintSheetPage;
+/** The Patch Panels view page — a single project-wide patch bay tab that renders every
+ *  patch-panel device (canvas or off-canvas) with its port occupancy. Pure view state;
+ *  panels and patch assignments live on nodes/edges, so deleting the page loses nothing. */
+export interface PatchPanelViewPage {
+  id: string;
+  label: string;
+  type: "patch-panel";
+}
+
+export type SchematicPage = RackElevationPage | PrintSheetPage | PatchPanelViewPage;
 
 /** Per-bundle metadata. Membership is on each connection's `data.bundleId`; this holds
  *  the label, an optional user-dragged trunk override, and collapse state. */
@@ -819,6 +894,8 @@ export interface SchematicFile {
   showCableIdLabels?: boolean;
   /** Show custom labels on connections (#61) */
   showCustomLabels?: boolean;
+  /** Show cable-length labels on connections (#100). Opt-in; off by default. */
+  showCableLengthLabels?: boolean;
   /** Cable ID endpoint spacing in pixels (#61) */
   cableIdGap?: number;
   /** Cable ID midpoint offset along path in pixels (#61) */
@@ -898,7 +975,11 @@ export const DEFAULT_PAN_MODE: PanMode = "select-first";
 export const DEFAULT_HEADER_COLOR = "#ff4747";
 
 export type StubLabelPageMode = "always" | "cross-page" | "never";
-export const DEFAULT_STUB_LABEL_SHOW_PORT = false;
+// Show the far-end port name (e.g. "[HDMI In 1]") on stub labels by default, at both
+// ends of a stubbed connection — the destination device alone is often ambiguous when a
+// device has several ports of the same signal type (issue #200). Still user-toggleable
+// globally (Preferences) and per-stub (right-click → Show port).
+export const DEFAULT_STUB_LABEL_SHOW_PORT = true;
 export const DEFAULT_STUB_LABEL_SHOW_ROOM = true;
 export const DEFAULT_STUB_LABEL_PAGE_MODE: StubLabelPageMode = "cross-page";
 
@@ -1015,6 +1096,7 @@ export const SIGNAL_COLORS: Record<SignalType, string> = {
   cresnet: "var(--color-cresnet)",
   dali: "var(--color-dali)",
   knx: "var(--color-knx)",
+  nlight: "var(--color-nlight)",
   sensor: "var(--color-sensor)",
   custom: "var(--color-custom)",
 };
@@ -1068,6 +1150,7 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "mini-din-7": "Mini-DIN 7-pin",
   "mini-din-8": "Mini-DIN 8-pin",
   "mini-hdmi": "Mini HDMI",
+  "micro-hdmi": "Micro HDMI",
   "mini-displayport": "Mini DisplayPort",
   "mini-xlr": "Mini XLR",
   opticalcon: "Fiber - opticalCON",
@@ -1087,6 +1170,7 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "lemo-2pin": "LEMO 2-pin",
   "lemo-4pin": "LEMO 4-pin",
   "lemo-5pin": "LEMO 5-pin",
+  "kycon-4pin": "Kycon 4-pin",
   "usb-mini": "Mini USB",
   "usb-micro": "Micro USB",
   "trs-2.5mm": "2.5mm TRS",
@@ -1187,6 +1271,7 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   cresnet: "Cresnet",
   dali: "DALI",
   knx: "KNX",
+  nlight: "nLight",
   sensor: "Sensor",
   custom: "Custom",
 };
@@ -1197,7 +1282,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
   "Video over IP": ["ndi", "srt", "hdbaset", "st2110"],
   "Audio": ["analog-audio", "speaker-level", "bluetooth", "aes", "dante", "avb", "aes67", "madi", "spdif", "adat", "ultranet", "aes50", "stageconnect", "ydif", "soundgrid", "gigaace", "dx5", "dsnake", "slink", "fibreace", "digilink", "extron-exp", "pots", "blu-link"],
   "Network": ["ethernet", "fiber"],
-  "Control / Data": ["dmx", "artnet", "sacn", "rs422", "rs485", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "sensor"],
+  "Control / Data": ["dmx", "artnet", "sacn", "rs422", "rs485", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "nlight", "sensor"],
   "Building Automation": ["dali", "knx"],
   "Sync / Clock": ["genlock", "wordclock", "timecode", "dars", "gps"],
   "Power": ["power", "power-l1", "power-l2", "power-l3", "power-neutral", "power-ground"],
@@ -1207,12 +1292,12 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
 
 /** Connector types organized by functional group (for searchable dropdowns) */
 export const CONNECTOR_GROUPS: Record<string, ConnectorType[]> = {
-  "Video": ["bnc", "hdmi", "mini-hdmi", "displayport", "mini-displayport", "dvi", "vga"],
+  "Video": ["bnc", "hdmi", "mini-hdmi", "micro-hdmi", "displayport", "mini-displayport", "dvi", "vga"],
   "Audio": ["xlr-3", "xlr-4", "xlr-5", "mini-xlr", "combo-xlr-trs", "trs-quarter", "ts-quarter", "trs-eighth", "trs-2.5mm", "rca", "din-5", "mini-din-4", "mini-din-7", "mini-din-8", "toslink"],
   "Network / Data": ["rj45", "ethercon", "sfp", "lc", "sc", "opticalcon", "qsfp", "qsfp28", "mpo", "rj11", "rj12"],
   "USB": ["usb-a", "usb-b", "usb-c", "usb-mini", "usb-micro"],
   "D-Sub / Serial": ["db9", "db15", "db25", "db37", "db7w2", "lemo-5pin"],
-  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "cee-7-7", "edison", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "d-tap", "v-mount"],
+  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "cee-7-7", "edison", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "kycon-4pin", "d-tap", "v-mount"],
   "Speaker": ["speakon", "banana", "binding-post", "binding-post-banana"],
   "Terminal": ["phoenix", "terminal-block", "multipin", "solder-cup", "punch-down-110", "punch-down-66", "krone-idc"],
   "RF": ["reverse-tnc", "sma", "f-connector"],

@@ -365,25 +365,44 @@ export function computePackList(
     (a, b) => a.room.localeCompare(b.room) || a.model.localeCompare(b.model),
   );
 
+  // Stubbed connections are split into two legs sharing a linkedConnectionId, each
+  // joining a real device to a stub-label node. Emit ONE cable per logical connection:
+  // process only the source-side leg and follow its partner to the real target device.
+  // Without this, every stubbed connection is counted twice and each row shows an
+  // "Unknown" endpoint. (Mirrors computeCableSchedule.)
+  const linkedPartner = new Map<string, ConnectionEdge>();
+  for (const e of edges) {
+    const link = e.data?.linkedConnectionId;
+    if (!link) continue;
+    const partner = edges.find((p) => p.id !== e.id && p.data?.linkedConnectionId === link);
+    if (partner) linkedPartner.set(e.id, partner);
+  }
+  const isSourceLeg = (e: ConnectionEdge): boolean =>
+    nodes.find((n) => n.id === e.source)?.type !== "stub-label";
+
   // Cables — exclude edges where one side is a direct-attach adapter port
   const cables: PackListCable[] = edges
     .filter((e) => {
       if (!e.data?.signalType) return false;
+      // For a stub pair, only the source-side leg represents the logical cable.
+      if (e.data?.linkedConnectionId && !isSourceLeg(e)) return false;
+      const effectiveTargetEdge = linkedPartner.get(e.id) ?? e;
       const srcNode = nodes.find((n) => n.id === e.source);
-      const tgtNode = nodes.find((n) => n.id === e.target);
+      const tgtNode = nodes.find((n) => n.id === effectiveTargetEdge.target);
       const srcPort = resolvePort(srcNode, e.sourceHandle);
-      const tgtPort = resolvePort(tgtNode, e.targetHandle);
+      const tgtPort = resolvePort(tgtNode, effectiveTargetEdge.targetHandle);
       if (srcNode?.type === "device" && (srcNode.data as DeviceData).deviceType === "adapter" && srcPort?.directAttach) return false;
       if (tgtNode?.type === "device" && (tgtNode.data as DeviceData).deviceType === "adapter" && tgtPort?.directAttach) return false;
       if (srcPort?.connectorType === "wireless" || tgtPort?.connectorType === "wireless") return false;
       return true;
     })
     .map((e) => {
+      const effectiveTargetEdge = linkedPartner.get(e.id) ?? e;
       const srcNode = nodes.find((n) => n.id === e.source);
-      const tgtNode = nodes.find((n) => n.id === e.target);
+      const tgtNode = nodes.find((n) => n.id === effectiveTargetEdge.target);
       const signalType = e.data!.signalType as SignalType;
       const srcPort = resolvePort(srcNode, e.sourceHandle);
-      const tgtPort = resolvePort(tgtNode, e.targetHandle);
+      const tgtPort = resolvePort(tgtNode, effectiveTargetEdge.targetHandle);
       const srcRoom = srcNode
         ? getRoomLabel(nodes, srcNode.parentId)
         : "Unknown";
@@ -402,7 +421,7 @@ export function computePackList(
         targetDevice: tgtNode?.type === "device"
           ? (tgtNode.data as DeviceData).label
           : "Unknown",
-        targetPort: tgtNode ? resolvePortLabel(tgtNode, e.targetHandle) : "",
+        targetPort: tgtNode ? resolvePortLabel(tgtNode, effectiveTargetEdge.targetHandle) : "",
         targetRoom: tgtRoom,
       };
     })
@@ -487,10 +506,18 @@ export function computeDocumentSummary(
     (n) => n.type === "device" && !(n.data as DeviceData).isCableAccessory,
   ).length;
   const rooms = nodes.filter((n) => n.type === "room").length;
-  const connections = edges.filter((e) => e.data?.signalType).length;
+  // A stubbed connection is two legs sharing a linkedConnectionId; the target-side
+  // leg's source is a stub-label node. Skip it so each logical connection counts once.
+  const isStubTargetLeg = (e: ConnectionEdge) =>
+    !!e.data?.linkedConnectionId &&
+    nodes.find((n) => n.id === e.source)?.type === "stub-label";
+  const connections = edges.filter(
+    (e) => e.data?.signalType && !isStubTargetLeg(e),
+  ).length;
   let patch = 0;
   let field = 0;
   for (const e of edges) {
+    if (isStubTargetLeg(e)) continue;
     if (e.data?.cableUse === "patch") patch++;
     else if (e.data?.cableUse === "field") field++;
   }
@@ -527,16 +554,18 @@ export function csvRow(cells: string[]): string {
   return cells.map(escapeCsv).join(",");
 }
 
-export function exportPackListCsv(
+/** Build the pack-list CSV file contents (including the UTF-8 BOM). */
+export function buildPackListCsv(
   data: PackListData,
   schematicName: string,
   cableCosts?: Record<string, number>,
   summary?: string,
-): void {
+  generatedDate: string = new Date().toLocaleDateString(),
+): string {
   const lines: string[] = [];
 
   lines.push(`Pack List — ${schematicName}`);
-  lines.push(`Generated ${new Date().toLocaleDateString()}`);
+  lines.push(`Generated ${generatedDate}`);
   if (summary) lines.push(summary);
   lines.push("");
 
@@ -629,7 +658,16 @@ export function exportPackListCsv(
     lines.push(csvRow(["", "", "", "", "", "TOTAL", cableTotal.toFixed(2)]));
   }
 
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  return "\uFEFF" + lines.join("\n");
+}
+
+export function exportPackListCsv(
+  data: PackListData,
+  schematicName: string,
+  cableCosts?: Record<string, number>,
+  summary?: string,
+): void {
+  const blob = new Blob([buildPackListCsv(data, schematicName, cableCosts, summary)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -747,13 +785,21 @@ export function getPackListTableData(
     cableGroupedRows = new Map(
       ordered.map((g): [string, Record<string, string>[]] => [
         g.category,
-        g.rows.map((s) => ({
-          count: `${s.count}x`,
-          cableType: s.cableType,
-          signalType: s.signalType,
-          cableLength: s.cableLength,
-          route: s.route,
-        })),
+        g.rows.map((s) => {
+          // Include cost columns here too — the flat and path-grouped rows carry
+          // them, and the user-toggleable Unit/Ext Cost columns would otherwise
+          // render blank in the category view whenever Sort is None.
+          const uc = cableCosts?.[cableCostKey(s.cableType, s.signalType, s.cableLength)] ?? 0;
+          return {
+            count: `${s.count}x`,
+            cableType: s.cableType,
+            signalType: s.signalType,
+            cableLength: s.cableLength,
+            route: s.route,
+            unitCost: uc > 0 ? `$${uc.toFixed(2)}` : "",
+            extCost: uc > 0 ? `$${(uc * s.count).toFixed(2)}` : "",
+          };
+        }),
       ]),
     );
     if (adapterCableRows.length > 0) cableGroupedRows.set("Adapters", adapterCableRows);

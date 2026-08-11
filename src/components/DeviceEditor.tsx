@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } from "react";
 import { useSchematicStore } from "../store";
 import { buildBulkSlots } from "../slotBulk";
-import { autoNamePorts } from "../portNaming";
+import { autoNamePorts, duplicatePortLabel } from "../portNaming";
 import {
   SIGNAL_LABELS,
   SIGNAL_COLORS,
@@ -18,12 +18,15 @@ import {
   type AuxRow,
   type DeviceData,
   type DeviceNode,
+  type DeviceTemplate,
   type DhcpServerConfig,
   type SlotDefinition,
 } from "../types";
 import { CONNECTORS_WITH_GENDER_VARIATION, DEFAULT_CONNECTOR, NETWORK_SIGNAL_TYPES, VIDEO_SIGNAL_TYPES, resolvePortGender, shouldDefaultMultiConnect } from "../connectorTypes";
-import { getBundledTemplates, getCardsByFamily, checkSession, createDraft, createHandoff } from "../templateApi";
+import { rackUnitLabel } from "../rackUtils";
+import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates, checkSession, createDraft, createHandoff } from "../templateApi";
 import { getTemplateDrift } from "../templateSync";
+import { templateIdentityPatch } from "../inventoryKey";
 import LoginDialog from "./LoginDialog";
 import CardCreatorDialog from "./CardCreatorDialog";
 import TemplateSyncDialog from "./TemplateSyncDialog";
@@ -129,6 +132,8 @@ export default function DeviceEditor() {
   const undo = useSchematicStore((s) => s.undo);
   const addCustomTemplate = useSchematicStore((s) => s.addCustomTemplate);
   const updateCustomTemplate = useSchematicStore((s) => s.updateCustomTemplate);
+  const propagateTemplateToInstances = useSchematicStore((s) => s.propagateTemplateToInstances);
+  const addToast = useSchematicStore((s) => s.addToast);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const templateHiddenSignals = useSchematicStore((s) => s.templateHiddenSignals);
   const currency = useSchematicStore((s) => s.currency);
@@ -139,6 +144,16 @@ export default function DeviceEditor() {
 
   const node = nodes.find((n) => n.id === editingNodeId && n.type === "device") as DeviceNode | undefined;
 
+  // Bumped after an in-editor template sync so the metadata effect below re-reads the
+  // freshly-synced node.data. The effect is keyed on editingNodeId (which doesn't change
+  // on sync), so without this the form keeps its pre-sync values and Save clobbers the sync.
+  const [syncNonce, setSyncNonce] = useState(0);
+  // Bumped once the community library resolves so template lookups (dirty-check,
+  // spec-sheet link, slot defs) re-evaluate against the warm cache. Community
+  // (API-only) templates aren't in the bundled fallback, so without warming the
+  // cache a device placed from one finds no source template and the "Submit to
+  // Community"/"Revert to Template" affordances never appear.
+  const [templatesLoaded, setTemplatesLoaded] = useState(0);
   const [label, setLabel] = useState("");
   const [shortName, setShortName] = useState("");
   /** Tri-state per-instance toggle: undefined = inherit schematic default. */
@@ -189,6 +204,8 @@ export default function DeviceEditor() {
   const [widthMm, setWidthMm] = useState<number | undefined>(undefined);
   const [depthMm, setDepthMm] = useState<number | undefined>(undefined);
   const [weightKg, setWeightKg] = useState<number | undefined>(undefined);
+  // Rack-form override — undefined means "auto" (infer from size heuristic)
+  const [rackForm, setRackForm] = useState<DeviceData["rackForm"]>(undefined);
 
   // Cable accessory flags
   const [isCableAccessory, setIsCableAccessory] = useState(false);
@@ -234,7 +251,7 @@ export default function DeviceEditor() {
   useEffect(() => {
     if (!node) return;
     const tpl = node.data.templateId
-      ? getBundledTemplates().find((t) => t.id === node.data.templateId)
+      ? getTemplateById(node.data.templateId, customTemplates)
       : undefined;
     setLabel(node.data.label);
     setShortName(node.data.shortName ?? "");
@@ -270,13 +287,14 @@ export default function DeviceEditor() {
     setWidthMm(node.data.widthMm);
     setDepthMm(node.data.depthMm);
     setWeightKg(node.data.weightKg);
+    setRackForm(node.data.rackForm);
     setIsCableAccessory(node.data.isCableAccessory ?? false);
     setIntegratedWithCable(node.data.integratedWithCable ?? false);
     setIsVenueProvided(node.data.isVenueProvided ?? false);
     setAdapterVisibility(node.data.adapterVisibility ?? "default");
     setAuxiliaryData(normalizeAuxRows(node.data.auxiliaryData));
     setSearchTermsRaw((node.data.searchTerms ?? []).join(", "));
-  }, [editingNodeId]);
+  }, [editingNodeId, syncNonce]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   // Ports + hiddenPorts sync on a SEPARATE effect keyed on the live port-id signature,
@@ -328,6 +346,19 @@ export default function DeviceEditor() {
   }, [editingNodeId, portSignature]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
+  // Warm the community library when the editor opens so template-backed lookups
+  // resolve even if the DeviceLibrary sidebar never mounted (e.g. editing from the
+  // rack page) or hasn't finished fetching yet. fetchTemplates is idempotent and
+  // returns immediately on a warm, non-degraded cache, so this is cheap.
+  useEffect(() => {
+    if (!editingNodeId) return;
+    let cancelled = false;
+    fetchTemplates()
+      .then(() => { if (!cancelled) setTemplatesLoaded((n) => n + 1); })
+      .catch(() => { /* degraded — lookups fall back to bundled/custom */ });
+    return () => { cancelled = true; };
+  }, [editingNodeId]);
+
   const close = useCallback(() => {
     // Read live store state — a stale closure here would make handleSave
     // (which clears creatingNodeId just before calling close) trigger the
@@ -348,8 +379,11 @@ export default function DeviceEditor() {
     setEditingNodeId(null);
   }, [undo, setCreatingNodeId, setEditingNodeId]);
 
-  const handleSave = useCallback(() => {
-    if (!editingNodeId) return;
+  // Build the DeviceData for the node under edit from the current form state. `overrides`
+  // let the template-update flows re-point templateId / bump templateVersion on the edited
+  // device without duplicating this whole builder. (#127)
+  const buildDeviceData = useCallback((overrides?: Partial<DeviceData>): DeviceData | null => {
+    if (!editingNodeId) return null;
 
     // Build old→new ID map for draft ports. Unnamed ports are auto-named (not
     // dropped) so a row you added never silently vanishes on Apply.
@@ -414,6 +448,7 @@ export default function DeviceEditor() {
       ...(widthMm != null ? { widthMm } : {}),
       ...(depthMm != null ? { depthMm } : {}),
       ...(weightKg != null ? { weightKg } : {}),
+      ...(rackForm ? { rackForm } : {}),
       ...(isCableAccessory ? { isCableAccessory: true } : {}),
       ...(integratedWithCable ? { integratedWithCable: true } : {}),
       ...(isVenueProvided ? { isVenueProvided: true } : {}),
@@ -426,10 +461,17 @@ export default function DeviceEditor() {
       })()),
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
+    return overrides ? { ...data, ...overrides } : data;
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+
+  const handleSave = useCallback(() => {
+    if (!editingNodeId) return;
+    const data = buildDeviceData();
+    if (!data) return;
     updateDevice(editingNodeId, data);
     setCreatingNodeId(null); // commit the node — close won't undo it
     close();
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, category, color, headerColor, node, updateDevice, close, setCreatingNodeId, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw]);
+  }, [editingNodeId, buildDeviceData, updateDevice, setCreatingNodeId, close]);
 
   // Ctrl+Enter anywhere in the editor → Apply & Close
   const onCtrlEnter = useCallback((e: React.KeyboardEvent) => {
@@ -440,113 +482,138 @@ export default function DeviceEditor() {
     }
   }, [handleSave]);
 
+  // Shared builder for the "save as template", "update template" and "fork built-in" flows.
+  // `overrides` carries the id (always) and, for updates/forks, version + a renamed label.
+  const buildTemplateFromForm = useCallback(
+    (overrides: Partial<DeviceTemplate> & Pick<DeviceTemplate, "id">): DeviceTemplate => {
+      const finalPorts: Port[] = ports
+        .filter((p) => p.label.trim())
+        .map((p, i) => ({
+          ...p,
+          id: `tpl-${i}`,
+          label: p.label.trim(),
+        }));
+      const trimmedAux = trimTrailingEmpty(auxiliaryData);
+      const existing = node?.data;
+      return {
+        deviceType: deviceType.trim() || "custom",
+        label: label.trim() || "Custom Device",
+        ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
+        ports: finalPorts,
+        ...(color ? { color } : {}),
+        ...(headerColor ? { headerColor } : {}),
+        ...(category.trim() ? { category: category.trim() } : {}),
+        ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
+        ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
+        ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
+        ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
+        ...(powerDrawW != null ? { powerDrawW } : {}),
+        ...(powerCapacityW != null ? { powerCapacityW } : {}),
+        ...(voltage ? { voltage } : {}),
+        ...(thermalBtuh != null ? { thermalBtuh } : {}),
+        ...(poeBudgetW != null ? { poeBudgetW } : {}),
+        ...(poeDrawW != null ? { poeDrawW } : {}),
+        ...(unitCost != null ? { unitCost } : {}),
+        ...(heightMm != null ? { heightMm } : {}),
+        ...(widthMm != null ? { widthMm } : {}),
+        ...(depthMm != null ? { depthMm } : {}),
+        ...(weightKg != null ? { weightKg } : {}),
+        ...(rackForm ? { rackForm } : {}),
+        ...(isVenueProvided ? { isVenueProvided: true } : {}),
+        // Convert InstalledSlot[] back to the blueprint SlotDefinition[] that DeviceTemplate
+        // expects — card selections are per-placement, not part of the template spec.
+        ...(existing?.slots && existing.slots.length > 0
+          ? {
+              slots: existing.slots.map((s) => ({
+                id: s.slotId,
+                label: s.label,
+                slotFamily: s.slotFamily ?? "",
+                ...(s.cardTemplateId ? { defaultCardId: s.cardTemplateId } : {}),
+              })),
+            }
+          : {}),
+        ...(existing?.slotFamily ? { slotFamily: existing.slotFamily as string } : {}),
+        ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
+        ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
+        ...overrides,
+      };
+    },
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw],
+  );
+
   const handleSaveAsTemplate = useCallback(() => {
-    const finalPorts: Port[] = ports
-      .filter((p) => p.label.trim())
-      .map((p, i) => ({
-        ...p,
-        id: `tpl-${i}`,
-        label: p.label.trim(),
-      }));
+    const newTemplate = buildTemplateFromForm({ id: `custom-${Date.now()}` });
+    addCustomTemplate(newTemplate);
 
-    const trimmedAux = trimTrailingEmpty(auxiliaryData);
-    const existing = node?.data;
+    // Re-identify the on-canvas device as an instance of the new user template so
+    // reports keyed on device identity (pack list / BOQ derive the name from
+    // `model ?? baseLabel ?? label`) immediately reflect the template name instead
+    // of the original library device's. Mirrors a freshly-placed template instance
+    // (see `addDevice`), which is why the delete-and-re-add workaround shows the
+    // correct name. (#137)
+    if (editingNodeId) {
+      patchDeviceData(editingNodeId, templateIdentityPatch(newTemplate));
+    }
+  }, [addCustomTemplate, buildTemplateFromForm, patchDeviceData, editingNodeId]);
 
-    addCustomTemplate({
-      id: `custom-${Date.now()}`,
-      deviceType: deviceType.trim() || "custom",
-      label: label.trim() || "Custom Device",
-      ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
-      ports: finalPorts,
-      ...(color ? { color } : {}),
-      ...(headerColor ? { headerColor } : {}),
-      ...(category.trim() ? { category: category.trim() } : {}),
-      ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
-      ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
-      ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
-      ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
-      ...(powerDrawW != null ? { powerDrawW } : {}),
-      ...(powerCapacityW != null ? { powerCapacityW } : {}),
-      ...(voltage ? { voltage } : {}),
-      ...(thermalBtuh != null ? { thermalBtuh } : {}),
-      ...(poeBudgetW != null ? { poeBudgetW } : {}),
-      ...(poeDrawW != null ? { poeDrawW } : {}),
-      ...(unitCost != null ? { unitCost } : {}),
-      ...(heightMm != null ? { heightMm } : {}),
-      ...(widthMm != null ? { widthMm } : {}),
-      ...(depthMm != null ? { depthMm } : {}),
-      ...(weightKg != null ? { weightKg } : {}),
-      ...(isVenueProvided ? { isVenueProvided: true } : {}),
-      // Convert InstalledSlot[] back to the blueprint SlotDefinition[] that DeviceTemplate
-      // expects — card selections are per-placement, not part of the template spec.
-      ...(existing?.slots && existing.slots.length > 0
-        ? {
-            slots: existing.slots.map((s) => ({
-              id: s.slotId,
-              label: s.label,
-              slotFamily: s.slotFamily ?? "",
-              ...(s.cardTemplateId ? { defaultCardId: s.cardTemplateId } : {}),
-            })),
-          }
-        : {}),
-      ...(existing?.slotFamily ? { slotFamily: existing.slotFamily as string } : {}),
-      ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
-      ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
-    });
-  }, [ports, label, shortName, hostname, addCustomTemplate, node, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw]);
-
+  // Overwrite the stored user template with the edited definition and push the change out
+  // to every other instance of it on the current schematic. Bumping the version keeps the
+  // edited device itself off the drift banner and marks the propagated instances current. (#127)
   const handleUpdateUserTemplate = useCallback(() => {
-    if (!node?.data.templateId) return;
-    const finalPorts: Port[] = ports
-      .filter((p) => p.label.trim())
-      .map((p, i) => ({
-        ...p,
-        id: `tpl-${i}`,
-        label: p.label.trim(),
-      }));
-    const trimmedAux = trimTrailingEmpty(auxiliaryData);
-    const existing = node.data;
-    updateCustomTemplate(node.data.templateId, {
-      id: node.data.templateId,
-      deviceType: deviceType.trim() || "custom",
-      label: label.trim() || "Custom Device",
-      ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
-      ports: finalPorts,
-      ...(color ? { color } : {}),
-      ...(headerColor ? { headerColor } : {}),
-      ...(category.trim() ? { category: category.trim() } : {}),
-      ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
-      ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
-      ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
-      ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
-      ...(powerDrawW != null ? { powerDrawW } : {}),
-      ...(powerCapacityW != null ? { powerCapacityW } : {}),
-      ...(voltage ? { voltage } : {}),
-      ...(thermalBtuh != null ? { thermalBtuh } : {}),
-      ...(poeBudgetW != null ? { poeBudgetW } : {}),
-      ...(poeDrawW != null ? { poeDrawW } : {}),
-      ...(unitCost != null ? { unitCost } : {}),
-      ...(heightMm != null ? { heightMm } : {}),
-      ...(widthMm != null ? { widthMm } : {}),
-      ...(depthMm != null ? { depthMm } : {}),
-      ...(weightKg != null ? { weightKg } : {}),
-      ...(isVenueProvided ? { isVenueProvided: true } : {}),
-      ...(existing.slots && existing.slots.length > 0
-        ? {
-            slots: existing.slots.map((s) => ({
-              id: s.slotId,
-              label: s.label,
-              slotFamily: s.slotFamily ?? "",
-              ...(s.cardTemplateId ? { defaultCardId: s.cardTemplateId } : {}),
-            })),
-          }
-        : {}),
-      ...(existing.slotFamily ? { slotFamily: existing.slotFamily as string } : {}),
-      ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
-      ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
-    });
-    handleSave();
-  }, [node, ports, label, shortName, hostname, updateCustomTemplate, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw, handleSave]);
+    const templateId = node?.data.templateId;
+    if (!templateId || !editingNodeId) return;
+    const prev = customTemplates.find((t) => t.id === templateId);
+    const nextVersion = (prev?.version ?? 0) + 1;
+    const template = buildTemplateFromForm({ id: templateId, version: nextVersion });
+
+    const others = nodes.filter(
+      (n) => n.type === "device" && (n.data as DeviceData).templateId === templateId && n.id !== editingNodeId,
+    ).length;
+    if (others > 0 && !confirm(`Update ${others} other instance${others === 1 ? "" : "s"} of this device on the current schematic?`)) {
+      return;
+    }
+
+    updateCustomTemplate(templateId, template);
+    // Persist the edited device with the bumped version so it doesn't read as drifted.
+    const data = buildDeviceData({ templateVersion: nextVersion });
+    if (data) updateDevice(editingNodeId, data);
+    setCreatingNodeId(null);
+    if (others > 0) {
+      const { updated } = propagateTemplateToInstances(templateId, template, editingNodeId);
+      if (updated > 0) addToast(`Updated ${updated} other instance${updated === 1 ? "" : "s"} on this schematic`, "success");
+    }
+    close();
+  }, [node, editingNodeId, customTemplates, buildTemplateFromForm, nodes, updateCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
+
+  // Built-in device: fork it into a "(Custom)" user template, re-point the edited device at
+  // the fork, and propagate to the other built-in instances on the schematic. (#127)
+  const handleForkBuiltInToCustom = useCallback(() => {
+    const builtInId = node?.data.templateId;
+    if (!builtInId || !editingNodeId) return;
+    const newId = `custom-${Date.now()}`;
+    const forkLabel = `${label.trim() || "Custom Device"} (Custom)`;
+
+    const others = nodes.filter(
+      (n) => n.type === "device" && (n.data as DeviceData).templateId === builtInId && n.id !== editingNodeId,
+    ).length;
+    if (others > 0 && !confirm(`Create a "(Custom)" user template and update ${others} other instance${others === 1 ? "" : "s"} on the current schematic?`)) {
+      return;
+    }
+
+    const template = buildTemplateFromForm({ id: newId, version: 1, label: forkLabel });
+    addCustomTemplate(template);
+    // Re-point the edited device at the fork (keeping its instance-level fields).
+    const data = buildDeviceData({ templateId: newId, templateVersion: 1 });
+    if (data) updateDevice(editingNodeId, data);
+    setCreatingNodeId(null);
+    if (others > 0) {
+      const { updated } = propagateTemplateToInstances(builtInId, template, editingNodeId);
+      addToast(`Created "${forkLabel}"${updated > 0 ? ` and updated ${updated} other instance${updated === 1 ? "" : "s"}` : ""}`, "success");
+    } else {
+      addToast(`Created "${forkLabel}"`, "success");
+    }
+    close();
+  }, [node, editingNodeId, label, nodes, buildTemplateFromForm, addCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
 
   const handleSubmitToCommunity = useCallback(async () => {
     const finalPorts: Port[] = ports
@@ -590,6 +657,7 @@ export default function DeviceEditor() {
       ...(widthMm != null ? { widthMm } : {}),
       ...(depthMm != null ? { depthMm } : {}),
       ...(weightKg != null ? { weightKg } : {}),
+      ...(rackForm ? { rackForm } : {}),
       ...(isVenueProvided ? { isVenueProvided: true } : {}),
       ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
@@ -619,7 +687,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, thermalBtuh, heightMm, widthMm, depthMm, weightKg, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -652,31 +720,48 @@ export default function DeviceEditor() {
     if (!node) return;
     const templateId = node.data.templateId;
     const tpl = templateId
-      ? getBundledTemplates().find((t) => t.id === templateId) ??
-        customTemplates.find((t) => t.id === templateId)
+      ? getTemplateById(templateId, customTemplates)
       : undefined;
     if (!tpl) return;
 
-    setPorts(tpl.ports.map((p) => ({
-      id: p.id,
-      label: p.label,
-      signalType: p.signalType,
-      direction: p.direction,
-      section: p.section,
-      connectorType: p.connectorType,
-      gender: p.gender,
-      networkConfig: p.networkConfig ? { ...p.networkConfig } : undefined,
-      capabilities: p.capabilities ? { ...p.capabilities } : undefined,
-      multiConnect: p.multiConnect,
-      directAttach: p.directAttach,
-      notes: p.notes,
-      poeDrawW: p.poeDrawW,
-      usbcPowerSourceW: p.usbcPowerSourceW,
-      usbcPowerDrawW: p.usbcPowerDrawW,
-      linkSpeed: p.linkSpeed,
-      flipped: p.flipped,
-      addressable: p.addressable,
-    })));
+    // Reuse the device-side port id for any template port that still matches an
+    // existing port (by templatePortId, else label), so connections to surviving
+    // ports stay attached — edges reference device-side handles, and adopting the
+    // template's ids wholesale would orphan every connection. Ports the template no
+    // longer has are dropped along with their edges (revert is a reset to template).
+    const existingPorts = node.data.ports ?? [];
+    const usedDeviceIds = new Set<string>();
+    const matchDeviceId = (tp: { id: string; label: string }): string | undefined => {
+      const byId = existingPorts.find((dp) => dp.templatePortId === tp.id && !usedDeviceIds.has(dp.id));
+      if (byId) return byId.id;
+      const byLabel = existingPorts.find((dp) => !dp.templatePortId && dp.label === tp.label && !usedDeviceIds.has(dp.id));
+      return byLabel?.id;
+    };
+    setPorts(tpl.ports.map((p) => {
+      const deviceId = matchDeviceId(p);
+      if (deviceId) usedDeviceIds.add(deviceId);
+      return {
+        id: deviceId ?? p.id,
+        templatePortId: p.id,
+        label: p.label,
+        signalType: p.signalType,
+        direction: p.direction,
+        section: p.section,
+        connectorType: p.connectorType,
+        gender: p.gender,
+        networkConfig: p.networkConfig ? { ...p.networkConfig } : undefined,
+        capabilities: p.capabilities ? { ...p.capabilities } : undefined,
+        multiConnect: p.multiConnect,
+        directAttach: p.directAttach,
+        notes: p.notes,
+        poeDrawW: p.poeDrawW,
+        usbcPowerSourceW: p.usbcPowerSourceW,
+        usbcPowerDrawW: p.usbcPowerDrawW,
+        linkSpeed: p.linkSpeed,
+        flipped: p.flipped,
+        addressable: p.addressable,
+      };
+    }));
     setHiddenPorts([]);
     setColor(tpl.color);
     setHeaderColor(tpl.headerColor);
@@ -701,6 +786,7 @@ export default function DeviceEditor() {
       setWidthMm(tpl.widthMm);
       setDepthMm(tpl.depthMm);
       setWeightKg(tpl.weightKg);
+      setRackForm(tpl.rackForm);
       setIsVenueProvided(tpl.isVenueProvided ?? false);
       setAuxiliaryData(normalizeAuxRows(tpl.auxiliaryData));
       setSearchTermsRaw((tpl.searchTerms ?? []).join(", "));
@@ -742,6 +828,28 @@ export default function DeviceEditor() {
 
   const removePort = (id: string) => {
     setPorts(ports.filter((p) => p.id !== id));
+  };
+
+  // Duplicate a port row, copying every property and inserting the clone right
+  // after the original. The clone gets a fresh draft id (so it saves as a new
+  // port) and a uniquified name derived from the source (e.g. "Input 1" → "Input 2").
+  const duplicatePort = (id: string) => {
+    setPorts((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
+      const orig = prev[idx];
+      const clone: PortDraft = {
+        ...orig,
+        id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        label: duplicatePortLabel(orig.label, prev.map((p) => p.label)),
+        // Deep-copy nested objects so editing the clone can't mutate the original.
+        networkConfig: orig.networkConfig ? { ...orig.networkConfig } : undefined,
+        capabilities: orig.capabilities ? { ...orig.capabilities } : undefined,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, clone);
+      return next;
+    });
   };
 
   const updatePort = (id: string, updates: Partial<PortDraft>) => {
@@ -810,8 +918,10 @@ export default function DeviceEditor() {
   const { dirtyVsPreset, dirtyVsTemplate } = useMemo(() => {
     if (!templateId) return { dirtyVsPreset: false, dirtyVsTemplate: false };
 
-    const tpl = getBundledTemplates().find((t) => t.id === templateId) ??
-      customTemplates.find((t) => t.id === templateId);
+    // getTemplateById reads the module-level community-library cache, so this memo
+    // must recompute when the library finishes loading, not just when props change.
+    void templatesLoaded;
+    const tpl = getTemplateById(templateId, customTemplates);
     const preset = templatePresets[templateId];
 
     const portsMatch = (a: PortDraft[], b: Port[]) => {
@@ -852,6 +962,7 @@ export default function DeviceEditor() {
         widthMm !== tpl.widthMm ||
         depthMm !== tpl.depthMm ||
         weightKg !== tpl.weightKg ||
+        (rackForm ?? undefined) !== (tpl.rackForm ?? undefined) ||
         isVenueProvided !== (tpl.isVenueProvided ?? false)
       ))
     );
@@ -864,7 +975,7 @@ export default function DeviceEditor() {
     );
 
     return { dirtyVsPreset, dirtyVsTemplate };
-  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, isVenueProvided]);
+  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, templatesLoaded]);
 
   if (!editingNodeId || !node) return null;
 
@@ -1085,7 +1196,7 @@ export default function DeviceEditor() {
 
           {(() => {
             const tpl = node.data.templateId
-              ? getBundledTemplates().find((t) => t.id === node.data.templateId)
+              ? getTemplateById(node.data.templateId, customTemplates)
               : undefined;
             const url = referenceUrl.trim() || tpl?.referenceUrl;
             return url ? (
@@ -1145,6 +1256,7 @@ export default function DeviceEditor() {
             onAdd={() => addPort("input")}
             onBulkAdd={bulkAddPorts}
             onRemove={removePort}
+            onDuplicate={duplicatePort}
             onUpdate={updatePort}
             draggedPortId={draggedPortId}
             setDraggedPortId={setDraggedPortId}
@@ -1163,6 +1275,7 @@ export default function DeviceEditor() {
             onAdd={() => addPort("output")}
             onBulkAdd={bulkAddPorts}
             onRemove={removePort}
+            onDuplicate={duplicatePort}
             onUpdate={updatePort}
             draggedPortId={draggedPortId}
             setDraggedPortId={setDraggedPortId}
@@ -1182,6 +1295,7 @@ export default function DeviceEditor() {
               onAdd={() => addPort("bidirectional")}
               onBulkAdd={bulkAddPorts}
               onRemove={removePort}
+              onDuplicate={duplicatePort}
               onUpdate={updatePort}
               draggedPortId={draggedPortId}
               setDraggedPortId={setDraggedPortId}
@@ -1202,6 +1316,7 @@ export default function DeviceEditor() {
               onAdd={() => addPort("passthrough")}
               onBulkAdd={bulkAddPorts}
               onRemove={removePort}
+              onDuplicate={duplicatePort}
               onUpdate={updatePort}
               draggedPortId={draggedPortId}
               setDraggedPortId={setDraggedPortId}
@@ -1292,6 +1407,37 @@ export default function DeviceEditor() {
                 />
               </div>
             </div>
+            {(() => {
+              const rackU = node ? rackUnitLabel({ ...node.data, heightMm, widthMm }) : null;
+              if (!rackU) return null;
+              return (
+                <div className="pt-1.5 pl-2 text-[10px] text-[var(--color-text-muted)]">
+                  Rack height:{" "}
+                  <span className="text-[var(--color-text-secondary)] font-medium">{rackU}</span>
+                  <span className="ml-1 opacity-70">(1U = 44.45 mm)</span>
+                </div>
+              );
+            })()}
+            <div className="pt-2 pl-2">
+              <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
+                Rack Form
+              </label>
+              <select
+                className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
+                value={rackForm ?? ""}
+                onChange={(e) =>
+                  setRackForm(e.target.value ? (e.target.value as DeviceData["rackForm"]) : undefined)
+                }
+              >
+                <option value="">Auto (from size)</option>
+                <option value="full">Full width (19&quot;)</option>
+                <option value="half">Half width (9.5&quot;)</option>
+                <option value="shelf-only">Shelf only</option>
+              </select>
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5 leading-tight">
+                Overrides how this device mounts in a rack. Auto infers from width &amp; height.
+              </p>
+            </div>
           </details>
 
           {ports.some((p) => p.connectorType === "rj45" || p.connectorType === "ethercon") && (
@@ -1348,7 +1494,7 @@ export default function DeviceEditor() {
           {/* Expansion Slots */}
           {(() => {
             const templateDef = node.data.templateId
-              ? getBundledTemplates().find((t) => t.id === node.data.templateId)
+              ? getTemplateById(node.data.templateId, customTemplates)
               : undefined;
             const slotDefs = templateDef?.slots ?? [];
             return (
@@ -1730,18 +1876,27 @@ export default function DeviceEditor() {
             <button
               onClick={handleUpdateUserTemplate}
               className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Overwrite the saved user template with this configuration"
+              title="Overwrite the saved user template with this configuration and apply it to every instance on the schematic"
             >
               Update User Template
             </button>
           ) : templateId ? (
-            <button
-              onClick={handleSaveAsPreset}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Set this configuration as the project default for this template"
-            >
-              Save as Preset
-            </button>
+            <>
+              <button
+                onClick={handleForkBuiltInToCustom}
+                className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
+                title="Save these changes as a new '(Custom)' user template and apply them to every instance of this device on the schematic"
+              >
+                Update as Custom
+              </button>
+              <button
+                onClick={handleSaveAsPreset}
+                className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
+                title="Set this configuration as the project default for this template"
+              >
+                Save as Preset
+              </button>
+            </>
           ) : null}
           {hasPreset && dirtyVsPreset && (
             <button
@@ -1795,6 +1950,9 @@ export default function DeviceEditor() {
           edges={edges}
           onConfirm={() => {
             syncDeviceFromTemplate(editingNodeId);
+            // Re-sync the metadata form from the just-updated node.data, otherwise
+            // Save would rebuild DeviceData from stale fields and overwrite the sync.
+            setSyncNonce((n) => n + 1);
             setShowSyncDialog(false);
           }}
           onCancel={() => setShowSyncDialog(false)}
@@ -2128,6 +2286,7 @@ function PortSection({
   onAdd,
   onBulkAdd,
   onRemove,
+  onDuplicate,
   onUpdate,
   draggedPortId,
   setDraggedPortId,
@@ -2144,6 +2303,7 @@ function PortSection({
   onAdd: () => void;
   onBulkAdd: (direction: PortDirection, prefix: string, start: number, count: number, signalType: SignalType, section: string) => void;
   onRemove: (id: string) => void;
+  onDuplicate: (id: string) => void;
   onUpdate: (id: string, updates: Partial<PortDraft>) => void;
   draggedPortId: string | null;
   setDraggedPortId: (id: string | null) => void;
@@ -2257,6 +2417,7 @@ function PortSection({
                   direction={direction}
                   deviceType={deviceType}
                   onRemove={() => onRemove(port.id)}
+                  onDuplicate={() => onDuplicate(port.id)}
                   onUpdate={(u) => onUpdate(port.id, u)}
                   isDragging={draggedPortId === port.id}
                   setDraggedPortId={setDraggedPortId}
@@ -2297,6 +2458,7 @@ function PortRow({
   direction,
   deviceType,
   onRemove,
+  onDuplicate,
   onUpdate,
   isDragging,
   setDraggedPortId,
@@ -2312,6 +2474,7 @@ function PortRow({
   direction: PortDirection;
   deviceType: string;
   onRemove: () => void;
+  onDuplicate: () => void;
   onUpdate: (updates: Partial<PortDraft>) => void;
   isDragging: boolean;
   setDraggedPortId: (id: string | null) => void;
@@ -2611,6 +2774,18 @@ function PortRow({
             title="Flip port to opposite side"
           >
             ⇄
+        </button>
+
+        {/* Duplicate port */}
+        <button
+          onClick={onDuplicate}
+          className="text-[var(--color-text-muted)] hover:text-blue-500 cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          title="Duplicate port"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+            <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" />
+          </svg>
         </button>
 
         <button
@@ -3110,9 +3285,12 @@ function SlotEditSection({
         const familyCards = family ? getCardsByFamily(family, customTemplates) : [];
         const isNested = !!slot.parentSlotId;
 
-        // Count connections to this slot's ports (including descendant ports for parent slots)
+        // Count connections to this slot's ports (including descendant ports for parent slots).
+        // Match descendants on whole path segments, not a raw prefix, so a sibling whose id
+        // merely starts with this one (e.g. "p1" vs "p10/...") isn't counted here. (Mirrors the
+        // descendant match in swapCard / removeSlot.)
         const descendantPortIds = isNested ? [] : installedSlots
-          .filter((s) => s.parentSlotId?.startsWith(slot.slotId))
+          .filter((s) => !!s.parentSlotId && (s.parentSlotId === slot.slotId || s.parentSlotId.startsWith(`${slot.slotId}/`)))
           .flatMap((s) => s.portIds);
         const allPortIds = new Set([...slot.portIds, ...descendantPortIds]);
         const connCount = edges.filter((e) => {

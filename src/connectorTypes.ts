@@ -74,6 +74,7 @@ export const DEFAULT_CONNECTOR: Record<SignalType, ConnectorType> = {
   cresnet: "terminal-block",
   dali: "terminal-block",
   knx: "terminal-block",
+  nlight: "rj45",
   sensor: "phoenix",
   custom: "other",
 };
@@ -90,6 +91,9 @@ export const CONNECTOR_ACCEPTS: Partial<Record<ConnectorType, ConnectorAcceptanc
   "opticalcon":    { native: ["lc"] },
   "binding-post-banana": { native: ["binding-post", "banana"] },
   "usb-c":         { adapter: ["usb-a", "usb-b"] },
+  // USB host (Type-A) to peripheral (Type-B / mini-B / micro-B) is the standard
+  // USB cable, not an adapter — e.g. computer to printer or audio interface.
+  "usb-a":         { native: ["usb-b", "usb-mini", "usb-micro"] },
   "mini-xlr":      { adapter: ["xlr-3"] },
   "dvi":           { adapter: ["hdmi"] },
   "mini-hdmi":     { adapter: ["hdmi"] },
@@ -144,9 +148,30 @@ export function areSignalsCompatibleViaConnector(
   );
 }
 
+/** Signal pairs that interconnect natively regardless of connector — no adapter needed.
+ *  An Allen & Heath SLink port auto-senses dSNAKE, DX and gigaACE, so an SLink jack mates
+ *  directly with any of those stageboxes/consoles. These all ride ethercon/rj45, which
+ *  areConnectorsCompatible already treats as interchangeable. */
+export const SIGNAL_COMPAT_PAIRS: ReadonlyArray<readonly [SignalType, SignalType]> = [
+  ["slink", "dsnake"],
+  ["slink", "dx5"],
+  ["slink", "gigaace"],
+];
+
+export function areSignalPairsCompatible(a: SignalType, b: SignalType): boolean {
+  return SIGNAL_COMPAT_PAIRS.some(
+    ([s1, s2]) => (s1 === a && s2 === b) || (s1 === b && s2 === a),
+  );
+}
+
 /** Check if two connector types are compatible (same type or one accepts the other) */
 export function areConnectorsCompatible(a: ConnectorType | undefined, b: ConnectorType | undefined): boolean {
   if (!a || !b) return true; // missing connector info = no mismatch
+  // Identical connectors always mate. This is why USB-A to USB-A and USB-B to
+  // USB-B connect without a warning — a deliberate call on #219, not an
+  // oversight. Making a connector invalid against itself would need gender
+  // modelled too (an A-male to A-female extension is legitimate), and a false
+  // warning on a valid run is worse than a missing one on a questionable run.
   if (a === b) return true;
   if (BARE_WIRE_CONNECTORS.has(a) || BARE_WIRE_CONNECTORS.has(b)) return true;
   const aAccepts = CONNECTOR_ACCEPTS[a];
@@ -222,6 +247,7 @@ export const CONNECTOR_TO_CABLE: Record<ConnectorType, string> = {
   "binding-post-banana": "Speaker Wire",
   dvi: "DVI",
   "mini-hdmi": "Mini HDMI",
+  "micro-hdmi": "Micro HDMI",
   "mini-displayport": "Mini DisplayPort",
   "mini-xlr": "Mini XLR",
   opticalcon: "opticalCON Fiber",
@@ -244,6 +270,7 @@ export const CONNECTOR_TO_CABLE: Record<ConnectorType, string> = {
   "lemo-2pin": "LEMO 2-pin",
   "lemo-4pin": "LEMO 4-pin",
   "lemo-5pin": "LEMO 5-pin",
+  "kycon-4pin": "Kycon 4-pin",
   "solder-cup": "Bare Wire",
   "punch-down-110": "Bulk Cable",
   "punch-down-66": "Bulk Cable",

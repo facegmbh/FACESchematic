@@ -74,6 +74,7 @@ export const DEFAULT_SIGNAL_COLORS: Record<SignalType, string> = {
   cresnet: "#a21caf",
   dali: "#9d174d",
   knx: "#0f766e",
+  nlight: "#ca8a04",
   sensor: "#71717a",
   custom: "#64748b",
 };

@@ -39,6 +39,32 @@ export default function DeviceLibraryPage() {
       </ol>
       <p>User templates persist in your browser's localStorage.</p>
 
+      <h2>Updating a template</h2>
+      <p>
+        You can change a template after the fact and have the change follow through to every
+        instance already placed on the current schematic:
+      </p>
+      <ul>
+        <li>
+          <strong>User templates</strong> — editing a device that came from one of your user
+          templates shows an <strong>Update User Template</strong> button. It overwrites the saved
+          template with the current configuration. If the device is placed elsewhere on the
+          schematic you're asked to confirm, then those other instances are reconciled to the new
+          definition — new ports are added, and existing connections are preserved wherever the
+          port still exists.
+        </li>
+        <li>
+          <strong>Built-in devices</strong> — editing a built-in library device shows an{" "}
+          <strong>Update as Custom</strong> button. It creates a user template named with{" "}
+          <em>(Custom)</em> appended (rename it later like any user template), re-points this device
+          at it, and applies the change to the other instances of that built-in on the schematic.
+        </li>
+      </ul>
+      <p>
+        Removed ports whose connections are still in use are kept as orphaned ports so no cabling is
+        silently lost; you can clean them up manually.
+      </p>
+
       <h2>Favorites</h2>
       <p>
         Star any device template in the library to mark it as a favorite. Favorites are pinned to
@@ -106,7 +132,10 @@ export default function DeviceLibraryPage() {
       </p>
       <ul>
         <li><strong>Submit new devices</strong> — log in with your email, fill out the device form with ports and specs,
-          and include a reference URL to the manufacturer's product page</li>
+          and include a reference URL to the manufacturer's product page. A live preview above the form shows the
+          device exactly as it will render on the schematic canvas — including port colors and section groupings —
+          so you can check the layout before submitting. Ports can be reordered by dragging their grip handle
+          (or with the up/down buttons), and dragging a port into another group changes its direction</li>
         <li><strong>Suggest edits</strong> — see a mistake or missing port? Propose changes to any existing template</li>
         <li><strong>Moderation</strong> — submissions are reviewed by moderators before going live to ensure accuracy</li>
         <li><strong>Reference URLs</strong> — branded devices link directly to the manufacturer's product page so
@@ -114,11 +143,18 @@ export default function DeviceLibraryPage() {
         <li><strong>Contributor credit</strong> — approved submissions are attributed to you on the device page and
           the contributors hall of fame</li>
         <li><strong>Submit from the app</strong> — right-click any custom device on the canvas and choose
-          "Submit to Community" to submit it directly without re-entering the details on the devices site</li>
+          "Submit to Community" to submit it directly without re-entering the details on the devices site.
+          This also works for improvements to existing library devices: edit any placed device (fix a port,
+          add a missing connector) and the same button appears in the device editor once you've made changes</li>
         <li><strong>Clone from an existing device</strong> — on the devices site, the "Submit a device" form has a
           <em>Clone existing device</em> option; pick any current template and the form prefills with its ports,
           connectors, and metadata. Tweak what's different (a sibling model, a regional variant) and submit — the
           moderation queue gets a much cleaner diff than a freshly typed-out form</li>
+        <li><strong>Works offline</strong> — visit the devices site once while online and it keeps working without a
+          connection: browsing, search, filters, and every device page are served from a locally saved copy of the
+          library. An "offline" banner shows when you're seeing the saved copy, and it refreshes automatically the
+          next time you're online. You can also install the site as an app from your browser, same as the main
+          EasySchematic app</li>
       </ul>
     </>
   );

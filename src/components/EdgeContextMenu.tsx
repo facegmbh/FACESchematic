@@ -221,8 +221,22 @@ export default function EdgeContextMenu() {
     useSchematicStore.setState({ edgeContextMenu: null });
   }, [menu]);
 
-  const [editingLabel, setEditingLabel] = useState<false | "label" | "multicable" | "source" | "target">(false);
+  const [editingLabel, setEditingLabel] = useState<false | "label" | "multicable" | "source" | "target" | "length">(false);
   const [labelValue, setLabelValue] = useState("");
+
+  // When opened directly into length-edit mode (double-click on the length label,
+  // #100), prime the editor with the current override; otherwise a fresh open of
+  // the menu shows the normal item list.
+  useEffect(() => {
+    if (!menu) return;
+    if (menu.initialEdit === "length") {
+      const edge = useSchematicStore.getState().edges.find((e) => e.id === menu.edgeId);
+      setLabelValue((edge?.data?.cableLength as string) ?? "");
+      setEditingLabel("length");
+    } else {
+      setEditingLabel(false);
+    }
+  }, [menu]);
 
   const setEdgeColor = useCallback((hex: string) => {
     if (!menu) return;
@@ -257,6 +271,14 @@ export default function EdgeContextMenu() {
     setEditingLabel("multicable");
   }, [menu]);
 
+  const setCableLength = useCallback(() => {
+    if (!menu) return;
+    const store = useSchematicStore.getState();
+    const edge = store.edges.find((e) => e.id === menu.edgeId);
+    setLabelValue((edge?.data?.cableLength as string) ?? "");
+    setEditingLabel("length");
+  }, [menu]);
+
   const setSourceEndLabel = useCallback(() => {
     if (!menu) return;
     const store = useSchematicStore.getState();
@@ -280,6 +302,7 @@ export default function EdgeContextMenu() {
       editingLabel === "multicable" ? "multicableLabel"
       : editingLabel === "source" ? "sourceLabel"
       : editingLabel === "target" ? "targetLabel"
+      : editingLabel === "length" ? "cableLength"
       : "label";
     store.patchEdgeData(menu.edgeId, { [field]: labelValue.trim() || undefined });
     useSchematicStore.setState({ edgeContextMenu: null });
@@ -417,6 +440,34 @@ export default function EdgeContextMenu() {
   const allowIncompatible = edge?.data?.allowIncompatible === true;
   const isDirectAttach = edge?.data?.directAttach === true;
   const customColor = (edge?.data?.color as string | undefined) ?? "";
+
+  // Patch panel routing (#232): hops live on the source-side leg of a stubbed pair —
+  // right-clicking the target leg redirects to the partner so the assignment lands right.
+  const patchEdge = (() => {
+    if (!edge) return undefined;
+    if (!edge.data?.linkedConnectionId) return edge;
+    const srcIsStub = store.nodes.find((n) => n.id === edge.source)?.type === "stub-label";
+    if (!srcIsStub) return edge;
+    return store.edges.find(
+      (e) => e.id !== edge.id && e.data?.linkedConnectionId === edge.data?.linkedConnectionId,
+    ) ?? edge;
+  })();
+  const isPatched = ((patchEdge?.data?.patchHops?.length ?? 0) as number) > 0;
+
+  const patchViaPanel = () => {
+    const s = useSchematicStore.getState();
+    if (!patchEdge) return;
+    const pageId = s.addPatchPanelPage();
+    s.setPatchAssignEdge(patchEdge.id);
+    s.setActivePage(pageId);
+    useSchematicStore.setState({ edgeContextMenu: null });
+  };
+
+  const removePatching = () => {
+    const s = useSchematicStore.getState();
+    if (patchEdge) s.clearEdgePatchHops(patchEdge.id);
+    useSchematicStore.setState({ edgeContextMenu: null });
+  };
   const bundleId = edge?.data?.bundleId;
   const inBundle = !!bundleId && (store.bundles[bundleId]?.id != null
     || store.edges.filter((e) => e.data?.bundleId === bundleId).length >= 2);
@@ -477,6 +528,7 @@ export default function EdgeContextMenu() {
           {editingLabel === "multicable" ? "Cable Label"
             : editingLabel === "source" ? "Source-end Label"
             : editingLabel === "target" ? "Target-end Label"
+            : editingLabel === "length" ? "Cable Length"
             : "Midpoint Label"}
         </div>
         <input
@@ -491,7 +543,11 @@ export default function EdgeContextMenu() {
               useSchematicStore.setState({ edgeContextMenu: null });
             }
           }}
-          placeholder={editingLabel === "multicable" ? "e.g. Audio Snake A" : "e.g. Program Feed"}
+          placeholder={
+            editingLabel === "multicable" ? "e.g. Audio Snake A"
+            : editingLabel === "length" ? "e.g. 50 ft"
+            : "e.g. Program Feed"
+          }
           autoFocus
         />
         <div className="flex justify-end gap-1 mt-1.5">
@@ -542,6 +598,9 @@ export default function EdgeContextMenu() {
       {isTrunkEdge && (
         <MenuItem label="Set Cable Label..." onClick={setCableLabel} />
       )}
+      {!isDirectAttach && (
+        <MenuItem label="Set Cable Length..." onClick={setCableLength} />
+      )}
       <MenuItem
         label={isCableIdHidden ? "Show Cable ID" : "Hide Cable ID"}
         onClick={toggleHideCableId}
@@ -563,6 +622,15 @@ export default function EdgeContextMenu() {
         label={isStubbed ? "Show Full Connection" : "Stub Connection"}
         onClick={toggleStubbed}
       />
+      {!isDirectAttach && (
+        <>
+          <MenuItem
+            label={isPatched ? "Patch via Panel (Add Hop)..." : "Patch via Panel..."}
+            onClick={patchViaPanel}
+          />
+          {isPatched && <MenuItem label="Remove Patching" onClick={removePatching} />}
+        </>
+      )}
       {canBundleSelection && (
         <>
           <div className="h-px bg-gray-200 my-1" />

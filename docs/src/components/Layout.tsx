@@ -12,6 +12,7 @@ const navItems = [
     { hash: "connection-routing", label: "Connection Routing" },
     { hash: "rooms-and-grouping", label: "Rooms & Grouping" },
     { hash: "racks", label: "Rack Builder" },
+    { hash: "patch-panels", label: "Patch Panels & Patch Bay" },
     { hash: "print-sheets", label: "Print Sheets" },
     { hash: "notes", label: "Notes & Annotations" },
     { hash: "device-library", label: "Device Library" },
@@ -22,6 +23,7 @@ const navItems = [
   { hash: "import-devices", label: "Import Devices" },
   { hash: "device-template-schema", label: "Device Template Schema" },
   { hash: "self-hosting", label: "Self-Hosting" },
+  { hash: "ai-assistant", label: "AI Assistant (MCP)" },
   { hash: "api", label: "Public API" },
 ];
 

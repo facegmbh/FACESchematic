@@ -5,14 +5,17 @@ import type {
   DistanceSettings,
   BundleMeta,
 } from "./types";
-import { SIGNAL_LABELS, CONNECTOR_LABELS, DEFAULT_DISTANCE_SETTINGS } from "./types";
+import { SIGNAL_LABELS, CONNECTOR_LABELS } from "./types";
 import { getCableType } from "./cableTypes";
 import { resolvePort, resolvePortLabel, getRoomLabel, escapeCsv, csvRow, groupBy } from "./packList";
 import { transformLabelNow } from "./labelCaseUtils";
 import type { ReportLayout } from "./reportLayout";
 import type { ReportTableData } from "./reportPdf";
 import type { DeviceData } from "./types";
-import { computeCableLength, formatLength, getRoomDistance } from "./roomDistance";
+import { getPatchSegments, resolvableHops, type PatchPointInfo } from "./patchCircuits";
+// Room-distance estimation moved behind this shared helper (#100) — it backs both the
+// schedule's computedLength column and the on-canvas cable-length badge.
+import { computeEdgeLengthEstimate } from "./cableLengthLabel";
 
 export interface CableScheduleDistanceContext {
   roomDistances?: Record<string, number>;
@@ -47,6 +50,11 @@ export interface CableScheduleRow {
   tested: string;
   /** Raw cable use: "patch" | "field" | "" (#P2-019). */
   cableUse: string;
+  /** Segment index for patched connections (0-based). Undefined for normal cables. */
+  segIndex?: number;
+  /** The parent connection's base cable ID (E001) when this row is a patch segment.
+   *  recomputeCableIds persists THIS (not the suffixed id) onto edge.data.cableId. */
+  baseCableId?: string;
 }
 
 /** Prefix letter for each signal type when using type-prefix cable naming */
@@ -123,6 +131,7 @@ const SIGNAL_PREFIX: Record<SignalType, string> = {
   cresnet: "CN",
   dali: "DLI",
   knx: "KNX",
+  nlight: "NL",
   sensor: "SNS",
   custom: "X",
 };
@@ -252,9 +261,10 @@ export function computeCableSchedule(
     return `${prefix}${String(n).padStart(3, "0")}`;
   };
 
+  let rows: CableScheduleRow[];
   if (namingScheme === "type-prefix") {
     // Per-type counters for type-prefix naming (e.g. S001, S002, E001)
-    return connections.map((c) => {
+    rows = connections.map((c) => {
       const prefix = SIGNAL_PREFIX[c.rawSignalType] ?? "X";
       return {
         edgeId: c.edgeId,
@@ -279,9 +289,10 @@ export function computeCableSchedule(
         cableUse: c.cableUse,
       };
     });
+    return expandPatchedRows(rows, nodes, edges, linkedPartner);
   }
 
-  return connections.map((c) => ({
+  rows = connections.map((c) => ({
     edgeId: c.edgeId,
     cableId: c.storedCableId || nextId("C"),
     sourceDevice: c.sourceDevice,
@@ -303,6 +314,67 @@ export function computeCableSchedule(
     tested: c.tested,
     cableUse: c.cableUse,
   }));
+  return expandPatchedRows(rows, nodes, edges, linkedPartner);
+}
+
+/** Replace each patched connection's single row with one row per physical segment
+ *  (device → panel, panel → panel, panel → device). Endpoint labels reuse the base
+ *  row's already-reconciled values, so stub-split edges (whose real target was resolved
+ *  through the linked partner leg upstream) stay correct without re-deriving here. */
+function expandPatchedRows(
+  rows: CableScheduleRow[],
+  nodes: SchematicNode[],
+  edges: ConnectionEdge[],
+  linkedPartner: Map<string, ConnectionEdge>,
+): CableScheduleRow[] {
+  const edgeById = new Map(edges.map((e) => [e.id, e]));
+  const out: CableScheduleRow[] = [];
+  for (const row of rows) {
+    const edge = edgeById.get(row.edgeId);
+    if (!edge || resolvableHops(edge, nodes).length === 0) { out.push(row); continue; }
+
+    const effectiveTargetEdge = linkedPartner.get(edge.id) ?? edge;
+    const srcPoint: PatchPointInfo = {
+      kind: "device", nodeId: edge.source, label: row.sourceDevice,
+      portLabel: row.sourcePort, room: row.sourceRoom,
+      port: resolvePort(nodes.find((n) => n.id === edge.source), edge.sourceHandle),
+    };
+    const tgtPoint: PatchPointInfo = {
+      kind: "device", nodeId: effectiveTargetEdge.target, label: row.targetDevice,
+      portLabel: row.targetPort, room: row.targetRoom,
+      port: resolvePort(nodes.find((n) => n.id === effectiveTargetEdge.target), effectiveTargetEdge.targetHandle),
+    };
+
+    const signalType = (edge.data?.signalType ?? "custom") as SignalType;
+    const segs = getPatchSegments(edge, nodes, row.cableId, srcPoint, tgtPoint);
+    for (const seg of segs) {
+      out.push({
+        ...row,
+        segIndex: seg.index,
+        baseCableId: row.cableId,
+        cableId: seg.label,
+        sourceDevice: seg.from.label,
+        sourcePort: seg.from.portLabel,
+        sourceConnector: seg.from.port?.connectorType
+          ? (CONNECTOR_LABELS[seg.from.port.connectorType] ?? "—") : "—",
+        targetDevice: seg.to.label,
+        targetPort: seg.to.portLabel,
+        targetConnector: seg.to.port?.connectorType
+          ? (CONNECTOR_LABELS[seg.to.port.connectorType] ?? "—") : "—",
+        cableType: getCableType(seg.from.port, seg.to.port, signalType),
+        // The connection's whole-run length can't be attributed to any single physical
+        // segment — lengths are per-segment overrides here. The edge-level value is
+        // preserved on the connection and reappears if it's unpatched.
+        cableLength: seg.cableLength,
+        // Room-distance estimates are whole-run, endpoint-room based; panel-adjacent
+        // segments can't reuse them — leave blank rather than mislead.
+        computedLength: "",
+        sourceRoom: seg.from.room,
+        targetRoom: seg.to.room,
+      });
+    }
+  }
+  return out;
 }
 
 function computeRowEstimatedLength(
@@ -311,21 +383,25 @@ function computeRowEstimatedLength(
   nodes: SchematicNode[],
   ctx: CableScheduleDistanceContext | undefined,
 ): string | undefined {
-  if (!ctx?.roomDistances) return undefined;
-  const dist = getRoomDistance(sourceParentId, targetParentId, { roomDistances: ctx.roomDistances }, nodes);
-  if (dist === undefined) return undefined;
-  const settings = ctx.distanceSettings ?? DEFAULT_DISTANCE_SETTINGS;
-  return formatLength(computeCableLength(dist, settings), settings.unit);
+  return computeEdgeLengthEstimate(
+    sourceParentId,
+    targetParentId,
+    nodes,
+    ctx?.roomDistances,
+    ctx?.distanceSettings,
+  );
 }
 
-export function exportCableScheduleCsv(
+/** Build the cable-schedule CSV file contents (including the UTF-8 BOM). */
+export function buildCableScheduleCsv(
   rows: CableScheduleRow[],
   schematicName: string,
-): void {
+  generatedDate: string = new Date().toLocaleDateString(),
+): string {
   const lines: string[] = [];
 
   lines.push(`Cable Schedule — ${escapeCsv(schematicName)}`);
-  lines.push(`Generated ${new Date().toLocaleDateString()}`);
+  lines.push(`Generated ${generatedDate}`);
   lines.push("");
 
   lines.push(csvRow([
@@ -346,7 +422,14 @@ export function exportCableScheduleCsv(
     ]));
   }
 
-  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  return "﻿" + lines.join("\n");
+}
+
+export function exportCableScheduleCsv(
+  rows: CableScheduleRow[],
+  schematicName: string,
+): void {
+  const blob = new Blob([buildCableScheduleCsv(rows, schematicName)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
