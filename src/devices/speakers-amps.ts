@@ -6,7 +6,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00a7-4000-8000-000000000167",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer Leopard",
     manufacturer: "Meyer Sound",
     modelNumber: "Leopard",
@@ -27,7 +27,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00a8-4000-8000-000000000168",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics KIVA II",
     manufacturer: "L'Acoustics",
     modelNumber: "KIVA II",
@@ -46,7 +46,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00a9-4000-8000-000000000169",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "JBL VRX928LA",
     manufacturer: "JBL Professional",
     modelNumber: "VRX928LA",
@@ -65,7 +65,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00aa-4000-8000-000000000170",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer UPM-1P",
     manufacturer: "Meyer Sound",
     modelNumber: "UPM-1P",
@@ -85,7 +85,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00ab-4000-8000-000000000171",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer UPA-1P",
     manufacturer: "Meyer Sound",
     modelNumber: "UPA-1P",
@@ -105,7 +105,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00ac-4000-8000-000000000172",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "QSC K12.2",
     manufacturer: "QSC",
     modelNumber: "K12.2",
@@ -126,7 +126,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00ad-4000-8000-000000000173",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer 900-LFC",
     manufacturer: "Meyer Sound",
     modelNumber: "900-LFC",
@@ -147,7 +147,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00ae-4000-8000-000000000174",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics SB15m",
     manufacturer: "L'Acoustics",
     modelNumber: "SB15m",
@@ -166,7 +166,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-00af-4000-8000-000000000175",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer MJF-210",
     manufacturer: "Meyer Sound",
     modelNumber: "MJF-210",
@@ -238,7 +238,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c3-4000-8000-000000000451",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics A15 Wide",
     manufacturer: "L'Acoustics",
     modelNumber: "A15 Wide",
@@ -253,7 +253,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c4-4000-8000-000000000452",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics K3",
     manufacturer: "L'Acoustics",
     modelNumber: "K3",
@@ -272,7 +272,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c5-4000-8000-000000000453",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics SYVA",
     manufacturer: "L'Acoustics",
     modelNumber: "SYVA",
@@ -291,7 +291,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c6-4000-8000-000000000454",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics X15 HiQ",
     manufacturer: "L'Acoustics",
     modelNumber: "X15 HiQ",
@@ -310,7 +310,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c7-4000-8000-000000000455",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics X8",
     manufacturer: "L'Acoustics",
     modelNumber: "X8",
@@ -329,7 +329,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c8-4000-8000-000000000456",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics X12",
     manufacturer: "L'Acoustics",
     modelNumber: "X12",
@@ -348,7 +348,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01c9-4000-8000-000000000457",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics KS28",
     manufacturer: "L'Acoustics",
     modelNumber: "KS28",
@@ -366,7 +366,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01ca-4000-8000-000000000458",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics K2",
     manufacturer: "L'Acoustics",
     modelNumber: "K2",
@@ -385,7 +385,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01cb-4000-8000-000000000459",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics Kara II",
     manufacturer: "L'Acoustics",
     modelNumber: "Kara II",
@@ -404,7 +404,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01cc-4000-8000-000000000460",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics 5XT",
     manufacturer: "L'Acoustics",
     modelNumber: "5XT",
@@ -423,7 +423,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01cd-4000-8000-000000000461",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "L'Acoustics SB18",
     manufacturer: "L'Acoustics",
     modelNumber: "SB18",
@@ -491,7 +491,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d0-4000-8000-000000000464",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer 750-LFC",
     manufacturer: "Meyer Sound",
     modelNumber: "750-LFC",
@@ -512,7 +512,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d1-4000-8000-000000000465",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer Lina",
     manufacturer: "Meyer Sound",
     modelNumber: "LINA",
@@ -533,7 +533,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d2-4000-8000-000000000466",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer Ultra-X23",
     manufacturer: "Meyer Sound",
     modelNumber: "Ultra-X23",
@@ -553,7 +553,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d3-4000-8000-000000000467",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer UM-1P",
     manufacturer: "Meyer Sound",
     modelNumber: "UPM-1P",
@@ -573,7 +573,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d4-4000-8000-000000000468",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer MM-4XP",
     manufacturer: "Meyer Sound",
     modelNumber: "MM-4XP",
@@ -591,7 +591,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d5-4000-8000-000000000469",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer M1D",
     manufacturer: "Meyer Sound",
     modelNumber: "M1D",
@@ -611,7 +611,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d6-4000-8000-000000000470",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer Ultra-X40",
     manufacturer: "Meyer Sound",
     modelNumber: "Ultra-X40",
@@ -631,7 +631,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d7-4000-8000-000000000471",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Meyer UPJ-1P",
     manufacturer: "Meyer Sound",
     modelNumber: "UPJ-1P",
@@ -653,7 +653,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d8-4000-8000-000000000472",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "d&b Y7P",
     manufacturer: "d&b audiotechnik",
     modelNumber: "Y7P",
@@ -672,7 +672,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01d9-4000-8000-000000000473",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "d&b V8",
     manufacturer: "d&b audiotechnik",
     modelNumber: "V8",
@@ -691,7 +691,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01da-4000-8000-000000000474",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "d&b V-Sub",
     manufacturer: "d&b audiotechnik",
     modelNumber: "V-SUB",
@@ -710,7 +710,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01db-4000-8000-000000000475",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "d&b E8",
     manufacturer: "d&b audiotechnik",
     modelNumber: "E8",
@@ -755,7 +755,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01dd-4000-8000-000000000477",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "JBL EON610",
     manufacturer: "JBL Professional",
     modelNumber: "EON610",
@@ -777,7 +777,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01de-4000-8000-000000000478",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "JBL VRX932LAP",
     manufacturer: "JBL Professional",
     modelNumber: "VRX932LAP",
@@ -797,7 +797,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01df-4000-8000-000000000479",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "JBL 305P MKII",
     manufacturer: "JBL Professional",
     modelNumber: "305P MkII",
@@ -819,7 +819,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01e0-4000-8000-000000000480",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "EV Evolve 50",
     manufacturer: "Electro-Voice",
     modelNumber: "Evolve 50",
@@ -841,7 +841,7 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-01e1-4000-8000-000000000481",
     deviceType: "speaker",
-    headerColor: "#80b5ff",
+    headerColor: "#dae8fb",
     label: "Fostex 6301B",
     manufacturer: "Fostex",
     modelNumber: "6301B",
