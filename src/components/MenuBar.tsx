@@ -426,10 +426,11 @@ export default function MenuBar() {
       if (!file) return;
       try {
         const templates = await readTemplateFile(file);
-        const { added, updated } = useSchematicStore.getState().importCustomTemplates(templates);
+        const { added, updated, skipped } = useSchematicStore.getState().importCustomTemplates(templates);
         const parts = [];
         if (added > 0) parts.push(`${added} added`);
         if (updated > 0) parts.push(`${updated} updated`);
+        if (skipped > 0) parts.push(`${skipped} already built in`);
         alert(parts.length > 0 ? `Imported device templates: ${parts.join(", ")}.` : "Nothing to import — the file matched your library exactly.");
       } catch (err) {
         alert(err instanceof Error ? err.message : "Invalid device archive file.");

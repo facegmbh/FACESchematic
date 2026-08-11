@@ -616,7 +616,7 @@ interface SchematicState {
   exportCustomTemplates: () => DeviceTemplate[];
   /** Merges templates into the library: same key (id) overwrites, unknown key is appended.
    *  Returns what actually happened so callers can report honest counts. */
-  importCustomTemplates: (templates: DeviceTemplate[]) => { added: number; updated: number };
+  importCustomTemplates: (templates: DeviceTemplate[]) => { added: number; updated: number; skipped: number };
 
   // Cloud storage
   cloudSchematicId: string | null;
@@ -1150,6 +1150,27 @@ function templateKey(t: DeviceTemplate): string {
   return t.id ?? t.deviceType;
 }
 
+/** Identity of a user template that has since been promoted into the bundled library.
+ *  Matched on id *and* label: id alone would be marginally unsafe, since user templates
+ *  get `custom-${Date.now()}` ids and two people could in principle mint the same id for
+ *  different devices. */
+function bundledIdentity(t: DeviceTemplate): string {
+  return `${t.id}\u0000${t.label}`;
+}
+const BUNDLED_TEMPLATE_IDENTITIES = new Set(
+  DEVICE_TEMPLATES.filter((t) => t.id).map(bundledIdentity),
+);
+
+/** Drop local user templates that now ship in the bundled library. The FACE house
+ *  library used to be handed around as a device archive that everyone imported by hand;
+ *  now that it's bundled (src/devices/face-library.ts), those local copies would show up
+ *  twice — once under "User Templates" and once in their category section. Devices
+ *  already placed on the canvas are unaffected: they carry their own port copies and
+ *  still resolve by templateId, since the bundled entries kept the archive's ids. */
+function dropBundledDuplicates(templates: DeviceTemplate[]): DeviceTemplate[] {
+  return templates.filter((t) => !BUNDLED_TEMPLATE_IDENTITIES.has(bundledIdentity(t)));
+}
+
 function loadCustomTemplates(): DeviceTemplate[] {
   try {
     const raw = localStorage.getItem(TEMPLATES_KEY);
@@ -1161,7 +1182,10 @@ function loadCustomTemplates(): DeviceTemplate[] {
         t.id = t.deviceType;
       }
     }
-    return templates;
+    const deduped = dropBundledDuplicates(templates);
+    // Write the cleanup back so it's a one-time migration rather than a per-load filter.
+    if (deduped.length !== templates.length) saveCustomTemplates(deduped);
+    return deduped;
   } catch {
     return [];
   }
@@ -3910,15 +3934,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   importCustomTemplates: (templates) => {
-    const { merged, addedKeys, added, updated } = mergeCustomTemplates(get().customTemplates, templates);
-    if (added === 0 && updated === 0) return { added: 0, updated: 0 };
+    // Templates the bundled library already ships are skipped rather than re-added as
+    // user templates: re-importing an old FACE device archive shouldn't resurrect
+    // local duplicates of devices that are now built in.
+    const incoming = dropBundledDuplicates(templates);
+    const skipped = templates.length - incoming.length;
+    const { merged, addedKeys, added, updated } = mergeCustomTemplates(get().customTemplates, incoming);
+    if (added === 0 && updated === 0) return { added: 0, updated: 0, skipped };
 
     const order = [...get().customTemplateOrder, ...addedKeys];
     set({ customTemplates: merged, customTemplateOrder: order });
     saveCustomTemplates(merged);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
 
-    return { added, updated };
+    return { added, updated, skipped };
   },
 
   setCloudSchematicId: (id) => { set({ cloudSchematicId: id }); get().saveToLocalStorage(); },
@@ -4909,11 +4938,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     edges = applyWaypointHeal(nodes, edges);
     // Heal-on-load: spawn break-in/out anchors for any imported bundle (idempotent).
     nodes = reconcileBundleJunctions(nodes, edges);
-    // Merge imported custom templates with existing ones (avoid duplicates by template key)
+    // Merge imported custom templates with existing ones (avoid duplicates by template
+    // key, and skip any that the bundled library already ships — older schematics still
+    // embed the FACE house library that now lives in src/devices/face-library.ts).
     if (data.customTemplates?.length) {
       const existing = get().customTemplates;
       const existingKeys = new Set(existing.map((t) => templateKey(t)));
-      const newTemplates = data.customTemplates.filter((t) => !existingKeys.has(templateKey(t)));
+      const newTemplates = dropBundledDuplicates(data.customTemplates)
+        .filter((t) => !existingKeys.has(templateKey(t)));
       if (newTemplates.length > 0) {
         const merged = [...existing, ...newTemplates];
         set({ customTemplates: merged });

@@ -30,6 +30,8 @@ export const DEVICE_TYPE_TO_CATEGORY: Record<string, string> = {
   "audio-mixer": "Mixing Consoles",
   "audio-embedder": "Audio I/O",
   "audio-interface": "Audio I/O",
+  // Generic I/O peripherals (Q-SYS QIO mic/line + GPIO nodes and friends).
+  "interface": "Audio I/O",
   "audio-dsp": "Audio",
   "equalizer": "Audio",
   "synthesizer": "Audio",

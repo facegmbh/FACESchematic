@@ -24,6 +24,7 @@ import { templates as expansionCards } from "./devices/expansion-cards";
 import { templates as storageMedia } from "./devices/storage-media";
 import { templates as buildingAutomation } from "./devices/building-automation";
 import { templates as faceProducts } from "./devices/face-products";
+import { templates as faceLibrary } from "./devices/face-library";
 
 import { DEVICE_TYPE_TO_CATEGORY } from "./deviceTypeCategories";
 export { DEVICE_TYPE_TO_CATEGORY };
@@ -52,6 +53,7 @@ export const DEVICE_TEMPLATES: DeviceTemplate[] = [
   ...codecs,
   ...buildingAutomation,
   ...faceProducts,
+  ...faceLibrary,
 ];
 
 export const CARD_TEMPLATES: DeviceTemplate[] = [...expansionCards, ...storageMedia];
