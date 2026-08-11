@@ -10,31 +10,10 @@ import type { DeviceTemplate } from "../types";
  */
 export const templates: DeviceTemplate[] = [
   // ── Bose Professional — ControlSpace DSP ─────────────────────────
-  {
-    id: "c0a80101-0fac-4000-8000-000000000f01",
-    deviceType: "audio-dsp",
-    label: "Bose ControlSpace EX-1280C",
-    manufacturer: "Bose Professional",
-    modelNumber: "ControlSpace EX-1280C",
-    referenceUrl: "https://pro.bose.com/en_us/products/signal_processing/controlspace_ex.html",
-    searchTerms: ["bose", "controlspace", "ex-1280c", "dsp", "conferencing", "dante", "amplink"],
-    powerDrawW: 60,
-    heightMm: 44,
-    widthMm: 483,
-    depthMm: 305,
-    weightKg: 4.5,
-    ports: [
-      ...ports("Analog In", "analog-audio", "input", 8, "phoenix"),
-      ...ports("Analog Out", "analog-audio", "output", 8, "phoenix"),
-      port("Dante", "dante", "bidirectional"),
-      port("AmpLink", "dante", "output", "rj45"),
-      port("USB (Audio/Control)", "usb", "bidirectional"),
-      port("Network", "ethernet", "bidirectional"),
-      port("GPIO", "gpio", "bidirectional"),
-      port("RS-232", "serial", "bidirectional"),
-      port("AC Power", "power", "input"),
-    ],
-  },
+  // The EX-1280C used to live here as `c0a80101-0fac-4000-8000-000000000f01` with a
+  // 23-port approximation. It now ships from the FACE house library (face-library.json,
+  // `face-0002-0000-4000-8000-000000000002`) with the full 40-port complement and aux
+  // rows, so the thinner duplicate was removed rather than shown twice under "Audio".
   {
     id: "c0a80101-0fac-4000-8000-000000000f02",
     deviceType: "audio-dsp",
