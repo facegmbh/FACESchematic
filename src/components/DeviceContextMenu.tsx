@@ -37,8 +37,12 @@ export default function DeviceContextMenu() {
   const editProperties = useCallback(() => {
     if (!menu) return;
     useSchematicStore.getState().setEditingNodeId(menu.nodeId);
-    useSchematicStore.setState({ deviceContextMenu: null });
+    useSchematicStore.setState({ deviceContextMenu: null, bulkDeviceEditOpen: false });
   }, [menu]);
+
+  const editSelectedProperties = useCallback(() => {
+    useSchematicStore.setState({ deviceContextMenu: null, bulkDeviceEditOpen: true });
+  }, []);
 
   const swapDevice = useCallback(() => {
     if (!menu) return;
@@ -60,6 +64,11 @@ export default function DeviceContextMenu() {
   const node = nodes.find((n) => n.id === nodeId);
   const deviceData = node?.type === "device" ? (node.data as DeviceData) : null;
 
+  // Right-clicking inside a multi-device selection offers the bulk editor first —
+  // that's the action the user almost always means there.
+  const selectedDeviceCount = nodes.filter((n) => n.type === "device" && n.selected).length;
+  const bulkAvailable = (node?.selected ?? false) && selectedDeviceCount >= 2;
+
   const placement = pages
     .flatMap((p) => p.placements.map((pl) => ({ page: p, placement: pl })))
     .find((x) => x.placement.deviceNodeId === nodeId);
@@ -77,7 +86,16 @@ export default function DeviceContextMenu() {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <MenuItem label="Edit Properties..." onClick={editProperties} />
+      {bulkAvailable && (
+        <MenuItem
+          label={`Edit Properties of ${selectedDeviceCount} Devices...`}
+          onClick={editSelectedProperties}
+        />
+      )}
+      <MenuItem
+        label={bulkAvailable ? "Edit This Device Only..." : "Edit Properties..."}
+        onClick={editProperties}
+      />
       <MenuItem label="Swap Device..." onClick={swapDevice} />
 
       {deviceData && (

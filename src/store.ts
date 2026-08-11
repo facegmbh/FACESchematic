@@ -283,6 +283,10 @@ interface SchematicState {
   updateDevice: (nodeId: string, data: DeviceData) => void;
   /** Patch device data without clearing baseLabel (for spreadsheet edits). */
   patchDeviceData: (nodeId: string, patch: Partial<DeviceData>) => void;
+  /** Patch many devices in one undo step (bulk property edit of a multi-selection).
+   *  Keys set to `undefined` are deleted. Runs auto-numbering, so patches may set
+   *  `baseLabel` to number a group. Never touches `ports`. */
+  batchPatchDeviceData: (changes: { nodeId: string; patch: Partial<DeviceData> }[]) => void;
   /** Merge two paired ports into a single passthrough port and re-anchor their edges atomically. */
   convertPortsToPassthrough: (nodeId: string, inputPortId: string, outputPortId: string, newPort: import("./types").Port) => void;
   /** Merge every input/output port pair on a device into passthrough ports in one atomic undo step. */
@@ -387,6 +391,9 @@ interface SchematicState {
   clearAllManualWaypoints: () => void;
   deviceContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
   setDeviceContextMenu: (menu: { nodeId: string; screenX: number; screenY: number } | null) => void;
+  /** UI state: the bulk device property panel is open for the current multi-selection. */
+  bulkDeviceEditOpen: boolean;
+  setBulkDeviceEditOpen: (open: boolean) => void;
   edgeContextMenu: { edgeId: string; screenX: number; screenY: number; flowX: number; flowY: number } | null;
   roomContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
   stubLabelContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
@@ -1252,6 +1259,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   routingDebugData: null,
   deviceContextMenu: null,
   setDeviceContextMenu: (menu) => set({ deviceContextMenu: menu }),
+  bulkDeviceEditOpen: false,
+  setBulkDeviceEditOpen: (open) => set({ bulkDeviceEditOpen: open }),
   deviceSwapTarget: null,
   edgeContextMenu: null,
   roomContextMenu: null,
@@ -2285,6 +2294,27 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         if (n.id !== nodeId || n.type !== "device") return n;
         return { ...n, data: { ...n.data, ...patch } } as DeviceNode;
       }),
+    });
+    get().saveToLocalStorage();
+  },
+
+  batchPatchDeviceData: (changes) => {
+    const state = get();
+    if (changes.length === 0) return;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const changeMap = new Map(changes.map((c) => [c.nodeId, c.patch]));
+    set({
+      // renumberNodes because a patch may set baseLabel to (re)number a group.
+      nodes: renumberNodes(state.nodes.map((n) => {
+        if (n.type !== "device") return n;
+        const patch = changeMap.get(n.id);
+        if (!patch) return n;
+        const merged = { ...n.data, ...patch } as DeviceData;
+        for (const k of Object.keys(patch)) {
+          if (patch[k] === undefined) delete merged[k];
+        }
+        return { ...n, data: merged } as DeviceNode;
+      })),
     });
     get().saveToLocalStorage();
   },

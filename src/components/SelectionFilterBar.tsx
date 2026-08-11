@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useSchematicStore } from "../store";
 import type { SchematicNode, ConnectionEdge } from "../types";
 import BulkConnectionEditPanel from "./BulkConnectionEditPanel";
+import BulkDeviceEditPanel from "./BulkDeviceEditPanel";
 
 type EntityKind = "device" | "room" | "stub-label" | "note" | "annotation" | "waypoint" | "edge";
 
@@ -57,13 +58,27 @@ export default function SelectionFilterBar() {
   }, [selectionKey]);
 
   const edgeCount = counts.edge ?? 0;
+  const deviceCount = counts.device ?? 0;
   const presentKinds = KIND_ORDER.filter((k) => (counts[k] ?? 0) > 0);
   const totalSelected = presentKinds.reduce((sum, k) => sum + (counts[k] ?? 0), 0);
 
   const [panelOpen, setPanelOpen] = useState(false);
+  // Device panel lives in the store so the device context menu can open it too.
+  const devicePanelOpen = useSchematicStore((s) => s.bulkDeviceEditOpen);
+  const setDevicePanelOpen = useSchematicStore((s) => s.setBulkDeviceEditOpen);
 
-  // Show bar whenever 2+ entities are selected, or the edit panel is pinned open
-  if (totalSelected < 2 && !panelOpen) return null;
+  // The two panels share the same screen slot — opening one closes the other.
+  const openConnectionPanel = (open: boolean) => {
+    setPanelOpen(open);
+    if (open) setDevicePanelOpen(false);
+  };
+  const openDevicePanel = (open: boolean) => {
+    setDevicePanelOpen(open);
+    if (open) setPanelOpen(false);
+  };
+
+  // Show bar whenever 2+ entities are selected, or an edit panel is pinned open
+  if (totalSelected < 2 && !panelOpen && !devicePanelOpen) return null;
 
   const apply = (kind: EntityKind, mode: "deselect" | "solo") => {
     const state = useSchematicStore.getState();
@@ -96,6 +111,7 @@ export default function SelectionFilterBar() {
   return (
     <>
       {panelOpen && <BulkConnectionEditPanel onClose={() => setPanelOpen(false)} />}
+      {devicePanelOpen && <BulkDeviceEditPanel onClose={() => setDevicePanelOpen(false)} />}
       <div
         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[40] flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[var(--color-border)] rounded-lg shadow-lg"
         data-print-hide
@@ -122,6 +138,19 @@ export default function SelectionFilterBar() {
               </button>
             );
           })}
+        {(deviceCount >= 2 || devicePanelOpen) && (
+          <button
+            title="Edit properties of all selected devices"
+            className={`px-2 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
+              devicePanelOpen
+                ? "bg-blue-600 text-white border-blue-600"
+                : "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100"
+            }`}
+            onClick={() => openDevicePanel(!devicePanelOpen)}
+          >
+            {deviceCount >= 2 ? `Edit ${deviceCount} devices…` : "Edit devices…"}
+          </button>
+        )}
         {(edgeCount >= 2 || panelOpen) && (
           <button
             title="Edit properties of selected connections"
@@ -130,7 +159,7 @@ export default function SelectionFilterBar() {
                 ? "bg-blue-600 text-white border-blue-600"
                 : "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100"
             }`}
-            onClick={() => setPanelOpen((v) => !v)}
+            onClick={() => openConnectionPanel(!panelOpen)}
           >
             {edgeCount >= 2 ? `Edit ${edgeCount}…` : "Edit connections…"}
           </button>
