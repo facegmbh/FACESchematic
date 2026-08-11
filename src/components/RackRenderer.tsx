@@ -441,7 +441,7 @@ function AccessoryBlock({
   const h = accessory.heightU * PX_PER_U - 1;
   const fills: Record<string, string> = {
     "blank-panel": "#888", "vent-panel": "#aaa", "shelf": "#a0855b",
-    "drawer": "#8a7a5a", "cable-manager": "#666", "fan-unit": "#556b7a",
+    "drawer": "#8a7a5a", "cable-manager": "#666", "brush-strip": "#666", "fan-unit": "#556b7a",
   };
   const isShelf = accessory.type === "shelf" && occupants.length > 0;
   const innerW = shelfInnerWidthMm();
@@ -1158,7 +1158,7 @@ function EditRackInlineDialog({
 // ── Slot context menu (cascading: Add Accessory ▸ Type ▸ U-height) ──
 
 const ACCESSORY_TYPE_ORDER: import("../types").RackAccessoryType[] = [
-  "shelf", "blank-panel", "vent-panel", "drawer", "cable-manager", "fan-unit",
+  "shelf", "blank-panel", "vent-panel", "drawer", "cable-manager", "brush-strip", "fan-unit",
 ];
 const ACCESSORY_HEIGHTS: number[] = [1, 2, 3, 4];
 const MENU_W = 180;
@@ -1540,7 +1540,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
           if (ac) {
             const fills: Record<string, string> = {
               "blank-panel": "#888", "vent-panel": "#aaa", "shelf": "#a0855b",
-              "drawer": "#8a7a5a", "cable-manager": "#666", "fan-unit": "#556b7a",
+              "drawer": "#8a7a5a", "cable-manager": "#666", "brush-strip": "#666", "fan-unit": "#556b7a",
             };
             setInRackDrag({
               kind: "accessory",

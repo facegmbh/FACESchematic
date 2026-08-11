@@ -319,7 +319,7 @@ export function drawElevation(
     const ah = ah_svg * s;
     const fill: Record<string, [number, number, number]> = {
       "blank-panel": [136, 136, 136], "vent-panel": [170, 170, 170], "shelf": [160, 133, 91],
-      "drawer": [138, 122, 90], "cable-manager": [102, 102, 102], "fan-unit": [85, 107, 122],
+      "drawer": [138, 122, 90], "cable-manager": [102, 102, 102], "brush-strip": [102, 102, 102], "fan-unit": [85, 107, 122],
     };
     doc.setFillColor(...(fill[a.type] ?? [136, 136, 136]));
     doc.setDrawColor(85, 85, 85);

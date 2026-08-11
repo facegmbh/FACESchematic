@@ -16,7 +16,7 @@ export function sideW(depthMm: number) { return Math.max(80, depthMm * PX_PER_MM
 
 export const ACC_COLORS: Record<string, string> = {
   "blank-panel": "#888", "vent-panel": "#aaa", "shelf": "#a0855b",
-  "drawer": "#8a7a5a", "cable-manager": "#666", "fan-unit": "#556b7a",
+  "drawer": "#8a7a5a", "cable-manager": "#666", "brush-strip": "#666", "fan-unit": "#556b7a",
 };
 
 export function wrapLabel(text: string, maxChars: number, maxLines: number): string[] {

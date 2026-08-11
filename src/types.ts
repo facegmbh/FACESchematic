@@ -701,7 +701,7 @@ export interface RackDepthConflict {
   depthOverhangMm: number;
 }
 
-export type RackAccessoryType = "blank-panel" | "vent-panel" | "shelf" | "drawer" | "cable-manager" | "fan-unit";
+export type RackAccessoryType = "blank-panel" | "vent-panel" | "shelf" | "drawer" | "cable-manager" | "brush-strip" | "fan-unit";
 
 export const RACK_ACCESSORY_LABELS: Record<RackAccessoryType, string> = {
   "blank-panel": "Blank Panel",
@@ -709,6 +709,7 @@ export const RACK_ACCESSORY_LABELS: Record<RackAccessoryType, string> = {
   "shelf": "Shelf",
   "drawer": "Drawer",
   "cable-manager": "Cable Manager",
+  "brush-strip": "Bürstenleiste",
   "fan-unit": "Fan Unit",
 };
 
