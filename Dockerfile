@@ -4,6 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 COPY . .
+# Talk to our own origin instead of the upstream API directly: nginx forwards the
+# device library and blocks every account/upload path (docker/nginx.conf).
+ARG VITE_TEMPLATE_API_URL=/api
+ENV VITE_TEMPLATE_API_URL=${VITE_TEMPLATE_API_URL}
 RUN npm run build
 
 # Production stage
