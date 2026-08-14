@@ -20,6 +20,13 @@ scripts
 *.log
 canvas-screenshot*.png
 
+# Tests are not part of the production image, and src/__tests__ imports from
+# api/src — which is excluded above, so `tsc -b` cannot resolve it and the image
+# build fails. CI type-checks these with the API installed; the image doesn't.
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+
 # Editor / CI
 .vscode
 .idea
