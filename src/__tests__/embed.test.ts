@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isEmbedded, listenForEmbeddedSchematic, READY, LOAD, LOADED, ERROR } from "../embed";
+import {
+  isEmbedded,
+  isOriginAllowed,
+  listenForEmbeddedSchematic,
+  READY,
+  LOAD,
+  LOADED,
+  ERROR,
+} from "../embed";
 
 /** The default allowlist — src/embed.ts falls back to this without a build arg. */
 const ALLOWED = "https://portal.face-gmbh.com";
@@ -107,6 +115,32 @@ describe("embedded viewer protocol", () => {
     expect(env.listenerCount()).toBe(0);
     env.emit(ALLOWED, { type: LOAD, schematic: { nodes: [] } });
     expect(seen).toEqual([]);
+  });
+
+  // Odoo.sh staging hostnames carry a build id that changes on every rebuild,
+  // so the allowlist covers them by wildcard — but only genuine subdomains.
+  it("accepts an Odoo.sh staging subdomain", () => {
+    expect(isOriginAllowed("https://facegmbh-odoo-prelive-36376243.dev.odoo.com")).toBe(true);
+  });
+
+  it("rejects lookalikes of the wildcard entry", () => {
+    for (const origin of [
+      "https://evil.com",
+      "https://dev.odoo.com.evil.com",
+      "https://evildev.odoo.com",
+      "http://facegmbh-odoo-prelive-1.dev.odoo.com",
+      "https://.dev.odoo.com",
+    ]) {
+      expect(isOriginAllowed(origin), origin).toBe(false);
+    }
+  });
+
+  it("answers the embedder, not every configured origin", () => {
+    const staging = "https://facegmbh-odoo-prelive-36376243.dev.odoo.com";
+    cleanup = listenForEmbeddedSchematic(() => {});
+    env.posted.length = 0;
+    env.emit(staging, { type: LOAD, schematic: { nodes: [], edges: [] } });
+    expect(env.posted).toEqual([{ message: { type: LOADED }, origin: staging }]);
   });
 
   it("detects embed mode from the query string", () => {
