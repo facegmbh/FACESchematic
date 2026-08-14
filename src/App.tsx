@@ -20,6 +20,7 @@ import {
   type Connection,
 } from "@xyflow/react";
 import { useSchematicStore, GRID_SIZE, setReconnectingEdgeId } from "./store";
+import { isEmbedded, listenForEmbeddedSchematic } from "./embed";
 import { normalizeShortcutKey } from "./keyUtils";
 import { warmupRoutingWorker } from "./routing/routingClient";
 import { useMcpBridge } from "./mcpBridge";
@@ -1804,6 +1805,16 @@ export default function App() {
   const undo = useSchematicStore((s) => s.undo);
   const redo = useSchematicStore((s) => s.redo);
 
+  // Embedded viewer — Odoo shows the real drawing next to the imported devices
+  // and cabling. No menu bar, no device library; just the canvas, fed over
+  // postMessage by the page that already holds the file. See src/embed.ts.
+  const embedded = useMemo(() => isEmbedded(), []);
+  const importFromJSON = useSchematicStore((s) => s.importFromJSON);
+  useEffect(() => {
+    if (!embedded) return;
+    return listenForEmbeddedSchematic((data) => importFromJSON(data as SchematicFile));
+  }, [embedded, importFromJSON]);
+
   // MCP bridge (Beta): connect to the local MCP server when the user enables it.
   useMcpBridge();
 
@@ -1872,9 +1883,11 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full">
-      <div data-print-hide>
-        <MenuBar />
-      </div>
+      {!embedded && (
+        <div data-print-hide>
+          <MenuBar />
+        </div>
+      )}
       <UpdatePill />
       <BetaBanner />
       <DemoBanner />
@@ -1884,9 +1897,11 @@ export default function App() {
       <PageTabs />
       {isSchematicActive ? (
         <div className="flex flex-1 overflow-hidden">
-          <div data-print-hide data-mobile-hide>
-            <DeviceLibrary />
-          </div>
+          {!embedded && (
+            <div data-print-hide data-mobile-hide>
+              <DeviceLibrary />
+            </div>
+          )}
           <div className="flex-1">
             <SchematicCanvas />
           </div>
