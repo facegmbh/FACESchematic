@@ -244,6 +244,13 @@ export interface OdooDeviceLink {
   unitIndex?: number;    // unit number within an order line's quantity
 }
 
+/**
+ * Electrical protection class (IEC 61140), as used by the Geräteprüfung in Odoo:
+ * I = earthed (PE), II = double insulated, III = SELV. Undefined means nobody has
+ * stated one — which is a valid and common answer for passive gear.
+ */
+export type ProtectionClass = "1" | "2" | "3";
+
 export interface DeviceData {
   [key: string]: unknown;
   label: string;
@@ -301,6 +308,12 @@ export interface DeviceData {
   powerDrawW?: number;
   powerCapacityW?: number;
   voltage?: string;
+  /** Electrical protection class per IEC 61140. Deliberately left undefined where
+   *  it does not apply (passive speakers, patch panels, adapters): the value ends up
+   *  on a safety test record in Odoo, so "not stated" must stay distinguishable from
+   *  a real class. Never derived from the device type — a guessed class on a test
+   *  protocol is worse than an empty field. */
+  protectionClass?: ProtectionClass;
   /** Thermal load in BTU/h for HVAC sizing; auto-derived from powerDrawW × 3.412 if omitted */
   thermalBtuh?: number;
   /** PoE budget in watts (for network switches — power this device *supplies* over PoE) */
@@ -608,6 +621,7 @@ export interface DeviceTemplate {
   powerDrawW?: number;           // Max power consumption in watts
   powerCapacityW?: number;       // Total supply capacity in watts (distros only)
   voltage?: string;              // Informational: "100-240V", "208V", "120V"
+  protectionClass?: ProtectionClass; // IEC 61140 class; preset per template so it isn't typed per device
   thermalBtuh?: number;          // Thermal load in BTU/h for HVAC sizing; auto-derived from powerDrawW × 3.412 if omitted
   isVenueProvided?: boolean;     // Venue-owned gear — excluded from pack list
   poeBudgetW?: number;           // PoE budget in watts (switches/PSEs supplying PoE)

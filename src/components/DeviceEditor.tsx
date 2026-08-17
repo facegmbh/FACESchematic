@@ -33,7 +33,7 @@ import TemplateSyncDialog from "./TemplateSyncDialog";
 import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from "../networkValidation";
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
-import type { FacePlateLayout, OdooDeviceLink } from "../types";
+import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
 
@@ -186,6 +186,7 @@ export default function DeviceEditor() {
   const [powerDrawW, setPowerDrawW] = useState<number | undefined>(undefined);
   const [powerCapacityW, setPowerCapacityW] = useState<number | undefined>(undefined);
   const [voltage, setVoltage] = useState<string | undefined>(undefined);
+  const [protectionClass, setProtectionClass] = useState<ProtectionClass | undefined>(undefined);
   const [thermalBtuh, setThermalBtuh] = useState<number | undefined>(undefined);
   const [poeBudgetW, setPoeBudgetW] = useState<number | undefined>(undefined);
   const [poeDrawW, setPoeDrawW] = useState<number | undefined>(undefined);
@@ -275,6 +276,7 @@ export default function DeviceEditor() {
     setPowerDrawW(node.data.powerDrawW);
     setPowerCapacityW(node.data.powerCapacityW);
     setVoltage(node.data.voltage);
+    setProtectionClass(node.data.protectionClass);
     setThermalBtuh(node.data.thermalBtuh);
     setPoeBudgetW(node.data.poeBudgetW);
     setPoeDrawW(node.data.poeDrawW);
@@ -438,6 +440,7 @@ export default function DeviceEditor() {
       ...(poeBudgetW != null ? { poeBudgetW } : {}),
       ...(poeDrawW != null ? { poeDrawW } : {}),
       ...(voltage ? { voltage } : {}),
+      ...(protectionClass ? { protectionClass } : {}),
       ...(thermalBtuh != null ? { thermalBtuh } : {}),
       ...(unitCost != null ? { unitCost } : {}),
       ...(serialNumber.trim() ? { serialNumber: serialNumber.trim() } : {}),
@@ -462,7 +465,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -510,6 +513,7 @@ export default function DeviceEditor() {
         ...(powerDrawW != null ? { powerDrawW } : {}),
         ...(powerCapacityW != null ? { powerCapacityW } : {}),
         ...(voltage ? { voltage } : {}),
+        ...(protectionClass ? { protectionClass } : {}),
         ...(thermalBtuh != null ? { thermalBtuh } : {}),
         ...(poeBudgetW != null ? { poeBudgetW } : {}),
         ...(poeDrawW != null ? { poeDrawW } : {}),
@@ -538,7 +542,7 @@ export default function DeviceEditor() {
         ...overrides,
       };
     },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw],
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -649,6 +653,7 @@ export default function DeviceEditor() {
       ...(powerDrawW != null ? { powerDrawW } : {}),
       ...(powerCapacityW != null ? { powerCapacityW } : {}),
       ...(voltage ? { voltage } : {}),
+      ...(protectionClass ? { protectionClass } : {}),
       ...(thermalBtuh != null ? { thermalBtuh } : {}),
       ...(poeBudgetW != null ? { poeBudgetW } : {}),
       ...(poeDrawW != null ? { poeDrawW } : {}),
@@ -687,7 +692,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -778,6 +783,7 @@ export default function DeviceEditor() {
       setPowerDrawW(tpl.powerDrawW);
       setPowerCapacityW(tpl.powerCapacityW);
       setVoltage(tpl.voltage);
+      setProtectionClass(tpl.protectionClass);
       setThermalBtuh(tpl.thermalBtuh);
       setPoeBudgetW(tpl.poeBudgetW);
       setPoeDrawW(tpl.poeDrawW);
@@ -1538,6 +1544,28 @@ export default function DeviceEditor() {
                     placeholder="100-240V"
                     onKeyDown={(e) => e.stopPropagation()}
                   />
+                </div>
+                <div className="col-span-2">
+                  <label
+                    className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5"
+                    title="Electrical protection class (IEC 61140). Carried into the Geräteprüfung in Odoo. Leave blank where it does not apply — passive speakers, patch panels, adapters."
+                  >
+                    Protection Class
+                  </label>
+                  <select
+                    className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
+                    value={protectionClass ?? ""}
+                    onChange={(e) =>
+                      setProtectionClass(
+                        (e.target.value || undefined) as ProtectionClass | undefined,
+                      )
+                    }
+                  >
+                    <option value="">— not applicable / unknown</option>
+                    <option value="1">I — earthed (PE)</option>
+                    <option value="2">II — double insulated</option>
+                    <option value="3">III — SELV</option>
+                  </select>
                 </div>
                 <div className="col-span-2">
                   <label
