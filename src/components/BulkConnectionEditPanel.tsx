@@ -17,11 +17,12 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       .filter((e) => e.selected)
       .map(
         (e) =>
-          `${e.id}:${e.data?.lineStyle ?? ""}:${e.data?.directAttach ? "1" : "0"}:${e.data?.hideCableId ? "1" : "0"}:${String(e.data?.sourceLabel ?? "")}:${String(e.data?.label ?? "")}:${String(e.data?.targetLabel ?? "")}:${String(e.data?.color ?? "")}:${e.data?.bundleId ?? ""}:${e.data?.signalType ?? ""}`,
+          `${e.id}:${e.data?.lineStyle ?? ""}:${e.data?.directAttach ? "1" : "0"}:${e.data?.hideCableId ? "1" : "0"}:${String(e.data?.sourceLabel ?? "")}:${String(e.data?.label ?? "")}:${String(e.data?.targetLabel ?? "")}:${String(e.data?.color ?? "")}:${e.data?.bundleId ?? ""}:${e.data?.signalType ?? ""}:${String(e.data?.cableIdLabelMode ?? "")}:${e.data?.linkedConnectionId ?? ""}:${e.data?.manualWaypoints?.length ?? 0}`,
       )
       .join("|"),
   );
   const bundles = useSchematicStore((s) => s.bundles);
+  const globalCableIdMode = useSchematicStore((s) => s.cableIdLabelMode);
 
   // selectionKey is the invalidation signal for this getState() snapshot
   const selectedEdges = useMemo(
@@ -64,6 +65,22 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
   }
   const directAttach = boolState("directAttach");
   const hideCableId = boolState("hideCableId");
+
+  // Stub state is structural, not a data flag: a stubbed connection is a pair of legs
+  // sharing linkedConnectionId.
+  const stubVals = selectedEdges.map((e) => !!e.data?.linkedConnectionId);
+  const stubbed = {
+    allOn: stubVals.every(Boolean),
+    mixed: stubVals.some(Boolean) && !stubVals.every(Boolean),
+  };
+
+  // Cable ID placement — per-edge override, falling back to the document default.
+  const cableIdModes = new Set(
+    selectedEdges.map((e) => (e.data?.cableIdLabelMode as string | undefined) ?? globalCableIdMode),
+  );
+  const sharedCableIdMode = cableIdModes.size === 1 ? [...cableIdModes][0] : null;
+
+  const anyManualRoute = selectedEdges.some((e) => e.data?.manualWaypoints?.length);
 
   // --- Actions ---
   const applyLineStyle = (ls: LineStyle) => {
@@ -138,6 +155,37 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
     useSchematicStore.getState().batchPatchEdgeData(
       selectedEdges.map((e) => ({ edgeId: e.id, patch: { color: undefined } })),
     );
+  };
+
+  const applyCableIdMode = (mode: string) => {
+    useSchematicStore.getState().batchPatchEdgeData(
+      selectedEdges.map((e) => ({ edgeId: e.id, patch: { cableIdLabelMode: mode as "endpoint" | "midpoint" } })),
+    );
+  };
+
+  // Stub conversion and route resets are per-edge store actions that each push their own
+  // undo entry, so wrap the loop to keep one click = one undo step.
+  const applyStubbed = () => {
+    const store = useSchematicStore.getState();
+    const collapse = stubbed.allOn && !stubbed.mixed;
+    const ids = selectedEdges.map((e) => e.id);
+    store.runAsSingleUndoStep(() => {
+      for (const id of ids) {
+        // Re-read: collapsing one leg removes its partner, converting replaces the edge.
+        const live = useSchematicStore.getState().edges.find((e) => e.id === id);
+        if (!live) continue;
+        if (collapse) useSchematicStore.getState().collapseStubsForEdge(id);
+        else if (!live.data?.linkedConnectionId) useSchematicStore.getState().convertEdgeToStubs(id);
+      }
+    });
+  };
+
+  const resetRoutes = () => {
+    const store = useSchematicStore.getState();
+    const ids = selectedEdges.map((e) => e.id);
+    store.runAsSingleUndoStep(() => {
+      for (const id of ids) useSchematicStore.getState().clearManualWaypoints(id);
+    });
   };
 
   return (
@@ -313,12 +361,64 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
         </section>
       )}
 
+      {/* Cable ID placement */}
+      <section className="mb-3">
+        <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
+          Cable ID Position
+          {sharedCableIdMode === null && <span className="ml-1 normal-case">(mixed)</span>}
+        </div>
+        <select
+          className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
+          value={sharedCableIdMode ?? "__mixed__"}
+          onChange={(e) => {
+            if (e.target.value === "__mixed__") return;
+            applyCableIdMode(e.target.value);
+          }}
+        >
+          {sharedCableIdMode === null && <option value="__mixed__">— mixed —</option>}
+          <option value="endpoint">At endpoints</option>
+          <option value="midpoint">At midpoint</option>
+        </select>
+      </section>
+
+      {/* Route */}
+      <section className="mb-3">
+        <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
+          Route
+        </div>
+        <button
+          onClick={resetRoutes}
+          disabled={!anyManualRoute}
+          className="w-full px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-blue-700 border border-[var(--color-border)] rounded hover:border-blue-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Drop manual waypoints so these connections re-route automatically"
+        >
+          Reset routes
+        </button>
+      </section>
+
       {/* Options / toggles */}
       <section>
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
           Options
         </div>
         <div className="space-y-1">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={stubbed.allOn}
+              ref={(el) => {
+                if (el) el.indeterminate = stubbed.mixed;
+              }}
+              onChange={applyStubbed}
+              className="cursor-pointer"
+            />
+            <span className="text-xs text-[var(--color-text)]">
+              Stub Connection
+              {stubbed.mixed && (
+                <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">(mixed)</span>
+              )}
+            </span>
+          </label>
           {(
             [
               { field: "directAttach" as const, label: "Direct Attach", state: directAttach },

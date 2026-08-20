@@ -221,6 +221,14 @@ export default function EdgeContextMenu() {
     useSchematicStore.setState({ edgeContextMenu: null });
   }, [menu]);
 
+  const editSelectedProperties = useCallback(() => {
+    useSchematicStore.setState({
+      edgeContextMenu: null,
+      bulkConnectionEditOpen: true,
+      bulkDeviceEditOpen: false,
+    });
+  }, []);
+
   const [editingLabel, setEditingLabel] = useState<false | "label" | "multicable" | "source" | "target" | "length">(false);
   const [labelValue, setLabelValue] = useState("");
 
@@ -479,10 +487,9 @@ export default function EdgeContextMenu() {
   const selectedBundleIds = [...new Set(selectedEdgeObjs.map((e) => e.data?.bundleId).filter(Boolean))];
   const selectionIsOneBundle =
     selectedBundleIds.length === 1 && selectedEdgeObjs.every((e) => e.data?.bundleId === selectedBundleIds[0]);
-  const canBundleSelection =
-    selectedEdgeObjs.length >= 2 &&
-    selectedEdgeObjs.some((e) => e.id === menu.edgeId) &&
-    !selectionIsOneBundle;
+  const isMultiSelection =
+    selectedEdgeObjs.length >= 2 && selectedEdgeObjs.some((e) => e.id === menu.edgeId);
+  const canBundleSelection = isMultiSelection && !selectionIsOneBundle;
 
   // Check if this is a trunk (multicable) edge
   const srcNode = store.nodes.find((n) => n.id === edge?.source);
@@ -581,6 +588,17 @@ export default function EdgeContextMenu() {
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      {/* Right-clicking inside a multi-connection selection: bulk edit first, since that's
+          the action the user almost always means there. */}
+      {isMultiSelection && (
+        <>
+          <MenuItem
+            label={`Edit Properties of ${selectedEdgeObjs.length} Connections...`}
+            onClick={editSelectedProperties}
+          />
+          <div className="h-px bg-gray-200 my-1" />
+        </>
+      )}
       <MenuItem label="Add Handle" onClick={addHandle} />
       {nearWaypoint && (
         <MenuItem label="Remove Handle" onClick={removeHandle} />

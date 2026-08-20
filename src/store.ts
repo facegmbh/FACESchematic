@@ -398,6 +398,10 @@ interface SchematicState {
   setPendingUndoSnapshot: () => void;
   clearPendingUndoSnapshot: () => void;
   flushPendingSnapshot: () => void;
+  /** Run a composite mutation as exactly one undo step. Any pushUndo the wrapped actions
+   *  perform collapses into a single entry holding the pre-batch state; if they change
+   *  nothing, no undo entry is left behind. Synchronous callbacks only. */
+  runAsSingleUndoStep: (fn: () => void) => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -458,6 +462,9 @@ interface SchematicState {
   /** UI state: the bulk device property panel is open for the current multi-selection. */
   bulkDeviceEditOpen: boolean;
   setBulkDeviceEditOpen: (open: boolean) => void;
+  /** UI state: the bulk connection property panel is open for the current multi-selection. */
+  bulkConnectionEditOpen: boolean;
+  setBulkConnectionEditOpen: (open: boolean) => void;
   edgeContextMenu: { edgeId: string; screenX: number; screenY: number; flowX: number; flowY: number; initialEdit?: "length" } | null;
   roomContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
   stubLabelContextMenu: { nodeId: string; screenX: number; screenY: number } | null;
@@ -967,6 +974,10 @@ const redoStack: Snapshot[] = [];
 /** If set, the next pushUndo call uses this instead of the passed snapshot. */
 let pendingUndoSnapshot: Snapshot | null = null;
 
+/** Set while runAsSingleUndoStep is running, so nested pushUndo calls collapse into one. */
+let undoBatchActive = false;
+let undoBatchPushed = false;
+
 /** Edge ID being reconnected — excluded from isValidConnection duplicate checks. */
 let _reconnectingEdgeId: string | null = null;
 export function setReconnectingEdgeId(id: string | null) {
@@ -974,6 +985,12 @@ export function setReconnectingEdgeId(id: string | null) {
 }
 
 function pushUndo(partial: { nodes: SchematicNode[]; edges: ConnectionEdge[]; autoRoute?: boolean }) {
+  // Inside runAsSingleUndoStep only the first push survives — it carries the pre-batch
+  // snapshot, so N per-item actions collapse into one undo entry instead of N.
+  if (undoBatchActive) {
+    if (undoBatchPushed) return;
+    undoBatchPushed = true;
+  }
   const liveState = useSchematicStore?.getState?.();
   const pages = liveState?.pages ?? [];
   const bundles = liveState?.bundles ?? {};
@@ -1437,6 +1454,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setDeviceContextMenu: (menu) => set({ deviceContextMenu: menu }),
   bulkDeviceEditOpen: false,
   setBulkDeviceEditOpen: (open) => set({ bulkDeviceEditOpen: open }),
+  bulkConnectionEditOpen: false,
+  setBulkConnectionEditOpen: (open) => set({ bulkConnectionEditOpen: open }),
   deviceSwapTarget: null,
   edgeContextMenu: null,
   roomContextMenu: null,
@@ -3522,6 +3541,21 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       // pushUndo consumes pendingUndoSnapshot automatically
       pushUndo({ nodes: get().nodes, edges: get().edges });
     }
+  },
+
+  runAsSingleUndoStep: (fn) => {
+    // The first pushUndo inside fn consumes this, so the entry holds pre-batch state.
+    get().setPendingUndoSnapshot();
+    undoBatchActive = true;
+    undoBatchPushed = false;
+    try {
+      fn();
+    } finally {
+      undoBatchActive = false;
+      // fn may have mutated nothing — don't leave a stale snapshot armed.
+      get().clearPendingUndoSnapshot();
+    }
+    if (undoBatchPushed) get().saveToLocalStorage();
   },
 
   undo: () => {
