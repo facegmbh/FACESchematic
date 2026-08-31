@@ -1404,4 +1404,91 @@ export const templates: DeviceTemplate[] = [
       port("AC Power", "power", "input"),
     ],
   },
+  // ── PureLink VL-BYOD200 — 4K BYOD Wireless Sharing / KVM Presentation Switch ──
+  // Ports and panel layout from "Manual_VL-BYOD200_EN_2026_web.pdf" (V1 | 2026-03),
+  // physical data from the purelink.de product page. Two things the manual does not
+  // state and that are therefore left off: the enclosure dimensions (the product page
+  // only lists a 380 × 210 × 80 mm carton) and the actual power consumption.
+  // The four rear Wi-Fi antenna connectors are not modelled as ports, matching the
+  // wireless-mic-receiver templates, which don't model antennas either.
+  {
+    id: "c0a80101-0174-4000-8000-000000000372",
+    deviceType: "wireless-presentation",
+    label: "PureLink VL-BYOD200",
+    shortName: "VL-BYOD200",
+    manufacturer: "PureLink",
+    modelNumber: "VL-BYOD200",
+    referenceUrl:
+      "https://www.purelink.de/en/collaboration-video-conferencing/wireless-presentation/21227/4k60-byod-collaboration-switcher",
+    searchTerms: [
+      "purelink",
+      "vuelogic",
+      "vl-byod200",
+      "byod",
+      "wireless presentation",
+      "airplay",
+      "miracast",
+      "chromecast",
+      "dongle",
+      "vl-dgl200",
+      "kvm",
+      "presentation switcher",
+      "collaboration",
+      "hdbaset",
+      "usb-c",
+    ],
+    // Rating of the supplied 20V/6A adapter, not a measured figure — the manual gives no
+    // consumption. Up to 75 W of it is pass-through to attached gear (USB-C PD 60 W +
+    // 3 × USB-A at 1 A), so the switcher's own draw is well below this.
+    powerDrawW: 120,
+    voltage: "20V DC",
+    weightKg: 1.58, // manufacturer net weight
+    rackForm: "shelf-only", // ships with 4 surface-mount brackets, no rack ears
+    ports: [
+      // Rear panel
+      {
+        ...port("USB-C In", "usb", "input", "usb-c"),
+        usbcPowerSourceW: 60,
+        notes:
+          "One connector carries DisplayPort 1.1 video (HDCP 1.4), a USB 3.0 host, a 1000BASE-T Ethernet link and up to 60 W charging.",
+      },
+      { ...port("HDMI In", "hdmi", "input"), notes: "HDMI 1.4, HDCP 1.4, up to 2160p30 4:4:4" },
+      {
+        ...port("USB Host", "usb", "bidirectional", "usb-b"),
+        notes: "USB 3.0 Type-B — second wired host for the built-in triple USB switcher",
+      },
+      { ...port("HDMI Out", "hdmi", "output"), notes: "HDMI 2.0, HDCP 2.2, up to 2160p60 4:4:4" },
+      {
+        ...port("HDBT Out", "hdbaset", "output"),
+        notes:
+          "Mirrors HDMI Out. HDMI 1.4, HDCP 1.4; 2160p50/60 drop to 4:2:0. Pairs with an HDBT receiver such as PT-HDBT-1020HU-RX.",
+      },
+      {
+        ...port("Utility LAN", "ethernet", "bidirectional"),
+        notes: "BYOD side: AirPlay/Chromecast signal input and network access for attached devices",
+      },
+      {
+        ...port("Secure LAN", "ethernet", "bidirectional"),
+        notes: "Control side: LAN control, Web UI and Telnet API",
+      },
+      port("DC Power 20V", "power", "input", "barrel"),
+      // Front panel
+      ...ports("USB 3.0", "usb", "bidirectional", 3, "usb-a").map(p => ({
+        ...p,
+        notes: "USB peripheral expansion (keyboard, mouse, touch screen, camera, speakerphone); 1 A per port",
+      })),
+      {
+        ...port("Audio Out", "analog-audio", "output", "phoenix"),
+        notes: "Balanced analog output on a single 5-pin 3.5 mm phoenix connector",
+      },
+      {
+        ...port("RS-232", "serial", "bidirectional", "phoenix"),
+        notes: "3-pin 3.5 mm phoenix — controls a peripheral (e.g. a display) or accepts control of this device",
+      },
+      {
+        ...port("Pairing", "usb", "bidirectional", "usb-c"),
+        notes: "USB-C service port for pairing and upgrading the VL-DGL200 sharing dongle",
+      },
+    ],
+  },
 ];
