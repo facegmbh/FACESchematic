@@ -891,7 +891,8 @@ export function routeAllEdges(
     ];
 
     const allWaypoints: Point[] = [];
-    let allFailed = false;
+    /** Set when at least one leg needed the naive bend bridge (see below). */
+    let legFellBack = false;
     let prevArrivalDir: number | undefined;
 
     const reservedExitDir: (number | undefined)[] = new Array(allPoints.length).fill(undefined);
@@ -932,6 +933,12 @@ export function routeAllEdges(
         sigType, noSourceStub, noTargetStub, excludeDir, reservedAtTarget,
         undefined, legSrcExitsRight, legTgtEntersLeft,
         precomputedGridRects, penaltySpatialIdx, globalGrid,
+        // freeEndDir: a user handle may be entered vertically. Without this every
+        // handle had to be approached horizontally (astarOrthogonal only accepts
+        // arrivalDir 0/2 when freeEndDir is false), and with reservedAtTarget also
+        // banning one of those two, a single corridor remained — blocked corridor
+        // meant a failed leg. The real target keeps the horizontal-entry rule.
+        !isLastLeg,
       );
 
       if (!legResult) {
@@ -943,7 +950,7 @@ export function routeAllEdges(
           penalties.length > 0 ? penalties : undefined,
           sigType, noSourceStub, noTargetStub, excludeDir, reservedAtTarget,
           undefined, legSrcExitsRight, legTgtEntersLeft,
-          undefined, penaltySpatialIdx,
+          undefined, penaltySpatialIdx, undefined, !isLastLeg,
         );
       }
 
@@ -954,13 +961,32 @@ export function routeAllEdges(
         } else {
           allWaypoints.push(...legResult.waypoints);
         }
+        continue;
+      }
+
+      // This leg has no A* route. Bridge just this leg with a naive orthogonal
+      // bend and keep the routed legs: previously one unroutable leg discarded the
+      // whole cable's routing for orthogonalize(allPoints), which knows nothing
+      // about obstacles — so the cable jumped to a polyline straight through
+      // devices, and jumped back when the handle moved one grid step.
+      legFellBack = true;
+      const bridge = orthogonalize([{ x: from.x, y: from.y }, { x: to.x, y: to.y }]);
+      if (allWaypoints.length > 0) {
+        allWaypoints.push(...bridge.slice(1));
       } else {
-        allFailed = true;
-        break;
+        allWaypoints.push(...bridge);
+      }
+      // Keep the direction chain coherent for the next leg's excludeDir.
+      const lastA = bridge[bridge.length - 2];
+      const lastB = bridge[bridge.length - 1];
+      if (lastA && lastB) {
+        prevArrivalDir = Math.abs(lastB.x - lastA.x) >= Math.abs(lastB.y - lastA.y)
+          ? (lastB.x - lastA.x >= 0 ? 0 : 2)
+          : (lastB.y - lastA.y >= 0 ? 1 : 3);
       }
     }
 
-    if (!allFailed && allWaypoints.length >= 2) {
+    if (allWaypoints.length >= 2) {
       const svgPath = waypointsToSvgPath(allWaypoints);
       const segments = extractSegments(allWaypoints);
       const midIdx = Math.floor(allWaypoints.length / 2);
@@ -968,13 +994,15 @@ export function routeAllEdges(
         edgeId: ep.edge.id, waypoints: allWaypoints, segments, svgPath,
         labelX: allWaypoints[midIdx]?.x ?? ep.sourceX,
         labelY: allWaypoints[midIdx]?.y ?? ep.sourceY,
-        turns: "manual", status: "good", signalType: sigType,
+        turns: legFellBack ? "manual-partial" : "manual", status: "good", signalType: sigType,
       };
       routeStates.push(rs);
       appendPenalties(rs);
       continue;
     }
 
+    // Last resort: not even one leg produced two points. Per-leg bridging above
+    // means an unroutable leg no longer lands here — this is the empty-route guard.
     const fallbackWp = simplifyWaypoints(orthogonalize(allPoints));
     const fbSvg = waypointsToSvgPath(fallbackWp);
     const fbSegs = extractSegments(fallbackWp);
