@@ -52,6 +52,7 @@ import { computeBundleTrunk, type BundleEndpoint } from "./routing/bundleRoute";
 import { buildHandleSnapshot } from "./routing/handleSnapshot";
 import { requestRoutes, setRoutingResultHandler, cancelRouting as cancelRoutingClient, type RoutingResult } from "./routing/routingClient";
 import { reconcileWaypointNodes, syncEdgesFromWaypointNodes, spliceWaypointsForRemovedNodes } from "./waypointSync";
+import { computeHandleInsertion } from "./edgeHandles";
 import { orthogonalize, extractSegments, segmentsCross, type RoutedEdge, type CrossingPoint } from "./edgeRouter";
 import { simplifyWaypoints, waypointsToSvgPath, waypointsToSvgPathWithHops } from "./pathfinding";
 import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, areSignalPairsCompatible, effectiveSignalType } from "./connectorTypes";
@@ -452,6 +453,10 @@ interface SchematicState {
   collapseStubsForEdge: (edgeId: string) => void;
 
   // Manual edge routing
+  /** Add one routing handle to `edgeId` at a canvas position, selecting the edge so the
+   *  new handle is visible. Shared by "Add Handle" and double-click on a connection.
+   *  Returns false when the edge has no drawn route to project onto yet. */
+  addRoutingHandleAt: (edgeId: string, flowX: number, flowY: number) => boolean;
   setManualWaypoints: (edgeId: string, waypoints: { x: number; y: number }[]) => void;
   clearManualWaypoints: (edgeId: string) => void;
   /** Strip manual waypoints from EVERY connection so the whole schematic re-auto-routes
@@ -6121,6 +6126,37 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       }),
     });
     get().saveToLocalStorage();
+  },
+
+  addRoutingHandleAt: (edgeId, flowX, flowY) => {
+    const state = get();
+    const edge = state.edges.find((e) => e.id === edgeId);
+    if (!edge) return false;
+
+    const insertion = computeHandleInsertion(
+      edge,
+      state.routedEdges[edgeId],
+      { x: flowX, y: flowY },
+      GRID_SIZE,
+      state.nodes,
+    );
+    if (!insertion) return false;
+
+    // patchEdgeData / setManualWaypoints each push their own undo entry; the selection
+    // write below must ride along too, so the whole thing is one Ctrl+Z.
+    get().runAsSingleUndoStep(() => {
+      if (insertion.kind === "stub") {
+        get().patchEdgeData(edgeId, { [insertion.field]: insertion.waypoints });
+      } else {
+        get().setManualWaypoints(edgeId, insertion.waypoints);
+      }
+      // The handle only renders while its edge is selected — select it, or the user
+      // double-clicks and apparently nothing happens.
+      set({
+        edges: get().edges.map((e) => (!!e.selected === (e.id === edgeId) ? e : { ...e, selected: e.id === edgeId })),
+      });
+    });
+    return true;
   },
 
   setManualWaypoints: (edgeId, waypoints) => {

@@ -1621,6 +1621,16 @@ function SchematicCanvas() {
       snapToGrid
       snapGrid={[GRID_SIZE, GRID_SIZE]}
       nodeExtent={undefined}
+      onEdgeDoubleClick={(event, edge) => {
+        // Double-click on a cable drops a routing handle where you clicked — the same
+        // thing the context menu's "Add Handle" does, without the two-step detour.
+        // Labels handle their own double-clicks (pick up / edit length) and sit in the
+        // EdgeLabelRenderer layer, so they never reach this.
+        event.preventDefault();
+        event.stopPropagation();
+        const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        useSchematicStore.getState().addRoutingHandleAt(edge.id, flowPos.x, flowPos.y);
+      }}
       onEdgeContextMenu={(event, edge) => {
         event.preventDefault();
         const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
