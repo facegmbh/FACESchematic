@@ -264,3 +264,31 @@ describe("legend, drawing block, revisions, notes", () => {
     expect(list.pages[0].notes[0].xM).toBeCloseTo(12);
   });
 });
+
+describe("images and covers", () => {
+  it("accepts an https image reference on a group and rejects other schemes", () => {
+    const { pageId } = handlers.create_floorplan({}) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS", imageUrl: "https://img.example/dm6se.png" }) as { groupId: string };
+    expect(floorplans()[0].groups[0].imageUrl).toBe("https://img.example/dm6se.png");
+    expect(() => handlers.update_floorplan_group({ pageId, groupId: g.groupId, imageUrl: "ftp://nope" })).toThrow(/https URL/);
+    handlers.update_floorplan_group({ pageId, groupId: g.groupId, imageUrl: "" });
+    expect(floorplans()[0].groups[0].imageUrl).toBeUndefined();
+    const list = handlers.list_floorplans({}) as { pages: { groups: { hasUploadedImage: boolean }[] }[] };
+    expect(list.pages[0].groups[0].hasUploadedImage).toBe(false);
+  });
+
+  it("set_floorplan_masks replaces the covers in paper mm and rejects off-sheet rects", () => {
+    const { pageId } = handlers.create_floorplan({}) as Summary;
+    const res = handlers.set_floorplan_masks({ pageId, masks: [{ xMm: 600, yMm: 300, wMm: 150, hMm: 120 }, { xMm: 10, yMm: 10, wMm: 20, hMm: 20 }] }) as { maskCount: number };
+    expect(res.maskCount).toBe(2);
+    expect(floorplans()[0].masks).toHaveLength(2);
+    expect(floorplans()[0].masks[0]).toMatchObject({ positionMm: { x: 600, y: 300 }, sizeMm: { w: 150, h: 120 } });
+    // A1 landscape is 841 × 594 mm
+    expect(() => handlers.set_floorplan_masks({ pageId, masks: [{ xMm: 800, yMm: 10, wMm: 100, hMm: 10 }] })).toThrow(/off the sheet/);
+    expect(() => handlers.set_floorplan_masks({ pageId, masks: [{ xMm: 0, yMm: 0, wMm: 0, hMm: 10 }] })).toThrow(/positive/);
+    handlers.set_floorplan_masks({ pageId, masks: [] });
+    expect(floorplans()[0].masks).toHaveLength(0);
+    const list = handlers.list_floorplans({}) as { pages: { masks: unknown[] }[] };
+    expect(list.pages[0].masks).toEqual([]);
+  });
+});

@@ -237,3 +237,35 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
   }
   throw new Error(`Unsupported file type "${ext || file.type || "unknown"}". Use a PDF or an image.`);
 }
+
+/**
+ * Fetch a remote image into a data URL so jsPDF can embed it. Draws through a canvas
+ * with an anonymous CORS request; hosts that refuse CORS make this resolve to undefined
+ * rather than throw, so a legend row simply prints without its picture. Capped to a few
+ * seconds — an export must never hang on a slow image host.
+ */
+export function fetchImageAsDataUrl(url: string, timeoutMs = 4000): Promise<string | undefined> {
+  if (url.startsWith("data:")) return Promise.resolve(url);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const timer = setTimeout(() => resolve(undefined), timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(undefined); return; }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch {
+        // Tainted canvas (no CORS) — nothing embeddable.
+        resolve(undefined);
+      }
+    };
+    img.onerror = () => { clearTimeout(timer); resolve(undefined); };
+    img.src = url;
+  });
+}

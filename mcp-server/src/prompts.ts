@@ -93,6 +93,7 @@ const FLOORPLAN = `You are annotating an architect's floor plan in EasySchematic
 5. Fill the legend with set_floorplan_legend: headline, notes heading and installation notes (one per line: mounting method, ceiling cut-out, cable type, reinforcement). Write them in the user's language.
 6. Fill the drawing block with set_floorplan_drawing_block: title (floor), subtitle (what the drawing shows), fields (project, client with address, scale via {{scale}}, sheet via {{sheetSize}}, date, drawn by, checked by), revisionHeaders in the user's language, and the first revision via revisions or add_floorplan_revision. Use tokens for values that already live in the project title block.
 7. Add site remarks next to the symbols they concern with add_floorplan_notes (boxed, short, imperative).
+7b. If the user wants the architect's own legend, revision table or title block gone from the print, cover them with set_floorplan_masks (paper mm) and place ours over the same spots — ask for the rough position on the sheet if you cannot infer it.
 8. Finish by calling list_floorplans once more and summarising what is on the sheet; remind the user to export the PDF from the floorplan toolbar.`;
 
 const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: string }> = {

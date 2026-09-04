@@ -493,6 +493,7 @@ export const TOOLS: ToolDef[] = [
         labelPrefix: { type: "string", description: "Numbering seed: \"1.1\" → 1.1, 1.2 …; \"SB.\" → SB.1, SB.2 …" },
         templateId: { type: "string", description: "Device template this group stands for (devices of that template join it when dropped in the editor)." },
         imageCaption: { type: "string", description: "Caption for the group's product image in the legend, e.g. \"DM6SE\"." },
+        imageUrl: { type: "string", description: "https URL of the product shot for the legend. Defaults to the template's image when templateId is given." },
         hiddenInLegend: { type: "boolean", description: "Keep the group off the legend box." },
       },
       required: ["pageId", "label"],
@@ -514,6 +515,7 @@ export const TOOLS: ToolDef[] = [
         labelPrefix: { type: "string" },
         templateId: { type: "string" },
         imageCaption: { type: "string" },
+        imageUrl: { type: "string", description: "https URL of the product shot; empty string removes it." },
         hiddenInLegend: { type: "boolean" },
       },
       required: ["pageId", "groupId"],
@@ -731,6 +733,32 @@ export const TOOLS: ToolDef[] = [
       type: "object",
       properties: { pageId: { type: "string" }, noteId: { type: "string" } },
       required: ["pageId", "noteId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_floorplan_masks",
+    description:
+      "Replace the white covers laid over the architect's plan — the way to take its legend, revision table, notes or title block out of the print so ours stand alone. Rectangles are in PAPER millimetres from the sheet's top-left corner (the sheet has the plan's format; list_floorplans reports our legend's and drawing block's positions in the same units). Pass [] to remove all covers. Only use where the user wants parts of the original plan gone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        masks: {
+          type: "array",
+          maxItems: 100,
+          items: {
+            type: "object",
+            properties: {
+              xMm: { type: "number" }, yMm: { type: "number" },
+              wMm: { type: "number" }, hMm: { type: "number" },
+            },
+            required: ["xMm", "yMm", "wMm", "hMm"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["pageId", "masks"],
       additionalProperties: false,
     },
   },

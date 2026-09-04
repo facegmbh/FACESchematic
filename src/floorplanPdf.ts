@@ -11,11 +11,13 @@ import type { FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode,
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
+import { fetchImageAsDataUrl } from "./floorplanUnderlay";
 import {
   buildLegendRows,
   layoutDrawingBlock,
   layoutNote,
   legendHeightMm,
+  legendRowImage,
   symbolLabelAnchor,
   symbolPolygon,
   DB_DISCLAIMER_FONT_MM,
@@ -87,7 +89,7 @@ function drawSymbol(doc: jsPDF, group: FloorplanSymbolGroup, cx: number, cy: num
 }
 
 /** Legend box: one row per symbol group, then the free-text installation notes. */
-function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[]) {
+function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>) {
   const { positionMm: pos, widthMm } = page.legend;
   const heightMm = legendHeightMm(rows, page.legend);
 
@@ -116,7 +118,8 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     drawSymbol(doc, { id: row.groupId, label: row.label, color: row.color, shape: row.shape }, innerX + page.symbolSizeMm / 2, centerY, page.symbolSizeMm);
 
     const textX = innerX + page.symbolSizeMm + 2;
-    const imageW = page.legend.showImages && row.imageSrc ? 22 : 0;
+    const rowImage = images.get(row.groupId);
+    const imageW = page.legend.showImages && rowImage ? 22 : 0;
     const textW = Math.max(10, innerW - (textX - innerX) - imageW - 2);
 
     doc.setFont("Inter", "bold");
@@ -131,11 +134,11 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
       doc.text(row.description, textX, centerY + 2.8, { baseline: "middle", maxWidth: textW });
     }
 
-    if (page.legend.showImages && row.imageSrc) {
+    if (page.legend.showImages && rowImage) {
       const imgH = rowH - 3;
       const imgX = innerX + innerW - imageW;
       try {
-        doc.addImage(row.imageSrc, imageFormat(row.imageSrc), imgX, y + 1.5, imageW - 6, imgH, undefined, "FAST");
+        doc.addImage(rowImage, imageFormat(rowImage), imgX, y + 1.5, imageW - 6, imgH, undefined, "FAST");
       } catch {
         // A legend image that jsPDF can't decode must not take the whole export down.
       }
@@ -355,6 +358,12 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       }
     }
 
+    // Covers: white over whatever part of the architect's plan was taken out.
+    doc.setFillColor(255, 255, 255);
+    for (const mask of page.masks) {
+      doc.rect(mask.positionMm.x, mask.positionMm.y, mask.sizeMm.w, mask.sizeMm.h, "F");
+    }
+
     // Content border
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.12);
@@ -381,7 +390,18 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     const rows = buildLegendRows(page);
     const notes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
     if (page.legend.visible && (rows.length > 0 || notes.length > 0)) {
-      drawLegend(doc, page, rows, notes);
+      // Uploaded images are data URLs already; remote references are fetched now so the
+      // legend prints the same picture the screen shows — when the host allows it.
+      const images = new Map<string, string>();
+      if (page.legend.showImages) {
+        await Promise.all(rows.map(async (row) => {
+          const src = legendRowImage(row);
+          if (!src) return;
+          const data = await fetchImageAsDataUrl(src);
+          if (data) images.set(row.groupId, data);
+        }));
+      }
+      drawLegend(doc, page, rows, notes, images);
     }
 
     if (page.drawingBlock.visible) {

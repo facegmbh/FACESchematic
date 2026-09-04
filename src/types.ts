@@ -895,8 +895,12 @@ export interface FloorplanSymbolGroup {
   shape: FloorplanSymbolShape;
   /** Legend sub-line, e.g. "Bose DM6SE schwarz | Kabel: 2x2,5 mm²". */
   description?: string;
-  /** Product shot for the legend, as a data URL. */
+  /** Product shot for the legend, as a data URL — the print-safe copy jsPDF can embed. */
   imageSrc?: string;
+  /** Remote reference for the product shot: the device template's image today, the Odoo
+   *  product image later. Shown on screen directly; the PDF export fetches it into a data
+   *  URL when the host allows, and an uploaded imageSrc always wins. */
+  imageUrl?: string;
   /** Caption next to the product shot, e.g. "DM6SE". */
   imageCaption?: string;
   /** Template this group stands for. Devices dropped on the plan land in the group
@@ -944,6 +948,18 @@ export interface FloorplanLegendBox {
   notesTitle?: string;
   /** One line per note. */
   notes?: string[];
+  /** Stretch the box below its content, in paper mm — lets the legend sit exactly over
+   *  the architect's legend instead of leaving a strip of it showing. */
+  minHeightMm?: number;
+}
+
+/** A white cover laid over part of the underlay — hides the architect's own legend,
+ *  title block or notes so the plan carries one set of boxes: ours. */
+export interface FloorplanMask {
+  id: string;
+  /** Top-left corner on the sheet, in paper mm. */
+  positionMm: { x: number; y: number };
+  sizeMm: { w: number; h: number };
 }
 
 /** One row of a drawing block's revision table — the "Index" history every issued plan
@@ -995,6 +1011,9 @@ export interface FloorplanDrawingBlock {
   showNorthArrow: boolean;
   /** Clockwise rotation of the north arrow in degrees; 0 points up the sheet. */
   northRotationDeg: number;
+  /** Stretch the block below its content, in paper mm; the title band takes the extra
+   *  room. Lets the block cover the architect's title block exactly. */
+  minHeightMm?: number;
 }
 
 /** Free text placed on the plan — installation notes, cable-route remarks, anything the
@@ -1041,6 +1060,8 @@ export interface FloorplanPage {
   drawingBlock: FloorplanDrawingBlock;
   /** Free text notes on the plan. */
   notes: FloorplanNote[];
+  /** White covers over parts of the underlay. */
+  masks: FloorplanMask[];
   /** Show the fixed project title block in the sheet corner as well. Off by default on
    *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;

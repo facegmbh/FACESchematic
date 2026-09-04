@@ -26,6 +26,8 @@ import {
   formatPlanDate,
   matchPaperToSize,
   fillSheetPlacement,
+  legendRowImage,
+  rectFromDrag,
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
@@ -62,6 +64,7 @@ function makePage(over: Partial<FloorplanPage> = {}): FloorplanPage {
     legend: createDefaultLegend(paper),
     drawingBlock: createDefaultDrawingBlock(paper),
     notes: [],
+    masks: [],
     showTitleBlock: false,
     symbolSizeMm: 6,
     labelSizeMm: 3.5,
@@ -237,17 +240,32 @@ describe("legend", () => {
     makeSymbol({ id: "s3", groupId: "g2", label: "SB.1" }),
   ];
 
-  it("lists one row per group with its symbol count", () => {
-    const page = makePage({ groups, symbols });
+  it("lists one row per group with its symbol count, hiding unused groups when asked", () => {
+    const page = makePage({ groups, symbols, legend: { ...createDefaultLegend(paper), onlyUsedGroups: true } });
     const rows = buildLegendRows(page);
     expect(rows.map((r) => r.label)).toEqual(["LS Gastro", "Subwoofer"]); // g3 has no symbols
     expect(rows[0].count).toBe(2);
     expect(rows[1].count).toBe(1);
   });
 
-  it("includes empty groups when the box is set to show all", () => {
-    const page = makePage({ groups, symbols, legend: { ...createDefaultLegend(paper), onlyUsedGroups: false } });
+  it("lists every group by default — a group is created on purpose", () => {
+    const page = makePage({ groups, symbols });
+    expect(page.legend.onlyUsedGroups).toBe(false);
     expect(buildLegendRows(page).map((r) => r.label)).toEqual(["LS Gastro", "Subwoofer", "Unused"]);
+  });
+
+  it("stretches to a minimum height so it can cover the architect's legend", () => {
+    const page = makePage({ groups, symbols });
+    const rows = buildLegendRows(page);
+    const natural = legendHeightMm(rows, page.legend);
+    expect(legendHeightMm(rows, { ...page.legend, minHeightMm: natural + 40 })).toBeCloseTo(natural + 40);
+    expect(legendHeightMm(rows, { ...page.legend, minHeightMm: 5 })).toBeCloseTo(natural);
+  });
+
+  it("prefers the uploaded image over the remote reference", () => {
+    expect(legendRowImage({ imageSrc: "data:x", imageUrl: "https://img" })).toBe("data:x");
+    expect(legendRowImage({ imageUrl: "https://img" })).toBe("https://img");
+    expect(legendRowImage({})).toBeUndefined();
   });
 
   it("honors per-group hiding", () => {
@@ -458,5 +476,37 @@ describe("sheet adopts the plan's format", () => {
     expect(fitted.sizeMm.w).toBeCloseTo(fitted.sizeMm.h);
     expect(fitted.sizeMm.w).toBeCloseTo(sheet.w);
     expect(fitted.positionMm.y).toBeGreaterThan(0);
+  });
+});
+
+describe("masks", () => {
+  it("normalizes a drag in any direction into a top-left rect clamped to the sheet", () => {
+    const r = rectFromDrag({ x: 300, y: 200 }, { x: 100, y: 50 }, paper);
+    expect(r.positionMm).toEqual({ x: 100, y: 50 });
+    expect(r.sizeMm).toEqual({ w: 200, h: 150 });
+    const clamped = rectFromDrag({ x: -20, y: 10 }, { x: 5000, y: 20 }, paper);
+    expect(clamped.positionMm.x).toBe(0);
+    expect(clamped.positionMm.x + clamped.sizeMm.w).toBeCloseTo(sheetSizeMm(paper).w);
+  });
+});
+
+describe("drawing block min height", () => {
+  it("gives the extra height to the title band and shifts the sections below", () => {
+    const ctx = {
+      titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "" },
+      page: { label: "EG", scaleDenominator: 50, paperId: "iso-a1", orientation: "portrait" as const },
+      projectName: "",
+    };
+    const block = createDefaultDrawingBlock(paper);
+    const natural = layoutDrawingBlock(block, ctx, { hasLogo: false });
+    const stretched = layoutDrawingBlock({ ...block, minHeightMm: natural.heightMm + 50 }, ctx, { hasLogo: false });
+    expect(stretched.heightMm).toBeCloseTo(natural.heightMm + 50);
+    const t0 = natural.sections.find((s) => s.kind === "title")!;
+    const t1 = stretched.sections.find((s) => s.kind === "title")!;
+    expect(t1.heightMm).toBeCloseTo(t0.heightMm + 50);
+    const f0 = natural.sections.find((s) => s.kind === "fields")!;
+    const f1 = stretched.sections.find((s) => s.kind === "fields")!;
+    expect(f1.yMm).toBeCloseTo(f0.yMm + 50);
+    expect(stretched.fieldCells[0].yMm).toBeCloseTo(natural.fieldCells[0].yMm + 50);
   });
 });

@@ -42,6 +42,7 @@ import type {
   FloorplanLegendBox,
   FloorplanDrawingBlock,
   FloorplanNote,
+  FloorplanMask,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -854,6 +855,9 @@ interface SchematicState {
   addFloorplanNote: (pageId: string, note: Partial<Omit<FloorplanNote, "id">> & Pick<FloorplanNote, "positionMm">) => string;
   updateFloorplanNote: (pageId: string, noteId: string, patch: Partial<Omit<FloorplanNote, "id">>) => void;
   removeFloorplanNote: (pageId: string, noteId: string) => void;
+  addFloorplanMask: (pageId: string, mask: Omit<FloorplanMask, "id">) => string;
+  updateFloorplanMask: (pageId: string, maskId: string, patch: Partial<Omit<FloorplanMask, "id">>) => void;
+  removeFloorplanMask: (pageId: string, maskId: string) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -939,6 +943,11 @@ function nextFloorplanNoteId(): string {
   return `fpnote-${++floorplanNoteIdCounter}`;
 }
 
+let floorplanMaskIdCounter = 0;
+function nextFloorplanMaskId(): string {
+  return `fpmask-${++floorplanMaskIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -1021,6 +1030,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const note of page.notes ?? []) {
         const nm2 = note.id.match(/^fpnote-(\d+)$/);
         if (nm2) floorplanNoteIdCounter = Math.max(floorplanNoteIdCounter, Number(nm2[1]));
+      }
+      for (const mask of page.masks ?? []) {
+        const mm2 = mask.id.match(/^fpmask-(\d+)$/);
+        if (mm2) floorplanMaskIdCounter = Math.max(floorplanMaskIdCounter, Number(mm2[1]));
       }
       continue;
     }
@@ -5241,6 +5254,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       legend: createDefaultLegend(base),
       drawingBlock: createDefaultDrawingBlock(base),
       notes: [],
+      masks: [],
       // The movable drawing block carries the title-block data; the fixed corner block
       // would only duplicate it.
       showTitleBlock: false,
@@ -5299,6 +5313,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         revisionHeaders: [...src.drawingBlock.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],
       },
       notes: src.notes.map((n) => ({ ...n, id: nextFloorplanNoteId() })),
+      masks: src.masks.map((m) => ({ ...m, id: nextFloorplanMaskId() })),
       underlay: src.underlay ? { ...src.underlay } : undefined,
     };
     const idx = state.pages.findIndex((p) => p.id === pageId);
@@ -5561,6 +5576,38 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, notes: p.notes.filter((n) => n.id !== noteId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanMask: (pageId, mask) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanMaskId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, masks: [...p.masks, { ...mask, id }] })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanMask: (pageId, maskId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, masks: p.masks.map((m) => m.id === maskId ? { ...m, ...patch } : m) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanMask: (pageId, maskId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, masks: p.masks.filter((m) => m.id !== maskId) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();

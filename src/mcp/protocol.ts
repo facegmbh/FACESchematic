@@ -71,7 +71,8 @@ export type CommandType =
   | "add_floorplan_revision"
   | "add_floorplan_notes"
   | "update_floorplan_note"
-  | "delete_floorplan_note";
+  | "delete_floorplan_note"
+  | "set_floorplan_masks";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -373,6 +374,9 @@ export interface FloorplanGroupSpec {
   templateId?: string;
   /** Caption next to the group's product image in the legend, e.g. "DM6SE". */
   imageCaption?: string;
+  /** Remote product image (https URL). Defaults to the template's image when templateId
+   *  is given; the Odoo product image can be passed here later. */
+  imageUrl?: string;
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
 }
@@ -494,6 +498,20 @@ export interface UpdateFloorplanNoteParams extends FloorplanPageRef, Partial<Flo
 
 export interface DeleteFloorplanNoteParams extends FloorplanPageRef {
   noteId: string;
+}
+
+export interface FloorplanMaskSpec {
+  /** Top-left corner and size in PAPER mm from the sheet's top-left corner — covers hide
+   *  parts of the printed sheet (the architect's legend, title block), not building spots. */
+  xMm: number;
+  yMm: number;
+  wMm: number;
+  hMm: number;
+}
+
+export interface SetFloorplanMasksParams extends FloorplanPageRef {
+  /** Replaces every white cover on the page. Pass [] to remove them all. */
+  masks: FloorplanMaskSpec[];
 }
 
 // ---------------------------------------------------------------------------

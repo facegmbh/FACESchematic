@@ -10,7 +10,10 @@ import {
   layoutDrawingBlock,
   layoutNote,
   legendHeightMm,
+  legendRowImage,
   measureRealDistanceMm,
+  rectFromDrag,
+  MASK_MIN_SIZE_MM,
   sheetSizeMm,
   symbolLabelAnchor,
   symbolPolygon,
@@ -27,6 +30,7 @@ import TitleBlockSVG from "./TitleBlockSVG";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
+import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
 
 const IN_TO_MM = 25.4;
@@ -48,7 +52,8 @@ type Selection =
   | { kind: "underlay" }
   | { kind: "legend" }
   | { kind: "drawing" }
-  | { kind: "note"; id: string };
+  | { kind: "note"; id: string }
+  | { kind: "mask"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -60,6 +65,11 @@ type DragState =
   | { kind: "drawing-resize"; startClient: Vec2; startWidth: number }
   | { kind: "note"; noteId: string; startClient: Vec2; start: Vec2 }
   | { kind: "note-resize"; noteId: string; startClient: Vec2; startWidth: number }
+  | { kind: "legend-height"; startClient: Vec2; startHeight: number }
+  | { kind: "drawing-height"; startClient: Vec2; startHeight: number }
+  | { kind: "mask-draw"; start: Vec2; current: Vec2 }
+  | { kind: "mask"; maskId: string; startClient: Vec2; start: Vec2 }
+  | { kind: "mask-resize"; maskId: string; startClient: Vec2; startSize: { w: number; h: number } }
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape plus its number. */
@@ -96,6 +106,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const addFloorplanNote = useSchematicStore((s) => s.addFloorplanNote);
   const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
+  const addFloorplanMask = useSchematicStore((s) => s.addFloorplanMask);
+  const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
+  const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const customTemplates = useSchematicStore((s) => s.customTemplates);
   const schematicName = useSchematicStore((s) => s.schematicName);
   const calibrateFloorplan = useSchematicStore((s) => s.calibrateFloorplan);
   const addToast = useSchematicStore((s) => s.addToast);
@@ -266,14 +280,19 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     if (activeGroupId) return activeGroupId;
     if (!data) return null;
     const modelLine = [data.manufacturer, data.modelNumber ?? data.model].filter(Boolean).join(" ");
+    // The template's product shot (community library today, Odoo product image later)
+    // becomes the legend row's picture without anyone uploading one.
+    const template = data.templateId ? getTemplateById(data.templateId, customTemplates) : undefined;
     const id = addFloorplanGroup(page.id, {
       label: data.model ?? data.label,
       description: modelLine || undefined,
       templateId: data.templateId,
+      imageUrl: template?.imageUrl || undefined,
+      imageCaption: data.modelNumber ?? undefined,
     });
     onActiveGroupChange(id);
     return id;
-  }, [page.groups, page.id, activeGroupId, addFloorplanGroup, onActiveGroupChange]);
+  }, [page.groups, page.id, activeGroupId, addFloorplanGroup, onActiveGroupChange, customTemplates]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     const nodeId = e.dataTransfer.getData(FLOORPLAN_DEVICE_MIME);
@@ -301,8 +320,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
     if (tool === "place" || tool === "note") return; // handled on click
+    if (tool === "erase") {
+      // Drag out a white cover — the only way to "remove" something from a raster plan.
+      setPanning(null);
+      const start = clientToPaperMm(e.clientX, e.clientY);
+      setDragging({ kind: "mask-draw", start, current: start });
+      return;
+    }
     setSelection({ kind: "none" });
-  }, [tool, spaceHeld, panMode]);
+  }, [tool, spaceHeld, panMode, clientToPaperMm]);
 
   const handleSheetClick = useCallback((e: React.MouseEvent) => {
     if (didMoveRef.current) return;
@@ -413,6 +439,22 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       } else if (dragging.kind === "note-resize") {
         const d = clientDeltaToMm(e.clientX - dragging.startClient.x, 0);
         updateFloorplanNote(page.id, dragging.noteId, { widthMm: Math.max(15, snap(dragging.startWidth + d.x, free)) });
+      } else if (dragging.kind === "legend-height") {
+        const d = clientDeltaToMm(0, e.clientY - dragging.startClient.y);
+        updateFloorplanLegend(page.id, { minHeightMm: Math.max(0, snap(dragging.startHeight + d.y, free)) });
+      } else if (dragging.kind === "drawing-height") {
+        const d = clientDeltaToMm(0, e.clientY - dragging.startClient.y);
+        updateFloorplanDrawingBlock(page.id, { minHeightMm: Math.max(0, snap(dragging.startHeight + d.y, free)) });
+      } else if (dragging.kind === "mask-draw") {
+        setDragging({ ...dragging, current: clientToPaperMm(e.clientX, e.clientY) });
+      } else if (dragging.kind === "mask") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanMask(page.id, dragging.maskId, { positionMm: { x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) } });
+      } else if (dragging.kind === "mask-resize") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanMask(page.id, dragging.maskId, {
+          sizeMm: { w: Math.max(MASK_MIN_SIZE_MM, snap(dragging.startSize.w + d.x, free)), h: Math.max(MASK_MIN_SIZE_MM, snap(dragging.startSize.h + d.y, free)) },
+        });
       }
       return;
     }
@@ -428,13 +470,24 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setViewport(vpRef.current.zoom, { x: panning.startPan.x + dx, y: panning.startPan.y + dy });
       }
     }
-  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, setViewport]);
+  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, setViewport]);
 
   const handleMouseUp = useCallback(() => {
+    if (dragging?.kind === "mask-draw") {
+      const rect = rectFromDrag(dragging.start, dragging.current, page);
+      if (rect.sizeMm.w >= MASK_MIN_SIZE_MM && rect.sizeMm.h >= MASK_MIN_SIZE_MM) {
+        const id = addFloorplanMask(page.id, {
+          positionMm: { x: snap(rect.positionMm.x, false), y: snap(rect.positionMm.y, false) },
+          sizeMm: { w: snap(rect.sizeMm.w, false), h: snap(rect.sizeMm.h, false) },
+        });
+        setSelection({ kind: "mask", id });
+        onToolChange("select");
+      }
+    }
     setDragging(null);
     setPanning(null);
     setDidMove(false);
-  }, []);
+  }, [dragging, page, addFloorplanMask, onToolChange]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -453,7 +506,12 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       removeFloorplanNote(page.id, selection.id);
       setSelection({ kind: "none" });
     }
-  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, editingNoteId]);
+    if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "mask") {
+      e.preventDefault();
+      removeFloorplanMask(page.id, selection.id);
+      setSelection({ kind: "none" });
+    }
+  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, editingNoteId]);
 
   // ── Calibration dialog ───────────────────────────────────────────
   const calibDistanceMm = calibPicks.length === 2
@@ -499,7 +557,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" || tool === "erase" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -567,6 +625,59 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             className="absolute pointer-events-none"
             style={{ left: marginPx, top: marginPx, right: marginPx, bottom: marginPx, border: "0.72px solid #000" }}
           />
+
+          {/* Covers over the underlay — white, so what is under them is gone from the print */}
+          {page.masks.map((mask) => {
+            const isSel = selection.kind === "mask" && selection.id === mask.id;
+            return (
+              <div
+                key={mask.id}
+                data-floorplan-mask
+                className="absolute bg-white"
+                style={{
+                  left: mmToPx(mask.positionMm.x),
+                  top: mmToPx(mask.positionMm.y),
+                  width: mmToPx(mask.sizeMm.w),
+                  height: mmToPx(mask.sizeMm.h),
+                  outline: isSel ? "2px solid #3b82f6" : tool === "select" ? "1px dashed #cbd5e1" : undefined,
+                  outlineOffset: -1,
+                  cursor: tool === "select" ? "move" : "inherit",
+                  zIndex: isSel ? 6 : 5,
+                }}
+                onMouseDown={(e) => {
+                  if (tool !== "select") return;
+                  e.stopPropagation();
+                  didMoveRef.current = false;
+                  setSelection({ kind: "mask", id: mask.id });
+                  setDragging({ kind: "mask", maskId: mask.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...mask.positionMm } });
+                }}
+                title="Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove."
+              >
+                {isSel && (
+                  <div
+                    className="absolute bg-blue-500"
+                    style={{ right: -5, bottom: -5, width: 10, height: 10, cursor: "nwse-resize" }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      didMoveRef.current = false;
+                      setDragging({ kind: "mask-resize", maskId: mask.id, startClient: { x: e.clientX, y: e.clientY }, startSize: { ...mask.sizeMm } });
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          {/* Cover being drawn */}
+          {dragging?.kind === "mask-draw" && (() => {
+            const r = rectFromDrag(dragging.start, dragging.current, page);
+            return (
+              <div
+                className="absolute bg-white/80 border border-dashed border-blue-500 pointer-events-none"
+                style={{ left: mmToPx(r.positionMm.x), top: mmToPx(r.positionMm.y), width: mmToPx(r.sizeMm.w), height: mmToPx(r.sizeMm.h), zIndex: 45 }}
+              />
+            );
+          })()}
 
           {/* Symbols */}
           {page.symbols.map((symbol) => {
@@ -741,10 +852,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                         <div style={{ fontSize: mmToPx(2.6), color: "#333" }} className="truncate">{row.description}</div>
                       )}
                     </div>
-                    {page.legend.showImages && row.imageSrc && (
+                    {page.legend.showImages && legendRowImage(row) && (
                       <div className="flex items-center shrink-0" style={{ gap: mmToPx(1.5) }}>
                         <img
-                          src={row.imageSrc}
+                          src={legendRowImage(row)}
                           alt=""
                           style={{ height: mmToPx(LEGEND_ROW_WITH_IMAGE_MM - 3), width: mmToPx(18), objectFit: "contain" }}
                         />
@@ -778,6 +889,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       setDragging({ kind: "legend-resize", startClient: { x: e.clientX, y: e.clientY }, startWidth: page.legend.widthMm });
                     }}
                     title="Resize the legend box"
+                  />
+                  <div
+                    className="absolute bg-blue-500"
+                    style={{ bottom: -5, left: "50%", width: 10, height: 10, marginLeft: -5, cursor: "ns-resize" }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      didMoveRef.current = false;
+                      setDragging({ kind: "legend-height", startClient: { x: e.clientX, y: e.clientY }, startHeight: legendH });
+                    }}
+                    title="Stretch the legend box downwards (to cover what lies beneath)"
                   />
                 </>
               )}
@@ -899,6 +1020,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     }}
                     title="Resize the drawing block"
                   />
+                  <div
+                    className="absolute bg-blue-500"
+                    style={{ bottom: -5, left: "50%", width: 10, height: 10, marginLeft: -5, cursor: "ns-resize" }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      didMoveRef.current = false;
+                      setDragging({ kind: "drawing-height", startClient: { x: e.clientX, y: e.clientY }, startHeight: drawingLayout.heightMm });
+                    }}
+                    title="Stretch the drawing block downwards (the title band grows)"
+                  />
                 </>
               )}
             </div>
@@ -919,7 +1050,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           )}
 
           {/* Empty state */}
-          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && (
+          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
               Import the architect's drawing from the toolbar, then drag devices onto it.
             </div>
@@ -986,6 +1117,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title="Click the plan to add a text note (installation hint, remark)"
         >
           ✎ Note
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "erase" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => onToolChange(tool === "erase" ? "select" : "erase")}
+          title="Drag a white cover over part of the architect's plan to take it out (legend, notes, title block)"
+        >
+          ▭ Erase
         </button>
         <div className="border-l border-neutral-200 h-3" />
         <span className="text-neutral-500 px-1" title="Drawing scale">{formatScale(page.scaleDenominator)}</span>

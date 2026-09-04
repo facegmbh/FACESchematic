@@ -3,6 +3,7 @@ import { useSchematicStore } from "../store";
 import { resolveDeviceLabel } from "../displayName";
 import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, formatPlanDate, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
 import { importLegendImage } from "../floorplanUnderlay";
+import { getTemplateById } from "../templateApi";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
 import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup } from "../types";
 import { FLOORPLAN_TOKENS } from "../types";
@@ -42,6 +43,8 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
   const addFloorplanNote = useSchematicStore((s) => s.addFloorplanNote);
   const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
+  const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const customTemplates = useSchematicStore((s) => s.customTemplates);
   const addToast = useSchematicStore((s) => s.addToast);
 
   const block = page.drawingBlock;
@@ -201,27 +204,52 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
                       />
                     ))}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {group.imageSrc && (
-                      <img src={group.imageSrc} alt="" className="w-8 h-8 object-contain border border-neutral-200 rounded bg-white" />
-                    )}
-                    <button
-                      className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
-                      onClick={() => { imageTargetGroupRef.current = group.id; imageInputRef.current?.click(); }}
-                    >
-                      {group.imageSrc ? "Replace image" : "Product image…"}
-                    </button>
-                    {group.imageSrc && (
-                      <button
-                        className="px-1 py-0.5 text-neutral-400 hover:text-red-600"
-                        onClick={() => updateFloorplanGroup(page.id, group.id, { imageSrc: undefined, imageCaption: undefined })}
-                        title="Remove image"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                  {group.imageSrc && (
+                  {(() => {
+                    const shown = group.imageSrc || group.imageUrl;
+                    const templateImage = group.templateId ? getTemplateById(group.templateId, customTemplates)?.imageUrl : undefined;
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          {shown && (
+                            <img src={shown} alt="" className="w-8 h-8 object-contain border border-neutral-200 rounded bg-white" />
+                          )}
+                          <button
+                            className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
+                            onClick={() => { imageTargetGroupRef.current = group.id; imageInputRef.current?.click(); }}
+                            title="Upload a product shot (stored in the project, always printed)"
+                          >
+                            {group.imageSrc ? "Replace image" : "Upload image…"}
+                          </button>
+                          {templateImage && !group.imageSrc && group.imageUrl !== templateImage && (
+                            <button
+                              className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
+                              onClick={() => updateFloorplanGroup(page.id, group.id, { imageUrl: templateImage })}
+                              title="Use the device template's image"
+                            >
+                              Template image
+                            </button>
+                          )}
+                          {shown && (
+                            <button
+                              className="px-1 py-0.5 text-neutral-400 hover:text-red-600"
+                              onClick={() => updateFloorplanGroup(page.id, group.id, { imageSrc: undefined, imageUrl: undefined, imageCaption: undefined })}
+                              title="Remove image"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+                          value={group.imageUrl ?? ""}
+                          placeholder="Image URL (template today, Odoo product later)"
+                          onChange={(e) => updateFloorplanGroup(page.id, group.id, { imageUrl: e.target.value || undefined })}
+                          title="A remote image reference. Shown on screen; the PDF embeds it when the host allows — an uploaded image always wins."
+                        />
+                      </>
+                    );
+                  })()}
+                  {(group.imageSrc || group.imageUrl) && (
                     <input
                       className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
                       value={group.imageCaption ?? ""}
@@ -510,6 +538,25 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
               </label>
             )}
           </div>
+        </div>
+      </details>
+
+      {/* ── Covers (erased parts of the underlay) ─────────────────── */}
+      <details className="border-t border-neutral-200">
+        <summary className="px-2 pt-2 pb-1 font-semibold text-neutral-500 uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          Erased areas ({page.masks.length})
+        </summary>
+        <div className="px-2 pb-3 flex flex-col gap-1">
+          <p className="text-neutral-400 leading-snug">
+            White covers over the architect&apos;s plan — use <strong>▭ Erase</strong> on the sheet to drag one out over a
+            legend, a note or a title block you want gone. Drag to move, corner to resize, <kbd>Delete</kbd> to remove.
+          </p>
+          {page.masks.map((m, i) => (
+            <div key={m.id} className="flex items-center justify-between text-neutral-600 border border-neutral-200 rounded px-1.5 py-0.5">
+              <span>Cover {i + 1} · {Math.round(m.sizeMm.w)} × {Math.round(m.sizeMm.h)} mm</span>
+              <button className="px-1 text-neutral-400 hover:text-red-600" onClick={() => removeFloorplanMask(page.id, m.id)} title="Remove cover">✕</button>
+            </div>
+          ))}
         </div>
       </details>
 

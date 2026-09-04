@@ -6,9 +6,9 @@ import FloorplanRenderer from "./FloorplanRenderer";
 import type { FloorplanPage as FloorplanPageType } from "../types";
 
 /** Active tool on a floorplan page. `place` drops symbols of the active group on click,
- *  `note` drops a free text note, `calibrate` collects two reference points to scale
- *  the underlay. */
-export type FloorplanTool = "select" | "place" | "note" | "calibrate";
+ *  `note` drops a free text note, `erase` drags out a white cover over part of the
+ *  underlay, `calibrate` collects two reference points to scale the underlay. */
+export type FloorplanTool = "select" | "place" | "note" | "erase" | "calibrate";
 
 export default function FloorplanPage() {
   const activePage = useSchematicStore((s) => s.activePage);

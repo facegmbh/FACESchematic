@@ -63,6 +63,8 @@ import {
   type FloorplanNoteSpec,
   type UpdateFloorplanNoteParams,
   type DeleteFloorplanNoteParams,
+  type SetFloorplanMasksParams,
+  type FloorplanMaskSpec,
   FLOORPLAN_SHAPES,
 } from "./mcp/protocol";
 import {
@@ -361,6 +363,15 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
   if (spec.labelPrefix !== undefined) patch.labelPrefix = String(spec.labelPrefix) || undefined;
   if (spec.templateId !== undefined) patch.templateId = String(spec.templateId) || undefined;
   if (spec.imageCaption !== undefined) patch.imageCaption = String(spec.imageCaption) || undefined;
+  if (spec.imageUrl !== undefined) {
+    const url = String(spec.imageUrl).trim();
+    if (url && !/^(https?:|data:image\/)/i.test(url)) throw new CommandError("imageUrl must be an https URL (or a data:image URL).");
+    patch.imageUrl = url || undefined;
+  } else if (spec.templateId) {
+    // The template's product shot is the legend picture unless the caller brings one.
+    const template = getTemplateById(String(spec.templateId), st().customTemplates);
+    if (template?.imageUrl) patch.imageUrl = template.imageUrl;
+  }
   if (spec.hiddenInLegend !== undefined) patch.hiddenInLegend = Boolean(spec.hiddenInLegend) || undefined;
   return patch;
 }
@@ -388,6 +399,7 @@ function floorplanSummary(page: FloorplanPage) {
     groups: page.groups.map((g) => ({
       groupId: g.id, label: g.label, color: g.color, shape: g.shape, description: g.description,
       labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
+      imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption,
       symbolCount: counts.get(g.id) ?? 0,
     })),
     symbols: page.symbols.map((sym) => ({
@@ -397,13 +409,17 @@ function floorplanSummary(page: FloorplanPage) {
     legend: {
       visible: page.legend.visible, title: page.legend.title, notesTitle: page.legend.notesTitle,
       notes: page.legend.notes ?? [], showImages: page.legend.showImages, onlyUsedGroups: page.legend.onlyUsedGroups,
+      positionMm: page.legend.positionMm, widthMm: page.legend.widthMm, minHeightMm: page.legend.minHeightMm,
     },
+    /** White covers over the underlay, in paper mm. */
+    masks: page.masks.map((m) => ({ maskId: m.id, xMm: m.positionMm.x, yMm: m.positionMm.y, wMm: m.sizeMm.w, hMm: m.sizeMm.h })),
     drawingBlock: {
       visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
       fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),
       revisions: page.drawingBlock.revisions, revisionHeaders: page.drawingBlock.revisionHeaders,
       disclaimer: page.drawingBlock.disclaimer, showLogo: page.drawingBlock.showLogo,
       showNorthArrow: page.drawingBlock.showNorthArrow, northRotationDeg: page.drawingBlock.northRotationDeg,
+      positionMm: page.drawingBlock.positionMm, widthMm: page.drawingBlock.widthMm, minHeightMm: page.drawingBlock.minHeightMm,
     },
     notes: page.notes.map((n) => ({ noteId: n.id, text: n.text, ...paperToRealM(page, n.positionMm), widthMm: n.widthMm, fontSizeMm: n.fontSizeMm, boxed: n.boxed ?? false })),
   };
@@ -1343,6 +1359,26 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     if (!page.notes.some((n) => n.id === noteId)) throw new CommandError(`No note "${noteId}" on floorplan "${page.id}".`);
     st().removeFloorplanNote(page.id, noteId);
     return { removed: true, noteId };
+  },
+
+  set_floorplan_masks: (params) => {
+    const { pageId, masks } = (params ?? {}) as unknown as SetFloorplanMasksParams;
+    const page = requireFloorplan(pageId);
+    if (!Array.isArray(masks)) throw new CommandError("masks must be an array of { xMm, yMm, wMm, hMm } (paper mm); pass [] to clear.");
+    if (masks.length > MAX_BATCH_ITEMS) throw new CommandError(`Too many masks (${masks.length}); the maximum is ${MAX_BATCH_ITEMS}.`);
+    const sheet = sheetSizeMm(page);
+    const rects = masks.map((m: FloorplanMaskSpec, i) => {
+      const vals = [m?.xMm, m?.yMm, m?.wMm, m?.hMm];
+      if (vals.some((v) => typeof v !== "number" || !Number.isFinite(v))) throw new CommandError(`masks[${i}]: xMm, yMm, wMm and hMm must be finite numbers (paper mm).`);
+      if (m.wMm <= 0 || m.hMm <= 0) throw new CommandError(`masks[${i}]: wMm and hMm must be positive.`);
+      if (m.xMm < 0 || m.yMm < 0 || m.xMm + m.wMm > sheet.w + 0.01 || m.yMm + m.hMm > sheet.h + 0.01) {
+        throw new CommandError(`masks[${i}] is off the sheet — the sheet is ${Math.round(sheet.w)} × ${Math.round(sheet.h)} mm.`);
+      }
+      return { positionMm: { x: m.xMm, y: m.yMm }, sizeMm: { w: m.wMm, h: m.hMm } };
+    });
+    for (const existing of page.masks) st().removeFloorplanMask(page.id, existing.id);
+    const ids = rects.map((r) => st().addFloorplanMask(page.id, r));
+    return { pageId: page.id, maskCount: ids.length, maskIds: ids };
   },
 };
 

@@ -17,7 +17,7 @@ import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 44;
+export const CURRENT_SCHEMA_VERSION = 45;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -636,6 +636,19 @@ const migrations: Record<number, Migration> = {
       });
     }
     data.version = 44;
+    return data;
+  },
+  44: (data) => {
+    // v44 → v45: floorplan pages gain white cover masks over the underlay, and the legend
+    // box lists every group by default (onlyUsedGroups existed before, so existing
+    // boxes keep their setting).
+    if (Array.isArray(data.pages)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration page
+      data.pages = data.pages.map((page: any) =>
+        page?.type === "floorplan" ? { ...page, masks: Array.isArray(page.masks) ? page.masks : [] } : page,
+      );
+    }
+    data.version = 45;
     return data;
   },
 };

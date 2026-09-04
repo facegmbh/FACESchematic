@@ -89,3 +89,18 @@ describe("v43→v44 floorplan drawing block migration", () => {
     expect(out.pages[0].notes).toHaveLength(1);
   });
 });
+
+describe("v44→v45 floorplan masks migration", () => {
+  it("adds an empty masks list to floorplan pages and leaves others alone", () => {
+    const out = migrateSchematic({
+      version: 44, nodes: [], edges: [],
+      pages: [
+        { id: "floorplan-1", type: "floorplan", drawingBlock: {}, notes: [] },
+        { id: "printsheet-1", type: "print-sheet", viewports: [] },
+      ],
+    });
+    expect(out.version).toBe(CURRENT_SCHEMA_VERSION);
+    expect(out.pages[0].masks).toEqual([]);
+    expect(out.pages[1]).not.toHaveProperty("masks");
+  });
+});

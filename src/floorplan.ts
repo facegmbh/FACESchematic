@@ -16,6 +16,7 @@ import type {
   FloorplanDrawingBlock,
   FloorplanDrawingField,
   FloorplanLegendBox,
+  FloorplanMask,
   FloorplanNote,
   FloorplanPage,
   FloorplanRevision,
@@ -267,9 +268,16 @@ export interface LegendRow {
   shape: FloorplanSymbolGroup["shape"];
   description?: string;
   imageSrc?: string;
+  imageUrl?: string;
   imageCaption?: string;
   /** How many symbols of this group sit on the plan. */
   count: number;
+}
+
+/** What to show for a legend row's product shot: the uploaded copy first, else the
+ *  remote reference (template image now, Odoo product image later). */
+export function legendRowImage(row: Pick<LegendRow, "imageSrc" | "imageUrl">): string | undefined {
+  return row.imageSrc || row.imageUrl || undefined;
 }
 
 /** Legend rows for a page: one per symbol group, in group order. Honors the box's
@@ -288,6 +296,7 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
       shape: g.shape,
       description: g.description,
       imageSrc: g.imageSrc,
+      imageUrl: g.imageUrl,
       imageCaption: g.imageCaption,
       count: counts.get(g.id) ?? 0,
     }));
@@ -300,7 +309,9 @@ export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox): n
   const rowH = legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   let h = LEGEND_TITLE_MM + rows.length * rowH + LEGEND_PAD_MM * 2;
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
-  return h;
+  // A stretched box covers what sits under it — the planner's way of hiding the
+  // architect's legend without a separate cover.
+  return Math.max(h, legend.minHeightMm ?? 0);
 }
 
 export const LEGEND_PAD_MM = 4;
@@ -321,7 +332,9 @@ export function createDefaultLegend(page: Pick<FloorplanPage, "paperId" | "orien
     positionMm: { x: area.x + area.w - widthMm - 4, y: area.y + 4 },
     widthMm,
     showImages: true,
-    onlyUsedGroups: true,
+    // Groups are created on purpose — list them even before the first symbol lands, so
+    // the legend reads as the plan's key from the first minute.
+    onlyUsedGroups: false,
     notesTitle: "INSTALLATION NOTES",
     notes: [],
   };
@@ -474,7 +487,9 @@ export function nextDrawingFieldId(): string {
  *  title block through tokens, parked in the sheet's bottom-right corner. */
 export function createDefaultDrawingBlock(page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): FloorplanDrawingBlock {
   const area = drawingAreaMm(page);
-  const widthMm = Math.min(120, area.w * 0.32);
+  // Architects' title blocks run about 150–160 mm wide on A-series sheets; matching that
+  // lets ours cover theirs without a first resize.
+  const widthMm = Math.min(160, area.w * 0.32);
   const fields: FloorplanDrawingField[] = [
     { id: nextDrawingFieldId(), label: "Project", value: "{{showName}}", wide: true },
     { id: nextDrawingFieldId(), label: "Client", value: "{{venue}}", wide: true },
@@ -637,6 +652,20 @@ export function layoutDrawingBlock(
     y += DB_FOOTER_MM;
   }
 
+  // A stretched block gives the extra room to the title band — that is where architects'
+  // blocks carry their whitespace, so ours reads the same when laid over one.
+  const minH = block.minHeightMm ?? 0;
+  if (y < minH) {
+    const extra = minH - y;
+    const titleIdx = sections.findIndex((s) => s.kind === "title");
+    if (titleIdx >= 0) {
+      sections[titleIdx].heightMm += extra;
+      for (let i = titleIdx + 1; i < sections.length; i++) sections[i].yMm += extra;
+      for (const cell of fieldCells) cell.yMm += extra;
+    }
+    y = minH;
+  }
+
   return {
     widthMm: block.widthMm,
     heightMm: y,
@@ -742,4 +771,22 @@ export function fillSheetPlacement(
     return { positionMm: { x: 0, y: 0 }, sizeMm: { w: sheet.w, h: sheet.h } };
   }
   return fitRectInArea(underlay.naturalWidthPx, underlay.naturalHeightPx, { x: 0, y: 0, w: sheet.w, h: sheet.h });
+}
+
+// ── Masks ────────────────────────────────────────────────────────────
+
+/** Smallest cover worth keeping — anything smaller is a slipped click, not a mask. */
+export const MASK_MIN_SIZE_MM = 4;
+
+/** Normalize a drag from `a` to `b` into a top-left rect, clamped to the sheet. */
+export function rectFromDrag(
+  a: Vec2,
+  b: Vec2,
+  page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">,
+): Pick<FloorplanMask, "positionMm" | "sizeMm"> {
+  const p = clampToSheet(a, page);
+  const q = clampToSheet(b, page);
+  const x = Math.min(p.x, q.x);
+  const y = Math.min(p.y, q.y);
+  return { positionMm: { x, y }, sizeMm: { w: Math.abs(q.x - p.x), h: Math.abs(q.y - p.y) } };
 }

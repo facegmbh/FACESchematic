@@ -74,6 +74,16 @@ export default function FloorplansPage() {
         (&quot;Bose DM6SE black | cable 2×2.5 mm²&quot;), and optionally a product image for the
         legend.
       </p>
+      <p>
+        Product shots come from three places, in this order: an image you <strong>upload</strong>{" "}
+        (stored in the project, always printed), the <strong>device template&apos;s image</strong> when the
+        group is bound to one (offered as a button, or picked up automatically when a device is
+        dropped on the plan), or any <strong>image URL</strong> you paste — the slot the Odoo product
+        image will fill later. Remote images show on screen immediately; the PDF export embeds them
+        when the image host allows cross-origin access, and falls back to printing the row without
+        its picture when it does not. The legend lists every group by default; switch it to
+        &quot;only groups used on this plan&quot; for a shared legend across a sheet set.
+      </p>
       <ul>
         <li><strong>Color</strong> — from the swatch row or any custom color.</li>
         <li><strong>Shape</strong> — circle, square, diamond or triangle, so groups stay apart on a monochrome print.</li>
@@ -116,6 +126,20 @@ export default function FloorplansPage() {
       <p>
         Switch it to list every group, not just the ones placed, when the plan is one sheet of a set
         that shares a legend.
+      </p>
+
+      <h2>Taking things out of the architect&apos;s plan</h2>
+      <p>
+        The underlay is a raster, so nothing in it can be deleted — but it can be covered. The{" "}
+        <strong>▭ Erase</strong> tool drags out a white cover over any part of the plan: the
+        architect&apos;s symbol legend, revision table, title block, a note that no longer applies.
+        Covers move, resize from the corner and go with <kbd>Delete</kbd>; the sidebar lists them.
+        Your legend and drawing block sit on top, so the printed sheet carries one set of boxes.
+      </p>
+      <p>
+        Both boxes also stretch: the bottom handle on the legend and on the drawing block sets a
+        minimum height, so either can be pulled down to cover the architect&apos;s block exactly
+        (the drawing block gives the extra room to its title band, the way architects&apos; blocks do).
       </p>
 
       <h2>Notes on the plan</h2>
