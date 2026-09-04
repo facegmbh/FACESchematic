@@ -13,10 +13,11 @@
 import { createDefaultLayout } from "./titleBlockLayout";
 import { DEFAULT_CONNECTOR } from "./connectorTypes";
 import { defaultStubPlacement } from "./stubPlacement";
+import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 43;
+export const CURRENT_SCHEMA_VERSION = 44;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -611,6 +612,30 @@ const migrations: Record<number, Migration> = {
     // v42 → v43: patch panel view — adds optional edge.data.patchHops/patchSegments,
     // DeviceData.offCanvas, and the "patch-panel" page variant. Purely additive.
     data.version = 43;
+    return data;
+  },
+  43: (data) => {
+    // v43 → v44: floorplan pages gain a movable drawing block (Plankopf) and free text
+    // notes. Pages saved by the first floorplan build lack both — give them the
+    // defaults so the renderer never meets an undefined block.
+    if (Array.isArray(data.pages)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration page
+      data.pages = data.pages.map((page: any) => {
+        if (page?.type !== "floorplan") return page;
+        const paper = {
+          paperId: page.paperId ?? "iso-a1",
+          orientation: page.orientation ?? "landscape",
+          customWidthIn: page.customWidthIn,
+          customHeightIn: page.customHeightIn,
+        };
+        return {
+          ...page,
+          drawingBlock: page.drawingBlock ?? createDefaultDrawingBlock(paper),
+          notes: Array.isArray(page.notes) ? page.notes : [],
+        };
+      });
+    }
+    data.version = 44;
     return data;
   },
 };

@@ -7,6 +7,8 @@ import {
   drawingAreaMm,
   formatMetres,
   formatScale,
+  layoutDrawingBlock,
+  layoutNote,
   legendHeightMm,
   measureRealDistanceMm,
   sheetSizeMm,
@@ -22,8 +24,9 @@ import {
 } from "../floorplan";
 import { TITLE_BLOCK_HEIGHT_IN } from "../printConfig";
 import TitleBlockSVG from "./TitleBlockSVG";
+import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
-import type { DeviceData, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
+import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import type { FloorplanTool } from "./FloorplanPage";
 
 const IN_TO_MM = 25.4;
@@ -43,7 +46,9 @@ type Selection =
   | { kind: "none" }
   | { kind: "symbols"; ids: string[] }
   | { kind: "underlay" }
-  | { kind: "legend" };
+  | { kind: "legend" }
+  | { kind: "drawing" }
+  | { kind: "note"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -51,6 +56,10 @@ type DragState =
   | { kind: "underlay-resize"; startClient: Vec2; startSize: { w: number; h: number } }
   | { kind: "legend"; startClient: Vec2; start: Vec2 }
   | { kind: "legend-resize"; startClient: Vec2; startWidth: number }
+  | { kind: "drawing"; startClient: Vec2; start: Vec2 }
+  | { kind: "drawing-resize"; startClient: Vec2; startWidth: number }
+  | { kind: "note"; noteId: string; startClient: Vec2; start: Vec2 }
+  | { kind: "note-resize"; noteId: string; startClient: Vec2; startWidth: number }
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape plus its number. */
@@ -83,6 +92,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanUnderlay = useSchematicStore((s) => s.updateFloorplanUnderlay);
   const updateFloorplanLegend = useSchematicStore((s) => s.updateFloorplanLegend);
+  const updateFloorplanDrawingBlock = useSchematicStore((s) => s.updateFloorplanDrawingBlock);
+  const addFloorplanNote = useSchematicStore((s) => s.addFloorplanNote);
+  const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
+  const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
+  const schematicName = useSchematicStore((s) => s.schematicName);
   const calibrateFloorplan = useSchematicStore((s) => s.calibrateFloorplan);
   const addToast = useSchematicStore((s) => s.addToast);
 
@@ -202,6 +216,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const [didMove, setDidMove] = useState(false);
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   // Calibration picks, in paper mm.
   const [calibPicks, setCalibPicks] = useState<Vec2[]>([]);
@@ -284,7 +300,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setDidMove(false);
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
-    if (tool === "place") return; // handled on click
+    if (tool === "place" || tool === "note") return; // handled on click
     setSelection({ kind: "none" });
   }, [tool, spaceHeld, panMode]);
 
@@ -313,8 +329,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) },
       });
       setSelection({ kind: "symbols", ids: [id] });
+      return;
     }
-  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, calibPicks, clientToPaperMm, addFloorplanSymbol, addToast]);
+    if (tool === "note") {
+      const id = addFloorplanNote(page.id, { positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) }, text: "Note" });
+      setSelection({ kind: "note", id });
+      setEditingNoteId(id);
+      setNoteDraft("Note");
+      onToolChange("select");
+    }
+  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addToast, onToolChange]);
 
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
@@ -377,6 +401,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       } else if (dragging.kind === "legend-resize") {
         const d = clientDeltaToMm(e.clientX - dragging.startClient.x, 0);
         updateFloorplanLegend(page.id, { widthMm: Math.max(40, snap(dragging.startWidth + d.x, free)) });
+      } else if (dragging.kind === "drawing") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanDrawingBlock(page.id, { positionMm: { x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) } });
+      } else if (dragging.kind === "drawing-resize") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, 0);
+        updateFloorplanDrawingBlock(page.id, { widthMm: Math.max(50, snap(dragging.startWidth + d.x, free)) });
+      } else if (dragging.kind === "note") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanNote(page.id, dragging.noteId, { positionMm: { x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) } });
+      } else if (dragging.kind === "note-resize") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, 0);
+        updateFloorplanNote(page.id, dragging.noteId, { widthMm: Math.max(15, snap(dragging.startWidth + d.x, free)) });
       }
       return;
     }
@@ -392,7 +428,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setViewport(vpRef.current.zoom, { x: panning.startPan.x + dx, y: panning.startPan.y + dy });
       }
     }
-  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, setViewport]);
+  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, setViewport]);
 
   const handleMouseUp = useCallback(() => {
     setDragging(null);
@@ -412,7 +448,12 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       for (const id of selection.ids) removeFloorplanSymbol(page.id, id);
       setSelection({ kind: "none" });
     }
-  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol]);
+    if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "note" && editingNoteId === null) {
+      e.preventDefault();
+      removeFloorplanNote(page.id, selection.id);
+      setSelection({ kind: "none" });
+    }
+  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, editingNoteId]);
 
   // ── Calibration dialog ───────────────────────────────────────────
   const calibDistanceMm = calibPicks.length === 2
@@ -442,6 +483,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const legendNotes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
   const legendH = legendHeightMm(legendRows, page.legend);
 
+  const drawingLayout = useMemo(
+    () => layoutDrawingBlock(page.drawingBlock, { titleBlock, page, projectName: schematicName }, { hasLogo: Boolean(titleBlock.logo) }),
+    [page, titleBlock, schematicName],
+  );
+
   const selectedSymbolIds = selection.kind === "symbols" ? selection.ids : [];
   const isPanning = panning !== null && didMove;
   const underlay = page.underlay;
@@ -453,7 +499,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" ? "crosshair" : tool === "place" ? "copy" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -738,6 +784,126 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             </div>
           )}
 
+          {/* Free text notes */}
+          {page.notes.map((note: FloorplanNote) => {
+            const nl = layoutNote(note);
+            const isSel = selection.kind === "note" && selection.id === note.id;
+            const isEditing = editingNoteId === note.id;
+            const pad = note.boxed ? mmToPx(1.5) : 0;
+            return (
+              <div
+                key={note.id}
+                className="absolute"
+                style={{
+                  left: mmToPx(note.positionMm.x),
+                  top: mmToPx(note.positionMm.y),
+                  width: mmToPx(note.widthMm),
+                  minHeight: mmToPx(nl.heightMm),
+                  background: note.boxed ? "white" : "transparent",
+                  border: note.boxed ? "0.5px solid #333" : undefined,
+                  padding: pad,
+                  boxSizing: "border-box",
+                  cursor: tool === "select" ? "move" : "inherit",
+                  zIndex: isSel ? 24 : 18,
+                }}
+                onMouseDown={(e) => {
+                  if (tool !== "select" || isEditing) return;
+                  e.stopPropagation();
+                  didMoveRef.current = false;
+                  setSelection({ kind: "note", id: note.id });
+                  setDragging({ kind: "note", noteId: note.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...note.positionMm } });
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setSelection({ kind: "note", id: note.id });
+                  setEditingNoteId(note.id);
+                  setNoteDraft(note.text);
+                }}
+              >
+                {isEditing ? (
+                  <textarea
+                    autoFocus
+                    className="w-full outline-none border border-blue-400 rounded-sm bg-white resize-none"
+                    style={{ fontSize: mmToPx(note.fontSizeMm), lineHeight: 1.4, color: note.color ?? "#111", minHeight: mmToPx(nl.heightMm + 6), padding: 0 }}
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onBlur={() => {
+                      if (noteDraft.trim()) updateFloorplanNote(page.id, note.id, { text: noteDraft });
+                      else removeFloorplanNote(page.id, note.id);
+                      setEditingNoteId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Escape") { setNoteDraft(note.text); e.currentTarget.blur(); }
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) e.currentTarget.blur();
+                    }}
+                    data-allow-scroll
+                  />
+                ) : (
+                  nl.lines.map((l, i) => (
+                    <div key={i} style={{ fontSize: mmToPx(note.fontSizeMm), lineHeight: `${mmToPx(nl.lineHeightMm)}px`, color: note.color ?? "#111", whiteSpace: "pre", height: mmToPx(nl.lineHeightMm) }}>
+                      {l || " "}
+                    </div>
+                  ))
+                )}
+                {isSel && !isEditing && (
+                  <>
+                    <div className="absolute inset-0 border-2 border-blue-500 pointer-events-none" />
+                    <div
+                      className="absolute bg-blue-500"
+                      style={{ right: -5, top: "50%", width: 10, height: 10, marginTop: -5, cursor: "ew-resize" }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        didMoveRef.current = false;
+                        setDragging({ kind: "note-resize", noteId: note.id, startClient: { x: e.clientX, y: e.clientY }, startWidth: note.widthMm });
+                      }}
+                      title="Change the note's wrap width"
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Drawing block (Plankopf) */}
+          {page.drawingBlock.visible && (
+            <div
+              className="absolute"
+              style={{
+                left: mmToPx(page.drawingBlock.positionMm.x),
+                top: mmToPx(page.drawingBlock.positionMm.y),
+                width: mmToPx(page.drawingBlock.widthMm),
+                zIndex: 25,
+                cursor: tool === "select" ? "move" : "default",
+              }}
+              onMouseDown={(e) => {
+                if (tool !== "select") return;
+                e.stopPropagation();
+                didMoveRef.current = false;
+                setSelection({ kind: "drawing" });
+                setDragging({ kind: "drawing", startClient: { x: e.clientX, y: e.clientY }, start: { ...page.drawingBlock.positionMm } });
+              }}
+            >
+              <FloorplanDrawingBlockView block={page.drawingBlock} layout={drawingLayout} mmToPx={mmToPx} logoSrc={titleBlock.logo || undefined} />
+              {selection.kind === "drawing" && (
+                <>
+                  <div className="absolute inset-0 border-2 border-blue-500 pointer-events-none" />
+                  <div
+                    className="absolute bg-blue-500"
+                    style={{ right: -5, top: "50%", width: 10, height: 10, marginTop: -5, cursor: "ew-resize" }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      didMoveRef.current = false;
+                      setDragging({ kind: "drawing-resize", startClient: { x: e.clientX, y: e.clientY }, startWidth: page.drawingBlock.widthMm });
+                    }}
+                    title="Resize the drawing block"
+                  />
+                </>
+              )}
+            </div>
+          )}
+
           {/* Title block */}
           {page.showTitleBlock && titleBlockLayout && (
             <div className="absolute pointer-events-none" style={{ left: tbLeftPx, top: tbTopPx, width: tbWidthPx, height: tbHeightPx, zIndex: 26 }}>
@@ -753,7 +919,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           )}
 
           {/* Empty state */}
-          {!underlay && page.symbols.length === 0 && (
+          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
               Import the architect's drawing from the toolbar, then drag devices onto it.
             </div>
@@ -813,6 +979,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title="Click the plan to drop symbols of the active group"
         >
           ✚ Place
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "note" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => onToolChange(tool === "note" ? "select" : "note")}
+          title="Click the plan to add a text note (installation hint, remark)"
+        >
+          ✎ Note
         </button>
         <div className="border-l border-neutral-200 h-3" />
         <span className="text-neutral-500 px-1" title="Drawing scale">{formatScale(page.scaleDenominator)}</span>

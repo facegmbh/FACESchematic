@@ -13,12 +13,19 @@
 
 import { getPaperSize, PAGE_MARGIN_IN } from "./printConfig";
 import type {
+  FloorplanDrawingBlock,
+  FloorplanDrawingField,
   FloorplanLegendBox,
+  FloorplanNote,
   FloorplanPage,
+  FloorplanRevision,
   FloorplanSymbol,
   FloorplanSymbolGroup,
+  FloorplanToken,
   FloorplanUnderlay,
+  TitleBlock,
 } from "./types";
+import { DEFAULT_FLOORPLAN_SCALE } from "./types";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -387,4 +394,292 @@ export function symbolLabelAnchor(symbol: FloorplanSymbol, symbolSizeMm: number)
 export function clampToSheet(pos: Vec2, page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): Vec2 {
   const { w, h } = sheetSizeMm(page);
   return { x: Math.min(Math.max(pos.x, 0), w), y: Math.min(Math.max(pos.y, 0), h) };
+}
+
+// ── Text wrapping ────────────────────────────────────────────────────
+
+/** Average glyph advance as a fraction of the cap height for the Inter face at plan
+ *  sizes. Used to wrap text identically on screen and in the PDF, so a note never
+ *  reflows between the two. Slightly conservative on purpose: a line breaking early
+ *  is invisible, a line overflowing its box is not. */
+export const AVG_GLYPH_WIDTH_FACTOR = 0.58;
+
+/** Word-wrap `text` into lines that fit `widthMm` at `fontSizeMm`. Explicit newlines
+ *  always break; over-long words are hard-split so nothing can escape the box. */
+export function wrapText(text: string, widthMm: number, fontSizeMm: number): string[] {
+  const charW = Math.max(0.1, fontSizeMm * AVG_GLYPH_WIDTH_FACTOR);
+  const maxChars = Math.max(1, Math.floor(widthMm / charW));
+  const out: string[] = [];
+  for (const paragraph of text.replace(/\r\n?/g, "\n").split("\n")) {
+    if (paragraph.trim() === "") { out.push(""); continue; }
+    let line = "";
+    for (const word of paragraph.split(/\s+/)) {
+      let w = word;
+      while (w.length > maxChars) {
+        if (line) { out.push(line); line = ""; }
+        out.push(w.slice(0, maxChars));
+        w = w.slice(maxChars);
+      }
+      if (!line) line = w;
+      else if (line.length + 1 + w.length <= maxChars) line += " " + w;
+      else { out.push(line); line = w; }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+// ── Drawing block (Plankopf) ─────────────────────────────────────────
+
+/** What a `{{token}}` in a drawing block resolves against. */
+export interface FloorplanTokenContext {
+  titleBlock: Pick<TitleBlock, "showName" | "venue" | "designer" | "engineer" | "date" | "drawingTitle" | "company" | "revision">;
+  page: Pick<FloorplanPage, "label" | "scaleDenominator" | "paperId" | "orientation" | "customWidthIn" | "customHeightIn">;
+  projectName: string;
+}
+
+/** Replace every `{{token}}` (see FLOORPLAN_TOKENS) in `text`. Unknown tokens are
+ *  left as typed so a typo stays visible instead of vanishing. */
+export function resolveFloorplanTokens(text: string, ctx: FloorplanTokenContext): string {
+  return text.replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (match, raw: string) => {
+    const token = raw as FloorplanToken;
+    switch (token) {
+      case "scale": return formatScale(ctx.page.scaleDenominator);
+      case "sheetSize": return formatSheetSize(ctx.page);
+      case "pageLabel": return ctx.page.label;
+      case "projectName": return ctx.projectName;
+      case "showName": case "venue": case "designer": case "engineer":
+      case "date": case "drawingTitle": case "company": case "revision":
+        return ctx.titleBlock[token] ?? "";
+      default: return match;
+    }
+  });
+}
+
+/** "594 × 841 mm (A1)" — how the sheet size reads in a drawing block. */
+export function formatSheetSize(page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): string {
+  const { w, h } = sheetSizeMm(page);
+  const paper = getPaperSize(page.paperId, page.customWidthIn, page.customHeightIn);
+  const name = page.paperId === "custom" ? "" : ` (${paper.label})`;
+  return `${Math.round(w)} × ${Math.round(h)} mm${name}`;
+}
+
+let drawingFieldCounter = 0;
+/** Ids for drawing block fields; stable enough for React keys and MCP references. */
+export function nextDrawingFieldId(): string {
+  return `fpfield-${Date.now().toString(36)}-${++drawingFieldCounter}`;
+}
+
+/** Drawing block for a new page: revision table empty, fields wired to the project
+ *  title block through tokens, parked in the sheet's bottom-right corner. */
+export function createDefaultDrawingBlock(page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): FloorplanDrawingBlock {
+  const area = drawingAreaMm(page);
+  const widthMm = Math.min(120, area.w * 0.32);
+  const fields: FloorplanDrawingField[] = [
+    { id: nextDrawingFieldId(), label: "Project", value: "{{showName}}", wide: true },
+    { id: nextDrawingFieldId(), label: "Client", value: "{{venue}}", wide: true },
+    { id: nextDrawingFieldId(), label: "Scale", value: "{{scale}}" },
+    { id: nextDrawingFieldId(), label: "Sheet", value: "{{sheetSize}}" },
+    { id: nextDrawingFieldId(), label: "Date", value: "{{date}}" },
+    { id: nextDrawingFieldId(), label: "Drawn by", value: "{{designer}}" },
+  ];
+  const block: FloorplanDrawingBlock = {
+    visible: true,
+    positionMm: { x: 0, y: 0 },
+    widthMm,
+    title: "{{pageLabel}}",
+    subtitle: "{{drawingTitle}}",
+    fields,
+    revisions: [],
+    revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
+    disclaimer: "",
+    showLogo: true,
+    showNorthArrow: true,
+    northRotationDeg: 0,
+  };
+  // Height depends on content; place it once we know it.
+  const h = layoutDrawingBlock(block, {
+    titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "" },
+    page: { ...page, label: "", scaleDenominator: DEFAULT_FLOORPLAN_SCALE },
+    projectName: "",
+  }, { hasLogo: false }).heightMm;
+  // Real project values (a two-line client address, a logo) grow the block past this
+  // empty-content estimate — leave headroom so it still lands inside the border.
+  const headroom = DB_FOOTER_MM + DB_FIELD_VALUE_FONT_MM * 3;
+  block.positionMm = { x: area.x + area.w - widthMm - 4, y: Math.max(area.y, area.y + area.h - h - headroom - 4) };
+  return block;
+}
+
+/** Fixed metrics of the drawing block, in paper mm. */
+export const DB_PAD_MM = 3;
+export const DB_TITLE_FONT_MM = 7;
+export const DB_SUBTITLE_FONT_MM = 3.2;
+export const DB_FIELD_LABEL_FONT_MM = 2.1;
+export const DB_FIELD_VALUE_FONT_MM = 3;
+export const DB_REV_FONT_MM = 2.4;
+export const DB_REV_ROW_MM = 4.6;
+export const DB_DISCLAIMER_FONT_MM = 2.2;
+export const DB_FOOTER_MM = 22;
+/** Revision table column widths as fractions of the inner width: index, date, change, by, chk. */
+export const DB_REV_COLS = [0.09, 0.15, 0.56, 0.1, 0.1] as const;
+
+export interface DrawingBlockSection {
+  kind: "revisions" | "disclaimer" | "title" | "fields" | "footer";
+  /** Top edge relative to the block's top, in mm. */
+  yMm: number;
+  heightMm: number;
+}
+
+export interface DrawingBlockFieldCell {
+  field: FloorplanDrawingField;
+  label: string;
+  /** Wrapped, token-resolved value lines. */
+  lines: string[];
+  /** Cell rect relative to the block's top-left, in mm. */
+  xMm: number;
+  yMm: number;
+  wMm: number;
+  hMm: number;
+}
+
+export interface DrawingBlockLayout {
+  widthMm: number;
+  heightMm: number;
+  innerXMm: number;
+  innerWMm: number;
+  sections: DrawingBlockSection[];
+  /** Resolved title/subtitle. */
+  title: string;
+  subtitle: string;
+  disclaimerLines: string[];
+  fieldCells: DrawingBlockFieldCell[];
+  /** Revision rows, newest first as plans print them, already token-free. */
+  revisionRows: FloorplanRevision[];
+  showFooter: boolean;
+}
+
+/**
+ * Lay the drawing block out top-to-bottom: revision table → disclaimer → title band →
+ * field grid → footer (logo + north arrow). Every measurement is in paper mm so the
+ * renderer and the PDF exporter draw the same boxes at the same places.
+ */
+export function layoutDrawingBlock(
+  block: FloorplanDrawingBlock,
+  ctx: FloorplanTokenContext,
+  opts: { hasLogo: boolean },
+): DrawingBlockLayout {
+  const innerX = DB_PAD_MM;
+  const innerW = Math.max(20, block.widthMm - 2 * DB_PAD_MM);
+  const sections: DrawingBlockSection[] = [];
+  let y = 0;
+
+  // Revision table: header + rows. Newest issue on top, like the reference plans.
+  const revisionRows = [...block.revisions].reverse();
+  if (revisionRows.length > 0) {
+    const h = DB_REV_ROW_MM * (revisionRows.length + 1) + DB_PAD_MM;
+    sections.push({ kind: "revisions", yMm: y, heightMm: h });
+    y += h;
+  }
+
+  const disclaimer = resolveFloorplanTokens(block.disclaimer ?? "", ctx).trim();
+  const disclaimerLines = disclaimer ? wrapText(disclaimer, innerW, DB_DISCLAIMER_FONT_MM) : [];
+  if (disclaimerLines.length > 0) {
+    const h = disclaimerLines.length * DB_DISCLAIMER_FONT_MM * 1.45 + DB_PAD_MM * 2;
+    sections.push({ kind: "disclaimer", yMm: y, heightMm: h });
+    y += h;
+  }
+
+  const title = resolveFloorplanTokens(block.title, ctx).trim();
+  const subtitle = resolveFloorplanTokens(block.subtitle ?? "", ctx).trim();
+  {
+    const h = DB_PAD_MM * 2 + DB_TITLE_FONT_MM * 1.3 + (subtitle ? DB_SUBTITLE_FONT_MM * 1.6 : 0);
+    sections.push({ kind: "title", yMm: y, heightMm: h });
+    y += h;
+  }
+
+  // Field grid: two columns, `wide` fields span both. Each cell is label + wrapped value.
+  const fieldCells: DrawingBlockFieldCell[] = [];
+  if (block.fields.length > 0) {
+    const gap = 1.5;
+    const colW = (innerW - gap) / 2;
+    let rowY = y + DB_PAD_MM;
+    let col = 0;
+    let rowH = 0;
+    const flushRow = () => { rowY += rowH; col = 0; rowH = 0; };
+    for (const field of block.fields) {
+      const wide = Boolean(field.wide);
+      if (wide && col === 1) flushRow();
+      const w = wide ? innerW : colW;
+      const x = innerX + (col === 1 ? colW + gap : 0);
+      const label = resolveFloorplanTokens(field.label, ctx);
+      const value = resolveFloorplanTokens(field.value, ctx);
+      const lines = wrapText(value, w - 2, DB_FIELD_VALUE_FONT_MM);
+      const h = DB_FIELD_LABEL_FONT_MM * 1.5 + lines.length * DB_FIELD_VALUE_FONT_MM * 1.4 + 1.5;
+      fieldCells.push({ field, label, lines, xMm: x, yMm: rowY, wMm: w, hMm: h });
+      rowH = Math.max(rowH, h);
+      if (wide || col === 1) flushRow();
+      else col = 1;
+    }
+    if (col === 1) flushRow();
+    // Cells in a row share the row's height so their borders line up.
+    for (const cell of fieldCells) {
+      const rowMates = fieldCells.filter((c) => c.yMm === cell.yMm);
+      cell.hMm = Math.max(...rowMates.map((c) => c.hMm));
+    }
+    const h = rowY - y + DB_PAD_MM;
+    sections.push({ kind: "fields", yMm: y, heightMm: h });
+    y += h;
+  }
+
+  const showFooter = (block.showLogo && opts.hasLogo) || block.showNorthArrow;
+  if (showFooter) {
+    sections.push({ kind: "footer", yMm: y, heightMm: DB_FOOTER_MM });
+    y += DB_FOOTER_MM;
+  }
+
+  return {
+    widthMm: block.widthMm,
+    heightMm: y,
+    innerXMm: innerX,
+    innerWMm: innerW,
+    sections,
+    title,
+    subtitle,
+    disclaimerLines,
+    fieldCells,
+    revisionRows,
+    showFooter,
+  };
+}
+
+/** Next revision index after the last one: "A" → "B", "01" → "02", nothing → "A". */
+export function nextRevisionIndex(revisions: FloorplanRevision[]): string {
+  const last = revisions[revisions.length - 1]?.index?.trim();
+  if (!last) return "A";
+  if (/^\d+$/.test(last)) return String(Number(last) + 1).padStart(last.length, "0");
+  if (/^[A-Za-z]$/.test(last)) {
+    const code = last.charCodeAt(0);
+    const isUpper = last === last.toUpperCase();
+    const z = isUpper ? 90 : 122;
+    return code >= z ? last + (isUpper ? "A" : "a") : String.fromCharCode(code + 1);
+  }
+  return `${last}+`;
+}
+
+/** Formats today's date the way German plans stamp it (04.09.26). */
+export function formatPlanDate(d: Date = new Date()): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}.${mm}.${yy}`;
+}
+
+// ── Notes ────────────────────────────────────────────────────────────
+
+/** Wrapped lines and box height of a note, shared by screen and PDF. */
+export function layoutNote(note: FloorplanNote): { lines: string[]; heightMm: number; lineHeightMm: number } {
+  const pad = note.boxed ? 1.5 : 0;
+  const lines = wrapText(note.text, note.widthMm - 2 * pad, note.fontSizeMm);
+  const lineHeightMm = note.fontSizeMm * 1.4;
+  return { lines, heightMm: lines.length * lineHeightMm + 2 * pad, lineHeightMm };
 }

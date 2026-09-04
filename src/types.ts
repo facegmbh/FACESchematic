@@ -946,6 +946,81 @@ export interface FloorplanLegendBox {
   notes?: string[];
 }
 
+/** One row of a drawing block's revision table — the "Index" history every issued plan
+ *  carries (A · 04.09.26 · Loudspeaker layout ground floor · SP · JL). */
+export interface FloorplanRevision {
+  /** Revision index, e.g. "A", "B" or "01". */
+  index: string;
+  date: string;
+  /** What changed in this issue. */
+  description: string;
+  /** Drawn by (initials). */
+  author?: string;
+  /** Checked by (initials). */
+  checkedBy?: string;
+}
+
+/** A label/value pair in the drawing block's field grid, e.g. "Project" / "Cafe & Bar
+ *  Celona". Values may carry `{{token}}` placeholders (see FLOORPLAN_TOKENS) that resolve
+ *  from the project title block and the page — so one block layout serves every sheet. */
+export interface FloorplanDrawingField {
+  id: string;
+  label: string;
+  value: string;
+  /** Span both columns of the field grid (for long values such as a client address). */
+  wide?: boolean;
+}
+
+/** The "Plankopf" — the drawing's identity block: revision table, disclaimer, drawing
+ *  title, project fields, logo and north arrow. Unlike the fixed project title block it
+ *  is a movable, per-page object the planner edits on the sheet, and MCP tools fill it
+ *  in when a plan is generated. */
+export interface FloorplanDrawingBlock {
+  visible: boolean;
+  /** Top-left corner on the sheet, in paper mm. */
+  positionMm: { x: number; y: number };
+  widthMm: number;
+  /** Big drawing title, e.g. "Erdgeschoss" / "Ground floor". Tokens allowed. */
+  title: string;
+  /** Line under the title, e.g. "Loudspeaker layout — bar area". Tokens allowed. */
+  subtitle?: string;
+  fields: FloorplanDrawingField[];
+  revisions: FloorplanRevision[];
+  /** Column headers of the revision table, in order: index, date, description, author, checked. */
+  revisionHeaders: [string, string, string, string, string];
+  /** Small-print block above the title (e.g. "All dimensions to be verified on site…"). */
+  disclaimer?: string;
+  /** Show the project title block's logo in the block's footer. */
+  showLogo: boolean;
+  showNorthArrow: boolean;
+  /** Clockwise rotation of the north arrow in degrees; 0 points up the sheet. */
+  northRotationDeg: number;
+}
+
+/** Free text placed on the plan — installation notes, cable-route remarks, anything the
+ *  fitter should read next to the symbol it concerns. */
+export interface FloorplanNote {
+  id: string;
+  /** Top-left corner on the sheet, in paper mm. */
+  positionMm: { x: number; y: number };
+  /** Wrap width in paper mm. */
+  widthMm: number;
+  text: string;
+  /** Cap height in paper mm. */
+  fontSizeMm: number;
+  color?: string;
+  /** Draw a white box with a hairline border behind the text so it reads over linework. */
+  boxed?: boolean;
+}
+
+/** Placeholders a drawing block field may use. `titleBlock.*` are the project title
+ *  block's fields; the rest come from the page. */
+export const FLOORPLAN_TOKENS = [
+  "showName", "venue", "designer", "engineer", "date", "drawingTitle", "company", "revision",
+  "scale", "sheetSize", "pageLabel", "projectName",
+] as const;
+export type FloorplanToken = (typeof FLOORPLAN_TOKENS)[number];
+
 /** A scaled plan drawing: an architect's drawing as underlay, device symbols placed on
  *  it, a generated legend, and the project title block. */
 export interface FloorplanPage {
@@ -962,6 +1037,12 @@ export interface FloorplanPage {
   groups: FloorplanSymbolGroup[];
   symbols: FloorplanSymbol[];
   legend: FloorplanLegendBox;
+  /** The movable drawing block (Plankopf). */
+  drawingBlock: FloorplanDrawingBlock;
+  /** Free text notes on the plan. */
+  notes: FloorplanNote[];
+  /** Show the fixed project title block in the sheet corner as well. Off by default on
+   *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;
   /** Symbol diameter in paper mm — constant size, independent of the drawing scale. */
   symbolSizeMm: number;
@@ -972,6 +1053,8 @@ export interface FloorplanPage {
 export const DEFAULT_FLOORPLAN_SCALE = 50;
 export const DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM = 6;
 export const DEFAULT_FLOORPLAN_LABEL_SIZE_MM = 3.5;
+export const DEFAULT_FLOORPLAN_NOTE_FONT_MM = 2.8;
+export const DEFAULT_FLOORPLAN_NOTE_WIDTH_MM = 60;
 
 export type SchematicPage = RackElevationPage | PrintSheetPage | PatchPanelViewPage | FloorplanPage;
 

@@ -113,12 +113,61 @@ export default function FloorplansPage() {
         that shares a legend.
       </p>
 
-      <h2>Title block and export</h2>
+      <h2>Notes on the plan</h2>
       <p>
-        The project <a href="/printing">title block</a> — project, client, drawing title, date,
-        logo — sits in the bottom-right corner of the sheet, the same block the print sheets use.
-        Toggle it off per page in the toolbar.
+        Free text goes anywhere on the sheet: pick the <strong>✎ Note</strong> tool and click, or
+        add one from the sidebar. Notes wrap at their width (drag the handle on the right edge),
+        print at the size you set in paper mm, and can sit in a white box so they stay legible
+        over the architect&apos;s linework. Double-click to edit inline, <kbd>Delete</kbd> removes.
+        Use them for the remarks a fitter needs next to the symbol they concern — cable
+        clearance, ceiling reinforcement, a door to keep clear.
       </p>
+
+      <h2>The drawing block</h2>
+      <p>
+        Every issued plan carries a title block — the <em>Plankopf</em>. On a floorplan it is a
+        movable object you drag into place and edit in the sidebar. Top to bottom it holds:
+      </p>
+      <ul>
+        <li>
+          <strong>Revision table</strong> — index, date, change, drawn by, checked by. Column
+          headers are editable (so <em>Index · Datum · Änderungen · Bearb. · Gepr.</em> is one edit
+          away). <strong>+ Revision</strong> appends a row with the next index and today&apos;s
+          date; the newest issue prints on top.
+        </li>
+        <li><strong>Disclaimer</strong> — small print such as the site-verification clause.</li>
+        <li><strong>Title</strong> and subtitle — the floor and what the drawing shows.</li>
+        <li>
+          <strong>Fields</strong> — a two-column grid of label/value pairs (project, client,
+          scale, sheet, date, drawn by …). Mark a field <em>wide</em> to span both columns for an
+          address. Values may use tokens that resolve from the project title block and the page:
+          <code>{"{{showName}}"}</code>, <code>{"{{venue}}"}</code>, <code>{"{{designer}}"}</code>,
+          <code>{"{{engineer}}"}</code>, <code>{"{{date}}"}</code>, <code>{"{{drawingTitle}}"}</code>,
+          <code>{"{{company}}"}</code>, <code>{"{{revision}}"}</code>, <code>{"{{scale}}"}</code>,
+          <code>{"{{sheetSize}}"}</code>, <code>{"{{pageLabel}}"}</code>, <code>{"{{projectName}}"}</code>.
+          Scale and sheet size therefore never go stale when the page changes.
+        </li>
+        <li><strong>Logo and north arrow</strong> — the project logo from the title block and a rotatable north arrow.</li>
+      </ul>
+      <p>
+        The fixed corner title block the print sheets use is off by default on floorplans (the
+        drawing block carries the same data) and can be switched back on in the toolbar.
+      </p>
+
+      <h2>Filling a plan from the AI assistant</h2>
+      <p>
+        Everything above except the underlay can be generated over the{" "}
+        <a href="/ai-assistant">MCP bridge</a>: <code>create_floorplan</code>,{" "}
+        <code>add_floorplan_group</code>, <code>place_floorplan_symbols</code> (positions in
+        real-world metres from the drawing area&apos;s corner), <code>set_floorplan_legend</code>{" "}
+        (headline and installation notes), <code>set_floorplan_drawing_block</code> and{" "}
+        <code>add_floorplan_revision</code> (title, fields, revision table, disclaimer), and{" "}
+        <code>add_floorplan_notes</code>. The server ships a <em>floorplan</em> playbook that walks
+        the assistant through the right order. The architect&apos;s drawing itself is imported and
+        calibrated in the editor — the assistant is told so when it is missing.
+      </p>
+
+      <h2>Export</h2>
       <p>
         <strong>Export PDF</strong> (toolbar, or <strong>File → Export → Export Floorplans</strong>)
         writes every floorplan page at true paper size, one PDF page each. Printed at 100 %, the

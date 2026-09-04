@@ -148,7 +148,9 @@ Scaled plan drawings built on the architect's drawing — where the gear physica
 - **Device-linked symbols** — drag a device from the sidebar onto the plan and the symbol stays bound to that schematic device; deleting the device clears its symbols the same way it clears rack placements
 - **Auto-numbering** that continues the group's series (4.1 → 4.2, SB.09 → SB.10), with per-symbol rename, draggable number labels, and group renumbering
 - **Generated legend box** — swatch, title, description and product shot per group, plus free-text installation notes; draggable, resizable, and optionally limited to the groups actually used
-- **Title block** — the same project block the print sheets use, in the sheet corner
+- **Drawing block (Plankopf)** — a movable, editable title block per plan: revision table (index / date / change / by / checked, headers editable), disclaimer small print, drawing title and subtitle, a two-column field grid with `{{scale}}`, `{{sheetSize}}`, `{{showName}}` … tokens that resolve from the project title block, logo and rotatable north arrow
+- **Notes on the plan** — free text anywhere on the sheet (✎ Note tool or sidebar), wrapping at a set width, boxed or plain, edited inline
+- **Generated over MCP** — `create_floorplan`, `add_floorplan_group`, `place_floorplan_symbols` (real-world metres), `set_floorplan_legend`, `set_floorplan_drawing_block`, `add_floorplan_revision`, `add_floorplan_notes` … plus a `floorplan` playbook; only the architect's drawing itself is imported in the editor
 - **True-to-scale PDF export** — one PDF page per floorplan at real paper size, so a 100 % print can be measured off on site
 
 ### Pack List & Reports

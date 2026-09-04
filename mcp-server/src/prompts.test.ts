@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { PROMPTS, getPrompt, SERVER_INSTRUCTIONS } from "./prompts.js";
 
-test("PROMPTS: exposes the three named playbooks", () => {
+test("PROMPTS: exposes the four named playbooks", () => {
   assert.deepEqual(
     PROMPTS.map((p) => p.name).sort(),
-    ["build-schematic", "modular-chassis", "rack-elevation"],
+    ["build-schematic", "floorplan", "modular-chassis", "rack-elevation"],
   );
   // Every prompt the list advertises must be resolvable by getPrompt.
   for (const p of PROMPTS) {
@@ -34,8 +34,8 @@ test("getPrompt: an unknown name throws an MCP InvalidParams error", () => {
   );
 });
 
-test("SERVER_INSTRUCTIONS: names the three playbooks", () => {
-  for (const name of ["build-schematic", "rack-elevation", "modular-chassis"]) {
+test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
+  for (const name of ["build-schematic", "rack-elevation", "modular-chassis", "floorplan"]) {
     assert.ok(SERVER_INSTRUCTIONS.includes(name));
   }
 });

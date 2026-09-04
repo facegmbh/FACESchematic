@@ -40,6 +40,8 @@ import type {
   FloorplanSymbol,
   FloorplanSymbolGroup,
   FloorplanLegendBox,
+  FloorplanDrawingBlock,
+  FloorplanNote,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -51,11 +53,14 @@ import {
   DEFAULT_FLOORPLAN_SCALE,
   DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
   DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
+  DEFAULT_FLOORPLAN_NOTE_FONT_MM,
+  DEFAULT_FLOORPLAN_NOTE_WIDTH_MM,
 } from "./types";
 import { pairKey } from "./roomDistance";
 import {
   FLOORPLAN_GROUP_COLORS,
   computeCalibration,
+  createDefaultDrawingBlock,
   createDefaultLegend,
   nextSymbolLabel,
   renumberGroup,
@@ -845,6 +850,10 @@ interface SchematicState {
   /** Renumber a group's symbols sequentially from `startLabel`, in placement order. */
   renumberFloorplanGroup: (pageId: string, groupId: string, startLabel: string) => void;
   updateFloorplanLegend: (pageId: string, patch: Partial<FloorplanLegendBox>) => void;
+  updateFloorplanDrawingBlock: (pageId: string, patch: Partial<FloorplanDrawingBlock>) => void;
+  addFloorplanNote: (pageId: string, note: Partial<Omit<FloorplanNote, "id">> & Pick<FloorplanNote, "positionMm">) => string;
+  updateFloorplanNote: (pageId: string, noteId: string, patch: Partial<Omit<FloorplanNote, "id">>) => void;
+  removeFloorplanNote: (pageId: string, noteId: string) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -925,6 +934,11 @@ function nextFloorplanSymbolId(): string {
   return `fpsym-${++floorplanSymbolIdCounter}`;
 }
 
+let floorplanNoteIdCounter = 0;
+function nextFloorplanNoteId(): string {
+  return `fpnote-${++floorplanNoteIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -1003,6 +1017,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const sym of page.symbols ?? []) {
         const sm2 = sym.id.match(/^fpsym-(\d+)$/);
         if (sm2) floorplanSymbolIdCounter = Math.max(floorplanSymbolIdCounter, Number(sm2[1]));
+      }
+      for (const note of page.notes ?? []) {
+        const nm2 = note.id.match(/^fpnote-(\d+)$/);
+        if (nm2) floorplanNoteIdCounter = Math.max(floorplanNoteIdCounter, Number(nm2[1]));
       }
       continue;
     }
@@ -5221,7 +5239,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       groups: [],
       symbols: [],
       legend: createDefaultLegend(base),
-      showTitleBlock: true,
+      drawingBlock: createDefaultDrawingBlock(base),
+      notes: [],
+      // The movable drawing block carries the title-block data; the fixed corner block
+      // would only duplicate it.
+      showTitleBlock: false,
       symbolSizeMm: DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
       labelSizeMm: DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
     };
@@ -5270,6 +5292,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         groupId: groupIdMap.get(sym.groupId) ?? sym.groupId,
       })),
       legend: { ...src.legend, notes: [...(src.legend.notes ?? [])] },
+      drawingBlock: {
+        ...src.drawingBlock,
+        fields: src.drawingBlock.fields.map((f) => ({ ...f })),
+        revisions: src.drawingBlock.revisions.map((r) => ({ ...r })),
+        revisionHeaders: [...src.drawingBlock.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],
+      },
+      notes: src.notes.map((n) => ({ ...n, id: nextFloorplanNoteId() })),
       underlay: src.underlay ? { ...src.underlay } : undefined,
     };
     const idx = state.pages.findIndex((p) => p.id === pageId);
@@ -5478,6 +5507,60 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, legend: { ...p.legend, ...patch } })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanDrawingBlock: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, drawingBlock: { ...p.drawingBlock, ...patch } })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanNote: (pageId, note) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanNoteId();
+    const full: FloorplanNote = {
+      id,
+      positionMm: note.positionMm,
+      widthMm: note.widthMm ?? DEFAULT_FLOORPLAN_NOTE_WIDTH_MM,
+      text: note.text ?? "Note",
+      fontSizeMm: note.fontSizeMm ?? DEFAULT_FLOORPLAN_NOTE_FONT_MM,
+      color: note.color,
+      boxed: note.boxed,
+    };
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, notes: [...p.notes, full] })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanNote: (pageId, noteId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        notes: p.notes.map((n) => n.id === noteId ? { ...n, ...patch } : n),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanNote: (pageId, noteId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, notes: p.notes.filter((n) => n.id !== noteId) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();

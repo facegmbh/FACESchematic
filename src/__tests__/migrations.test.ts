@@ -61,3 +61,31 @@ describe("v39→v40 bundles migration", () => {
     expect(out.bundles.b1.label).toBe("Snake A");
   });
 });
+
+describe("v43→v44 floorplan drawing block migration", () => {
+  it("gives a floorplan page saved before v44 a drawing block and an empty notes list", () => {
+    const out = migrateSchematic({
+      version: 43,
+      nodes: [],
+      edges: [],
+      pages: [
+        { id: "floorplan-1", type: "floorplan", label: "EG", paperId: "iso-a1", orientation: "landscape", scaleDenominator: 50, groups: [], symbols: [], legend: { visible: true } },
+        { id: "rackpage-1", type: "rack-elevation", label: "Racks", racks: [], placements: [], accessories: [] },
+      ],
+    });
+    expect(out.version).toBe(CURRENT_SCHEMA_VERSION);
+    const fp = out.pages[0];
+    expect(fp.drawingBlock.visible).toBe(true);
+    expect(fp.drawingBlock.fields.length).toBeGreaterThan(0);
+    expect(fp.notes).toEqual([]);
+    // Other page types are untouched
+    expect(out.pages[1]).not.toHaveProperty("drawingBlock");
+  });
+
+  it("keeps an existing drawing block", () => {
+    const block = { visible: false, positionMm: { x: 1, y: 2 }, widthMm: 80, title: "T", fields: [], revisions: [], revisionHeaders: ["a", "b", "c", "d", "e"], showLogo: false, showNorthArrow: false, northRotationDeg: 0 };
+    const out = migrateSchematic({ version: 43, nodes: [], edges: [], pages: [{ id: "floorplan-1", type: "floorplan", drawingBlock: block, notes: [{ id: "fpnote-1" }] }] });
+    expect(out.pages[0].drawingBlock).toBe(block);
+    expect(out.pages[0].notes).toHaveLength(1);
+  });
+});

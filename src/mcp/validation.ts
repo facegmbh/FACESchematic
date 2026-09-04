@@ -358,3 +358,55 @@ export function validateRackSpec(
   }
   return { ok: true, rackType: rt as (typeof RACK_TYPES)[number], heightU: h, depthMm: d };
 }
+
+// ── Floorplan helpers (Ship 10) ────────────────────────────────────
+// Pure validators for the floorplan tools' untrusted scalar inputs. Page/group/symbol
+// existence checks stay in the bridge handler, where the store is.
+
+export type RealPositionResult =
+  | { ok: true; xM: number; yM: number }
+  | { ok: false; error: string };
+
+/** A real-world position in metres from the drawing area's corner: both finite numbers,
+ *  not negative (the corner is the origin), and within a generous 2 km so a typo in the
+ *  unit (mm instead of m) is caught rather than placed 40 sheets away. */
+export function validateRealPosition(xM: unknown, yM: unknown): RealPositionResult {
+  if (typeof xM !== "number" || typeof yM !== "number" || !Number.isFinite(xM) || !Number.isFinite(yM)) {
+    return { ok: false, error: "xM and yM are required and must be finite numbers (metres from the drawing area's top-left corner)." };
+  }
+  if (xM < 0 || yM < 0) return { ok: false, error: "xM and yM must not be negative — the drawing area's top-left corner is the origin." };
+  if (xM > 2000 || yM > 2000) return { ok: false, error: "xM/yM look like millimetres — positions are metres (max 2000 m)." };
+  return { ok: true, xM, yM };
+}
+
+export type HexColorResult = { ok: true; color: string } | { ok: false; error: string };
+
+/** #rgb or #rrggbb, normalized to lower-case #rrggbb. */
+export function validateHexColor(color: unknown): HexColorResult {
+  if (typeof color !== "string") return { ok: false, error: "color must be a string like \"#e11d1d\"." };
+  const c = color.trim();
+  const m6 = /^#([0-9a-f]{6})$/i.exec(c);
+  if (m6) return { ok: true, color: `#${m6[1].toLowerCase()}` };
+  const m3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+  if (m3) return { ok: true, color: `#${(m3[1] + m3[1] + m3[2] + m3[2] + m3[3] + m3[3]).toLowerCase()}` };
+  return { ok: false, error: `"${color}" is not a hex color — use "#rrggbb".` };
+}
+
+export type ScaleResult = { ok: true; scaleDenominator: number } | { ok: false; error: string };
+
+/** Drawing scale denominator: a whole number in [1, 5000] (1:1 … 1:5000). */
+export function validateScaleDenominator(value: unknown): ScaleResult {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+    return { ok: false, error: "scaleDenominator must be a whole number — 50 means 1:50." };
+  }
+  if (value < 1 || value > 5000) return { ok: false, error: "scaleDenominator must be between 1 and 5000." };
+  return { ok: true, scaleDenominator: value };
+}
+
+/** A required, non-empty string parameter. */
+export function requireText(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${name} is required (a non-empty string).`);
+  }
+  return value.trim();
+}

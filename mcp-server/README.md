@@ -7,9 +7,12 @@ to the assistant over stdio, and connects to the editor over a localhost WebSock
 > Beta — supported actions: read the schematic, search the device library, add and
 > delete devices, set safe device properties, connect and disconnect devices, move a
 > device, group devices into rooms, add/edit/delete text notes, fit expansion cards
-> into modular-chassis slots, and build rack elevations (create racks, mount devices).
-> Adding devices, making connections, installing cards and mounting devices in racks
-> each have a batch version for doing many at once.
+> into modular-chassis slots, build rack elevations (create racks, mount devices), and
+> fill floorplans (symbol groups, device symbols at real-world positions, legend text,
+> the drawing block with its revision table, and free text notes). Adding devices,
+> making connections, installing cards, mounting devices in racks, placing floorplan
+> symbols and adding floorplan notes each have a batch version for doing many at once.
+> The architect's drawing itself is imported and calibrated in the editor.
 
 ## How it fits together
 

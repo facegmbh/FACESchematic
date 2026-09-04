@@ -22,7 +22,9 @@ Golden rules:
 - Prefer the batch tools (add_devices, connect_devices_batch, install_card_batch, place_device_in_rack_batch) over repeated single calls; each reports per-item success so you can retry only what failed.
 - Re-read get_device after a structural change (e.g. installing a card) before wiring the new Ports.
 
-Three prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), and "modular-chassis" (fit cards into a chassis).`;
+- Floorplans are scaled plan drawings: positions there are real-world METRES from the drawing area's corner, never canvas pixels. The architect's drawing (underlay) is imported and calibrated by the user in the editor — you fill in groups, symbols, legend text, the drawing block and notes.
+
+Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), and "floorplan" (annotate an architect's plan with device symbols, legend and drawing block).`;
 
 /** Definitions returned by the prompts/list handler. */
 export const PROMPTS: Prompt[] = [
@@ -45,6 +47,13 @@ export const PROMPTS: Prompt[] = [
     description: "Playbook for fitting expansion cards into a modular device's slots (get_device → list_slot_cards → install_card_batch).",
     arguments: [
       { name: "chassis", description: "Which chassis to configure and which cards to fit (e.g. 'fill the DM matrix with 4 HDMI input cards').", required: false },
+    ],
+  },
+  {
+    name: "floorplan",
+    description: "Playbook for turning an architect's plan into an installation drawing (list_floorplans → add_floorplan_group → place_floorplan_symbols → set_floorplan_legend → set_floorplan_drawing_block → add_floorplan_notes).",
+    arguments: [
+      { name: "plan", description: "What to draw and for whom (e.g. 'loudspeaker layout ground floor, 12 ceiling speakers and 2 subs, German legend, revision A today').", required: false },
     ],
   },
 ];
@@ -75,6 +84,17 @@ const MODULAR_CHASSIS = `You are configuring a modular Device — a chassis with
 4. Install with install_card_batch rather than one card at a time. Items apply in array order, so an earlier install that opens sub-slots can make a later install into one of them valid.
 5. Installing a card adds Ports to the chassis. Re-read get_device after installs to pick up the new Port ids before you connect them.`;
 
+const FLOORPLAN = `You are annotating an architect's floor plan in EasySchematic through the live MCP bridge — producing the installation drawing a fitter works from. Work in this order:
+
+1. Call list_floorplans FIRST. If there is no floorplan page, create one with create_floorplan. If a page has no calibrated underlay, tell the user to import the architect's PDF and calibrate it in the editor (Import Plan… → Calibrate) — you cannot do that over the bridge, and symbols placed on an uncalibrated plan will not measure true.
+2. Positions are real-world METRES from the top-left corner of the sheet's drawing area (x right, y down). list_floorplans reports how many metres the sheet covers at its scale; stay inside that. Read positions off the user's description or the architect's dimensions, never guess canvas pixels.
+3. One symbol group per device family: add_floorplan_group with the legend headline, a description line with model, finish and cable spec, a distinct color/shape, and a labelPrefix that seeds the numbering (e.g. "1.1" for zone 1, "SB." for subwoofers). Groups are the legend rows — get them right before placing.
+4. Place symbols with place_floorplan_symbols (the batch tool). Link deviceId from get_schematic wherever the device exists on the signal flow, so plan and schematic describe the same gear. Omit label to let numbering continue; pass label to start a new zone ("2.1").
+5. Fill the legend with set_floorplan_legend: headline, notes heading and installation notes (one per line: mounting method, ceiling cut-out, cable type, reinforcement). Write them in the user's language.
+6. Fill the drawing block with set_floorplan_drawing_block: title (floor), subtitle (what the drawing shows), fields (project, client with address, scale via {{scale}}, sheet via {{sheetSize}}, date, drawn by, checked by), revisionHeaders in the user's language, and the first revision via revisions or add_floorplan_revision. Use tokens for values that already live in the project title block.
+7. Add site remarks next to the symbols they concern with add_floorplan_notes (boxed, short, imperative).
+8. Finish by calling list_floorplans once more and summarising what is on the sheet; remind the user to export the PDF from the floorplan toolbar.`;
+
 const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: string }> = {
   "build-schematic": {
     body: BUILD_SCHEMATIC,
@@ -90,6 +110,11 @@ const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: 
     body: MODULAR_CHASSIS,
     argName: "chassis",
     noArgFallback: "No chassis was named — list the modular Devices with get_schematic / get_device and ask the user which one to configure.",
+  },
+  floorplan: {
+    body: FLOORPLAN,
+    argName: "plan",
+    noArgFallback: "No plan was described — call list_floorplans and ask the user which floor to draw and which devices go where.",
   },
 };
 

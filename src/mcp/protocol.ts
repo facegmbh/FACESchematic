@@ -26,8 +26,11 @@ export const PROTOCOL_VERSION = 1;
  *  tools (list_slot_cards, install_card, remove_card), and the four Ship-7
  *  "racks / rack elevation" tools (list_racks, create_rack, place_device_in_rack,
  *  remove_device_from_rack), the two Ship-8 "notes" tools (update_note,
- *  delete_note — get_schematic also now reports rooms + notes), and the two Ship-9
- *  "batch structural" tools (install_card_batch, place_device_in_rack_batch). */
+ *  delete_note — get_schematic also now reports rooms + notes), the two Ship-9
+ *  "batch structural" tools (install_card_batch, place_device_in_rack_batch), and the
+ *  Ship-10 "floorplan" tools (list_floorplans … delete_floorplan_note) that fill a scaled
+ *  plan drawing: symbol groups, device symbols, the legend box, the drawing block with
+ *  its revision table, and free text notes. */
 export type CommandType =
   | "get_schematic"
   | "list_devices"
@@ -54,7 +57,21 @@ export type CommandType =
   | "update_note"
   | "delete_note"
   | "install_card_batch"
-  | "place_device_in_rack_batch";
+  | "place_device_in_rack_batch"
+  | "list_floorplans"
+  | "create_floorplan"
+  | "update_floorplan"
+  | "add_floorplan_group"
+  | "update_floorplan_group"
+  | "place_floorplan_symbols"
+  | "update_floorplan_symbol"
+  | "remove_floorplan_symbol"
+  | "set_floorplan_legend"
+  | "set_floorplan_drawing_block"
+  | "add_floorplan_revision"
+  | "add_floorplan_notes"
+  | "update_floorplan_note"
+  | "delete_floorplan_note";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -68,6 +85,9 @@ export type PortFace = "in" | "out" | "rear" | "front";
  *  single source the bridge validates against (create_rack); the server tool schema
  *  mirrors the same five values. */
 export const RACK_TYPES = ["floor-19", "wall-mount", "desktop", "open-2post", "open-4post"] as const;
+
+/** Symbol shapes a floorplan group may use, mirroring `FloorplanSymbolShape` in `src/types.ts`. */
+export const FLOORPLAN_SHAPES = ["circle", "square", "triangle", "diamond"] as const;
 
 // ---------------------------------------------------------------------------
 // App -> server: handshake. The app proves it is the real editor (token) and the
@@ -306,6 +326,174 @@ export interface PlaceDeviceInRackBatchParams {
    *  span / half-rack side, and a device already placed by an earlier item is rejected
    *  by a later one). */
   placements: PlaceDeviceInRackParams[];
+}
+
+// ── Floorplan tools (Ship 10) ─────────────────────────────────────────
+// Positions on a floorplan are REAL-WORLD METRES measured from the top-left corner of the
+// sheet's drawing area (inside the printed border), x to the right, y down. The page's
+// drawing scale converts them to paper — so a symbol stays where the loudspeaker hangs
+// even if the planner later changes the scale. Paper-mm placement of the boxes (legend,
+// drawing block) is left to the editor, where the planner drags them.
+
+export interface FloorplanPageRef {
+  /** The floorplan page id from list_floorplans / create_floorplan. */
+  pageId: string;
+}
+
+export interface CreateFloorplanParams {
+  /** Tab name and default drawing title, e.g. "Ground floor". Default "Floorplan N". */
+  label?: string;
+  /** Paper id as in the editor ("iso-a1", "iso-a0", "iso-a3", "letter", …). Default "iso-a1". */
+  paperId?: string;
+  orientation?: "landscape" | "portrait";
+  /** Drawing scale denominator: 50 means 1:50. Default 50. */
+  scaleDenominator?: number;
+}
+
+export interface UpdateFloorplanParams extends FloorplanPageRef {
+  label?: string;
+  paperId?: string;
+  orientation?: "landscape" | "portrait";
+  /** Changing the scale re-fits the underlay so the building keeps its real size. */
+  scaleDenominator?: number;
+}
+
+export interface FloorplanGroupSpec {
+  /** Legend headline, e.g. "Ceiling speakers". */
+  label: string;
+  /** #rrggbb. Defaults cycle through the editor's legend palette. */
+  color?: string;
+  /** One of FLOORPLAN_SHAPES. Default "circle". */
+  shape?: string;
+  /** Legend sub-line, e.g. "Bose DM6SE black | cable 2×2.5 mm²". */
+  description?: string;
+  /** Seed for auto-numbering: "1.1" numbers 1.1, 1.2 …; "SB." numbers SB.1, SB.2 … */
+  labelPrefix?: string;
+  /** Device template this group stands for; devices of that template land in it. */
+  templateId?: string;
+  /** Caption next to the group's product image in the legend, e.g. "DM6SE". */
+  imageCaption?: string;
+  /** Hide the group from the legend box. */
+  hiddenInLegend?: boolean;
+}
+
+export interface AddFloorplanGroupParams extends FloorplanPageRef, FloorplanGroupSpec {}
+
+export interface UpdateFloorplanGroupParams extends FloorplanPageRef, Partial<FloorplanGroupSpec> {
+  groupId: string;
+}
+
+export interface FloorplanSymbolSpec {
+  /** The group (legend row) the symbol belongs to. */
+  groupId: string;
+  /** Schematic device this symbol stands for (from get_schematic). Optional. */
+  deviceId?: string;
+  /** Real-world position in metres from the drawing area's top-left corner. */
+  xM: number;
+  yM: number;
+  /** Symbol number, e.g. "4.1". Omit to continue the group's numbering. */
+  label?: string;
+  notes?: string;
+}
+
+export interface PlaceFloorplanSymbolsParams extends FloorplanPageRef {
+  /** Symbols to place, applied in array order (best-effort, per-item results). */
+  symbols: FloorplanSymbolSpec[];
+}
+
+export interface UpdateFloorplanSymbolParams extends FloorplanPageRef {
+  symbolId: string;
+  groupId?: string;
+  deviceId?: string | null;
+  xM?: number;
+  yM?: number;
+  label?: string;
+  notes?: string;
+}
+
+export interface RemoveFloorplanSymbolParams extends FloorplanPageRef {
+  symbolId: string;
+}
+
+export interface SetFloorplanLegendParams extends FloorplanPageRef {
+  visible?: boolean;
+  /** Box headline, e.g. "BESCHALLUNG – LEGENDE & MONTAGE". */
+  title?: string;
+  /** Heading above the free-text notes, e.g. "MONTAGEHINWEISE". */
+  notesTitle?: string;
+  /** Installation notes, one entry per printed line. Replaces the existing list. */
+  notes?: string[];
+  showImages?: boolean;
+  onlyUsedGroups?: boolean;
+}
+
+export interface FloorplanRevisionSpec {
+  /** Revision index ("A", "B", "01"). Omit to continue the sequence. */
+  index?: string;
+  /** Issue date as printed, e.g. "04.09.26". Omit for today. */
+  date?: string;
+  description: string;
+  /** Drawn by (initials). */
+  author?: string;
+  /** Checked by (initials). */
+  checkedBy?: string;
+}
+
+export interface FloorplanDrawingFieldSpec {
+  label: string;
+  /** Text or a `{{token}}`: showName, venue, designer, engineer, date, drawingTitle,
+   *  company, revision (project title block) · scale, sheetSize, pageLabel, projectName (page). */
+  value: string;
+  /** Span both columns (for a client address). */
+  wide?: boolean;
+}
+
+export interface SetFloorplanDrawingBlockParams extends FloorplanPageRef {
+  visible?: boolean;
+  /** Drawing title, e.g. "Erdgeschoss". Tokens allowed. */
+  title?: string;
+  subtitle?: string;
+  /** Replaces the field grid. */
+  fields?: FloorplanDrawingFieldSpec[];
+  /** Replaces the revision table (oldest first). Use add_floorplan_revision to append. */
+  revisions?: FloorplanRevisionSpec[];
+  /** Column headers: index, date, description, author, checked. */
+  revisionHeaders?: [string, string, string, string, string];
+  /** Small print above the title (site-verification clause etc.). */
+  disclaimer?: string;
+  showLogo?: boolean;
+  showNorthArrow?: boolean;
+  /** Clockwise degrees; 0 = north is up the sheet. */
+  northRotationDeg?: number;
+}
+
+export interface AddFloorplanRevisionParams extends FloorplanPageRef, FloorplanRevisionSpec {}
+
+export interface FloorplanNoteSpec {
+  text: string;
+  /** Real-world position of the note's top-left corner, in metres from the drawing area's corner. */
+  xM: number;
+  yM: number;
+  /** Wrap width in paper mm. Default 60. */
+  widthMm?: number;
+  /** Cap height in paper mm. Default 2.8. */
+  fontSizeMm?: number;
+  /** White box with hairline border behind the text. Default true. */
+  boxed?: boolean;
+  /** #rrggbb text color. */
+  color?: string;
+}
+
+export interface AddFloorplanNotesParams extends FloorplanPageRef {
+  notes: FloorplanNoteSpec[];
+}
+
+export interface UpdateFloorplanNoteParams extends FloorplanPageRef, Partial<FloorplanNoteSpec> {
+  noteId: string;
+}
+
+export interface DeleteFloorplanNoteParams extends FloorplanPageRef {
+  noteId: string;
 }
 
 // ---------------------------------------------------------------------------

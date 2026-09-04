@@ -3,6 +3,7 @@ import {
   buildFloorplanSchedule,
   buildLegendRows,
   computeCalibration,
+  createDefaultDrawingBlock,
   createDefaultLegend,
   drawingAreaMm,
   fitRectInArea,
@@ -17,6 +18,13 @@ import {
   sheetSizeMm,
   symbolLabelAnchor,
   underlayMmPerPx,
+  wrapText,
+  resolveFloorplanTokens,
+  layoutDrawingBlock,
+  layoutNote,
+  nextRevisionIndex,
+  formatPlanDate,
+  AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
 import type { FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
@@ -50,7 +58,9 @@ function makePage(over: Partial<FloorplanPage> = {}): FloorplanPage {
     groups: [],
     symbols: [],
     legend: createDefaultLegend(paper),
-    showTitleBlock: true,
+    drawingBlock: createDefaultDrawingBlock(paper),
+    notes: [],
+    showTitleBlock: false,
     symbolSizeMm: 6,
     labelSizeMm: 3.5,
     ...over,
@@ -302,5 +312,113 @@ describe("symbol label placement", () => {
   it("honors a dragged label offset", () => {
     const symbol = makeSymbol({ id: "s1", groupId: "g1", label: "1.1", positionMm: { x: 100, y: 100 }, labelOffsetMm: { x: -12, y: -8 } });
     expect(symbolLabelAnchor(symbol, 6)).toEqual({ x: 88, y: 92 });
+  });
+});
+
+describe("text wrapping", () => {
+  it("breaks on width and keeps explicit newlines", () => {
+    // 20 mm at 2.8 mm caps ≈ 12 chars per line
+    const lines = wrapText("Mount on the ceiling\nsecond paragraph", 20, 2.8);
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines).toContain("second");
+    expect(lines.join(" ")).toContain("Mount on the");
+  });
+
+  it("hard-splits a word longer than the line so nothing escapes the box", () => {
+    const lines = wrapText("Supercalifragilistic", 10, 2.8);
+    expect(lines.every((l) => l.length <= Math.floor(10 / (2.8 * AVG_GLYPH_WIDTH_FACTOR)))).toBe(true);
+    expect(lines.join("")).toBe("Supercalifragilistic");
+  });
+
+  it("keeps a blank line for an empty paragraph", () => {
+    expect(wrapText("a\n\nb", 50, 3)).toEqual(["a", "", "b"]);
+  });
+});
+
+describe("drawing block", () => {
+  const ctx = {
+    titleBlock: { showName: "Cafe & Bar Celona", venue: "Nikolaiort 6, Osnabrück", designer: "SP", engineer: "JL", date: "04.09.26", drawingTitle: "Loudspeaker layout", company: "FACE GmbH", revision: "A" },
+    page: { label: "Erdgeschoss", scaleDenominator: 50, paperId: "iso-a1", orientation: "landscape" as const },
+    projectName: "CBC Osnabrück",
+  };
+
+  it("resolves title block, page and sheet tokens", () => {
+    expect(resolveFloorplanTokens("{{showName}} · {{scale}} · {{pageLabel}}", ctx)).toBe("Cafe & Bar Celona · 1:50 · Erdgeschoss");
+    expect(resolveFloorplanTokens("{{sheetSize}}", ctx)).toBe("841 × 594 mm (A1)");
+    expect(resolveFloorplanTokens("{{ designer }}/{{engineer}}", ctx)).toBe("SP/JL");
+    expect(resolveFloorplanTokens("{{projectName}}", ctx)).toBe("CBC Osnabrück");
+  });
+
+  it("leaves an unknown token visible instead of swallowing it", () => {
+    expect(resolveFloorplanTokens("{{nope}}", ctx)).toBe("{{nope}}");
+  });
+
+  it("stacks revisions → disclaimer → title → fields → footer and sizes the box", () => {
+    const block = createDefaultDrawingBlock(paper);
+    block.revisions = [
+      { index: "A", date: "01.09.26", description: "First issue" },
+      { index: "B", date: "04.09.26", description: "Speakers moved" },
+    ];
+    block.disclaimer = "All dimensions to be verified on site.";
+    const layout = layoutDrawingBlock(block, ctx, { hasLogo: true });
+    expect(layout.sections.map((s) => s.kind)).toEqual(["revisions", "disclaimer", "title", "fields", "footer"]);
+    // Sections tile the block with no gaps
+    let y = 0;
+    for (const s of layout.sections) { expect(s.yMm).toBeCloseTo(y); y += s.heightMm; }
+    expect(layout.heightMm).toBeCloseTo(y);
+    // Newest revision prints first
+    expect(layout.revisionRows[0].index).toBe("B");
+    expect(layout.title).toBe("Erdgeschoss");
+    expect(layout.subtitle).toBe("Loudspeaker layout");
+  });
+
+  it("omits empty sections", () => {
+    const block = { ...createDefaultDrawingBlock(paper), revisions: [], disclaimer: "", showLogo: false, showNorthArrow: false, subtitle: "" };
+    const layout = layoutDrawingBlock(block, ctx, { hasLogo: false });
+    expect(layout.sections.map((s) => s.kind)).toEqual(["title", "fields"]);
+    expect(layout.showFooter).toBe(false);
+  });
+
+  it("lays wide fields across both columns and pairs the rest", () => {
+    const block = createDefaultDrawingBlock(paper);
+    const layout = layoutDrawingBlock(block, ctx, { hasLogo: false });
+    const project = layout.fieldCells.find((c) => c.field.label === "Project")!;
+    const scale = layout.fieldCells.find((c) => c.field.label === "Scale")!;
+    const sheet = layout.fieldCells.find((c) => c.field.label === "Sheet")!;
+    expect(project.wMm).toBeCloseTo(layout.innerWMm);
+    expect(scale.yMm).toBeCloseTo(sheet.yMm); // same row
+    expect(scale.xMm).toBeLessThan(sheet.xMm);
+    expect(scale.lines).toEqual(["1:50"]);
+  });
+
+  it("parks the default block inside the drawing area", () => {
+    const block = createDefaultDrawingBlock(paper);
+    const area = drawingAreaMm(paper);
+    // With a logo and a real client address the block is still expected to fit.
+    const h = layoutDrawingBlock(block, ctx, { hasLogo: true }).heightMm;
+    expect(block.positionMm.x).toBeGreaterThanOrEqual(area.x);
+    expect(block.positionMm.x + block.widthMm).toBeLessThanOrEqual(area.x + area.w);
+    expect(block.positionMm.y + h).toBeLessThanOrEqual(area.y + area.h + 0.01);
+  });
+
+  it("advances the revision index like a plan set does", () => {
+    expect(nextRevisionIndex([])).toBe("A");
+    expect(nextRevisionIndex([{ index: "A", date: "", description: "" }])).toBe("B");
+    expect(nextRevisionIndex([{ index: "Z", date: "", description: "" }])).toBe("ZA");
+    expect(nextRevisionIndex([{ index: "01", date: "", description: "" }])).toBe("02");
+    expect(nextRevisionIndex([{ index: "09", date: "", description: "" }])).toBe("10");
+  });
+
+  it("stamps dates the German way", () => {
+    expect(formatPlanDate(new Date(2026, 8, 4))).toBe("04.09.26");
+  });
+});
+
+describe("notes", () => {
+  it("wraps a note to its width and reports its height", () => {
+    const note = { id: "n1", positionMm: { x: 0, y: 0 }, widthMm: 30, text: "DM6SE: mount on the ceiling, cable 5 cm from the wall.", fontSizeMm: 2.8, boxed: true };
+    const layout = layoutNote(note);
+    expect(layout.lines.length).toBeGreaterThan(1);
+    expect(layout.heightMm).toBeCloseTo(layout.lines.length * layout.lineHeightMm + 3);
   });
 });

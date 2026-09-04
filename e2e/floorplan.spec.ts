@@ -6,7 +6,8 @@ import { join } from "node:path";
 /**
  * Floorplan page smoke test: the page mounts, an underlay imports and places itself on
  * the sheet, symbols drop with continuing auto-numbers, the legend picks the group up,
- * and calibration resolves the drawing's real-world scale.
+ * calibration resolves the drawing's real-world scale, the drawing block takes a title
+ * and a revision, and a free text note can be dropped and edited inline.
  *
  * Uses a generated PNG rather than a PDF so the test carries its own fixture; the PDF
  * path shares everything downstream of `importUnderlayFile`.
@@ -61,7 +62,23 @@ test("floorplan: import an underlay, place numbered symbols, calibrate", async (
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.getByText(/mm\/px/)).toBeVisible();
 
-  // The PDF export draws the same sheet: underlay, symbols, legend and title block.
+  // Drawing block: title resolves from the page label token; a revision row appears.
+  await page.getByPlaceholder("Drawing title, e.g. Ground floor").fill("Ground floor");
+  await page.getByRole("button", { name: "+ Revision" }).click();
+  await page.getByPlaceholder("Change").fill("First issue");
+  await expect(page.getByText("Ground floor", { exact: true })).toBeVisible();
+  await expect(page.getByText("First issue", { exact: true })).toBeVisible();
+
+  // A free text note dropped with the note tool, edited inline.
+  await page.getByTitle("Click the plan to add a text note (installation hint, remark)").click();
+  await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.4);
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("Reinforce ceiling 1.2 x 0.6 m");
+  await page.keyboard.press("Control+Enter");
+  // The text also sits in the sidebar's note editor — assert on the sheet itself.
+  await expect(paper.getByText("Reinforce ceiling 1.2 x 0.6 m", { exact: true })).toBeVisible();
+
+  // The PDF export draws the same sheet: underlay, symbols, notes, legend and drawing block.
   const download = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export PDF" }).click(),

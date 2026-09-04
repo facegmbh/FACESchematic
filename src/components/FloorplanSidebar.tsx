@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import { resolveDeviceLabel } from "../displayName";
-import { FLOORPLAN_GROUP_COLORS } from "../floorplan";
+import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, formatPlanDate, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
 import { importLegendImage } from "../floorplanUnderlay";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
-import type { DeviceData, FloorplanPage, FloorplanSymbolGroup } from "../types";
+import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup } from "../types";
+import { FLOORPLAN_TOKENS } from "../types";
 
 /** MIME type carrying a device node id from this sidebar to the sheet. */
 export const FLOORPLAN_DEVICE_MIME = "application/x-floorplan-device-id";
@@ -37,7 +38,16 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
   const removeFloorplanGroup = useSchematicStore((s) => s.removeFloorplanGroup);
   const renumberFloorplanGroup = useSchematicStore((s) => s.renumberFloorplanGroup);
   const updateFloorplanLegend = useSchematicStore((s) => s.updateFloorplanLegend);
+  const updateFloorplanDrawingBlock = useSchematicStore((s) => s.updateFloorplanDrawingBlock);
+  const addFloorplanNote = useSchematicStore((s) => s.addFloorplanNote);
+  const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
+  const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
   const addToast = useSchematicStore((s) => s.addToast);
+
+  const block = page.drawingBlock;
+  const patchBlock = (patch: Partial<FloorplanDrawingBlock>) => updateFloorplanDrawingBlock(page.id, patch);
+  const patchRevision = (i: number, patch: Partial<FloorplanRevision>) =>
+    patchBlock({ revisions: block.revisions.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
 
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -360,6 +370,191 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
           data-allow-scroll
         />
       </div>
+
+      {/* ── Drawing block (Plankopf) ──────────────────────────────── */}
+      <details className="border-t border-neutral-200" open>
+        <summary className="px-2 pt-2 pb-1 font-semibold text-neutral-500 uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          Drawing Block
+        </summary>
+        <div className="px-2 pb-3 flex flex-col gap-1.5">
+          <label className="flex items-center gap-1 text-neutral-600 cursor-pointer">
+            <input type="checkbox" checked={block.visible} onChange={(e) => patchBlock({ visible: e.target.checked })} />
+            Show drawing block on the sheet
+          </label>
+          <input
+            className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400 font-semibold"
+            value={block.title}
+            placeholder="Drawing title, e.g. Ground floor"
+            onChange={(e) => patchBlock({ title: e.target.value })}
+            title="Tokens: {{pageLabel}}, {{showName}}, {{scale}} …"
+          />
+          <input
+            className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+            value={block.subtitle ?? ""}
+            placeholder="Subtitle, e.g. Loudspeaker layout"
+            onChange={(e) => patchBlock({ subtitle: e.target.value })}
+          />
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Fields</span>
+            <button
+              className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-50 border border-transparent hover:border-emerald-200"
+              onClick={() => patchBlock({ fields: [...block.fields, { id: nextDrawingFieldId(), label: "Field", value: "" }] })}
+            >
+              + Field
+            </button>
+          </div>
+          {block.fields.map((f, i) => (
+            <div key={f.id} className="flex items-center gap-1">
+              <input
+                className="w-[38%] border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 uppercase"
+                style={{ fontSize: 10 }}
+                value={f.label}
+                placeholder="Label"
+                onChange={(e) => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })}
+              />
+              <textarea
+                className="flex-1 min-w-0 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 resize-none leading-tight"
+                rows={Math.max(1, Math.min(4, f.value.split("\n").length))}
+                value={f.value}
+                placeholder="Value or {{token}}"
+                title="Multi-line values (addresses) wrap onto several lines in the block"
+                onChange={(e) => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })}
+                data-allow-scroll
+              />
+              <button
+                className={`px-1 rounded border ${f.wide ? "border-emerald-400 text-emerald-700 bg-emerald-50" : "border-neutral-200 text-neutral-400"}`}
+                title="Span both columns"
+                onClick={() => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, wide: !x.wide } : x)) })}
+              >
+                ⟷
+              </button>
+              <button
+                className="px-1 text-neutral-400 hover:text-red-600"
+                title="Remove field"
+                onClick={() => patchBlock({ fields: block.fields.filter((_, j) => j !== i) })}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <p className="text-neutral-400 leading-snug" style={{ fontSize: 10 }}>
+            Tokens: {FLOORPLAN_TOKENS.map((t) => `{{${t}}}`).join(" ")} — resolved from the project title block and the page.
+          </p>
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Revisions</span>
+            <button
+              className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-50 border border-transparent hover:border-emerald-200"
+              onClick={() => patchBlock({
+                revisions: [...block.revisions, { index: nextRevisionIndex(block.revisions), date: formatPlanDate(), description: "", author: "", checkedBy: "" }],
+              })}
+            >
+              + Revision
+            </button>
+          </div>
+          <div className="flex gap-1 text-neutral-400 uppercase" style={{ fontSize: 9 }}>
+            {block.revisionHeaders.map((h, i) => (
+              <input
+                key={i}
+                className="border border-transparent hover:border-neutral-200 rounded px-1 outline-none focus:border-emerald-400 bg-transparent min-w-0"
+                style={{ width: i === 2 ? "38%" : "15%", fontSize: 9 }}
+                value={h}
+                onChange={(e) => {
+                  const headers = [...block.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"];
+                  headers[i] = e.target.value;
+                  patchBlock({ revisionHeaders: headers });
+                }}
+                title="Column header"
+              />
+            ))}
+          </div>
+          {block.revisions.map((r, i) => (
+            <div key={i} className="flex gap-1 items-center">
+              <input className="border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.index} onChange={(e) => patchRevision(i, { index: e.target.value })} title="Index" />
+              <input className="border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.date} onChange={(e) => patchRevision(i, { date: e.target.value })} title="Date" />
+              <input className="border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 min-w-0 flex-1" value={r.description} placeholder="Change" onChange={(e) => patchRevision(i, { description: e.target.value })} title="Change" />
+              <input className="border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.author ?? ""} placeholder="By" onChange={(e) => patchRevision(i, { author: e.target.value })} title="Drawn by" />
+              <input className="border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.checkedBy ?? ""} placeholder="Chk" onChange={(e) => patchRevision(i, { checkedBy: e.target.value })} title="Checked by" />
+              <button className="px-1 text-neutral-400 hover:text-red-600" title="Remove revision" onClick={() => patchBlock({ revisions: block.revisions.filter((_, j) => j !== i) })}>✕</button>
+            </div>
+          ))}
+
+          <textarea
+            className="w-full border border-neutral-200 rounded px-1.5 py-1 outline-none focus:border-emerald-400 resize-y mt-1"
+            rows={3}
+            value={block.disclaimer ?? ""}
+            placeholder="Small print above the title, e.g. “All dimensions to be verified on site …”"
+            onChange={(e) => patchBlock({ disclaimer: e.target.value })}
+            data-allow-scroll
+          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-1 text-neutral-600 cursor-pointer">
+              <input type="checkbox" checked={block.showLogo} onChange={(e) => patchBlock({ showLogo: e.target.checked })} />
+              Logo
+            </label>
+            <label className="flex items-center gap-1 text-neutral-600 cursor-pointer">
+              <input type="checkbox" checked={block.showNorthArrow} onChange={(e) => patchBlock({ showNorthArrow: e.target.checked })} />
+              North arrow
+            </label>
+            {block.showNorthArrow && (
+              <label className="flex items-center gap-1 text-neutral-600" title="North arrow rotation (° clockwise)">
+                <input
+                  type="number"
+                  className="w-14 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400"
+                  value={block.northRotationDeg}
+                  step={5}
+                  onChange={(e) => patchBlock({ northRotationDeg: Number(e.target.value) || 0 })}
+                />
+                °
+              </label>
+            )}
+          </div>
+        </div>
+      </details>
+
+      {/* ── Notes on the plan ─────────────────────────────────────── */}
+      <details className="border-t border-neutral-200" open>
+        <summary className="px-2 pt-2 pb-1 font-semibold text-neutral-500 uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          Notes on the plan ({page.notes.length})
+        </summary>
+        <div className="px-2 pb-4 flex flex-col gap-1.5">
+          <button
+            className="self-start px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-50 border border-transparent hover:border-emerald-200"
+            onClick={() => {
+              const area = drawingAreaMm(page);
+              addFloorplanNote(page.id, { positionMm: { x: area.x + area.w / 2 - 30, y: area.y + area.h / 2 }, text: "Note", boxed: true });
+            }}
+            title="Adds a note at the sheet center — or use the ✎ Note tool to click it into place"
+          >
+            + Note
+          </button>
+          {page.notes.map((n) => (
+            <div key={n.id} className="border border-neutral-200 rounded p-1.5 flex flex-col gap-1">
+              <textarea
+                className="w-full border border-neutral-200 rounded px-1.5 py-1 outline-none focus:border-emerald-400 resize-y"
+                rows={2}
+                value={n.text}
+                onChange={(e) => updateFloorplanNote(page.id, n.id, { text: e.target.value })}
+                data-allow-scroll
+              />
+              <div className="flex items-center gap-2 text-neutral-600">
+                <label className="flex items-center gap-1" title="Font size (mm)">
+                  <input type="number" className="w-12 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400" min={1} max={20} step={0.2} value={n.fontSizeMm} onChange={(e) => updateFloorplanNote(page.id, n.id, { fontSizeMm: Number(e.target.value) || 2.8 })} />
+                  mm
+                </label>
+                <input type="color" className="w-6 h-5 border border-neutral-200 rounded cursor-pointer" value={n.color ?? "#111111"} onChange={(e) => updateFloorplanNote(page.id, n.id, { color: e.target.value })} title="Text color" />
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="checkbox" checked={Boolean(n.boxed)} onChange={(e) => updateFloorplanNote(page.id, n.id, { boxed: e.target.checked })} />
+                  Box
+                </label>
+                <div className="flex-1" />
+                <button className="px-1 text-neutral-400 hover:text-red-600" onClick={() => removeFloorplanNote(page.id, n.id)} title="Delete note">✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

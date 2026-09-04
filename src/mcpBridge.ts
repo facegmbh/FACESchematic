@@ -48,6 +48,22 @@ import {
   type InstallCardBatchParams,
   type PlaceDeviceInRackBatchParams,
   type PortFace,
+  type CreateFloorplanParams,
+  type UpdateFloorplanParams,
+  type AddFloorplanGroupParams,
+  type UpdateFloorplanGroupParams,
+  type PlaceFloorplanSymbolsParams,
+  type FloorplanSymbolSpec,
+  type UpdateFloorplanSymbolParams,
+  type RemoveFloorplanSymbolParams,
+  type SetFloorplanLegendParams,
+  type SetFloorplanDrawingBlockParams,
+  type AddFloorplanRevisionParams,
+  type AddFloorplanNotesParams,
+  type FloorplanNoteSpec,
+  type UpdateFloorplanNoteParams,
+  type DeleteFloorplanNoteParams,
+  FLOORPLAN_SHAPES,
 } from "./mcp/protocol";
 import {
   classifyDeviceProperties,
@@ -62,10 +78,21 @@ import {
   validateUPosition,
   validateRackFace,
   validateRackSpec,
+  validateRealPosition,
+  validateHexColor,
+  validateScaleDenominator,
+  requireText,
 } from "./mcp/validation";
 import type {
   DeviceData,
   DeviceTemplate,
+  FloorplanDrawingBlock,
+  FloorplanDrawingField,
+  FloorplanPage,
+  FloorplanRevision,
+  FloorplanSymbol,
+  FloorplanSymbolGroup,
+  FloorplanSymbolShape,
   InstalledSlot,
   Port,
   RackData,
@@ -73,6 +100,16 @@ import type {
   RackElevationPage,
   SchematicNode,
 } from "./types";
+import { PAPER_SIZES } from "./printConfig";
+import {
+  drawingAreaMm,
+  formatPlanDate,
+  nextDrawingFieldId,
+  nextRevisionIndex,
+  paperMmToRealMm,
+  realMmToPaperMm,
+  sheetSizeMm,
+} from "./floorplan";
 
 export type BridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -233,6 +270,194 @@ async function allTemplates(): Promise<DeviceTemplate[]> {
     merged.set(t.id ?? t.deviceType, t);
   }
   return [...merged.values()];
+}
+
+// ── Floorplan helpers (Ship 10) ────────────────────────────────────
+
+function floorplanPages(): FloorplanPage[] {
+  return st().pages.filter((p): p is FloorplanPage => p.type === "floorplan");
+}
+
+function requireFloorplan(pageId: unknown): FloorplanPage {
+  if (typeof pageId !== "string" || !pageId) throw new CommandError("pageId is required. Call list_floorplans first.");
+  const page = floorplanPages().find((p) => p.id === pageId);
+  if (!page) throw new CommandError(`No floorplan page found with id "${pageId}". Call list_floorplans first.`);
+  return page;
+}
+
+function requireGroup(page: FloorplanPage, groupId: unknown): FloorplanSymbolGroup {
+  if (typeof groupId !== "string" || !groupId) throw new CommandError("groupId is required. Call list_floorplans first.");
+  const group = page.groups.find((g) => g.id === groupId);
+  if (!group) throw new CommandError(`No symbol group "${groupId}" on floorplan "${page.id}". Call list_floorplans first.`);
+  return group;
+}
+
+function requireSymbol(page: FloorplanPage, symbolId: unknown): FloorplanSymbol {
+  if (typeof symbolId !== "string" || !symbolId) throw new CommandError("symbolId is required.");
+  const symbol = page.symbols.find((sym) => sym.id === symbolId);
+  if (!symbol) throw new CommandError(`No symbol "${symbolId}" on floorplan "${page.id}".`);
+  return symbol;
+}
+
+/** Real-world metres from the drawing area's corner → paper mm on the sheet. Rejects
+ *  positions that would land off the paper — a symbol nobody can see is a silent error. */
+function realMToPaper(page: FloorplanPage, xM: number, yM: number): { x: number; y: number } {
+  const area = drawingAreaMm(page);
+  const pos = {
+    x: area.x + realMmToPaperMm(xM * 1000, page.scaleDenominator),
+    y: area.y + realMmToPaperMm(yM * 1000, page.scaleDenominator),
+  };
+  const sheet = sheetSizeMm(page);
+  if (pos.x > sheet.w || pos.y > sheet.h) {
+    const maxX = paperMmToRealMm(area.w, page.scaleDenominator) / 1000;
+    const maxY = paperMmToRealMm(area.h, page.scaleDenominator) / 1000;
+    throw new CommandError(
+      `Position (${xM} m, ${yM} m) is off the sheet — at 1:${page.scaleDenominator} this sheet covers ${maxX.toFixed(1)} m × ${maxY.toFixed(1)} m.`,
+    );
+  }
+  return pos;
+}
+
+/** Paper mm → real-world metres from the drawing area's corner (for reporting). */
+function paperToRealM(page: FloorplanPage, pos: { x: number; y: number }): { xM: number; yM: number } {
+  const area = drawingAreaMm(page);
+  return {
+    xM: Math.round(paperMmToRealMm(pos.x - area.x, page.scaleDenominator)) / 1000,
+    yM: Math.round(paperMmToRealMm(pos.y - area.y, page.scaleDenominator)) / 1000,
+  };
+}
+
+function validateShape(shape: unknown): FloorplanSymbolShape {
+  if (typeof shape !== "string" || !(FLOORPLAN_SHAPES as readonly string[]).includes(shape)) {
+    throw new CommandError(`shape must be one of ${FLOORPLAN_SHAPES.join(", ")}.`);
+  }
+  return shape as FloorplanSymbolShape;
+}
+
+function validatePaper(paperId: unknown): string {
+  if (typeof paperId !== "string" || !PAPER_SIZES.some((p) => p.id === paperId)) {
+    throw new CommandError(`paperId must be one of ${PAPER_SIZES.map((p) => p.id).join(", ")}.`);
+  }
+  return paperId;
+}
+
+function validateOrientation(o: unknown): "landscape" | "portrait" {
+  if (o !== "landscape" && o !== "portrait") throw new CommandError('orientation must be "landscape" or "portrait".');
+  return o;
+}
+
+/** Group patch from an MCP spec: validates colors/shapes, drops undefined keys so a
+ *  partial update never blanks a field the caller did not mention. */
+function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omit<FloorplanSymbolGroup, "id">> {
+  const patch: Partial<Omit<FloorplanSymbolGroup, "id">> = {};
+  if (spec.label !== undefined) patch.label = requireText(spec.label, "label");
+  if (spec.color !== undefined) {
+    const c = validateHexColor(spec.color);
+    if (!c.ok) throw new CommandError(c.error);
+    patch.color = c.color;
+  }
+  if (spec.shape !== undefined) patch.shape = validateShape(spec.shape);
+  if (spec.description !== undefined) patch.description = String(spec.description);
+  if (spec.labelPrefix !== undefined) patch.labelPrefix = String(spec.labelPrefix) || undefined;
+  if (spec.templateId !== undefined) patch.templateId = String(spec.templateId) || undefined;
+  if (spec.imageCaption !== undefined) patch.imageCaption = String(spec.imageCaption) || undefined;
+  if (spec.hiddenInLegend !== undefined) patch.hiddenInLegend = Boolean(spec.hiddenInLegend) || undefined;
+  return patch;
+}
+
+function floorplanSummary(page: FloorplanPage) {
+  const deviceLabel = (id?: string) => (id ? (st().nodes.find((n) => n.id === id)?.data as DeviceData | undefined)?.label ?? null : null);
+  const counts = new Map<string, number>();
+  for (const sym of page.symbols) counts.set(sym.groupId, (counts.get(sym.groupId) ?? 0) + 1);
+  const area = drawingAreaMm(page);
+  return {
+    pageId: page.id,
+    label: page.label,
+    paperId: page.paperId,
+    orientation: page.orientation,
+    scale: `1:${page.scaleDenominator}`,
+    scaleDenominator: page.scaleDenominator,
+    /** Real-world extent the drawing area covers at this scale, in metres. */
+    coversM: {
+      width: Math.round(paperMmToRealMm(area.w, page.scaleDenominator)) / 1000,
+      height: Math.round(paperMmToRealMm(area.h, page.scaleDenominator)) / 1000,
+    },
+    underlay: page.underlay
+      ? { present: true, sourceName: page.underlay.sourceName, kind: page.underlay.kind, pageNumber: page.underlay.pageNumber, calibrated: page.underlay.mmPerPx !== undefined }
+      : { present: false },
+    groups: page.groups.map((g) => ({
+      groupId: g.id, label: g.label, color: g.color, shape: g.shape, description: g.description,
+      labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
+      symbolCount: counts.get(g.id) ?? 0,
+    })),
+    symbols: page.symbols.map((sym) => ({
+      symbolId: sym.id, groupId: sym.groupId, label: sym.label, deviceId: sym.deviceNodeId,
+      deviceLabel: deviceLabel(sym.deviceNodeId), ...paperToRealM(page, sym.positionMm), notes: sym.notes,
+    })),
+    legend: {
+      visible: page.legend.visible, title: page.legend.title, notesTitle: page.legend.notesTitle,
+      notes: page.legend.notes ?? [], showImages: page.legend.showImages, onlyUsedGroups: page.legend.onlyUsedGroups,
+    },
+    drawingBlock: {
+      visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
+      fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),
+      revisions: page.drawingBlock.revisions, revisionHeaders: page.drawingBlock.revisionHeaders,
+      disclaimer: page.drawingBlock.disclaimer, showLogo: page.drawingBlock.showLogo,
+      showNorthArrow: page.drawingBlock.showNorthArrow, northRotationDeg: page.drawingBlock.northRotationDeg,
+    },
+    notes: page.notes.map((n) => ({ noteId: n.id, text: n.text, ...paperToRealM(page, n.positionMm), widthMm: n.widthMm, fontSizeMm: n.fontSizeMm, boxed: n.boxed ?? false })),
+  };
+}
+
+function placeSymbolCore(page: FloorplanPage, spec: FloorplanSymbolSpec) {
+  const live = requireFloorplan(page.id); // re-read: earlier batch items change numbering
+  const group = requireGroup(live, spec.groupId);
+  if (spec.deviceId !== undefined && spec.deviceId !== null) requireDevice(spec.deviceId);
+  const pos = validateRealPosition(spec.xM, spec.yM);
+  if (!pos.ok) throw new CommandError(pos.error);
+  const positionMm = realMToPaper(live, pos.xM, pos.yM);
+  const label = spec.label !== undefined ? requireText(spec.label, "label") : undefined;
+  const symbolId = st().addFloorplanSymbol(live.id, {
+    groupId: group.id,
+    deviceNodeId: spec.deviceId ?? undefined,
+    positionMm,
+    label,
+    notes: spec.notes ? String(spec.notes) : undefined,
+  });
+  const placed = requireFloorplan(page.id).symbols.find((sym) => sym.id === symbolId);
+  return { symbolId, label: placed?.label ?? label, groupId: group.id, deviceId: spec.deviceId ?? undefined, xM: pos.xM, yM: pos.yM };
+}
+
+function addNoteCore(page: FloorplanPage, spec: FloorplanNoteSpec) {
+  const text = requireText(spec.text, "text");
+  const pos = validateRealPosition(spec.xM, spec.yM);
+  if (!pos.ok) throw new CommandError(pos.error);
+  const positionMm = realMToPaper(page, pos.xM, pos.yM);
+  let color: string | undefined;
+  if (spec.color !== undefined) {
+    const c = validateHexColor(spec.color);
+    if (!c.ok) throw new CommandError(c.error);
+    color = c.color;
+  }
+  const noteId = st().addFloorplanNote(page.id, {
+    positionMm,
+    text,
+    widthMm: typeof spec.widthMm === "number" && spec.widthMm >= 10 ? spec.widthMm : undefined,
+    fontSizeMm: typeof spec.fontSizeMm === "number" && spec.fontSizeMm > 0 ? spec.fontSizeMm : undefined,
+    boxed: spec.boxed ?? true,
+    color,
+  });
+  return { noteId, text, xM: pos.xM, yM: pos.yM };
+}
+
+function revisionFromSpec(existing: FloorplanRevision[], spec: Partial<AddFloorplanRevisionParams>): FloorplanRevision {
+  return {
+    index: typeof spec.index === "string" && spec.index.trim() ? spec.index.trim() : nextRevisionIndex(existing),
+    date: typeof spec.date === "string" && spec.date.trim() ? spec.date.trim() : formatPlanDate(),
+    description: requireText(spec.description, "description"),
+    author: spec.author ? String(spec.author) : undefined,
+    checkedBy: spec.checkedBy ? String(spec.checkedBy) : undefined,
+  };
 }
 
 function resolveTemplate(templateId: string, list: DeviceTemplate[]): DeviceTemplate | undefined {
@@ -896,6 +1121,228 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     // the same path.
     st().deleteNode(noteId);
     return { deleted: true, noteId };
+  },
+
+  // ── Floorplans (Ship 10) ─────────────────────────────────────────
+
+  list_floorplans: () => {
+    const pages = floorplanPages().map(floorplanSummary);
+    return { pageCount: pages.length, pages };
+  },
+
+  create_floorplan: (params) => {
+    const { label, paperId, orientation, scaleDenominator } = (params ?? {}) as unknown as CreateFloorplanParams;
+    const paper = paperId !== undefined ? validatePaper(paperId) : "iso-a1";
+    const orient = orientation !== undefined ? validateOrientation(orientation) : "landscape";
+    let scale = 50;
+    if (scaleDenominator !== undefined) {
+      const r = validateScaleDenominator(scaleDenominator);
+      if (!r.ok) throw new CommandError(r.error);
+      scale = r.scaleDenominator;
+    }
+    const pageLabel = typeof label === "string" && label.trim() ? label.trim() : undefined;
+    // addFloorplanPage pushes one undo entry; the follow-up paper/scale sets each push
+    // their own, which is acceptable for a create — the page is new either way.
+    const pageId = st().addFloorplanPage(pageLabel);
+    if (paper !== "iso-a1" || orient !== "landscape") st().setFloorplanPaper(pageId, paper, orient);
+    if (scale !== 50) st().setFloorplanScale(pageId, scale);
+    return floorplanSummary(requireFloorplan(pageId));
+  },
+
+  update_floorplan: (params) => {
+    const { pageId, label, paperId, orientation, scaleDenominator } = (params ?? {}) as unknown as UpdateFloorplanParams;
+    const page = requireFloorplan(pageId);
+    if (label !== undefined) st().renameFloorplanPage(page.id, requireText(label, "label"));
+    if (paperId !== undefined || orientation !== undefined) {
+      const live = requireFloorplan(page.id);
+      st().setFloorplanPaper(
+        page.id,
+        paperId !== undefined ? validatePaper(paperId) : live.paperId,
+        orientation !== undefined ? validateOrientation(orientation) : live.orientation,
+        live.customWidthIn,
+        live.customHeightIn,
+      );
+    }
+    if (scaleDenominator !== undefined) {
+      const r = validateScaleDenominator(scaleDenominator);
+      if (!r.ok) throw new CommandError(r.error);
+      st().setFloorplanScale(page.id, r.scaleDenominator);
+    }
+    return floorplanSummary(requireFloorplan(page.id));
+  },
+
+  add_floorplan_group: (params) => {
+    const p = (params ?? {}) as unknown as AddFloorplanGroupParams;
+    const page = requireFloorplan(p.pageId);
+    const patch = groupPatchFromSpec({ ...p, label: requireText(p.label, "label") });
+    const groupId = st().addFloorplanGroup(page.id, patch);
+    const group = requireGroup(requireFloorplan(page.id), groupId);
+    return { groupId, label: group.label, color: group.color, shape: group.shape, description: group.description, labelPrefix: group.labelPrefix };
+  },
+
+  update_floorplan_group: (params) => {
+    const p = (params ?? {}) as unknown as UpdateFloorplanGroupParams;
+    const page = requireFloorplan(p.pageId);
+    const group = requireGroup(page, p.groupId);
+    const { pageId: _p, groupId: _g, ...spec } = p;
+    const patch = groupPatchFromSpec(spec);
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one group property.");
+    st().updateFloorplanGroup(page.id, group.id, patch);
+    const updated = requireGroup(requireFloorplan(page.id), group.id);
+    return { groupId: updated.id, label: updated.label, color: updated.color, shape: updated.shape, description: updated.description, labelPrefix: updated.labelPrefix };
+  },
+
+  place_floorplan_symbols: (params) => {
+    const { pageId, symbols } = (params ?? {}) as unknown as PlaceFloorplanSymbolsParams;
+    const page = requireFloorplan(pageId);
+    const outcome = runBatch<FloorplanSymbolSpec, ReturnType<typeof placeSymbolCore>>(symbols, MAX_BATCH_ITEMS, (spec) => placeSymbolCore(page, spec));
+    if (!outcome.ok) throw new CommandError(outcome.error);
+    return { pageId: page.id, results: outcome.results, succeeded: outcome.succeeded, failed: outcome.failed };
+  },
+
+  update_floorplan_symbol: (params) => {
+    const p = (params ?? {}) as unknown as UpdateFloorplanSymbolParams;
+    const page = requireFloorplan(p.pageId);
+    const symbol = requireSymbol(page, p.symbolId);
+    const patch: Partial<Omit<FloorplanSymbol, "id">> = {};
+    if (p.groupId !== undefined) patch.groupId = requireGroup(page, p.groupId).id;
+    if (p.deviceId === null) patch.deviceNodeId = undefined;
+    else if (p.deviceId !== undefined) patch.deviceNodeId = requireDevice(p.deviceId).id;
+    if (p.xM !== undefined || p.yM !== undefined) {
+      const current = paperToRealM(page, symbol.positionMm);
+      const pos = validateRealPosition(p.xM ?? current.xM, p.yM ?? current.yM);
+      if (!pos.ok) throw new CommandError(pos.error);
+      patch.positionMm = realMToPaper(page, pos.xM, pos.yM);
+    }
+    if (p.label !== undefined) patch.label = requireText(p.label, "label");
+    if (p.notes !== undefined) patch.notes = String(p.notes) || undefined;
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one symbol property.");
+    st().updateFloorplanSymbol(page.id, symbol.id, patch);
+    const updated = requireSymbol(requireFloorplan(page.id), symbol.id);
+    return { symbolId: updated.id, groupId: updated.groupId, label: updated.label, deviceId: updated.deviceNodeId, ...paperToRealM(page, updated.positionMm) };
+  },
+
+  remove_floorplan_symbol: (params) => {
+    const { pageId, symbolId } = (params ?? {}) as unknown as RemoveFloorplanSymbolParams;
+    const page = requireFloorplan(pageId);
+    const symbol = requireSymbol(page, symbolId);
+    st().removeFloorplanSymbol(page.id, symbol.id);
+    return { removed: true, symbolId: symbol.id };
+  },
+
+  set_floorplan_legend: (params) => {
+    const { pageId, visible, title, notesTitle, notes, showImages, onlyUsedGroups } = (params ?? {}) as unknown as SetFloorplanLegendParams;
+    const page = requireFloorplan(pageId);
+    const patch: Partial<FloorplanPage["legend"]> = {};
+    if (visible !== undefined) patch.visible = Boolean(visible);
+    if (title !== undefined) patch.title = String(title);
+    if (notesTitle !== undefined) patch.notesTitle = String(notesTitle);
+    if (notes !== undefined) {
+      if (!Array.isArray(notes) || notes.some((n) => typeof n !== "string")) throw new CommandError("notes must be an array of strings (one per line).");
+      patch.notes = notes;
+    }
+    if (showImages !== undefined) patch.showImages = Boolean(showImages);
+    if (onlyUsedGroups !== undefined) patch.onlyUsedGroups = Boolean(onlyUsedGroups);
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one legend property.");
+    st().updateFloorplanLegend(page.id, patch);
+    return floorplanSummary(requireFloorplan(page.id)).legend;
+  },
+
+  set_floorplan_drawing_block: (params) => {
+    const p = (params ?? {}) as unknown as SetFloorplanDrawingBlockParams;
+    const page = requireFloorplan(p.pageId);
+    const patch: Partial<FloorplanDrawingBlock> = {};
+    if (p.visible !== undefined) patch.visible = Boolean(p.visible);
+    if (p.title !== undefined) patch.title = String(p.title);
+    if (p.subtitle !== undefined) patch.subtitle = String(p.subtitle);
+    if (p.disclaimer !== undefined) patch.disclaimer = String(p.disclaimer);
+    if (p.showLogo !== undefined) patch.showLogo = Boolean(p.showLogo);
+    if (p.showNorthArrow !== undefined) patch.showNorthArrow = Boolean(p.showNorthArrow);
+    if (p.northRotationDeg !== undefined) {
+      if (typeof p.northRotationDeg !== "number" || !Number.isFinite(p.northRotationDeg)) throw new CommandError("northRotationDeg must be a number of degrees.");
+      patch.northRotationDeg = p.northRotationDeg;
+    }
+    if (p.fields !== undefined) {
+      if (!Array.isArray(p.fields)) throw new CommandError("fields must be an array of { label, value, wide? }.");
+      patch.fields = p.fields.map((f, i): FloorplanDrawingField => ({
+        id: nextDrawingFieldId(),
+        label: requireText(f?.label, `fields[${i}].label`),
+        value: typeof f?.value === "string" ? f.value : "",
+        wide: f?.wide ? true : undefined,
+      }));
+    }
+    if (p.revisions !== undefined) {
+      if (!Array.isArray(p.revisions)) throw new CommandError("revisions must be an array of { description, index?, date?, author?, checkedBy? }.");
+      const rows: FloorplanRevision[] = [];
+      for (const r of p.revisions) rows.push(revisionFromSpec(rows, r ?? {}));
+      patch.revisions = rows;
+    }
+    if (p.revisionHeaders !== undefined) {
+      if (!Array.isArray(p.revisionHeaders) || p.revisionHeaders.length !== 5 || p.revisionHeaders.some((h) => typeof h !== "string")) {
+        throw new CommandError("revisionHeaders must be five strings: index, date, description, author, checked.");
+      }
+      patch.revisionHeaders = [...p.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"];
+    }
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one drawing block property.");
+    st().updateFloorplanDrawingBlock(page.id, patch);
+    return floorplanSummary(requireFloorplan(page.id)).drawingBlock;
+  },
+
+  add_floorplan_revision: (params) => {
+    const p = (params ?? {}) as unknown as AddFloorplanRevisionParams;
+    const page = requireFloorplan(p.pageId);
+    const revision = revisionFromSpec(page.drawingBlock.revisions, p);
+    st().updateFloorplanDrawingBlock(page.id, { revisions: [...page.drawingBlock.revisions, revision] });
+    return { revision, revisionCount: page.drawingBlock.revisions.length + 1 };
+  },
+
+  add_floorplan_notes: (params) => {
+    const { pageId, notes } = (params ?? {}) as unknown as AddFloorplanNotesParams;
+    const page = requireFloorplan(pageId);
+    const outcome = runBatch<FloorplanNoteSpec, ReturnType<typeof addNoteCore>>(notes, MAX_BATCH_ITEMS, (spec) => addNoteCore(requireFloorplan(page.id), spec));
+    if (!outcome.ok) throw new CommandError(outcome.error);
+    return { pageId: page.id, results: outcome.results, succeeded: outcome.succeeded, failed: outcome.failed };
+  },
+
+  update_floorplan_note: (params) => {
+    const p = (params ?? {}) as unknown as UpdateFloorplanNoteParams;
+    const page = requireFloorplan(p.pageId);
+    const note = page.notes.find((n) => n.id === p.noteId);
+    if (!note) throw new CommandError(`No note "${p.noteId}" on floorplan "${page.id}". Call list_floorplans first.`);
+    const patch: Partial<Omit<FloorplanPage["notes"][number], "id">> = {};
+    if (p.text !== undefined) patch.text = requireText(p.text, "text");
+    if (p.xM !== undefined || p.yM !== undefined) {
+      const current = paperToRealM(page, note.positionMm);
+      const pos = validateRealPosition(p.xM ?? current.xM, p.yM ?? current.yM);
+      if (!pos.ok) throw new CommandError(pos.error);
+      patch.positionMm = realMToPaper(page, pos.xM, pos.yM);
+    }
+    if (p.widthMm !== undefined) {
+      if (typeof p.widthMm !== "number" || p.widthMm < 10) throw new CommandError("widthMm must be a number ≥ 10 (paper mm).");
+      patch.widthMm = p.widthMm;
+    }
+    if (p.fontSizeMm !== undefined) {
+      if (typeof p.fontSizeMm !== "number" || p.fontSizeMm <= 0) throw new CommandError("fontSizeMm must be a positive number (paper mm).");
+      patch.fontSizeMm = p.fontSizeMm;
+    }
+    if (p.boxed !== undefined) patch.boxed = Boolean(p.boxed);
+    if (p.color !== undefined) {
+      const c = validateHexColor(p.color);
+      if (!c.ok) throw new CommandError(c.error);
+      patch.color = c.color;
+    }
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one note property.");
+    st().updateFloorplanNote(page.id, note.id, patch);
+    const updated = requireFloorplan(page.id).notes.find((n) => n.id === note.id)!;
+    return { noteId: updated.id, text: updated.text, ...paperToRealM(page, updated.positionMm) };
+  },
+
+  delete_floorplan_note: (params) => {
+    const { pageId, noteId } = (params ?? {}) as unknown as DeleteFloorplanNoteParams;
+    const page = requireFloorplan(pageId);
+    if (!page.notes.some((n) => n.id === noteId)) throw new CommandError(`No note "${noteId}" on floorplan "${page.id}".`);
+    st().removeFloorplanNote(page.id, noteId);
+    return { removed: true, noteId };
   },
 };
 

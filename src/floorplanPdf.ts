@@ -7,15 +7,26 @@
  */
 
 import { jsPDF } from "jspdf";
-import type { FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
+import type { FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
 import {
   buildLegendRows,
+  layoutDrawingBlock,
+  layoutNote,
   legendHeightMm,
   symbolLabelAnchor,
   symbolPolygon,
+  DB_DISCLAIMER_FONT_MM,
+  DB_FIELD_LABEL_FONT_MM,
+  DB_FIELD_VALUE_FONT_MM,
+  DB_PAD_MM,
+  DB_REV_COLS,
+  DB_REV_FONT_MM,
+  DB_REV_ROW_MM,
+  DB_SUBTITLE_FONT_MM,
+  DB_TITLE_FONT_MM,
   IN_TO_MM,
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
@@ -38,6 +49,10 @@ export interface FloorplanPdfOptions {
   schematicName: string;
   titleBlock?: TitleBlock;
 }
+
+const EMPTY_TITLE_BLOCK: TitleBlock = {
+  showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [],
+};
 
 /** #rrggbb → [r, g, b]; falls back to black for anything unparseable. */
 function hexToRgb(hex: string): [number, number, number] {
@@ -155,6 +170,159 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
   }
 }
 
+/** Draw the north arrow: filled left half, outlined right half, "N" below — matches NorthArrow in the view. */
+function drawNorthArrow(doc: jsPDF, cx: number, cy: number, sizeMm: number, rotationDeg: number) {
+  const r = sizeMm / 2;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const rot = (x: number, y: number): [number, number] => [
+    cx + x * Math.cos(rad) - y * Math.sin(rad),
+    cy + x * Math.sin(rad) + y * Math.cos(rad),
+  ];
+  doc.setDrawColor(17, 17, 17);
+  doc.setLineWidth(0.2);
+  doc.circle(cx, cy, r - 0.5, "S");
+  const tip = rot(0, -r * 0.88);
+  const base = rot(0, r * 0.72);
+  const left = rot(-r * 0.26, r * 0.72);
+  const right = rot(r * 0.26, r * 0.72);
+  doc.setFillColor(17, 17, 17);
+  doc.lines([[base[0] - tip[0], base[1] - tip[1]], [left[0] - base[0], left[1] - base[1]]], tip[0], tip[1], [1, 1], "F", true);
+  doc.lines([[base[0] - tip[0], base[1] - tip[1]], [right[0] - base[0], right[1] - base[1]]], tip[0], tip[1], [1, 1], "S", true);
+  doc.setFont("Inter", "bold");
+  doc.setFontSize(sizeMm * 0.16 * MM_TO_PT);
+  doc.setTextColor(17, 17, 17);
+  const n = rot(0, r * 0.98);
+  doc.text("N", n[0], n[1], { align: "center", baseline: "bottom" });
+}
+
+/** The drawing block (Plankopf), walking the same layout the on-screen view renders. */
+function drawDrawingBlock(doc: jsPDF, page: FloorplanPage, titleBlock: TitleBlock, projectName: string) {
+  const block = page.drawingBlock;
+  const layout = layoutDrawingBlock(block, { titleBlock, page, projectName }, { hasLogo: Boolean(titleBlock.logo) });
+  const { positionMm: pos } = block;
+  const innerX = pos.x + layout.innerXMm;
+  const innerW = layout.innerWMm;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(34, 34, 34);
+  doc.setLineWidth(0.25);
+  doc.rect(pos.x, pos.y, layout.widthMm, layout.heightMm, "FD");
+
+  for (const section of layout.sections) {
+    const top = pos.y + section.yMm;
+    if (section.yMm > 0 && section.kind !== "disclaimer") {
+      doc.setDrawColor(34, 34, 34);
+      doc.setLineWidth(0.25);
+      doc.line(pos.x, top, pos.x + layout.widthMm, top);
+    }
+
+    if (section.kind === "revisions") {
+      const rowsY = top + DB_PAD_MM / 2;
+      const colX: number[] = [innerX];
+      for (const frac of DB_REV_COLS) colX.push(colX[colX.length - 1] + frac * innerW);
+      const rows = [block.revisionHeaders.map((h) => h.toUpperCase()), ...layout.revisionRows.map((r) => [r.index, r.date, r.description, r.author ?? "", r.checkedBy ?? ""])];
+      doc.setDrawColor(85, 85, 85);
+      doc.setLineWidth(0.15);
+      rows.forEach((cells, ri) => {
+        const y = rowsY + ri * DB_REV_ROW_MM;
+        doc.setFont("Inter", ri === 0 ? "bold" : "normal");
+        doc.setFontSize((ri === 0 ? DB_REV_FONT_MM * 0.9 : DB_REV_FONT_MM) * MM_TO_PT);
+        doc.setTextColor(17, 17, 17);
+        cells.forEach((text, ci) => {
+          const w = colX[ci + 1] - colX[ci];
+          doc.rect(colX[ci], y, w, DB_REV_ROW_MM, "S");
+          // Clip long text to the cell by trimming characters — jsPDF has no overflow:hidden.
+          const maxChars = Math.max(1, Math.floor((w - 1.6) / (DB_REV_FONT_MM * 0.55)));
+          const clipped = text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 1))}…` : text;
+          doc.text(clipped, colX[ci] + 0.8, y + DB_REV_ROW_MM / 2, { baseline: "middle" });
+        });
+      });
+    } else if (section.kind === "disclaimer") {
+      doc.setFont("Inter", "normal");
+      doc.setFontSize(DB_DISCLAIMER_FONT_MM * MM_TO_PT);
+      doc.setTextColor(34, 34, 34);
+      const lineH = DB_DISCLAIMER_FONT_MM * 1.45;
+      layout.disclaimerLines.forEach((l, i) => {
+        doc.text(l, innerX, top + DB_PAD_MM + i * lineH + lineH / 2, { baseline: "middle" });
+      });
+    } else if (section.kind === "title") {
+      const cx = pos.x + layout.widthMm / 2;
+      const titleH = DB_TITLE_FONT_MM * 1.3;
+      const subH = layout.subtitle ? DB_SUBTITLE_FONT_MM * 1.6 : 0;
+      const contentTop = top + (section.heightMm - titleH - subH) / 2;
+      doc.setFont("Inter", "bold");
+      doc.setFontSize(DB_TITLE_FONT_MM * MM_TO_PT);
+      doc.setTextColor(17, 17, 17);
+      doc.text(layout.title, cx, contentTop + titleH / 2, { align: "center", baseline: "middle", maxWidth: innerW });
+      if (layout.subtitle) {
+        doc.setFont("Inter", "normal");
+        doc.setFontSize(DB_SUBTITLE_FONT_MM * MM_TO_PT);
+        doc.setTextColor(51, 51, 51);
+        doc.text(layout.subtitle, cx, contentTop + titleH + subH / 2, { align: "center", baseline: "middle", maxWidth: innerW });
+      }
+    } else if (section.kind === "fields") {
+      for (const cell of layout.fieldCells) {
+        const x = pos.x + cell.xMm;
+        const y = pos.y + cell.yMm;
+        doc.setDrawColor(119, 119, 119);
+        doc.setLineWidth(0.15);
+        doc.rect(x, y, cell.wMm, cell.hMm, "S");
+        doc.setFont("Inter", "bold");
+        doc.setFontSize(DB_FIELD_LABEL_FONT_MM * MM_TO_PT);
+        doc.setTextColor(68, 68, 68);
+        const labelH = DB_FIELD_LABEL_FONT_MM * 1.5;
+        doc.text(cell.label.toUpperCase(), x + 1, y + 0.6 + labelH / 2, { baseline: "middle", maxWidth: cell.wMm - 2 });
+        doc.setFont("Inter", "normal");
+        doc.setFontSize(DB_FIELD_VALUE_FONT_MM * MM_TO_PT);
+        doc.setTextColor(17, 17, 17);
+        const lineH = DB_FIELD_VALUE_FONT_MM * 1.4;
+        cell.lines.forEach((l, i) => {
+          doc.text(l, x + 1, y + 0.6 + labelH + i * lineH + lineH / 2, { baseline: "middle" });
+        });
+      }
+    } else if (section.kind === "footer") {
+      const h = section.heightMm;
+      if (block.showLogo && titleBlock.logo) {
+        try {
+          const img = new Image();
+          img.src = titleBlock.logo;
+          const aspect = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 3;
+          const logoH = h - 6;
+          const logoW = Math.min(logoH * aspect, innerW * 0.55);
+          doc.addImage(titleBlock.logo, imageFormat(titleBlock.logo), innerX, top + 3, logoW, logoH, undefined, "FAST");
+        } catch {
+          // A logo jsPDF can't decode is not worth failing the whole plan for.
+        }
+      }
+      if (block.showNorthArrow) {
+        const size = h - 5;
+        drawNorthArrow(doc, innerX + innerW - size / 2, top + h / 2, size, block.northRotationDeg);
+      }
+    }
+  }
+}
+
+/** Free text notes, wrapped exactly as on screen. */
+function drawNotes(doc: jsPDF, notes: FloorplanNote[]) {
+  for (const note of notes) {
+    const nl = layoutNote(note);
+    const pad = note.boxed ? 1.5 : 0;
+    if (note.boxed) {
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(51, 51, 51);
+      doc.setLineWidth(0.15);
+      doc.rect(note.positionMm.x, note.positionMm.y, note.widthMm, nl.heightMm, "FD");
+    }
+    const [r, g, b] = hexToRgb(note.color ?? "#111111");
+    doc.setFont("Inter", "normal");
+    doc.setFontSize(note.fontSizeMm * MM_TO_PT);
+    doc.setTextColor(r, g, b);
+    nl.lines.forEach((l, i) => {
+      doc.text(l, note.positionMm.x + pad, note.positionMm.y + pad + i * nl.lineHeightMm + nl.lineHeightMm / 2, { baseline: "middle" });
+    });
+  }
+}
+
 export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<void> {
   const planPages = opts.pages.filter((p): p is FloorplanPage => p.type === "floorplan");
   if (planPages.length === 0) return;
@@ -206,11 +374,18 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       doc.text(symbol.label, anchor.x, anchor.y, { baseline: "middle" });
     }
 
+    // Notes sit above symbols, below the legend and drawing block.
+    drawNotes(doc, page.notes);
+
     // Legend
     const rows = buildLegendRows(page);
     const notes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
     if (page.legend.visible && (rows.length > 0 || notes.length > 0)) {
       drawLegend(doc, page, rows, notes);
+    }
+
+    if (page.drawingBlock.visible) {
+      drawDrawingBlock(doc, page, opts.titleBlock ?? EMPTY_TITLE_BLOCK, opts.schematicName);
     }
 
     if (page.showTitleBlock && opts.titleBlock) {
