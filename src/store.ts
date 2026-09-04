@@ -95,7 +95,7 @@ import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { createDefaultLayout } from "./titleBlockLayout";
 import { sanitizeNoteHtml } from "./sanitizeHtml";
 import { getTemplateById } from "./templateApi";
-import { compareLineNo, lineForDevice, planLines, syncLinesFromSchematic, type LoadSpecLookup } from "./speakerLines";
+import { compareLineNo, lineForDevice, planLines, syncLinesFromSchematic, wiringSignature, type LoadSpecLookup } from "./speakerLines";
 import { DEFAULT_BRIDGE_PORT } from "./mcp/protocol";
 import { syncDeviceWithTemplate, type SyncResult } from "./templateSync";
 import { chooseNewHandleSuffix, type SwapPlan, type NewPortRef } from "./deviceSwap";
@@ -7471,3 +7471,30 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ resizeGuides: guides });
   },
 }));
+
+// ── Live line sync ─────────────────────────────────────────────────────
+// A speaker rewired to another amplifier channel on the schematic moves to that channel's
+// line on every loudspeaker plan at once — no button to press. Only symbols on lines that
+// are bound to a channel follow; hand-numbered lines stay as they are. Part of the wiring
+// edit itself, so it adds no undo step (undoing the wiring undoes the move too).
+let lastWiringSignature: string | null = null;
+useSchematicStore.subscribe((state, prev) => {
+  if (state.nodes === prev.nodes && state.edges === prev.edges) return;
+  const signature = wiringSignature(state.nodes, state.edges);
+  if (signature === lastWiringSignature) return;
+  const first = lastWiringSignature === null;
+  lastWiringSignature = signature;
+  if (first) return; // the initial state is a baseline, not a change
+  const lookup = loadSpecLookup(state);
+  let changed = false;
+  const pages = state.pages.map((p) => {
+    if (p.type !== "floorplan" || p.kind !== "loudspeaker" || !(p.lines ?? []).some((l) => l.ampNodeId)) return p;
+    const res = syncLinesFromSchematic(p, state.nodes, state.edges, lookup, { live: true });
+    if (res.relabeledCount === 0 && res.addedLineNos.length === 0) return p;
+    changed = true;
+    return { ...p, lines: res.lines, symbols: res.symbols };
+  });
+  if (!changed) return;
+  useSchematicStore.setState({ pages });
+  useSchematicStore.getState().saveToLocalStorage();
+});

@@ -140,7 +140,10 @@ export default function FloorplansPage() {
         wired speaker on the plan and it lands on its channel&apos;s line automatically, the line
         being created with the next free number when the channel has none yet; <strong>Sync from
         schematic</strong> in the sidebar&apos;s <em>Lines &amp; load</em> panel does the same for
-        everything at once and renumbers the placed symbols per channel. Lines that are not wired
+        everything at once and renumbers the placed symbols per channel. From then on the plan
+        follows the schematic <strong>live</strong>: rewire a speaker to another channel and its
+        symbol moves to that channel&apos;s line at once, on every loudspeaker plan, with no
+        button to press (undoing the wiring undoes the move). Lines that are not wired
         yet (a number typed into the <em>Line</em> field) stay as they are; each line card lets you
         pick the channel, rename the line (its symbols are relabelled), name it for the legend and
         set how the channel runs: <strong>Lo-Z</strong>, <strong>70 V</strong> or{" "}

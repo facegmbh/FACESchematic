@@ -509,6 +509,36 @@ describe("amplifier lines & load (Ship 11)", () => {
     expect(() => handlers.speaker_load_report({ pageId: "floorplan-999" })).toThrow(/No floorplan page/);
   });
 
+  it("rewiring a speaker on the schematic moves its symbol to the new channel's line at once", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS" }) as { groupId: string };
+    handlers.place_floorplan_symbols({ pageId, symbols: [
+      { groupId: g.groupId, deviceId: "s1", xM: 1, yM: 1 }, // CH1 → line 1
+      { groupId: g.groupId, deviceId: "s2", xM: 2, yM: 1 }, // CH1 → 1.2
+      { groupId: g.groupId, deviceId: "s3", xM: 3, yM: 1 }, // CH3 → line 2
+    ] });
+    expect(floorplans()[0].symbols.map((s) => s.label)).toEqual(["1.1", "1.2", "2.1"]);
+    const undoBefore = useSchematicStore.getState().undoSize;
+
+    // Move s2 from CH1 onto CH3 by editing the connection — the plan follows without a sync call.
+    const edges = useSchematicStore.getState().edges;
+    useSchematicStore.setState({ edges: edges.map((e) => (e.id === "e2" ? { ...e, source: "amp-1", sourceHandle: "amp-out3" } : e)) });
+    const labels = Object.fromEntries(floorplans()[0].symbols.map((s) => [s.deviceNodeId, s.label]));
+    expect(labels).toEqual({ s1: "1.1", s3: "2.1", s2: "2.2" });
+    expect(useSchematicStore.getState().undoSize).toBe(undoBefore); // no extra undo step
+
+    // Rewire s2 onto the unused CH2: a new line appears for it.
+    useSchematicStore.setState({ edges: useSchematicStore.getState().edges.map((e) => (e.id === "e2" ? { ...e, sourceHandle: "amp-out2" } : e)) });
+    const page = floorplans()[0];
+    expect(page.symbols.find((s) => s.deviceNodeId === "s2")?.label).toBe("3.1");
+    expect(page.lines?.find((l) => l.lineNo === "3")).toMatchObject({ ampPortId: "amp-out2" });
+
+    // A node drag changes nothing.
+    const nodes = useSchematicStore.getState().nodes;
+    useSchematicStore.setState({ nodes: nodes.map((n) => ({ ...n, position: { x: 50, y: 50 } })) as typeof nodes });
+    expect(floorplans()[0]).toBe(page);
+  });
+
   it("sync_floorplan_lines complains when the schematic has no amplifier", () => {
     useSchematicStore.setState({ nodes: [spk("s1")], edges: [] });
     const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;

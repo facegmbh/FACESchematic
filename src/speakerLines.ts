@@ -304,26 +304,48 @@ export interface LineSyncResult {
  *  amplifier / channel order), and every placed symbol whose device hangs on a channel
  *  moves to that channel's line and is numbered within it. Symbols of unwired devices
  *  keep what they have. */
+export interface LineSyncOptions {
+  /** Live mode (runs on every wiring change): only symbols that already sit on a line bound
+   *  to an amplifier channel follow a rewire, and lines are created only for the channels
+   *  those symbols move to. Hand-numbered symbols and unbound lines are never touched. */
+  live?: boolean;
+}
+
 export function syncLinesFromSchematic(
   page: Pick<FloorplanPage, "lines" | "symbols" | "kind" | "labelTemplate" | "groups">,
   nodes: SchematicNode[],
   edges: ConnectionEdge[],
   lookup: LoadSpecLookup,
+  options: LineSyncOptions = {},
 ): LineSyncResult {
   const amps = amplifiersOnSchematic(nodes, edges);
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const lines: FloorplanLine[] = planLines(page).map((l) => ({ ...l }));
   const addedLineNos: string[] = [];
+  const boundLineNos = new Set(lines.filter((l) => l.ampNodeId).map((l) => l.lineNo));
+  const follows = (s: FloorplanSymbol) => Boolean(s.deviceNodeId) && (!options.live || boundLineNos.has((s.lineNo ?? "").trim()));
 
-  for (const amp of amps) {
-    const ampNode = nodeById.get(amp.nodeId);
+  const addLine = (ch: AmplifierChannel) => {
+    const ampNode = nodeById.get(ch.ampNodeId);
     const mode = defaultLineMode(ampNode ? lookup.ampSpecFor(ampNode) : undefined);
-    for (const ch of amp.channels) {
-      if (ch.speakerNodeIds.length === 0) continue;
-      if (lineForChannel(lines, ch.ampNodeId, ch.portId)) continue;
-      const lineNo = nextLineNo(lines.map((l) => l.lineNo));
-      lines.push({ lineNo, ampNodeId: ch.ampNodeId, ampPortId: ch.portId, mode });
-      addedLineNos.push(lineNo);
+    const lineNo = nextLineNo(lines.map((l) => l.lineNo));
+    lines.push({ lineNo, ampNodeId: ch.ampNodeId, ampPortId: ch.portId, mode });
+    addedLineNos.push(lineNo);
+  };
+
+  if (options.live) {
+    // Only the channels that following symbols need.
+    for (const s of page.symbols) {
+      if (!follows(s)) continue;
+      const ch = findChannelForSpeaker(amps, s.deviceNodeId!);
+      if (ch && !lineForChannel(lines, ch.ampNodeId, ch.portId)) addLine(ch);
+    }
+  } else {
+    for (const amp of amps) {
+      for (const ch of amp.channels) {
+        if (ch.speakerNodeIds.length === 0) continue;
+        if (!lineForChannel(lines, ch.ampNodeId, ch.portId)) addLine(ch);
+      }
     }
   }
 
@@ -333,8 +355,8 @@ export function syncLinesFromSchematic(
   const groupLabel = (gid: string) => page.groups.find((g) => g.id === gid)?.label;
   const lineNoForSymbol = new Map<string, string>();
   for (const s of page.symbols) {
-    if (!s.deviceNodeId) continue;
-    const ch = findChannelForSpeaker(amps, s.deviceNodeId);
+    if (!follows(s)) continue;
+    const ch = findChannelForSpeaker(amps, s.deviceNodeId!);
     if (!ch) continue;
     const line = lineForChannel(lines, ch.ampNodeId, ch.portId);
     if (line) lineNoForSymbol.set(s.id, line.lineNo);
@@ -347,11 +369,23 @@ export function syncLinesFromSchematic(
       if (s.lineNo?.trim()) touched.add(s.lineNo.trim());
     }
   }
+  // Live mode appends a mover after the speakers already on its new line and leaves the
+  // line it left alone (gaps included) — the fewest labels change on a plan that is being
+  // worked on. The manual sync renumbers every touched line 1…n instead.
   const counters = new Map<string, number>();
+  if (options.live) {
+    for (const s of page.symbols) {
+      const key = (s.lineNo ?? "").trim();
+      const target = lineNoForSymbol.get(s.id);
+      const stays = target === undefined || target === key;
+      if (key && stays && typeof s.seq === "number") counters.set(key, Math.max(counters.get(key) ?? 0, s.seq));
+    }
+  }
   let relabeledCount = 0;
   const symbols = page.symbols.map((s) => {
     const lineNo = lineNoForSymbol.get(s.id) ?? (s.lineNo ?? "").trim();
     if (!lineNo || !touched.has(lineNo)) return s;
+    if (options.live && lineNo === (s.lineNo ?? "").trim()) return s; // stays put
     const n = (counters.get(lineNo) ?? 0) + 1;
     counters.set(lineNo, n);
     const deviceLabel = s.deviceNodeId ? (nodeById.get(s.deviceNodeId)?.data as DeviceData | undefined)?.label : undefined;
@@ -387,6 +421,22 @@ export function lineForDevice(
   const mode = defaultLineMode(ampNode ? lookup.ampSpecFor(ampNode) : undefined);
   const lineNo = nextLineNo(planLines(page).map((l) => l.lineNo));
   return { lineNo, newLine: { lineNo, ampNodeId: ch.ampNodeId, ampPortId: ch.portId, mode } };
+}
+
+/** Cheap fingerprint of the speaker wiring — what a rewire changes and a node drag does
+ *  not — so the live sync can skip everything else. */
+export function wiringSignature(nodes: SchematicNode[], edges: ConnectionEdge[]): string {
+  const parts: string[] = [];
+  for (const n of nodes) {
+    if (n.type !== "device") continue;
+    const d = n.data as DeviceData;
+    parts.push(`${n.id}:${d.deviceType}:${d.ports.filter((p) => p.signalType === "speaker-level").map((p) => p.id).join(",")}`);
+  }
+  for (const e of edges) {
+    if (e.data?.signalType !== "speaker-level") continue;
+    parts.push(`${e.source}|${e.sourceHandle ?? ""}>${e.target}|${e.targetHandle ?? ""}|${e.data?.linkedConnectionId ?? ""}`);
+  }
+  return parts.join(";");
 }
 
 // ── Legend line table ────────────────────────────────────────────────

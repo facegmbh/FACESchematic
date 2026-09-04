@@ -15,6 +15,7 @@ import {
   nextLineNo,
   planLines,
   syncLinesFromSchematic,
+  wiringSignature,
   type LoadSpecLookup,
 } from "../speakerLines";
 
@@ -211,5 +212,37 @@ describe("computeLineLoads / legend rows", () => {
     expect(legendShowsLines({ ...page, legend: { ...page.legend, showLines: false } })).toBe(false);
     expect(legendShowsLines({ ...page, kind: "generic", legend: { ...page.legend, showLines: true } })).toBe(true);
     expect(legendShowsLines(pageWith([]))).toBe(false);
+  });
+});
+
+describe("live sync (rewiring follows the schematic)", () => {
+  it("moves only symbols on bound lines, creates lines just for the channels they move to, leaves hand numbering alone", () => {
+    const page = pageWith(
+      [
+        { deviceNodeId: "s1", lineNo: "1", seq: 1, label: "1.1" },  // bound line 1 = A/CH1
+        { deviceNodeId: "s4", lineNo: "1", seq: 2, label: "1.2" },  // wrongly on line 1, actually on A/CH2 → must move
+        { deviceNodeId: "s5", lineNo: "7", seq: 1, label: "7.1" },  // hand-numbered (line 7 unbound) → untouched
+      ],
+      [{ lineNo: "1", ampNodeId: "A", ampPortId: "A-out1" }],
+    );
+    const res = syncLinesFromSchematic(page, nodes, edges, lookup, { live: true });
+    expect(res.addedLineNos).toEqual(["2"]); // only A/CH2; B/CH1 (s5) gets no line in live mode
+    expect(res.lines.find((l) => l.lineNo === "2")).toMatchObject({ ampNodeId: "A", ampPortId: "A-out2" });
+    const byDevice = Object.fromEntries(res.symbols.map((s) => [s.deviceNodeId, s]));
+    expect(byDevice.s4).toMatchObject({ lineNo: "2", seq: 1, label: "2.1" });
+    expect(byDevice.s1).toMatchObject({ lineNo: "1", seq: 1, label: "1.1" });
+    expect(byDevice.s5).toMatchObject({ lineNo: "7", seq: 1, label: "7.1" });
+    expect(res.relabeledCount).toBe(1);
+  });
+
+  it("is a no-op when the wiring matches, and wiringSignature ignores node positions", () => {
+    const page = pageWith([{ deviceNodeId: "s1", lineNo: "1", seq: 1, label: "1.1" }], [{ lineNo: "1", ampNodeId: "A", ampPortId: "A-out1" }]);
+    const res = syncLinesFromSchematic(page, nodes, edges, lookup, { live: true });
+    expect(res.relabeledCount).toBe(0);
+    expect(res.addedLineNos).toEqual([]);
+    const moved = nodes.map((n) => ({ ...n, position: { x: 99, y: 99 } })) as SchematicNode[];
+    expect(wiringSignature(moved, edges)).toBe(wiringSignature(nodes, edges));
+    const rewired = edges.map((e) => (e.id === "e4" ? { ...e, sourceHandle: "A-out3" } : e)) as ConnectionEdge[];
+    expect(wiringSignature(nodes, rewired)).not.toBe(wiringSignature(nodes, edges));
   });
 });
