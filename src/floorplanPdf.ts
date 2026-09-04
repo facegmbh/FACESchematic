@@ -7,7 +7,8 @@
  */
 
 import { jsPDF } from "jspdf";
-import type { CompanyProfile, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
+import type { CompanyProfile, ConnectionEdge, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
+import { buildLegendLineRows, computeLineLoads, legendShowsLines, type LegendLineRow, type LoadSpecLookup } from "./speakerLines";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
@@ -39,6 +40,11 @@ import {
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
   LEGEND_NOTE_LINE_MM,
+  LEGEND_LINES_GAP_MM,
+  LEGEND_LINES_TITLE_MM,
+  LEGEND_LINE_ROW_MM,
+  LEGEND_LINE_COLS,
+  DEFAULT_LEGEND_LINES_TITLE,
   LEGEND_PAD_MM,
   LEGEND_ROW_MM,
   LEGEND_ROW_WITH_IMAGE_MM,
@@ -54,6 +60,10 @@ const LEGEND_TITLE_RULE_MM = LEGEND_TITLE_MM - 3;
 export interface FloorplanPdfOptions {
   pages: SchematicPage[];
   nodes: SchematicNode[];
+  /** Connections — needed for the legend's line table (amplifier channel per line). */
+  edges?: ConnectionEdge[];
+  /** Where speaker / amplifier load specs come from (store.loadSpecLookup). */
+  loadSpecLookup?: LoadSpecLookup;
   schematicName: string;
   titleBlock?: TitleBlock;
   companyProfile?: CompanyProfile;
@@ -104,9 +114,9 @@ function drawSymbol(doc: jsPDF, group: Pick<FloorplanSymbolGroup, "shape" | "col
 }
 
 /** Legend box: one row per symbol group, then the free-text installation notes. */
-function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined) {
+function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined, lineRows: LegendLineRow[] = []) {
   const { positionMm: pos, widthMm } = page.legend;
-  const heightMm = legendHeightMm(rows, page.legend, company);
+  const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length);
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(68, 68, 68);
@@ -165,6 +175,40 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
       }
     }
     y += rowH;
+  }
+
+  // Line table: line → amplifier channel, speaker count, load.
+  if (lineRows.length > 0) {
+    y += LEGEND_LINES_GAP_MM;
+    doc.setDrawColor(153, 153, 153);
+    doc.setLineWidth(0.15);
+    doc.line(innerX, y, innerX + innerW, y);
+    doc.setFont("Inter", "bold");
+    doc.setFontSize(3 * MM_TO_PT);
+    doc.setTextColor(17, 17, 17);
+    doc.text(page.legend.linesTitle ?? DEFAULT_LEGEND_LINES_TITLE, innerX, y + 3.6, { maxWidth: innerW });
+    y += LEGEND_LINES_TITLE_MM;
+    const colX = [0, 1, 2, 3].map((i) => innerX + LEGEND_LINE_COLS.slice(0, i).reduce((a, c) => a + c, 0) * innerW);
+    const colW = LEGEND_LINE_COLS.map((c) => c * innerW);
+    const cell = (text: string, col: number, rowY: number, bold: boolean, align: "left" | "right" = "left") => {
+      doc.setFont("Inter", bold ? "bold" : "normal");
+      doc.setFontSize(2.4 * MM_TO_PT);
+      doc.setTextColor(34, 34, 34);
+      const x = align === "right" ? colX[col] + colW[col] - 1 : colX[col];
+      doc.text(text, x, rowY + LEGEND_LINE_ROW_MM * 0.72, { maxWidth: colW[col] - 1, align });
+    };
+    cell("Line", 0, y, true); cell("Amplifier · channel", 1, y, true); cell("Qty", 2, y, true, "right"); cell("Load", 3, y, true);
+    y += LEGEND_LINE_ROW_MM;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.1);
+    doc.line(innerX, y - 0.6, innerX + innerW, y - 0.6);
+    for (const r of lineRows) {
+      cell(r.lineNo, 0, y, true);
+      cell(r.name ? `${r.feed} — ${r.name}` : r.feed, 1, y, false);
+      cell(String(r.count), 2, y, false, "right");
+      cell(r.load, 3, y, false);
+      y += LEGEND_LINE_ROW_MM;
+    }
   }
 
   if (notes.length > 0) {
@@ -440,7 +484,10 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     // Legend
     const rows = buildLegendRows(page);
     const notes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
-    if (page.legend.visible && (rows.length > 0 || notes.length > 0)) {
+    const lineRows = legendShowsLines(page) && opts.edges && opts.loadSpecLookup
+      ? buildLegendLineRows(computeLineLoads(page, opts.nodes, opts.edges, opts.loadSpecLookup))
+      : [];
+    if (page.legend.visible && (rows.length > 0 || notes.length > 0 || lineRows.length > 0)) {
       // Uploaded images are data URLs already; remote references are fetched now so the
       // legend prints the same picture the screen shows — when the host allows it.
       const images = new Map<string, string>();
@@ -452,7 +499,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           if (data) images.set(row.groupId, data);
         }));
       }
-      drawLegend(doc, page, rows, notes, images, opts.companyProfile);
+      drawLegend(doc, page, rows, notes, images, opts.companyProfile, lineRows);
     }
 
     if (page.drawingBlock.visible) {

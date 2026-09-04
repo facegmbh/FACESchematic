@@ -297,6 +297,10 @@ export interface DeviceData {
   installNotes?: string;
   /** Floorplan symbol, inherited from the template (see DeviceTemplate.planSymbol). */
   planSymbol?: PlanSymbolSpec;
+  /** Electrical load data of a loudspeaker, inherited from the template (see DeviceTemplate.speakerLoad). */
+  speakerLoad?: SpeakerLoadSpec;
+  /** Output capability of an amplifier, inherited from the template (see DeviceTemplate.ampLoad). */
+  ampLoad?: AmplifierLoadSpec;
   /** Device category (e.g. "video", "audio") — meaningful for custom templates and community submissions */
   category?: string;
   showAllPorts?: boolean;
@@ -633,6 +637,12 @@ export interface DeviceTemplate {
    *  symbol. A group created for the model inherits it, so the same speaker looks the same
    *  on every plan. Without one, the shape follows the device type and the color the id. */
   planSymbol?: PlanSymbolSpec;
+  /** What the loudspeaker asks of an amplifier channel: nominal impedance, continuous
+   *  power, transformer taps and spectral profile. Feeds the line load calculation on
+   *  loudspeaker plans (see src/speakerLoad.ts). */
+  speakerLoad?: SpeakerLoadSpec;
+  /** What the amplifier can deliver per channel and in total. Same purpose. */
+  ampLoad?: AmplifierLoadSpec;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -868,6 +878,76 @@ export interface PatchPanelViewPage {
 /** Shape a floorplan symbol is drawn with. Circles match the reference plans
  *  (loudspeakers); the others exist so several device families stay distinguishable
  *  on a monochrome print. */
+// ── Loudspeaker load model ───────────────────────────────────────────
+// Modeled on the Bose PowerShareX Design Tool: a channel's requested burst power is
+// twice the speakers' continuous rating (Lo-Z) or the sum of their taps (70 V / 100 V),
+// the spectral profile sets the crest factor that turns burst into average power, and
+// the amplifier is checked against peak voltage, peak current, per-channel and pooled
+// power. Brand-neutral — the same numbers describe Audac, JBL, Voice-Acoustic or Tennax.
+
+/** Spectral profile of what the speaker reproduces: full range, low / mid / high band of a
+ *  multi-amped box, or subwoofer. Governs the crest factor (average vs burst power). */
+export type SpeakerLoadProfile = "FR" | "LF" | "MF" | "HF" | "SW";
+export const SPEAKER_LOAD_PROFILES: SpeakerLoadProfile[] = ["FR", "LF", "MF", "HF", "SW"];
+
+export interface SpeakerLoadSpec {
+  /** Nominal impedance in ohms for low-impedance (direct) operation. */
+  impedanceOhm?: number;
+  /** Continuous (RMS / pink noise) power handling in watts, from the datasheet. */
+  rmsPowerW?: number;
+  /** Transformer tap settings available in watts, highest first — e.g. [80, 40, 20, 10, 5].
+   *  Empty or undefined = the model has no 70 V / 100 V transformer. */
+  tapsW?: number[];
+  /** Default "FR". */
+  profile?: SpeakerLoadProfile;
+}
+
+/** How an amplifier channel drives its line. */
+export type SpeakerLineMode = "lo-z" | "70v" | "100v";
+export const SPEAKER_LINE_MODES: SpeakerLineMode[] = ["lo-z", "70v", "100v"];
+
+export interface AmplifierLoadSpec {
+  /** Amplifier channels. Undefined = the count of speaker-level output ports. */
+  channels?: number;
+  /** Rated continuous power per channel, all channels driven, by load. Omit what the
+   *  amplifier does not support (no v100 = no 100 V mode). */
+  ratedW?: { ohm2?: number; ohm4?: number; ohm8?: number; v70?: number; v100?: number };
+  /** Total rated power across all channels (the PowerShare pool). Undefined = channels ×
+   *  highest per-channel rating. */
+  totalRatedW?: number;
+  /** Highest burst power one channel may take when the others idle (asymmetric loading).
+   *  Undefined = the highest per-channel rating. */
+  maxBurstPerChannelW?: number;
+  /** Burst power the whole amplifier can deliver at once. Undefined = totalRatedW. */
+  maxBurstTotalW?: number;
+  /** Long-term average output power the amplifier sustains thermally / from the mains.
+   *  Undefined = 17.5 % of totalRatedW, the PowerShareX ratio. */
+  maxAvgTotalW?: number;
+  /** Peak output voltage per channel in volts. Undefined = derived from the 8 Ω / 100 V rating. */
+  peakVoltageV?: number;
+  /** Peak output current per channel in amperes. Undefined = derived from the lowest-impedance rating. */
+  peakCurrentA?: number;
+  /** Lowest load impedance a channel accepts. Undefined = the lowest impedance with a rating. */
+  minImpedanceOhm?: number;
+}
+
+/** An amplifier line on a loudspeaker plan: its printed number, the amplifier channel that
+ *  feeds it on the schematic and how that channel is run. Symbols carry the lineNo;
+ *  the line registry carries what the number means. */
+export interface FloorplanLine {
+  lineNo: string;
+  /** Schematic node id of the amplifier and the id of its speaker-level output port.
+   *  Undefined = a line that is only numbered, not wired yet. */
+  ampNodeId?: string;
+  ampPortId?: string;
+  /** Default: lo-z, or 100v when the amplifier only has a 100 V rating. */
+  mode?: SpeakerLineMode;
+  /** Hi-Z: tap per speaker in watts. Undefined = each speaker's highest tap. */
+  tapW?: number;
+  /** Free text, e.g. "Terrasse" — printed in the legend's line table. */
+  name?: string;
+}
+
 export type FloorplanSymbolShape = "circle" | "square" | "triangle" | "diamond";
 
 export const FLOORPLAN_SYMBOL_SHAPES: FloorplanSymbolShape[] = ["circle", "square", "triangle", "diamond"];
@@ -993,6 +1073,11 @@ export interface FloorplanLegendBox {
   /** Print the company block (logo, name, address, contact) at the foot of the legend.
    *  Undefined counts as on — the planner's company belongs on every plan. */
   showCompany?: boolean;
+  /** Print the line table (line → amplifier channel, speaker count, load). Undefined counts
+   *  as on for loudspeaker plans with lines. */
+  showLines?: boolean;
+  /** Heading of the line table, e.g. "LINIEN / ENDSTUFENKANÄLE". */
+  linesTitle?: string;
 }
 
 /** Who drew the plan: the planning company's identity as it prints on every sheet —
@@ -1135,6 +1220,9 @@ export interface FloorplanPage {
   /** How a symbol's label is composed from its fields: {{line}}, {{n}}, {{group}},
    *  {{device}}. Default "{{n}}" (generic) / "{{line}}.{{n}}" (loudspeaker). */
   labelTemplate?: string;
+  /** Amplifier lines: number ↔ amplifier channel binding and operating mode. Lines that
+   *  only exist as a lineNo on symbols are implied; entries here add the wiring. */
+  lines?: FloorplanLine[];
 }
 
 export type FloorplanKind = "generic" | "loudspeaker";

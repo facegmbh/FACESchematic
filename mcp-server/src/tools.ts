@@ -8,7 +8,9 @@
  * remove_device_from_rack), the Ship-8 "notes" tools (update_note, delete_note;
  * get_schematic also reports rooms + notes), and the Ship-9 "batch structural" tools
  * (install_card_batch, place_device_in_rack_batch), and the Ship-10 "floorplan" tools
- * (list_floorplans … delete_floorplan_note) that fill a scaled plan drawing. Each entry is a plain JSON-Schema tool
+ * (list_floorplans … delete_floorplan_note) that fill a scaled plan drawing, and the Ship-11 line tools
+ * (list_floorplan_lines, sync_floorplan_lines, update_floorplan_line, speaker_load_report) that bind amplifier
+ * channels to plan lines and check their load. Each entry is a plain JSON-Schema tool
  * definition; the call is relayed verbatim to the editor over the bridge, which validates
  * and executes it against the live store.
  *
@@ -609,6 +611,8 @@ export const TOOLS: ToolDef[] = [
         notes: { type: "array", items: { type: "string" }, description: "Installation notes, one per line." },
         showImages: { type: "boolean", description: "Show each group's product image." },
         onlyUsedGroups: { type: "boolean", description: "List only groups that have symbols on this plan." },
+        showLines: { type: "boolean", description: "Print the line table (line → amplifier channel, quantity, load). Default on for loudspeaker plans with lines." },
+        linesTitle: { type: "string", description: "Heading of the line table, e.g. \"LINIEN / ENDSTUFENKANÄLE\"." },
       },
       required: ["pageId"],
       additionalProperties: false,
@@ -772,6 +776,58 @@ export const TOOLS: ToolDef[] = [
         },
       },
       required: ["pageId", "masks"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_floorplan_lines",
+    description:
+      "The amplifier lines of a loudspeaker plan with their load check. For each line: number, name, the amplifier channel feeding it (device, port), operating mode (lo-z / 70v / 100v), tap, how many speakers are placed on the plan and wired on the schematic, and the verdict — requested power, impedance, peak voltage/current, headroom in dB, what limits it (peak voltage, peak current, channel power, shared power, average power, minimum impedance) and a status ok / nearing / exceeds / no-data. Also lists every amplifier on the schematic with its channels, so you can wire lines with update_floorplan_line. The model follows the Bose PowerShareX Design Tool and works for any brand whose templates carry speakerLoad / ampLoad data.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string", description: "Floorplan page id from list_floorplans." } },
+      required: ["pageId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "sync_floorplan_lines",
+    description:
+      "Bind the plan's lines to the schematic: every amplifier channel (speaker-level output) that has speakers wired to it gets a line — existing bindings are kept, new channels take the next free number in amplifier / channel order — and every placed symbol whose device hangs on a channel moves to that channel's line and is numbered within it (4.1, 4.2 …). Run this after wiring the schematic; then list_floorplan_lines shows the load per line.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string" } },
+      required: ["pageId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_floorplan_line",
+    description:
+      "Change one amplifier line of a floorplan: wire it to an amplifier channel (ampDeviceId + ampPort — the port id or label of a speaker-level output; null for both unwires), set its operating mode (lo-z, 70v, 100v), the Hi-Z tap per speaker in watts (null = highest tap), a name for the legend's line table, or rename it (newLineNo — its symbols are relabelled). Only the properties you pass change. Returns the line with its load verdict.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        lineNo: { type: "string", description: "The line as printed, e.g. \"4\" or \"SB\"." },
+        newLineNo: { type: "string" },
+        ampDeviceId: { type: ["string", "null"], description: "Amplifier device id from get_schematic / list_floorplan_lines." },
+        ampPort: { type: ["string", "null"], description: "Speaker-level output port id or label, e.g. \"Speaker Out 3\"." },
+        mode: { type: "string", enum: ["lo-z", "70v", "100v"] },
+        tapW: { type: ["number", "null"], description: "Hi-Z tap per speaker in watts." },
+        name: { type: ["string", "null"] },
+      },
+      required: ["pageId", "lineNo"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "speaker_load_report",
+    description:
+      "Load check of every amplifier on the schematic, channel by channel, independent of any plan: speakers wired to each speaker-level output (following loop-through), requested power (2× continuous rating in Lo-Z, tap sum in 70/100 V), impedance, peak voltage and current, average power, per-limit headroom in dB and status ok / nearing (< +1 dB) / exceeds (< −2 dB), plus the amplifier's shared-supply totals. Pass pageId to judge channels in the modes / taps that plan's lines set. Channels or speakers without load data on their templates are reported as such — fill in speakerLoad / ampLoad on the device to get a verdict.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string", description: "Optional floorplan page whose line modes apply." } },
       additionalProperties: false,
     },
   },

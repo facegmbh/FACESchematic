@@ -45,6 +45,7 @@ import type {
   FloorplanMask,
   CompanyProfile,
   FloorplanKind,
+  FloorplanLine,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -94,6 +95,7 @@ import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { createDefaultLayout } from "./titleBlockLayout";
 import { sanitizeNoteHtml } from "./sanitizeHtml";
 import { getTemplateById } from "./templateApi";
+import { compareLineNo, lineForDevice, planLines, syncLinesFromSchematic, type LoadSpecLookup } from "./speakerLines";
 import { DEFAULT_BRIDGE_PORT } from "./mcp/protocol";
 import { syncDeviceWithTemplate, type SyncResult } from "./templateSync";
 import { chooseNewHandleSuffix, type SwapPlan, type NewPortRef } from "./deviceSwap";
@@ -862,6 +864,13 @@ interface SchematicState {
   setFloorplanKind: (pageId: string, kind: FloorplanKind) => void;
   /** Renumber one amplifier line 1…n in placement order. */
   renumberFloorplanLine: (pageId: string, lineNo: string) => void;
+  /** Bind the plan's lines to the schematic's amplifier channels: a line per channel with
+   *  speakers, placed symbols moved onto their channel's line. */
+  syncFloorplanLines: (pageId: string) => { addedLineNos: string[]; relabeledCount: number };
+  /** Change a line's binding, mode, tap, name — or its number (newLineNo relabels its symbols). */
+  updateFloorplanLine: (pageId: string, lineNo: string, patch: Partial<Omit<FloorplanLine, "lineNo">> & { newLineNo?: string }) => void;
+  /** Drop a line's registry entry. Its symbols keep their number. */
+  removeFloorplanLine: (pageId: string, lineNo: string) => void;
   /** Patch several symbols in one undo step (label placement presets). */
   updateFloorplanSymbols: (pageId: string, symbolIds: string[], patch: Partial<Omit<FloorplanSymbol, "id">>) => void;
   removeFloorplanPage: (pageId: string) => void;
@@ -969,6 +978,18 @@ function nextFloorplanGroupId(): string {
 }
 
 let floorplanSymbolIdCounter = 0;
+/** Load specs for the line calculation: the device's own values, else its template's. */
+export function loadSpecLookup(state: Pick<SchematicState, "customTemplates">): LoadSpecLookup {
+  const tpl = (node: SchematicNode) => {
+    const data = node.data as DeviceData;
+    return data.templateId ? getTemplateById(data.templateId, state.customTemplates) : undefined;
+  };
+  return {
+    speakerSpecFor: (node) => (node.data as DeviceData).speakerLoad ?? tpl(node)?.speakerLoad,
+    ampSpecFor: (node) => (node.data as DeviceData).ampLoad ?? tpl(node)?.ampLoad,
+  };
+}
+
 function nextFloorplanSymbolId(): string {
   return `fpsym-${++floorplanSymbolIdCounter}`;
 }
@@ -1940,6 +1961,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(template.installCable ? { installCable: template.installCable } : {}),
         ...(template.installNotes ? { installNotes: template.installNotes } : {}),
         ...(template.planSymbol ? { planSymbol: { ...template.planSymbol } } : {}),
+        ...(template.speakerLoad ? { speakerLoad: { ...template.speakerLoad } } : {}),
+        ...(template.ampLoad ? { ampLoad: { ...template.ampLoad } } : {}),
         ...(template.category ? { category: template.category } : {}),
         ...(template.powerDrawW != null ? { powerDrawW: template.powerDrawW } : {}),
         ...(template.powerCapacityW != null ? { powerCapacityW: template.powerCapacityW } : {}),
@@ -3001,6 +3024,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ...(newTemplate.installCable ? { installCable: newTemplate.installCable } : {}),
       ...(newTemplate.installNotes ? { installNotes: newTemplate.installNotes } : {}),
       ...(newTemplate.planSymbol ? { planSymbol: { ...newTemplate.planSymbol } } : {}),
+      ...(newTemplate.speakerLoad ? { speakerLoad: { ...newTemplate.speakerLoad } } : {}),
+      ...(newTemplate.ampLoad ? { ampLoad: { ...newTemplate.ampLoad } } : {}),
       ...(newTemplate.category ? { category: newTemplate.category } : {}),
       ...(newTemplate.powerDrawW != null ? { powerDrawW: newTemplate.powerDrawW } : {}),
       ...(newTemplate.powerCapacityW != null ? { powerCapacityW: newTemplate.powerCapacityW } : {}),
@@ -4078,6 +4103,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(template.installCable ? { installCable: template.installCable } : {}),
         ...(template.installNotes ? { installNotes: template.installNotes } : {}),
         ...(template.planSymbol ? { planSymbol: { ...template.planSymbol } } : {}),
+        ...(template.speakerLoad ? { speakerLoad: { ...template.speakerLoad } } : {}),
+        ...(template.ampLoad ? { ampLoad: { ...template.ampLoad } } : {}),
         ...(template.category ? { category: template.category } : {}),
         ...(hiddenPorts && hiddenPorts.length > 0 ? { hiddenPorts } : {}),
       },
@@ -5327,7 +5354,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...p,
         kind,
         labelTemplate: undefined, // back to the kind's default template
-        legend: { ...p.legend, title: preset.legendTitle, notesTitle: preset.legendNotesTitle },
+        legend: { ...p.legend, title: preset.legendTitle, notesTitle: preset.legendNotesTitle, linesTitle: preset.legendLinesTitle },
         drawingBlock: {
           ...p.drawingBlock,
           revisionHeaders: [...preset.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],
@@ -5349,6 +5376,65 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...p,
         symbols: renumberLine(p.symbols, lineNo, effectiveLabelTemplate(p), (gid) => p.groups.find((g) => g.id === gid)?.label),
       })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  syncFloorplanLines: (pageId) => {
+    const state = get();
+    const page = state.pages.find((p): p is FloorplanPage => p.type === "floorplan" && p.id === pageId);
+    if (!page) return { addedLineNos: [], relabeledCount: 0 };
+    const result = syncLinesFromSchematic(page, state.nodes, state.edges, loadSpecLookup(state));
+    if (result.addedLineNos.length === 0 && result.relabeledCount === 0 && (page.lines ?? []).length === result.lines.length) {
+      return { addedLineNos: [], relabeledCount: 0 };
+    }
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, lines: result.lines, symbols: result.symbols })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return { addedLineNos: result.addedLineNos, relabeledCount: result.relabeledCount };
+  },
+
+  updateFloorplanLine: (pageId, lineNo, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const key = lineNo.trim();
+    const { newLineNo, ...rest } = patch;
+    const renamed = newLineNo !== undefined && newLineNo.trim() !== "" && newLineNo.trim() !== key ? newLineNo.trim() : undefined;
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        // The registry lists every line, implied ones included, once any of them is edited.
+        const lines = planLines(p).map((l) => {
+          if (l.lineNo !== key) return l;
+          const merged: FloorplanLine = { ...l, ...rest, lineNo: renamed ?? key };
+          // An explicit undefined in the patch clears the field (e.g. unwiring a channel).
+          for (const k of Object.keys(rest) as (keyof typeof rest)[]) if (rest[k] === undefined) delete merged[k];
+          return merged;
+        });
+        lines.sort((a, b) => compareLineNo(a.lineNo, b.lineNo));
+        let symbols = p.symbols;
+        if (renamed) {
+          const template = effectiveLabelTemplate(p);
+          symbols = p.symbols.map((s) => (s.lineNo?.trim() === key
+            ? { ...s, lineNo: renamed, label: formatSymbolLabel(template, { line: renamed, n: s.seq, group: p.groups.find((g) => g.id === s.groupId)?.label }) }
+            : s));
+        }
+        return { ...p, lines, symbols };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanLine: (pageId, lineNo) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const key = lineNo.trim();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, lines: (p.lines ?? []).filter((l) => l.lineNo.trim() !== key) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();
@@ -5571,19 +5657,30 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => {
         const group = p.groups.find((g) => g.id === symbol.groupId);
+        // On a loudspeaker plan a device that hangs on an amplifier channel lands on that
+        // channel's line automatically — creating the line when the channel has none yet.
+        let lineNo = symbol.lineNo;
+        let lines = p.lines;
+        if (lineNo === undefined && p.kind === "loudspeaker" && symbol.deviceNodeId) {
+          const hit = lineForDevice(p, symbol.deviceNodeId, state.nodes, state.edges, loadSpecLookup(state));
+          if (hit) {
+            lineNo = hit.lineNo;
+            if (hit.newLine) lines = [...planLines(p), hit.newLine].sort((a, b) => compareLineNo(a.lineNo, b.lineNo));
+          }
+        }
         // Structured numbering (line.speaker) on loudspeaker plans or whenever a line is
         // given; otherwise the classic "continue the group's last number".
-        const structured = symbol.lineNo !== undefined || p.kind === "loudspeaker";
+        const structured = lineNo !== undefined || p.kind === "loudspeaker";
         let seq = symbol.seq;
         let label = symbol.label;
         if (structured) {
-          seq = seq ?? nextSeqInLine(p.symbols, symbol.lineNo);
+          seq = seq ?? nextSeqInLine(p.symbols, lineNo);
           const deviceLabel = symbol.deviceNodeId ? (state.nodes.find((n) => n.id === symbol.deviceNodeId)?.data as DeviceData | undefined)?.label : undefined;
-          label = label ?? formatSymbolLabel(effectiveLabelTemplate(p), { line: symbol.lineNo, n: seq, group: group?.label, device: deviceLabel });
+          label = label ?? formatSymbolLabel(effectiveLabelTemplate(p), { line: lineNo, n: seq, group: group?.label, device: deviceLabel });
         } else {
           label = label ?? nextSymbolLabel(p.symbols.filter((sym) => sym.groupId === symbol.groupId).map((sym) => sym.label), group?.labelPrefix);
         }
-        return { ...p, symbols: [...p.symbols, { ...symbol, id, seq, label }] };
+        return { ...p, lines, symbols: [...p.symbols, { ...symbol, id, lineNo, seq, label }] };
       }),
       undoSize: undoStack.length, redoSize: 0,
     });

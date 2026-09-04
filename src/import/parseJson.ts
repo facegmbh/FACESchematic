@@ -67,6 +67,8 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     installCable: str(raw.installCable),
     installNotes: str(raw.installNotes),
     planSymbol: isPlanSymbol(raw.planSymbol) ? { shape: raw.planSymbol.shape, color: str(raw.planSymbol.color), glyph: str(raw.planSymbol.glyph) } : undefined,
+    speakerLoad: speakerLoad(raw.speakerLoad),
+    ampLoad: ampLoad(raw.ampLoad),
     color: str(raw.color),
     headerColor: str(raw.headerColor),
     imageUrl: str(raw.imageUrl),
@@ -97,6 +99,42 @@ function normalizePort(raw: Record<string, unknown>, index: number): Partial<Por
     connectorType: typeof raw.connectorType === "string" ? raw.connectorType as Port["connectorType"] : undefined,
     section: str(raw.section),
   };
+}
+
+const LOAD_PROFILES = new Set(["FR", "LF", "MF", "HF", "SW"]);
+
+/** Loudspeaker load data; only well-formed numbers survive. */
+function speakerLoad(v: unknown): DeviceTemplate["speakerLoad"] {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const taps = Array.isArray(o.tapsW) ? o.tapsW.filter((t): t is number => typeof t === "number" && Number.isFinite(t) && t > 0) : undefined;
+  const out = {
+    impedanceOhm: num(o.impedanceOhm),
+    rmsPowerW: num(o.rmsPowerW),
+    tapsW: taps && taps.length ? taps : undefined,
+    profile: typeof o.profile === "string" && LOAD_PROFILES.has(o.profile) ? (o.profile as NonNullable<DeviceTemplate["speakerLoad"]>["profile"]) : undefined,
+  };
+  return Object.values(out).some((x) => x !== undefined) ? out : undefined;
+}
+
+/** Amplifier output capability. */
+function ampLoad(v: unknown): DeviceTemplate["ampLoad"] {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const r = o.ratedW && typeof o.ratedW === "object" ? (o.ratedW as Record<string, unknown>) : {};
+  const ratedW = { ohm2: num(r.ohm2), ohm4: num(r.ohm4), ohm8: num(r.ohm8), v70: num(r.v70), v100: num(r.v100) };
+  const out = {
+    channels: num(o.channels),
+    ratedW: Object.values(ratedW).some((x) => x !== undefined) ? ratedW : undefined,
+    totalRatedW: num(o.totalRatedW),
+    maxBurstPerChannelW: num(o.maxBurstPerChannelW),
+    maxBurstTotalW: num(o.maxBurstTotalW),
+    maxAvgTotalW: num(o.maxAvgTotalW),
+    peakVoltageV: num(o.peakVoltageV),
+    peakCurrentA: num(o.peakCurrentA),
+    minImpedanceOhm: num(o.minImpedanceOhm),
+  };
+  return Object.values(out).some((x) => x !== undefined) ? out : undefined;
 }
 
 function str(v: unknown): string | undefined {

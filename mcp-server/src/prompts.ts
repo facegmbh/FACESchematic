@@ -51,7 +51,7 @@ export const PROMPTS: Prompt[] = [
   },
   {
     name: "floorplan",
-    description: "Playbook for turning an architect's plan into an installation drawing (list_floorplans → add_floorplan_group → place_floorplan_symbols → set_floorplan_legend → set_floorplan_drawing_block → add_floorplan_notes).",
+    description: "Playbook for turning an architect's plan into an installation drawing (list_floorplans → add_floorplan_group → place_floorplan_symbols → sync_floorplan_lines → set_floorplan_legend → set_floorplan_drawing_block → add_floorplan_notes).",
     arguments: [
       { name: "plan", description: "What to draw and for whom (e.g. 'loudspeaker layout ground floor, 12 ceiling speakers and 2 subs, German legend, revision A today').", required: false },
     ],
@@ -90,6 +90,7 @@ const FLOORPLAN = `You are annotating an architect's floor plan in EasySchematic
 2. Positions are real-world METRES from the top-left corner of the sheet's drawing area (x right, y down). list_floorplans reports how many metres the sheet covers at its scale; stay inside that. Read positions off the user's description or the architect's dimensions, never guess canvas pixels.
 3. One symbol group per device family: add_floorplan_group with the legend headline, a description line with model, finish and cable spec, a distinct color/shape, and a labelPrefix that seeds the numbering (e.g. "1.1" for zone 1, "SB." for subwoofers). Groups are the legend rows — get them right before placing.
 4. Place symbols with place_floorplan_symbols (the batch tool). Link deviceId from get_schematic wherever the device exists on the signal flow, so plan and schematic describe the same gear. On a loudspeaker plan give each symbol its lineNo (amplifier line / circuit) and let n run per line; use labelPosition to keep labels clear of walls and other symbols.
+4b. On a loudspeaker plan, bind the lines to the amplifiers: call sync_floorplan_lines once the schematic is wired (amplifier speaker-level outputs → speakers, loop-through included) — each channel with speakers becomes a line and the placed symbols are numbered per channel. Then list_floorplan_lines and read the load verdict per line; set the operating mode / tap with update_floorplan_line where a channel runs 70 V or 100 V, and tell the user about any line that is "nearing" or "exceeds" (which limit, by how many dB) or lacks load data on its templates. The legend prints the line table (line → amplifier channel, quantity, load) automatically.
 5. Fill the legend with set_floorplan_legend: headline, notes heading and installation notes (one per line: mounting method, ceiling cut-out, cable type, reinforcement). Write them in the user's language.
 6. Fill the drawing block with set_floorplan_drawing_block: title (floor), subtitle (what the drawing shows), fields (project, client with address, scale via {{scale}}, sheet via {{sheetSize}}, date, drawn by, checked by), revisionHeaders in the user's language, and the first revision via revisions or add_floorplan_revision. Use tokens for values that already live in the project title block.
 7. Add site remarks next to the symbols they concern with add_floorplan_notes (boxed, short, imperative).

@@ -9,7 +9,8 @@ to the assistant over stdio, and connects to the editor over a localhost WebSock
 > device, group devices into rooms, add/edit/delete text notes, fit expansion cards
 > into modular-chassis slots, build rack elevations (create racks, mount devices), and
 > fill floorplans (symbol groups, device symbols at real-world positions, legend text,
-> the drawing block with its revision table, and free text notes). Adding devices,
+> the drawing block with its revision table, free text notes, and amplifier lines bound
+> to the schematic's channels with a per-line load check). Adding devices,
 > making connections, installing cards, mounting devices in racks, placing floorplan
 > symbols and adding floorplan notes each have a batch version for doing many at once.
 > The architect's drawing itself is imported and calibrated in the editor.

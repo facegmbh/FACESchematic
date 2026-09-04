@@ -2700,7 +2700,18 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 4,
+      "ratedW": {
+        "ohm4": 300,
+        "ohm8": 300,
+        "v70": 300,
+        "v100": 300
+      },
+      "totalRatedW": 1200,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000011",
@@ -2796,7 +2807,18 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm4": 600,
+        "ohm8": 600,
+        "v70": 600,
+        "v100": 600
+      },
+      "totalRatedW": 1200,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000020",
@@ -2903,7 +2925,16 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm4": 300,
+        "ohm8": 200
+      },
+      "totalRatedW": 600,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000021",
@@ -3010,7 +3041,16 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm4": 450,
+        "ohm8": 330
+      },
+      "totalRatedW": 900,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000022",
@@ -3117,7 +3157,16 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm4": 750,
+        "ohm8": 500
+      },
+      "totalRatedW": 1500,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000023",
@@ -3224,7 +3273,16 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm4": 1350,
+        "ohm8": 1000
+      },
+      "totalRatedW": 2700,
+      "minImpedanceOhm": 4
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000030",
@@ -3408,7 +3466,24 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 4,
+      "ratedW": {
+        "ohm2": 400,
+        "ohm4": 300,
+        "ohm8": 300,
+        "v70": 300,
+        "v100": 300
+      },
+      "totalRatedW": 1200,
+      "maxBurstPerChannelW": 1100,
+      "maxBurstTotalW": 1200,
+      "maxAvgTotalW": 360,
+      "peakVoltageV": 70,
+      "peakCurrentA": 33,
+      "minImpedanceOhm": 2
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000031",
@@ -3592,7 +3667,24 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 4,
+      "ratedW": {
+        "ohm2": 800,
+        "ohm4": 600,
+        "ohm8": 600,
+        "v70": 600,
+        "v100": 600
+      },
+      "totalRatedW": 2400,
+      "maxBurstPerChannelW": 1200,
+      "maxBurstTotalW": 2400,
+      "maxAvgTotalW": 460,
+      "peakVoltageV": 100,
+      "peakCurrentA": 45,
+      "minImpedanceOhm": 2
+    }
   },
   {
     "id": "face-0002-0000-4000-8000-000000000032",
@@ -3766,7 +3858,24 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 4,
+      "ratedW": {
+        "ohm2": 1500,
+        "ohm4": 1200,
+        "ohm8": 1300,
+        "v70": 2100,
+        "v100": 2200
+      },
+      "totalRatedW": 4800,
+      "maxBurstPerChannelW": 2200,
+      "maxBurstTotalW": 6000,
+      "maxAvgTotalW": 840,
+      "peakVoltageV": 139,
+      "peakCurrentA": 45,
+      "minImpedanceOhm": 2
+    }
   },
   {
     "id": "face-0003-0000-4000-8000-000000000001",
@@ -5449,7 +5558,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 16,
+      "rmsPowerW": 16,
+      "tapsW": [
+        16,
+        8,
+        4,
+        2,
+        1
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0002-0000-0000-000000000000",
@@ -5507,7 +5628,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 40,
+      "tapsW": [
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0003-0000-0000-000000000000",
@@ -5565,7 +5698,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 16,
+      "rmsPowerW": 16,
+      "tapsW": [
+        16,
+        8,
+        4,
+        2,
+        1
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0004-0000-0000-000000000000",
@@ -5623,7 +5768,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 40,
+      "tapsW": [
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0005-0000-0000-000000000000",
@@ -5681,7 +5838,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 16,
+      "rmsPowerW": 16,
+      "tapsW": [
+        16,
+        8,
+        4,
+        2,
+        1
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0006-0000-0000-000000000000",
@@ -5739,7 +5908,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 40,
+      "tapsW": [
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0007-0000-0000-000000000000",
@@ -5799,6 +5980,17 @@
     "planSymbol": {
       "shape": "circle",
       "color": "#facc15"
+    },
+    "speakerLoad": {
+      "impedanceOhm": 16,
+      "rmsPowerW": 16,
+      "tapsW": [
+        9,
+        4.5,
+        2.3,
+        1.2
+      ],
+      "profile": "FR"
     }
   },
   {
@@ -5853,7 +6045,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 25,
+      "tapsW": [
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0009-0000-0000-000000000000",
@@ -5907,7 +6110,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 50,
+      "tapsW": [
+        50,
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0010-0000-0000-000000000000",
@@ -5961,7 +6176,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 100,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0011-0000-0000-000000000000",
@@ -6015,7 +6243,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 125,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0012-0000-0000-000000000000",
@@ -6069,7 +6310,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 16,
+      "rmsPowerW": 16,
+      "tapsW": [
+        9,
+        4.5,
+        2.3,
+        1.2
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0013-0000-0000-000000000000",
@@ -6127,7 +6379,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 25,
+      "tapsW": [
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0014-0000-0000-000000000000",
@@ -6185,7 +6448,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 50,
+      "tapsW": [
+        50,
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0015-0000-0000-000000000000",
@@ -6249,6 +6524,19 @@
     "planSymbol": {
       "shape": "circle",
       "color": "#e11d1d"
+    },
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 100,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
     }
   },
   {
@@ -6307,7 +6595,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 125,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0017-0000-0000-000000000000",
@@ -6365,7 +6666,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 25,
+      "tapsW": [
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0018-0000-0000-000000000000",
@@ -6423,7 +6735,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 50,
+      "tapsW": [
+        50,
+        25,
+        12,
+        6,
+        3
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0019-0000-0000-000000000000",
@@ -6485,7 +6809,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 100,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0020-0000-0000-000000000000",
@@ -6539,7 +6876,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 150,
+      "tapsW": [
+        150,
+        80,
+        40,
+        20
+      ],
+      "profile": "SW"
+    }
   },
   {
     "id": "face-bose-spkr-0021-0000-0000-000000000000",
@@ -6597,7 +6945,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 250,
+      "tapsW": [
+        150,
+        80,
+        40,
+        20
+      ],
+      "profile": "SW"
+    }
   },
   {
     "id": "face-bose-spkr-0022-0000-0000-000000000000",
@@ -6655,7 +7014,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 250,
+      "tapsW": [
+        150,
+        80,
+        40,
+        20
+      ],
+      "profile": "SW"
+    }
   },
   {
     "id": "face-bose-spkr-0023-0000-0000-000000000000",
@@ -6709,7 +7079,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 125,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0024-0000-0000-000000000000",
@@ -6763,7 +7146,20 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 125,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5,
+        2.5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0025-0000-0000-000000000000",
@@ -6821,7 +7217,12 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 500,
+      "profile": "SW"
+    }
   },
   {
     "id": "face-bose-spkr-0026-0000-0000-000000000000",
@@ -6990,7 +7391,17 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 150,
+      "tapsW": [
+        100,
+        50,
+        25
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0029-0000-0000-000000000000",
@@ -7037,7 +7448,12 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 240,
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0030-0000-0000-000000000000",
@@ -7084,7 +7500,12 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 120,
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0031-0000-0000-000000000000",
@@ -7154,7 +7575,12 @@
         "connectorType": "speakon",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 150,
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0032-0000-0000-000000000000",
@@ -7231,7 +7657,12 @@
         "connectorType": "speakon",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 300,
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0033-0000-0000-000000000000",
@@ -7293,7 +7724,12 @@
         "connectorType": "speakon",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 500,
+      "profile": "SW"
+    }
   },
   {
     "id": "face-bose-spkr-0034-0000-0000-000000000000",
@@ -7351,7 +7787,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input (70/100V + 8Ω Tap)"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 100,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0035-0000-0000-000000000000",
@@ -7409,7 +7857,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input (70/100V + 8Ω Tap)"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 200,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0036-0000-0000-000000000000",
@@ -7463,7 +7923,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input (70/100V + 8Ω Tap)"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 250,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-bose-spkr-0037-0000-0000-000000000000",
@@ -7517,7 +7989,19 @@
         "connectorType": "terminal-block",
         "section": "Speaker Input (70/100V + 8Ω Tap)"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 300,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10,
+        5
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-va-0001-0000-4000-8000-000000000000",
@@ -12814,7 +13298,12 @@
         "direction": "output",
         "connectorType": "binding-post"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 175,
+      "profile": "FR"
+    }
   },
   {
     "id": "custom-1780314838547",
@@ -12858,7 +13347,12 @@
         "direction": "output",
         "connectorType": "binding-post"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 100,
+      "profile": "FR"
+    }
   },
   {
     "id": "custom-1780571563707",
@@ -12936,7 +13430,18 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "speakerLoad": {
+      "impedanceOhm": 8,
+      "rmsPowerW": 65,
+      "tapsW": [
+        80,
+        40,
+        20,
+        10
+      ],
+      "profile": "FR"
+    }
   },
   {
     "id": "face-light-0001-0000-4000-8000-000000000000",

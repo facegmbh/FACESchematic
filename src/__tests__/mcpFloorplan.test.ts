@@ -382,3 +382,143 @@ describe("loudspeaker plans: lines and label placement", () => {
     expect(() => handlers.update_floorplan({ pageId, kind: "wiring" })).toThrow(/kind must be/);
   });
 });
+
+describe("amplifier lines & load (Ship 11)", () => {
+  const DM6 = { impedanceOhm: 8, rmsPowerW: 100, tapsW: [80, 40, 20, 10, 5, 2.5], profile: "FR" as const };
+  const PSX = { channels: 4, ratedW: { ohm2: 1500, ohm4: 1200, ohm8: 1300, v70: 2100, v100: 2200 }, totalRatedW: 4800, maxBurstPerChannelW: 2200, maxBurstTotalW: 6000, maxAvgTotalW: 840, peakVoltageV: 139, peakCurrentA: 45, minImpedanceOhm: 2 };
+  type Port = { id: string; label: string; direction: "input" | "output"; signalType: string };
+  const spk = (id: string): SchematicNode => ({
+    id, type: "device", position: { x: 0, y: 0 },
+    data: {
+      label: `LS ${id}`, deviceType: "speaker", speakerLoad: DM6,
+      ports: [{ id: `${id}-in`, label: "Speaker In", direction: "input", signalType: "speaker-level" }, { id: `${id}-loop`, label: "Speaker Loop Out", direction: "output", signalType: "speaker-level" }] as Port[],
+    } as unknown as DeviceData,
+  } as SchematicNode);
+  const ampNode: SchematicNode = {
+    id: "amp-1", type: "device", position: { x: 0, y: 0 },
+    data: { label: "PSX4804D", deviceType: "amplifier", ampLoad: PSX, ports: [1, 2, 3, 4].map((i) => ({ id: `amp-out${i}`, label: `Speaker Out ${i}`, direction: "output", signalType: "speaker-level" })) as Port[] } as unknown as DeviceData,
+  } as SchematicNode;
+  const wire = (id: string, s: string, sh: string, t: string, th: string) => ({ id, source: s, sourceHandle: sh, target: t, targetHandle: th, data: { signalType: "speaker-level" } });
+
+  type LineRow = { lineNo: string; ampDeviceId?: string; ampPortLabel?: string; channel?: string; mode?: string; placedCount: number; wiredCount: number; load?: { requestedW: number; impedanceOhm?: number; status: string; headroomDb?: number; limitedBy?: string }; amplifierHasLoadData: boolean };
+  type LinesResult = { lines: LineRow[]; amplifiers: { deviceId: string; status: string; totalRequestedW: number; channels: { channel: string; speakerCount: number; status: string }[] }[] };
+
+  beforeEach(() => {
+    useSchematicStore.setState({
+      nodes: [ampNode, spk("s1"), spk("s2"), spk("s3"), spk("s4")],
+      edges: [wire("e1", "amp-1", "amp-out1", "s1", "s1-in"), wire("e2", "s1", "s1-loop", "s2", "s2-in"), wire("e3", "amp-1", "amp-out3", "s3", "s3-in")] as unknown as typeof useSchematicStore extends never ? never : ReturnType<typeof useSchematicStore.getState>["edges"],
+      pages: [],
+    });
+  });
+
+  it("a speaker dropped on a loudspeaker plan lands on its amplifier channel's line automatically", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS" }) as { groupId: string };
+    const res = handlers.place_floorplan_symbols({ pageId, symbols: [
+      { groupId: g.groupId, deviceId: "s3", xM: 1, yM: 1 }, // CH3 → line 1 (first wired channel used)
+      { groupId: g.groupId, deviceId: "s1", xM: 2, yM: 1 }, // CH1 → line 2
+      { groupId: g.groupId, deviceId: "s2", xM: 3, yM: 1 }, // CH1 → line 2 again
+      { groupId: g.groupId, deviceId: "s4", xM: 4, yM: 1 }, // unwired → no line
+    ] }) as { results: { result?: { label?: string; lineNo?: string } }[] };
+    expect(res.results.map((r) => r.result?.label)).toEqual(["1.1", "2.1", "2.2", "1"]);
+    const page = floorplans()[0];
+    expect(page.lines?.map((l) => [l.lineNo, l.ampPortId, l.mode])).toEqual([["1", "amp-out3", "lo-z"], ["2", "amp-out1", "lo-z"]]);
+    const list = handlers.list_floorplans({}) as { pages: (Summary & { lines: { lineNo: string; ampDeviceId?: string }[] })[] };
+    expect(list.pages[0].lines).toHaveLength(2);
+    expect(list.pages[0].lines[0].ampDeviceId).toBe("amp-1");
+  });
+
+  it("list_floorplan_lines reports channel, counts and the load verdict; sync binds the rest", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS" }) as { groupId: string };
+    // Place with an explicit line so nothing is bound yet, then sync.
+    handlers.place_floorplan_symbols({ pageId, symbols: [{ groupId: g.groupId, deviceId: "s1", xM: 1, yM: 1, lineNo: "7" }, { groupId: g.groupId, deviceId: "s2", xM: 2, yM: 1, lineNo: "7" }] });
+    const before = handlers.list_floorplan_lines({ pageId }) as LinesResult;
+    expect(before.lines).toEqual([expect.objectContaining({ lineNo: "7", placedCount: 2, wiredCount: 0, load: undefined })]);
+    expect(before.amplifiers[0].channels.map((c) => c.speakerCount)).toEqual([2, 0, 1, 0]);
+
+    const sync = handlers.sync_floorplan_lines({ pageId }) as { addedLineNos: string[]; relabeledCount: number; lines: LineRow[] };
+    expect(sync.addedLineNos).toEqual(["1", "2"]); // CH1, CH3
+    expect(sync.relabeledCount).toBe(2);
+    const after = handlers.list_floorplan_lines({ pageId }) as LinesResult;
+    const l1 = after.lines.find((l) => l.lineNo === "1")!;
+    expect(l1.ampPortLabel).toBe("Speaker Out 1");
+    expect(l1.channel).toBe("CH 1");
+    expect(l1.placedCount).toBe(2);
+    expect(l1.wiredCount).toBe(2);
+    expect(l1.load).toMatchObject({ requestedW: 400, impedanceOhm: 4, status: "ok" });
+    expect(l1.amplifierHasLoadData).toBe(true);
+    expect(after.lines.find((l) => l.lineNo === "7")).toBeUndefined(); // emptied line vanishes (it was only implied)
+    expect(floorplans()[0].symbols.map((s) => s.label).sort()).toEqual(["1.1", "1.2"]);
+  });
+
+  it("update_floorplan_line wires, sets mode/tap/name, renames, and validates", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS" }) as { groupId: string };
+    handlers.place_floorplan_symbols({ pageId, symbols: [{ groupId: g.groupId, xM: 1, yM: 1, lineNo: "4" }] });
+    const wired = handlers.update_floorplan_line({ pageId, lineNo: "4", ampDeviceId: "amp-1", ampPort: "Speaker Out 3", name: "Terrasse" }) as LineRow & { name?: string };
+    expect(wired).toMatchObject({ lineNo: "4", ampDeviceId: "amp-1", ampPortLabel: "Speaker Out 3", name: "Terrasse", wiredCount: 1 });
+    expect(wired.load?.status).toBe("ok");
+
+    const hiZ = handlers.update_floorplan_line({ pageId, lineNo: "4", mode: "100v", tapW: 20 }) as LineRow & { tapW?: number };
+    expect(hiZ.mode).toBe("100v");
+    expect(hiZ.tapW).toBe(20);
+    expect(hiZ.load?.requestedW).toBe(20);
+
+    const renamed = handlers.update_floorplan_line({ pageId, lineNo: "4", newLineNo: "SB" }) as LineRow;
+    expect(renamed.lineNo).toBe("SB");
+    expect(floorplans()[0].symbols[0].label).toBe("SB.1");
+
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "9", name: "x" })).toThrow(/No line "9"/);
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "SB", ampDeviceId: "amp-1", ampPort: "Speaker Out 9" })).toThrow(/No speaker-level output/);
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "SB", ampDeviceId: "s1", ampPort: "Speaker Loop Out" })).not.toThrow(); // a speaker's loop-out is speaker-level too — allowed, the planner's call
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "SB", mode: "hi-z" })).toThrow(/mode must be/);
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "SB", tapW: -5 })).toThrow(/tapW/);
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "SB" })).toThrow(/Nothing to update/);
+
+    const unwired = handlers.update_floorplan_line({ pageId, lineNo: "SB", ampDeviceId: null, ampPort: null }) as LineRow;
+    expect(unwired.ampDeviceId).toBeUndefined();
+    expect(unwired.load).toBeUndefined();
+  });
+
+  it("a channel cannot feed two lines", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS" }) as { groupId: string };
+    handlers.place_floorplan_symbols({ pageId, symbols: [{ groupId: g.groupId, xM: 1, yM: 1, lineNo: "1" }, { groupId: g.groupId, xM: 2, yM: 1, lineNo: "2" }] });
+    handlers.update_floorplan_line({ pageId, lineNo: "1", ampDeviceId: "amp-1", ampPort: "amp-out1" });
+    expect(() => handlers.update_floorplan_line({ pageId, lineNo: "2", ampDeviceId: "amp-1", ampPort: "amp-out1" })).toThrow(/already feeds line "1"/);
+  });
+
+  it("speaker_load_report judges every amplifier on the schematic, with or without a plan", () => {
+    const report = handlers.speaker_load_report({}) as { amplifierCount: number; amplifiers: { label: string; hasLoadData: boolean; status: string; totalRequestedW: number; channels: { channel: string; speakerCount: number; requestedW: number; status: string; limitedBy?: string }[] }[] };
+    expect(report.amplifierCount).toBe(1);
+    const a = report.amplifiers[0];
+    expect(a.label).toBe("PSX4804D");
+    expect(a.hasLoadData).toBe(true);
+    expect(a.totalRequestedW).toBe(600); // 2 × DM6 on CH1 + 1 × DM6 on CH3, each 2 × 100 W
+    expect(a.channels.map((c) => c.channel)).toEqual(["CH 1", "CH 2", "CH 3", "CH 4"]);
+    expect(a.channels.map((c) => c.status)).toEqual(["ok", "empty", "ok", "empty"]);
+
+    // A plan's line mode is honored when its pageId is passed.
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    handlers.sync_floorplan_lines({ pageId });
+    handlers.update_floorplan_line({ pageId, lineNo: "1", mode: "70v" });
+    const withPlan = handlers.speaker_load_report({ pageId }) as typeof report & { pageId: string };
+    expect(withPlan.pageId).toBe(pageId);
+    expect(withPlan.amplifiers[0].channels[0].requestedW).toBe(160); // 2 × 80 W tap
+    expect(() => handlers.speaker_load_report({ pageId: "floorplan-999" })).toThrow(/No floorplan page/);
+  });
+
+  it("sync_floorplan_lines complains when the schematic has no amplifier", () => {
+    useSchematicStore.setState({ nodes: [spk("s1")], edges: [] });
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    expect(() => handlers.sync_floorplan_lines({ pageId })).toThrow(/No amplifier on the schematic/);
+  });
+
+  it("set_floorplan_legend toggles the line table and its heading", () => {
+    const { pageId } = handlers.create_floorplan({ kind: "loudspeaker" }) as Summary;
+    const legend = handlers.set_floorplan_legend({ pageId, showLines: false, linesTitle: "LINIEN" }) as { showLines?: boolean; linesTitle?: string };
+    expect(legend.showLines).toBe(false);
+    expect(legend.linesTitle).toBe("LINIEN");
+  });
+});

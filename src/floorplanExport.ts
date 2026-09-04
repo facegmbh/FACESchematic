@@ -1,4 +1,4 @@
-import { useSchematicStore } from "./store";
+import { useSchematicStore, loadSpecLookup } from "./store";
 
 /**
  * Run the floorplan PDF export from current store state.
@@ -16,6 +16,8 @@ export async function runFloorplanExport(): Promise<void> {
   await exportFloorplanPdf({
     pages: state.pages,
     nodes: state.nodes,
+    edges: state.edges,
+    loadSpecLookup: loadSpecLookup(state),
     schematicName: state.schematicName,
     titleBlock: state.titleBlock,
     companyProfile: state.companyProfile,

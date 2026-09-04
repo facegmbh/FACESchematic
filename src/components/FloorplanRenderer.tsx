@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSchematicStore } from "../store";
+import { useSchematicStore, loadSpecLookup } from "../store";
 import { resolveDeviceLabel } from "../displayName";
+import { buildLegendLineRows, computeLineLoads, legendShowsLines } from "../speakerLines";
 import {
   buildLegendRows,
   clampToSheet,
@@ -32,6 +33,11 @@ import {
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
   LEGEND_NOTE_LINE_MM,
+  LEGEND_LINES_GAP_MM,
+  LEGEND_LINES_TITLE_MM,
+  LEGEND_LINE_ROW_MM,
+  LEGEND_LINE_COLS,
+  DEFAULT_LEGEND_LINES_TITLE,
   LEGEND_PAD_MM,
   LEGEND_ROW_MM,
   LEGEND_ROW_WITH_IMAGE_MM,
@@ -120,6 +126,7 @@ function SymbolGlyph({ group, sizePx }: { group: Pick<FloorplanSymbolGroup, "sha
 
 export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
+  const edges = useSchematicStore((s) => s.edges);
   const allPages = useSchematicStore((s) => s.pages);
   const titleBlock = useSchematicStore((s) => s.titleBlock);
   const titleBlockLayout = useSchematicStore((s) => s.titleBlockLayout);
@@ -593,9 +600,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
 
   // ── Legend ───────────────────────────────────────────────────────
   const legendRows = useMemo(() => buildLegendRows(page), [page]);
+  const legendLineRows = useMemo(
+    () => (legendShowsLines(page) ? buildLegendLineRows(computeLineLoads(page, nodes, edges, loadSpecLookup({ customTemplates }))) : []),
+    [page, nodes, edges, customTemplates],
+  );
   const legendNotes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
   const showCompany = page.legend.showCompany !== false && hasCompanyProfile(companyProfile);
-  const legendH = legendHeightMm(legendRows, page.legend, companyProfile);
+  const legendH = legendHeightMm(legendRows, page.legend, companyProfile, legendLineRows.length);
 
   const blockLogo = titleBlock.logo || companyProfile.logo || undefined;
   const drawingLayout = useMemo(
@@ -924,6 +935,27 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     )}
                   </div>
                 ))}
+                {legendLineRows.length > 0 && (
+                  <div style={{ marginTop: mmToPx(LEGEND_LINES_GAP_MM) }}>
+                    <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_LINES_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>
+                      {page.legend.linesTitle ?? DEFAULT_LEGEND_LINES_TITLE}
+                    </div>
+                    <div className="flex" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_LINE_ROW_MM), fontWeight: 700, color: "#222", borderBottom: "0.3px solid #ccc" }}>
+                      <span style={{ width: `${LEGEND_LINE_COLS[0] * 100}%` }}>Line</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[1] * 100}%` }}>Amplifier · channel</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[2] * 100}%`, textAlign: "right", paddingRight: mmToPx(1) }}>Qty</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[3] * 100}%` }}>Load</span>
+                    </div>
+                    {legendLineRows.map((r) => (
+                      <div key={r.lineNo} className="flex" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_LINE_ROW_MM), color: "#222" }}>
+                        <span className="truncate" style={{ width: `${LEGEND_LINE_COLS[0] * 100}%`, fontWeight: 700 }}>{r.lineNo}</span>
+                        <span className="truncate" style={{ width: `${LEGEND_LINE_COLS[1] * 100}%` }}>{r.name ? `${r.feed} — ${r.name}` : r.feed}</span>
+                        <span style={{ width: `${LEGEND_LINE_COLS[2] * 100}%`, textAlign: "right", paddingRight: mmToPx(1) }}>{r.count}</span>
+                        <span className="truncate" style={{ width: `${LEGEND_LINE_COLS[3] * 100}%` }}>{r.load}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {legendNotes.length > 0 && (
                   <div style={{ marginTop: mmToPx(LEGEND_NOTES_GAP_MM) }}>
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_NOTES_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>

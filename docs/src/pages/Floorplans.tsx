@@ -131,6 +131,40 @@ export default function FloorplansPage() {
         reproduces alignment and rotation exactly.
       </p>
 
+      <h2>Lines, amplifier channels and load</h2>
+      <p>
+        A line is an amplifier channel&apos;s circuit. On a loudspeaker plan the lines are{" "}
+        <strong>read off the schematic</strong>: every speaker-level output of an amplifier (or any
+        device that is not a speaker and has such outputs) is a channel, and the speakers wired to
+        it — loop-through from speaker to speaker included — are the channel&apos;s load. Drop a
+        wired speaker on the plan and it lands on its channel&apos;s line automatically, the line
+        being created with the next free number when the channel has none yet; <strong>Sync from
+        schematic</strong> in the sidebar&apos;s <em>Lines &amp; load</em> panel does the same for
+        everything at once and renumbers the placed symbols per channel. Lines that are not wired
+        yet (a number typed into the <em>Line</em> field) stay as they are; each line card lets you
+        pick the channel, rename the line (its symbols are relabelled), name it for the legend and
+        set how the channel runs: <strong>Lo-Z</strong>, <strong>70 V</strong> or{" "}
+        <strong>100 V</strong> with the transformer tap per speaker.
+      </p>
+      <p>
+        With the channel known, every line shows its <strong>load check</strong>, modeled on the
+        Bose PowerShareX Design Tool and usable for any brand whose templates carry the data
+        (Audac, JBL, Voice-Acoustic, Tennax …): the speakers&apos; <code>speakerLoad</code>{" "}
+        (impedance, continuous power, taps, profile) and the amplifier&apos;s <code>ampLoad</code>{" "}
+        (rated power per channel by load, shared total, peak voltage / current) — see the{" "}
+        <a href="/device-template-schema">template schema</a>; both are edited on the device under{" "}
+        <em>Load</em>. Per channel the model computes the requested burst power (twice the
+        continuous rating in Lo-Z, the tap sum on a 70/100 V line), the load impedance and its
+        expected minimum, peak voltage and current, and the average power after the profile&apos;s
+        crest factor; it then compares against the amplifier&apos;s peak voltage, peak current,
+        per-channel and shared (PowerShare-style) power and reports the smallest headroom in dB
+        with what limits it. <strong>OK</strong> above +1 dB, <strong>Nearing limit</strong> down
+        to −2 dB, <strong>Exceeds</strong> below — or a load below the amplifier&apos;s minimum
+        impedance. Speakers or amplifiers without data are reported as such rather than guessed.
+        The legend prints a <strong>line table</strong> (line → amplifier · channel, quantity,
+        load) on loudspeaker plans; switch it off or retitle it in the legend settings.
+      </p>
+
       <h2>Placing symbols</h2>
       <p>
         Drag a device from the sidebar onto the plan — the symbol stays linked to that device on the
@@ -240,7 +274,11 @@ export default function FloorplansPage() {
         real-world metres from the drawing area&apos;s corner), <code>set_floorplan_legend</code>{" "}
         (headline and installation notes), <code>set_floorplan_drawing_block</code> and{" "}
         <code>add_floorplan_revision</code> (title, fields, revision table, disclaimer), and{" "}
-        <code>add_floorplan_notes</code>. The server ships a <em>floorplan</em> playbook that walks
+        <code>add_floorplan_notes</code>. Lines and load are covered by{" "}
+        <code>sync_floorplan_lines</code>, <code>list_floorplan_lines</code>,{" "}
+        <code>update_floorplan_line</code> (channel, mode, tap, name, rename) and{" "}
+        <code>speaker_load_report</code> (every amplifier on the schematic, channel by channel).
+        The server ships a <em>floorplan</em> playbook that walks
         the assistant through the right order. The architect&apos;s drawing itself is imported and
         calibrated in the editor — the assistant is told so when it is missing.
       </p>

@@ -309,10 +309,11 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
 
 /** Legend box height in mm for the given rows — the renderer and the PDF export share
  *  this so the on-screen box and the printed one agree. */
-export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null): number {
+export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0): number {
   const notes = (legend.notes ?? []).filter((n) => n.trim().length > 0);
   const rowH = legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   let h = LEGEND_TITLE_MM + rows.length * rowH + LEGEND_PAD_MM * 2;
+  if (lineRowCount > 0) h += LEGEND_LINES_GAP_MM + LEGEND_LINES_TITLE_MM + LEGEND_LINE_ROW_MM * (lineRowCount + 1);
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
   if (legend.showCompany !== false && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
   // A stretched box covers what sits under it — the planner's way of hiding the
@@ -327,6 +328,13 @@ export const LEGEND_ROW_WITH_IMAGE_MM = 14;
 export const LEGEND_NOTES_GAP_MM = 3;
 export const LEGEND_NOTES_TITLE_MM = 6;
 export const LEGEND_NOTE_LINE_MM = 4.2;
+/** Line table: gap above, heading, one header row + one row per line. */
+export const LEGEND_LINES_GAP_MM = 3;
+export const LEGEND_LINES_TITLE_MM = 6;
+export const LEGEND_LINE_ROW_MM = 4.2;
+/** Column shares of the line table: line, name/feed, count, load. */
+export const LEGEND_LINE_COLS = [0.12, 0.5, 0.1, 0.28] as const;
+export const DEFAULT_LEGEND_LINES_TITLE = "LINES / AMPLIFIER CHANNELS";
 
 /** Default legend box, parked in the sheet's top-right corner. */
 export function createDefaultLegend(page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): FloorplanLegendBox {
@@ -921,6 +929,8 @@ export interface FloorplanKindPreset {
   labelTemplate: string;
   legendTitle: string;
   legendNotesTitle: string;
+  /** Heading of the legend's line table. */
+  legendLinesTitle: string;
   revisionHeaders: [string, string, string, string, string];
   /** Field labels for the drawing block, matched by position to createDefaultDrawingBlock's fields. */
   fieldLabels: string[];
@@ -932,6 +942,7 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
     labelTemplate: "{{n}}",
     legendTitle: "LEGEND",
     legendNotesTitle: "INSTALLATION NOTES",
+    legendLinesTitle: "LINES / AMPLIFIER CHANNELS",
     revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
     fieldLabels: ["Project", "Client", "Scale", "Sheet", "Date", "Drawn by"],
     drawingSubtitle: "{{drawingTitle}}",
@@ -940,6 +951,7 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
     labelTemplate: "{{line}}.{{n}}",
     legendTitle: "BESCHALLUNG - LEGENDE & MONTAGE",
     legendNotesTitle: "MONTAGEHINWEISE",
+    legendLinesTitle: "LINIEN / ENDSTUFENKANÄLE",
     revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
     fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
     drawingSubtitle: "Lautsprecherplanung",

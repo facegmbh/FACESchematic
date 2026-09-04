@@ -1,11 +1,14 @@
 import { useMemo, useRef, useState } from "react";
-import { useSchematicStore } from "../store";
+import { useSchematicStore, loadSpecLookup } from "../store";
 import { resolveDeviceLabel } from "../displayName";
-import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, glyphColorOn, linesOnPage, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
+import { FLOORPLAN_GROUP_COLORS, DEFAULT_LEGEND_LINES_TITLE, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, glyphColorOn, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
+import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
+import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
+import { SPEAKER_LINE_MODES } from "../types";
 import { importLegendImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
-import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup } from "../types";
+import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { FLOORPLAN_TOKENS } from "../types";
 
 /** MIME type carrying a device node id from this sidebar to the sheet. */
@@ -36,8 +39,29 @@ function SymbolChip({ group, size = 14 }: { group: Pick<FloorplanSymbolGroup, "c
   );
 }
 
+const STATUS_CLASS: Record<LoadStatus, string> = {
+  ok: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  nearing: "bg-amber-100 text-amber-800 border-amber-200",
+  exceeds: "bg-red-100 text-red-800 border-red-200",
+  unsupported: "bg-red-100 text-red-800 border-red-200",
+  "no-data": "bg-neutral-100 text-neutral-600 border-neutral-200",
+  empty: "bg-neutral-100 text-neutral-500 border-neutral-200",
+};
+
+function StatusBadge({ status, title }: { status: LoadStatus; title?: string }) {
+  return (
+    <span className={`shrink-0 px-1 rounded border ${STATUS_CLASS[status]}`} style={{ fontSize: 9 }} title={title}>
+      {LOAD_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
 export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupChange, activeLine, onActiveLineChange }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
+  const edges = useSchematicStore((s) => s.edges);
+  const syncFloorplanLines = useSchematicStore((s) => s.syncFloorplanLines);
+  const updateFloorplanLine = useSchematicStore((s) => s.updateFloorplanLine);
+  const removeFloorplanLine = useSchematicStore((s) => s.removeFloorplanLine);
   const useShortNames = useSchematicStore((s) => s.useShortNames);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
@@ -52,9 +76,21 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
   const updateFloorplanPage = useSchematicStore((s) => s.updateFloorplanPage);
   const renumberFloorplanLine = useSchematicStore((s) => s.renumberFloorplanLine);
   const isLoudspeaker = page.kind === "loudspeaker";
-  const lines = linesOnPage(page.symbols);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const addToast = useSchematicStore((s) => s.addToast);
+  const lineReport = useMemo(() => computeLineLoads(page, nodes, edges, loadSpecLookup({ customTemplates })), [page, nodes, edges, customTemplates]);
+  const lines = lineReport.rows;
+  const channelOptions = useMemo(
+    () => lineReport.schematicAmps.flatMap((amp) => amp.channels.map((ch) => ({ key: `${ch.ampNodeId}::${ch.portId}`, ch, label: `${amp.label} · ${channelShortLabel(ch)} (${ch.speakerNodeIds.length})` }))),
+    [lineReport.schematicAmps],
+  );
+  const specLookup = useMemo(() => loadSpecLookup({ customTemplates }), [customTemplates]);
+  const handleSyncLines = () => {
+    const res = syncFloorplanLines(page.id);
+    if (lineReport.schematicAmps.length === 0) addToast("No amplifier with speaker-level outputs on the schematic.", "info");
+    else if (res.addedLineNos.length === 0 && res.relabeledCount === 0) addToast("Lines already match the schematic.", "info");
+    else addToast(`${res.addedLineNos.length} line${res.addedLineNos.length === 1 ? "" : "s"} added, ${res.relabeledCount} symbol${res.relabeledCount === 1 ? "" : "s"} renumbered.`, "success");
+  };
 
   const block = page.drawingBlock;
   const patchBlock = (patch: Partial<FloorplanDrawingBlock>) => updateFloorplanDrawingBlock(page.id, patch);
@@ -336,7 +372,7 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
             list="floorplan-lines"
           />
           <datalist id="floorplan-lines">
-            {lines.map((l) => <option key={l.lineNo} value={l.lineNo} />)}
+            {lines.map((l) => <option key={l.line.lineNo} value={l.line.lineNo} />)}
           </datalist>
         </label>
         <label className="flex items-center gap-2 text-neutral-600" title="How labels are composed: {{line}}, {{n}}, {{group}}, {{device}}">
@@ -348,27 +384,47 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
             onChange={(e) => updateFloorplanPage(page.id, { labelTemplate: e.target.value || undefined })}
           />
         </label>
-        {lines.length > 0 && (
-          <div className="flex flex-col gap-0.5">
-            {lines.map((l) => (
-              <div key={l.lineNo} className="flex items-center justify-between text-neutral-600 border border-neutral-200 rounded px-1.5 py-0.5">
-                <button className="text-left flex-1 hover:text-emerald-700" onClick={() => onActiveLineChange(l.lineNo)} title="Make this the active line">
-                  Line <strong>{l.lineNo}</strong> · {l.count} {l.count === 1 ? "speaker" : "speakers"}
-                </button>
-                <button
-                  className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
-                  onClick={() => renumberFloorplanLine(page.id, l.lineNo)}
-                  title="Renumber this line 1…n in placement order"
-                >
-                  Renumber
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
         {!isLoudspeaker && !activeLine && (
           <p className="text-neutral-400 leading-snug">Leave the line empty to continue each group's own numbering (1.1 → 1.2). Set a line to number per amplifier line instead.</p>
         )}
+      </div>
+
+      {/* ── Lines ↔ amplifier channels ────────────────────────────── */}
+      <div className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-neutral-500 uppercase tracking-wider border-t border-neutral-200" style={{ fontSize: 9 }}>
+        <span>Lines &amp; load</span>
+        <button
+          className="normal-case tracking-normal font-normal px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
+          onClick={handleSyncLines}
+          title="Read the amplifier channels off the schematic: one line per channel with speakers, placed symbols moved onto their channel's line"
+        >
+          Sync from schematic
+        </button>
+      </div>
+      <div className="px-2 pb-2 flex flex-col gap-1.5">
+        {lines.length === 0 && (
+          <p className="text-neutral-400 leading-snug">
+            No lines yet. Drop speakers that are wired to an amplifier on the schematic — they take their channel's line automatically on a loudspeaker plan — or press Sync.
+          </p>
+        )}
+        {lines.map((row) => (
+          <LineCard
+            key={row.line.lineNo}
+            row={row}
+            channelOptions={channelOptions}
+            active={activeLine.trim() === row.line.lineNo}
+            onActivate={() => onActiveLineChange(row.line.lineNo)}
+            onRenumber={() => renumberFloorplanLine(page.id, row.line.lineNo)}
+            onChange={(patch) => updateFloorplanLine(page.id, row.line.lineNo, patch)}
+            onForget={() => removeFloorplanLine(page.id, row.line.lineNo)}
+            speakerTaps={row.channel ? row.channel.speakerNodeIds.map((id) => { const n = nodes.find((x) => x.id === id); return n ? defaultTapW(specLookup.speakerSpecFor(n)) : undefined; }) : []}
+          />
+        ))}
+        {[...lineReport.amps.values()].filter((a) => a.result.channels.some((c) => c.speakerCount > 0)).map(({ amplifier, result }) => (
+          <div key={amplifier.nodeId} className="flex items-center justify-between gap-1 text-neutral-600 border border-dashed border-neutral-200 rounded px-1.5 py-0.5" title={result.hasSpec ? `Burst pool ${formatWatt(result.totalRequestedW)} of ${formatWatt(result.limits?.maxBurstTotalW)} · average ${formatWatt(result.totalAverageW)} of ${formatWatt(result.limits?.maxAvgTotalW)}` : "No amplifier load data on the template — open the device and fill in its ratings"}>
+            <span className="truncate"><strong>{amplifier.label}</strong> · Σ {formatWatt(result.totalRequestedW)}{result.hasSpec ? ` / ${formatWatt(result.limits?.maxBurstTotalW)} · ${formatHeadroom(result.poolBurstHeadroomDb)}` : ""}</span>
+            <StatusBadge status={result.hasSpec ? result.status : "no-data"} />
+          </div>
+        ))}
       </div>
 
       {/* ── Devices ───────────────────────────────────────────────── */}
@@ -458,6 +514,19 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
           />
           Company block (logo, address)
         </label>
+        <label className="flex items-center gap-2 text-neutral-600" title="Print the line table (line → amplifier channel, quantity, load) under the legend rows">
+          <input type="checkbox" checked={legendShowsLines(page)} onChange={(e) => updateFloorplanLegend(page.id, { showLines: e.target.checked })} />
+          Show line table
+        </label>
+        {legendShowsLines(page) && (
+          <input
+            className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+            value={page.legend.linesTitle ?? ""}
+            placeholder={DEFAULT_LEGEND_LINES_TITLE}
+            onChange={(e) => updateFloorplanLegend(page.id, { linesTitle: e.target.value || undefined })}
+            title="Heading of the line table"
+          />
+        )}
         <input
           className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
           value={page.legend.notesTitle ?? ""}
@@ -677,6 +746,151 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
           ))}
         </div>
       </details>
+    </div>
+  );
+}
+
+
+interface LineCardProps {
+  row: LineLoadRow;
+  channelOptions: { key: string; label: string; ch: NonNullable<LineLoadRow["channel"]> }[];
+  active: boolean;
+  onActivate: () => void;
+  onRenumber: () => void;
+  onChange: (patch: { ampNodeId?: string; ampPortId?: string; mode?: SpeakerLineMode; tapW?: number; name?: string; newLineNo?: string }) => void;
+  onForget: () => void;
+  /** Default taps of the speakers on the line, for the tap picker. */
+  speakerTaps: (number | undefined)[];
+}
+
+/** One amplifier line: number, channel binding, mode / tap and the load verdict. */
+function LineCard({ row, channelOptions, active, onActivate, onRenumber, onChange, onForget, speakerTaps }: LineCardProps) {
+  const [open, setOpen] = useState(false);
+  const [lineNoDraft, setLineNoDraft] = useState<string | null>(null);
+  const { line, channel, load, amp } = row;
+  const mode: SpeakerLineMode = line.mode ?? load?.mode ?? "lo-z";
+  const limits = amp?.limits;
+  const modeSupported = (m: SpeakerLineMode) => !limits || (m === "lo-z" ? limits.supportsLoZ : m === "70v" ? limits.supports70V : limits.supports100V);
+  const status: LoadStatus = load ? load.status : channel ? "no-data" : "empty";
+  const tapChoices = [...new Set(speakerTaps.filter((t): t is number => typeof t === "number"))].sort((a, b) => b - a);
+  const detail = load && load.speakerCount > 0
+    ? [
+        load.impedanceOhm !== undefined ? `Z ${formatOhm(load.impedanceOhm)}` : null,
+        `P ${formatWatt(load.requestedW)}`,
+        load.peakVoltageV !== undefined ? `Vpk ${Math.round(load.peakVoltageV)} V` : null,
+        load.peakCurrentA !== undefined ? `Ipk ${Math.round(load.peakCurrentA * 10) / 10} A` : null,
+        load.headroomDb !== undefined ? `${formatHeadroom(load.headroomDb)}${load.limitedBy ? ` (${LOAD_LIMITER_LABELS[load.limitedBy]})` : ""}` : null,
+        load.speakersWithoutData > 0 ? `${load.speakersWithoutData} without load data` : null,
+      ].filter(Boolean).join(" · ")
+    : null;
+
+  return (
+    <div className={`border rounded ${active ? "border-emerald-400 bg-emerald-50/40" : "border-neutral-200"}`}>
+      <div className="flex items-center gap-1 px-1.5 py-0.5 text-neutral-700">
+        <button className="text-left flex-1 min-w-0 hover:text-emerald-700" onClick={onActivate} title="Make this the active line for the next symbols">
+          Line <strong>{line.lineNo}</strong>
+          {line.name ? <span className="text-neutral-500"> · {line.name}</span> : null}
+          <span className="text-neutral-500"> · {row.placedCount} placed{channel ? ` / ${row.wiredCount} wired` : ""}</span>
+        </button>
+        <StatusBadge status={status} title={detail ?? undefined} />
+        <button className="px-1 rounded border border-neutral-200 text-neutral-500 hover:border-emerald-400 hover:text-emerald-700" onClick={() => setOpen((v) => !v)} title={open ? "Collapse" : "Wiring, mode and load"}>
+          {open ? "▾" : "▸"}
+        </button>
+      </div>
+      <div className="px-1.5 pb-1 text-neutral-600 truncate" style={{ fontSize: 10 }} title={detail ?? undefined}>
+        {channel ? `${channel.ampLabel} · ${channelShortLabel(channel)} · ${LINE_MODE_LABELS[mode]}` : "not wired to an amplifier channel"}
+        {detail ? ` — ${detail}` : ""}
+      </div>
+      {open && (
+        <div className="px-1.5 pb-1.5 flex flex-col gap-1 border-t border-neutral-100 pt-1">
+          <label className="flex items-center gap-2 text-neutral-600">
+            <span className="shrink-0 w-14">Number</span>
+            <input
+              className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+              value={lineNoDraft ?? line.lineNo}
+              onChange={(e) => setLineNoDraft(e.target.value)}
+              onBlur={() => { if (lineNoDraft !== null && lineNoDraft.trim() && lineNoDraft.trim() !== line.lineNo) onChange({ newLineNo: lineNoDraft.trim() }); setLineNoDraft(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              title="Renaming the line relabels its symbols"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-neutral-600">
+            <span className="shrink-0 w-14">Channel</span>
+            <select
+              className="flex-1 min-w-0 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 bg-white"
+              value={line.ampNodeId && line.ampPortId ? `${line.ampNodeId}::${line.ampPortId}` : ""}
+              onChange={(e) => {
+                const opt = channelOptions.find((o) => o.key === e.target.value);
+                onChange(opt ? { ampNodeId: opt.ch.ampNodeId, ampPortId: opt.ch.portId } : { ampNodeId: undefined, ampPortId: undefined });
+              }}
+              title="Amplifier channel feeding this line (speaker-level output on the schematic)"
+            >
+              <option value="">— not wired —</option>
+              {channelOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-neutral-600">
+            <span className="shrink-0 w-14">Mode</span>
+            <select
+              className="flex-1 min-w-0 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 bg-white"
+              value={mode}
+              onChange={(e) => onChange({ mode: e.target.value as SpeakerLineMode })}
+              title="Low impedance or 70 V / 100 V constant-voltage line"
+            >
+              {SPEAKER_LINE_MODES.map((m) => (
+                <option key={m} value={m} disabled={!modeSupported(m)}>{LINE_MODE_LABELS[m]}{modeSupported(m) ? "" : " (amp: n/a)"}</option>
+              ))}
+            </select>
+          </label>
+          {mode !== "lo-z" && (
+            <label className="flex items-center gap-2 text-neutral-600">
+              <span className="shrink-0 w-14">Tap</span>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+                value={line.tapW ?? ""}
+                placeholder={tapChoices.length ? `max (${tapChoices[0]} W)` : "W per speaker"}
+                list={`taps-${line.lineNo}`}
+                onChange={(e) => onChange({ tapW: e.target.value === "" ? undefined : Number(e.target.value) })}
+                title="Transformer tap per speaker in watts; empty = each speaker's highest tap"
+              />
+              <datalist id={`taps-${line.lineNo}`}>
+                {tapChoices.map((t) => <option key={t} value={t} />)}
+              </datalist>
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-neutral-600">
+            <span className="shrink-0 w-14">Name</span>
+            <input
+              className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+              value={line.name ?? ""}
+              placeholder="e.g. Terrasse"
+              onChange={(e) => onChange({ name: e.target.value || undefined })}
+              title="Printed in the legend's line table"
+            />
+          </label>
+          {limits && (
+            <p className="text-neutral-400 leading-snug" style={{ fontSize: 10 }}>
+              Amp limits: {formatWatt(limits.maxBurstPerChannelW)}/ch · Σ {formatWatt(limits.maxBurstTotalW)} burst · {Math.round(limits.peakVoltageV)} V / {Math.round(limits.peakCurrentA)} A peak · min {formatOhm(limits.minImpedanceOhm)}
+            </p>
+          )}
+          {channel && !amp?.hasSpec && (
+            <p className="text-amber-600 leading-snug" style={{ fontSize: 10 }}>The amplifier has no load data — fill in its ratings on the device (Load section) to get a verdict.</p>
+          )}
+          <div className="flex items-center gap-1">
+            <button className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700" onClick={onRenumber} title="Renumber this line 1…n in placement order">
+              Renumber
+            </button>
+            {(line.ampNodeId || line.mode || line.name || line.tapW !== undefined) && (
+              <button className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-500 hover:border-red-400 hover:text-red-700" onClick={onForget} title="Drop the wiring / mode of this line; its symbols keep their numbers">
+                Forget wiring
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

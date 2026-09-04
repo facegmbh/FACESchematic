@@ -72,7 +72,11 @@ export type CommandType =
   | "add_floorplan_notes"
   | "update_floorplan_note"
   | "delete_floorplan_note"
-  | "set_floorplan_masks";
+  | "set_floorplan_masks"
+  | "list_floorplan_lines"
+  | "sync_floorplan_lines"
+  | "update_floorplan_line"
+  | "speaker_load_report";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -448,6 +452,10 @@ export interface RemoveFloorplanSymbolParams extends FloorplanPageRef {
 
 export interface SetFloorplanLegendParams extends FloorplanPageRef {
   visible?: boolean;
+  /** Print the line table (line → amplifier channel, quantity, load). Default: on for loudspeaker plans. */
+  showLines?: boolean;
+  /** Heading of the line table, e.g. "LINIEN / ENDSTUFENKANÄLE". */
+  linesTitle?: string;
   /** Box headline, e.g. "BESCHALLUNG – LEGENDE & MONTAGE". */
   title?: string;
   /** Heading above the free-text notes, e.g. "MONTAGEHINWEISE". */
@@ -539,6 +547,41 @@ export interface FloorplanMaskSpec {
 export interface SetFloorplanMasksParams extends FloorplanPageRef {
   /** Replaces every white cover on the page. Pass [] to remove them all. */
   masks: FloorplanMaskSpec[];
+}
+
+// ── Amplifier lines & load (Ship 11) ─────────────────────────────────
+// A line is an amplifier channel's circuit on the plan: the number printed on its
+// speakers (4.1, 4.2 …), the schematic channel that feeds it and how the channel runs
+// (Lo-Z / 70 V / 100 V). The load check follows the Bose PowerShareX Design Tool and
+// is brand-neutral: speakers carry speakerLoad, amplifiers ampLoad on their templates.
+
+/** How an amplifier channel drives its line, mirroring `SpeakerLineMode` in `src/types.ts`. */
+export const SPEAKER_LINE_MODES_WIRE = ["lo-z", "70v", "100v"] as const;
+
+export type ListFloorplanLinesParams = FloorplanPageRef;
+
+export type SyncFloorplanLinesParams = FloorplanPageRef;
+
+export interface UpdateFloorplanLineParams extends FloorplanPageRef {
+  /** The line as printed ("4", "SB"). */
+  lineNo: string;
+  /** Rename the line; its symbols are relabelled. */
+  newLineNo?: string;
+  /** Amplifier device id (get_schematic) and the id or label of its speaker-level output
+   *  port. Pass null for both to unwire the line. */
+  ampDeviceId?: string | null;
+  ampPort?: string | null;
+  mode?: (typeof SPEAKER_LINE_MODES_WIRE)[number];
+  /** Hi-Z tap per speaker in watts; null = each speaker's highest tap. */
+  tapW?: number | null;
+  /** Free text printed in the legend's line table, e.g. "Terrasse". null clears. */
+  name?: string | null;
+}
+
+export interface SpeakerLoadReportParams {
+  /** Optional: use this floorplan's line modes / taps; otherwise every channel is judged
+   *  in Lo-Z (or the amplifier's only Hi-Z mode). */
+  pageId?: string;
 }
 
 // ---------------------------------------------------------------------------

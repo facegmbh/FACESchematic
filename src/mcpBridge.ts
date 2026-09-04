@@ -14,7 +14,7 @@
  */
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
-import { useSchematicStore } from "./store";
+import { useSchematicStore, loadSpecLookup } from "./store";
 import { getPortAbsolutePositions } from "./snapUtils";
 import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates } from "./templateApi";
 import { inferRackForm, inferRackHeightU } from "./rackUtils";
@@ -65,6 +65,10 @@ import {
   type DeleteFloorplanNoteParams,
   type SetFloorplanMasksParams,
   type FloorplanMaskSpec,
+  type FloorplanPageRef,
+  type UpdateFloorplanLineParams,
+  type SpeakerLoadReportParams,
+  SPEAKER_LINE_MODES_WIRE,
   FLOORPLAN_SHAPES,
   FLOORPLAN_LABEL_POSITIONS,
 } from "./mcp/protocol";
@@ -120,6 +124,9 @@ import {
   realMmToPaperMm,
   sheetSizeMm,
 } from "./floorplan";
+import { amplifiersOnSchematic, channelShortLabel, computeAmplifierLoads, computeLineLoads, planLines, speakerLevelOutputs, type LineLoadRow } from "./speakerLines";
+import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, type AmplifierLoadResult, type ChannelLoadResult } from "./speakerLoad";
+import type { FloorplanLine, SpeakerLineMode } from "./types";
 
 export type BridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -440,9 +447,12 @@ function floorplanSummary(page: FloorplanPage) {
       notes: page.legend.notes ?? [], showImages: page.legend.showImages, onlyUsedGroups: page.legend.onlyUsedGroups,
       positionMm: page.legend.positionMm, widthMm: page.legend.widthMm, minHeightMm: page.legend.minHeightMm,
       showCompany: page.legend.showCompany !== false,
+      showLines: page.legend.showLines, linesTitle: page.legend.linesTitle,
     },
     /** The planning company's block (Preferences → Company) prints at the foot of the legend when set. */
     companyProfile: { present: Boolean(st().companyProfile.name.trim() || st().companyProfile.logo), name: st().companyProfile.name },
+    /** Amplifier lines: number ↔ channel binding (details and load via list_floorplan_lines). */
+    lines: planLines(page).map((l) => ({ lineNo: l.lineNo, name: l.name, ampDeviceId: l.ampNodeId, ampPortId: l.ampPortId, mode: l.mode, tapW: l.tapW })),
     /** White covers over the underlay, in paper mm. */
     masks: page.masks.map((m) => ({ maskId: m.id, xMm: m.positionMm.x, yMm: m.positionMm.y, wMm: m.sizeMm.w, hMm: m.sizeMm.h })),
     drawingBlock: {
@@ -1316,7 +1326,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
   },
 
   set_floorplan_legend: (params) => {
-    const { pageId, visible, title, notesTitle, notes, showImages, onlyUsedGroups } = (params ?? {}) as unknown as SetFloorplanLegendParams;
+    const { pageId, visible, title, notesTitle, notes, showImages, onlyUsedGroups, showLines, linesTitle } = (params ?? {}) as unknown as SetFloorplanLegendParams;
     const page = requireFloorplan(pageId);
     const patch: Partial<FloorplanPage["legend"]> = {};
     if (visible !== undefined) patch.visible = Boolean(visible);
@@ -1328,6 +1338,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     }
     if (showImages !== undefined) patch.showImages = Boolean(showImages);
     if (onlyUsedGroups !== undefined) patch.onlyUsedGroups = Boolean(onlyUsedGroups);
+    if (showLines !== undefined) patch.showLines = Boolean(showLines);
+    if (linesTitle !== undefined) patch.linesTitle = String(linesTitle) || undefined;
     if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one legend property.");
     st().updateFloorplanLegend(page.id, patch);
     return floorplanSummary(requireFloorplan(page.id)).legend;
@@ -1449,7 +1461,162 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const ids = rects.map((r) => st().addFloorplanMask(page.id, r));
     return { pageId: page.id, maskCount: ids.length, maskIds: ids };
   },
+
+  // ── Amplifier lines & load (Ship 11) ────────────────────────────────
+
+  list_floorplan_lines: (params) => {
+    const { pageId } = (params ?? {}) as unknown as FloorplanPageRef;
+    const page = requireFloorplan(pageId);
+    const state = st();
+    const report = computeLineLoads(page, state.nodes, state.edges, loadSpecLookup(state));
+    return {
+      pageId: page.id,
+      lines: report.rows.map(lineRowSummary),
+      amplifiers: amplifierSummaries(report.amps),
+    };
+  },
+
+  sync_floorplan_lines: (params) => {
+    const { pageId } = (params ?? {}) as unknown as FloorplanPageRef;
+    const page = requireFloorplan(pageId);
+    const state = st();
+    const amps = amplifiersOnSchematic(state.nodes, state.edges);
+    if (amps.length === 0) throw new CommandError("No amplifier on the schematic — a device that is not a speaker and has speaker-level output ports. Wire amplifier outputs to the speakers first.");
+    const res = st().syncFloorplanLines(page.id);
+    const after = st();
+    const report = computeLineLoads(requireFloorplan(page.id), after.nodes, after.edges, loadSpecLookup(after));
+    return { pageId: page.id, addedLineNos: res.addedLineNos, relabeledCount: res.relabeledCount, lines: report.rows.map(lineRowSummary) };
+  },
+
+  update_floorplan_line: (params) => {
+    const p = (params ?? {}) as unknown as UpdateFloorplanLineParams;
+    const page = requireFloorplan(p.pageId);
+    const lineNo = requireText(p.lineNo, "lineNo");
+    const line = planLines(page).find((l) => l.lineNo === lineNo);
+    if (!line) throw new CommandError(`No line "${lineNo}" on floorplan "${page.id}". Call list_floorplan_lines first.`);
+    const patch: Partial<Omit<FloorplanLine, "lineNo">> & { newLineNo?: string } = {};
+    if (p.newLineNo !== undefined) {
+      const next = requireText(p.newLineNo, "newLineNo");
+      if (next !== lineNo && planLines(page).some((l) => l.lineNo === next)) throw new CommandError(`Line "${next}" already exists on this floorplan.`);
+      patch.newLineNo = next;
+    }
+    if (p.ampDeviceId !== undefined || p.ampPort !== undefined) {
+      if (p.ampDeviceId === null || p.ampPort === null) {
+        patch.ampNodeId = undefined;
+        patch.ampPortId = undefined;
+      } else {
+        const ampNode = requireDevice(String(p.ampDeviceId ?? line.ampNodeId ?? ""));
+        const outputs = speakerLevelOutputs(ampNode.data as DeviceData);
+        if (outputs.length === 0) throw new CommandError(`"${(ampNode.data as DeviceData).label}" has no speaker-level output ports — it cannot feed a line.`);
+        const wanted = p.ampPort !== undefined ? String(p.ampPort).trim() : line.ampPortId;
+        const port = outputs.find((o) => o.id === wanted) ?? outputs.find((o) => o.label.trim().toLowerCase() === (wanted ?? "").toLowerCase());
+        if (!port) throw new CommandError(`No speaker-level output "${wanted}" on "${(ampNode.data as DeviceData).label}". Outputs: ${outputs.map((o) => `${o.label} (${o.id})`).join(", ")}.`);
+        const taken = planLines(page).find((l) => l.lineNo !== lineNo && l.ampNodeId === ampNode.id && l.ampPortId === port.id);
+        if (taken) throw new CommandError(`Channel "${port.label}" of "${(ampNode.data as DeviceData).label}" already feeds line "${taken.lineNo}".`);
+        patch.ampNodeId = ampNode.id;
+        patch.ampPortId = port.id;
+      }
+    }
+    if (p.mode !== undefined) {
+      if (!(SPEAKER_LINE_MODES_WIRE as readonly string[]).includes(String(p.mode))) throw new CommandError(`mode must be one of ${SPEAKER_LINE_MODES_WIRE.join(", ")}.`);
+      patch.mode = p.mode as SpeakerLineMode;
+    }
+    if (p.tapW !== undefined) {
+      if (p.tapW === null) patch.tapW = undefined;
+      else if (typeof p.tapW !== "number" || !Number.isFinite(p.tapW) || p.tapW <= 0) throw new CommandError("tapW must be a positive number of watts, or null.");
+      else patch.tapW = p.tapW;
+    }
+    if (p.name !== undefined) patch.name = p.name === null ? undefined : String(p.name).trim() || undefined;
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one line property.");
+    st().updateFloorplanLine(page.id, lineNo, patch);
+    const state = st();
+    const report = computeLineLoads(requireFloorplan(page.id), state.nodes, state.edges, loadSpecLookup(state));
+    const row = report.rows.find((r) => r.line.lineNo === (patch.newLineNo ?? lineNo));
+    if (!row) throw new CommandError(`Line "${patch.newLineNo ?? lineNo}" vanished during the update.`);
+    return lineRowSummary(row);
+  },
+
+  speaker_load_report: (params) => {
+    const { pageId } = (params ?? {}) as unknown as SpeakerLoadReportParams;
+    const state = st();
+    const page = pageId !== undefined ? requireFloorplan(pageId) : undefined;
+    const amps = amplifiersOnSchematic(state.nodes, state.edges);
+    const results = computeAmplifierLoads(amps, page?.lines, state.nodes, loadSpecLookup(state));
+    return {
+      pageId: page?.id,
+      amplifierCount: amps.length,
+      amplifiers: amplifierSummaries(results),
+      hint: amps.length === 0 ? "No amplifier with speaker-level outputs on the schematic." : undefined,
+    };
+  },
 };
+
+function channelSummary(c: ChannelLoadResult) {
+  const r1 = (v: number | undefined) => (v === undefined ? undefined : Math.round(v * 10) / 10);
+  return {
+    mode: c.mode,
+    modeLabel: LINE_MODE_LABELS[c.mode],
+    speakerCount: c.speakerCount,
+    speakersWithoutData: c.speakersWithoutData,
+    requestedW: Math.round(c.requestedW),
+    averageW: r1(c.averageW),
+    impedanceOhm: r1(c.impedanceOhm),
+    minImpedanceOhm: r1(c.minImpedanceOhm),
+    peakVoltageV: r1(c.peakVoltageV),
+    peakCurrentA: r1(c.peakCurrentA),
+    headroomDb: r1(c.headroomDb),
+    limitedBy: c.limitedBy,
+    limitedByLabel: c.limitedBy ? LOAD_LIMITER_LABELS[c.limitedBy] : undefined,
+    headroomByLimitDb: Object.fromEntries(Object.entries(c.headroom).map(([k, v]) => [k, r1(v)])),
+    status: c.status,
+  };
+}
+
+function lineRowSummary(row: LineLoadRow) {
+  return {
+    lineNo: row.line.lineNo,
+    name: row.line.name,
+    ampDeviceId: row.line.ampNodeId,
+    ampDeviceLabel: row.channel?.ampLabel,
+    ampPortId: row.line.ampPortId,
+    ampPortLabel: row.channel?.portLabel,
+    channel: row.channel ? channelShortLabel(row.channel) : undefined,
+    channelIndex: row.channel?.channelIndex,
+    mode: row.line.mode ?? row.load?.mode,
+    tapW: row.line.tapW,
+    placedCount: row.placedCount,
+    wiredCount: row.wiredCount,
+    wiredSpeakerIds: row.channel?.speakerNodeIds ?? [],
+    load: row.load ? channelSummary(row.load) : undefined,
+    amplifierHasLoadData: row.amp?.hasSpec ?? false,
+  };
+}
+
+function amplifierSummaries(results: Map<string, { amplifier: { nodeId: string; label: string; channels: { portId: string; portLabel: string; channelIndex: number; speakerNodeIds: string[] }[] }; result: AmplifierLoadResult }>) {
+  const r1 = (v: number | undefined) => (v === undefined ? undefined : Math.round(v * 10) / 10);
+  return [...results.values()].map(({ amplifier, result }) => ({
+    deviceId: amplifier.nodeId,
+    label: amplifier.label,
+    hasLoadData: result.hasSpec,
+    status: result.status,
+    totalRequestedW: Math.round(result.totalRequestedW),
+    totalAverageW: r1(result.totalAverageW),
+    poolBurstHeadroomDb: r1(result.poolBurstHeadroomDb),
+    poolAverageHeadroomDb: r1(result.poolAverageHeadroomDb),
+    limits: result.limits
+      ? {
+          channels: result.limits.channels, totalRatedW: result.limits.totalRatedW, maxBurstPerChannelW: result.limits.maxBurstPerChannelW,
+          maxBurstTotalW: result.limits.maxBurstTotalW, maxAvgTotalW: r1(result.limits.maxAvgTotalW), peakVoltageV: r1(result.limits.peakVoltageV),
+          peakCurrentA: r1(result.limits.peakCurrentA), minImpedanceOhm: result.limits.minImpedanceOhm,
+          modes: (["lo-z", "70v", "100v"] as const).filter((m) => (m === "lo-z" ? result.limits!.supportsLoZ : m === "70v" ? result.limits!.supports70V : result.limits!.supports100V)),
+        }
+      : undefined,
+    channels: amplifier.channels.map((ch, i) => ({
+      portId: ch.portId, portLabel: ch.portLabel, channel: channelShortLabel(ch), channelIndex: ch.channelIndex,
+      speakerIds: ch.speakerNodeIds, ...channelSummary(result.channels[i]),
+    })),
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Connection controller — a singleton driven by the useMcpBridge() hook.

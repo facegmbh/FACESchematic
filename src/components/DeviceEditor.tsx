@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } from "react";
+import { SPEAKER_LOAD_PROFILES } from "../types";
+import { PROFILE_LABELS } from "../speakerLoad";
 import { useSchematicStore } from "../store";
 import { buildBulkSlots } from "../slotBulk";
 import { autoNamePorts, duplicatePortLabel } from "../portNaming";
@@ -34,7 +36,7 @@ import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from ".
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
-import type { FloorplanSymbolShape } from "../types";
+import type { AmplifierLoadSpec, SpeakerLoadSpec, FloorplanSymbolShape } from "../types";
 import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
@@ -168,6 +170,8 @@ export default function DeviceEditor() {
   const [referenceUrl, setReferenceUrl] = useState("");
   const [installCable, setInstallCable] = useState("");
   const [installNotes, setInstallNotes] = useState("");
+  const [speakerLoad, setSpeakerLoad] = useState<SpeakerLoadSpec | undefined>(undefined);
+  const [ampLoad, setAmpLoad] = useState<AmplifierLoadSpec | undefined>(undefined);
   const [planShape, setPlanShape] = useState<"" | FloorplanSymbolShape>("");
   const [planColor, setPlanColor] = useState("");
   const [planGlyph, setPlanGlyph] = useState("");
@@ -272,6 +276,8 @@ export default function DeviceEditor() {
     setReferenceUrl(node.data.referenceUrl ?? tpl?.referenceUrl ?? "");
     setInstallCable(node.data.installCable ?? tpl?.installCable ?? "");
     setInstallNotes(node.data.installNotes ?? tpl?.installNotes ?? "");
+    setSpeakerLoad(node.data.speakerLoad ?? tpl?.speakerLoad);
+    setAmpLoad(node.data.ampLoad ?? tpl?.ampLoad);
     const ps = node.data.planSymbol ?? tpl?.planSymbol;
     setPlanShape(ps?.shape ?? "");
     setPlanColor(ps?.color ?? "");
@@ -431,6 +437,8 @@ export default function DeviceEditor() {
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(speakerLoad ? { speakerLoad } : {}),
+      ...(ampLoad ? { ampLoad } : {}),
       ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.templateId ? { templateId: existing.templateId } : {}),
@@ -481,7 +489,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -527,10 +535,14 @@ export default function DeviceEditor() {
         ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
         ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
         ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(speakerLoad ? { speakerLoad } : {}),
+      ...(ampLoad ? { ampLoad } : {}),
         ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(speakerLoad ? { speakerLoad } : {}),
+      ...(ampLoad ? { ampLoad } : {}),
       ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
         ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
         ...(powerDrawW != null ? { powerDrawW } : {}),
@@ -565,7 +577,7 @@ export default function DeviceEditor() {
         ...overrides,
       };
     },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, auxiliaryData, searchTermsRaw],
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -671,6 +683,8 @@ export default function DeviceEditor() {
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(speakerLoad ? { speakerLoad } : {}),
+      ...(ampLoad ? { ampLoad } : {}),
       ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.slots ? { slots: existing.slots } : {}),
@@ -718,7 +732,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -806,6 +820,8 @@ export default function DeviceEditor() {
       setReferenceUrl(tpl.referenceUrl ?? "");
       setInstallCable(tpl.installCable ?? "");
       setInstallNotes(tpl.installNotes ?? "");
+      setSpeakerLoad(tpl.speakerLoad);
+      setAmpLoad(tpl.ampLoad);
       setPlanShape(tpl.planSymbol?.shape ?? "");
       setPlanColor(tpl.planSymbol?.color ?? "");
       setPlanGlyph(tpl.planSymbol?.glyph ?? "");
@@ -986,6 +1002,8 @@ export default function DeviceEditor() {
         (manufacturer ?? "") !== (tpl.manufacturer ?? "") ||
         (modelNumber ?? "") !== (tpl.modelNumber ?? "") ||
         (referenceUrl ?? "") !== (tpl.referenceUrl ?? "") ||
+        JSON.stringify(speakerLoad ?? null) !== JSON.stringify(tpl.speakerLoad ?? null) ||
+        JSON.stringify(ampLoad ?? null) !== JSON.stringify(tpl.ampLoad ?? null) ||
         (category ?? "") !== (tpl.category ?? "") ||
         (hostname ?? "") !== (tpl.hostname ?? "") ||
         powerDrawW !== tpl.powerDrawW ||
@@ -1012,7 +1030,7 @@ export default function DeviceEditor() {
     );
 
     return { dirtyVsPreset, dirtyVsTemplate };
-  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, templatesLoaded]);
+  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, speakerLoad, ampLoad, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, templatesLoaded]);
 
   if (!editingNodeId || !node) return null;
 
@@ -1205,6 +1223,7 @@ export default function DeviceEditor() {
                 title="Standing installation note for this model — listed under the floorplan legend's installation notes"
               />
             </Field>
+            <LoadSpecFields deviceType={deviceType} speakerLoad={speakerLoad} ampLoad={ampLoad} onSpeakerLoad={setSpeakerLoad} onAmpLoad={setAmpLoad} />
             {ports.some((p) => p.signalType === "knx") && (
               <Field label="KNX-Adresse">
                 <input
@@ -3583,5 +3602,113 @@ function PortCapabilitiesSection({
         </div>
       )}
     </div>
+  );
+}
+
+
+const LOAD_INPUT = "w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500";
+
+function NumField({ label, value, onChange, placeholder, title }: { label: string; value: number | undefined; onChange: (v: number | undefined) => void; placeholder?: string; title?: string }) {
+  return (
+    <div title={title}>
+      <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">{label}</label>
+      <input
+        type="number"
+        step="any"
+        className={LOAD_INPUT}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        placeholder={placeholder}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+function pruneSpec<T extends object>(spec: T): T | undefined {
+  const entries = Object.entries(spec).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0) && !(typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).every((x) => x === undefined)));
+  return entries.length ? (Object.fromEntries(entries) as T) : undefined;
+}
+
+/** Loudspeaker / amplifier load data for the line load calculation on loudspeaker plans.
+ *  Shown for speakers and amplifiers (both blocks for anything else, in case the type is off). */
+function LoadSpecFields({ deviceType, speakerLoad, ampLoad, onSpeakerLoad, onAmpLoad }: {
+  deviceType: string;
+  speakerLoad: SpeakerLoadSpec | undefined;
+  ampLoad: AmplifierLoadSpec | undefined;
+  onSpeakerLoad: (v: SpeakerLoadSpec | undefined) => void;
+  onAmpLoad: (v: AmplifierLoadSpec | undefined) => void;
+}) {
+  const t = deviceType.toLowerCase();
+  const showSpeaker = t === "speaker" || t !== "amplifier";
+  const showAmp = t === "amplifier" || t !== "speaker";
+  const [tapsDraft, setTapsDraft] = useState<string | null>(null);
+  const patchSpeaker = (patch: Partial<SpeakerLoadSpec>) => onSpeakerLoad(pruneSpec({ ...(speakerLoad ?? {}), ...patch }));
+  const patchAmp = (patch: Partial<AmplifierLoadSpec>) => onAmpLoad(pruneSpec({ ...(ampLoad ?? {}), ...patch }));
+  const patchRated = (patch: Partial<NonNullable<AmplifierLoadSpec["ratedW"]>>) => {
+    const ratedW = pruneSpec({ ...(ampLoad?.ratedW ?? {}), ...patch });
+    patchAmp({ ratedW });
+  };
+  const hasAny = Boolean(speakerLoad || ampLoad);
+  return (
+    <details className="text-xs" open={hasAny}>
+      <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1" title="Feeds the line load check on loudspeaker plans (modeled on the Bose PowerShareX Design Tool)">
+        Load{hasAny ? "" : " (loudspeaker line calculation)"}
+      </summary>
+      <div className="flex flex-col gap-2 pt-1 pl-2">
+        {showSpeaker && (
+          <div>
+            {showAmp && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">As a loudspeaker</div>}
+            <div className="grid grid-cols-2 gap-2">
+              <NumField label="Impedance (Ω)" value={speakerLoad?.impedanceOhm} onChange={(v) => patchSpeaker({ impedanceOhm: v })} placeholder="8" title="Nominal impedance for low-impedance operation" />
+              <NumField label="Continuous power (W)" value={speakerLoad?.rmsPowerW} onChange={(v) => patchSpeaker({ rmsPowerW: v })} placeholder="100" title="RMS / pink-noise power handling from the datasheet" />
+              <div title="Transformer tap settings in watts, highest first — empty when the model has no 70 V / 100 V transformer">
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">Taps 70/100 V (W)</label>
+                <input
+                  className={LOAD_INPUT}
+                  value={tapsDraft ?? (speakerLoad?.tapsW ?? []).join(", ")}
+                  onChange={(e) => setTapsDraft(e.target.value)}
+                  onBlur={() => {
+                    if (tapsDraft === null) return;
+                    const taps = tapsDraft.split(/[,;\s]+/).map((x) => Number(x.replace(",", "."))).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => b - a);
+                    patchSpeaker({ tapsW: taps.length ? taps : undefined });
+                    setTapsDraft(null);
+                  }}
+                  placeholder="80, 40, 20, 10, 5"
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div title="Spectral profile — sets the crest factor that turns burst into average power">
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">Profile</label>
+                <select className={LOAD_INPUT} value={speakerLoad?.profile ?? ""} onChange={(e) => patchSpeaker({ profile: (e.target.value || undefined) as SpeakerLoadSpec["profile"] })}>
+                  <option value="">Full range (default)</option>
+                  {SPEAKER_LOAD_PROFILES.map((p) => <option key={p} value={p}>{PROFILE_LABELS[p]} ({p})</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+        {showAmp && (
+          <div>
+            {showSpeaker && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">As an amplifier</div>}
+            <div className="grid grid-cols-3 gap-2">
+              <NumField label="Channels" value={ampLoad?.channels} onChange={(v) => patchAmp({ channels: v })} placeholder="ports" title="Empty = number of speaker-level output ports" />
+              <NumField label="Total rated (W)" value={ampLoad?.totalRatedW} onChange={(v) => patchAmp({ totalRatedW: v })} placeholder="sum" title="Rated power across all channels (the shared pool)" />
+              <NumField label="Min load (Ω)" value={ampLoad?.minImpedanceOhm} onChange={(v) => patchAmp({ minImpedanceOhm: v })} placeholder="auto" />
+              <NumField label="W @ 8 Ω" value={ampLoad?.ratedW?.ohm8} onChange={(v) => patchRated({ ohm8: v })} />
+              <NumField label="W @ 4 Ω" value={ampLoad?.ratedW?.ohm4} onChange={(v) => patchRated({ ohm4: v })} />
+              <NumField label="W @ 2 Ω" value={ampLoad?.ratedW?.ohm2} onChange={(v) => patchRated({ ohm2: v })} />
+              <NumField label="W @ 70 V" value={ampLoad?.ratedW?.v70} onChange={(v) => patchRated({ v70: v })} title="Empty = no 70 V mode" />
+              <NumField label="W @ 100 V" value={ampLoad?.ratedW?.v100} onChange={(v) => patchRated({ v100: v })} title="Empty = no 100 V mode" />
+              <NumField label="Burst / ch (W)" value={ampLoad?.maxBurstPerChannelW} onChange={(v) => patchAmp({ maxBurstPerChannelW: v })} placeholder="auto" title="Most one channel may take with the others idle" />
+              <NumField label="Burst total (W)" value={ampLoad?.maxBurstTotalW} onChange={(v) => patchAmp({ maxBurstTotalW: v })} placeholder="auto" />
+              <NumField label="Average total (W)" value={ampLoad?.maxAvgTotalW} onChange={(v) => patchAmp({ maxAvgTotalW: v })} placeholder="auto" title="Long-term output the amplifier sustains; empty = 17.5 % of the rated total" />
+              <NumField label="Peak V / A" value={ampLoad?.peakVoltageV} onChange={(v) => patchAmp({ peakVoltageV: v })} placeholder="V, auto" title="Peak output voltage per channel" />
+              <NumField label="Peak current (A)" value={ampLoad?.peakCurrentA} onChange={(v) => patchAmp({ peakCurrentA: v })} placeholder="auto" />
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
