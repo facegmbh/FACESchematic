@@ -141,7 +141,7 @@ Paper-based layout pages for composing rack viewports into a printable drawing.
 
 Scaled plan drawings built on the architect's drawing — where the gear physically goes, as a counterpart to the signal flow.
 
-- **Architect's drawing as underlay** — import a **PDF** page (rendered in the browser) or an image (PNG/JPEG/WebP/SVG); multi-page PDFs get a page switcher, and the raster is stored in the project file so the plan travels with the schematic. DWG has no browser-side parser — plot it to PDF first
+- **Architect's drawing as underlay** — import a **PDF** page (rendered in the browser) or an image (PNG/JPEG/WebP/SVG); the sheet adopts the PDF's format (A1 portrait stays A1 portrait, odd sizes become a custom sheet) and the drawing covers it edge to edge, so your legend and drawing block lie over the architect's own. Multi-page PDFs get a page switcher, and the raster is stored in the project file so the plan travels with the schematic. DWG has no browser-side parser — plot it to PDF first
 - **Drawing scale** — 1:20 through 1:500 or any custom denominator; changing the scale re-fits the underlay so the building keeps its real-world size
 - **Calibration** — click two ends of a known dimension, type it in metres, and the underlay is resized so the plan measures true at the page scale; the toolbar then reports the drawing's mm-per-pixel resolution
 - **Symbol groups** — one legend row each: color, shape (circle / square / diamond / triangle), model + cable description, product image, and a number prefix that seeds auto-numbering

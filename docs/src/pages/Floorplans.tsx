@@ -26,9 +26,14 @@ export default function FloorplansPage() {
       <h2>Importing the architect&apos;s drawing</h2>
       <p>
         <strong>Import Plan…</strong> in the toolbar takes a <strong>PDF</strong> (any page of it)
-        or an image (PNG, JPEG, WebP, SVG). PDF pages are rendered in the browser and placed at
-        their own physical size; multi-page sets get a page selector next to the file name so you
-        can switch floors without re-importing.
+        or an image (PNG, JPEG, WebP, SVG). A PDF page carries its physical size, so the sheet
+        <em>adopts the plan&apos;s format</em> — an A1 portrait drawing becomes an A1 portrait sheet,
+        an odd plotter size becomes a custom sheet of exactly that size — and the drawing covers the
+        sheet edge to edge. Your legend and drawing block then sit on top of the architect&apos;s own
+        boxes, hiding them, instead of the plan being parked on a differently shaped sheet next to a
+        second legend. Images have no physical size and are fitted into the current sheet;{" "}
+        <strong>⤢ Fill Sheet</strong> re-lays any underlay over the whole sheet. Multi-page sets get
+        a page selector next to the file name so you can switch floors without re-importing.
       </p>
       <p>
         <strong>DWG is not supported</strong> — it is a proprietary binary format with no viable

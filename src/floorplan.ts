@@ -11,7 +11,7 @@
  * This module is deliberately free of React and of the store so the math stays testable.
  */
 
-import { getPaperSize, PAGE_MARGIN_IN } from "./printConfig";
+import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import type {
   FloorplanDrawingBlock,
   FloorplanDrawingField,
@@ -682,4 +682,64 @@ export function layoutNote(note: FloorplanNote): { lines: string[]; heightMm: nu
   const lines = wrapText(note.text, note.widthMm - 2 * pad, note.fontSizeMm);
   const lineHeightMm = note.fontSizeMm * 1.4;
   return { lines, heightMm: lines.length * lineHeightMm + 2 * pad, lineHeightMm };
+}
+
+// ── Sheet ↔ plan format ──────────────────────────────────────────────
+
+export interface PaperChoice {
+  paperId: string;
+  orientation: "landscape" | "portrait";
+  customWidthIn?: number;
+  customHeightIn?: number;
+}
+
+/** Paper sizes may differ from the nominal by this much and still count as a match —
+ *  PDF plotters round page boxes by a millimetre or two. */
+const PAPER_MATCH_TOLERANCE_MM = 3;
+
+/**
+ * Pick the sheet format that matches a physical page size — the imported architect's
+ * drawing keeps its own format instead of being parked on a differently shaped sheet.
+ * Standard sizes are matched in either orientation; anything else becomes a custom sheet
+ * of exactly that size.
+ */
+export function matchPaperToSize(widthMm: number, heightMm: number): PaperChoice {
+  const orientation: PaperChoice["orientation"] = widthMm > heightMm ? "landscape" : "portrait";
+  const shortMm = Math.min(widthMm, heightMm);
+  const longMm = Math.max(widthMm, heightMm);
+  for (const paper of PAPER_SIZES) {
+    const w = paper.widthIn * IN_TO_MM;
+    const h = paper.heightIn * IN_TO_MM;
+    if (Math.abs(w - shortMm) <= PAPER_MATCH_TOLERANCE_MM && Math.abs(h - longMm) <= PAPER_MATCH_TOLERANCE_MM) {
+      return { paperId: paper.id, orientation };
+    }
+  }
+  // Custom sheets store portrait dimensions plus an orientation, like the standard ones.
+  return {
+    paperId: "custom",
+    orientation,
+    customWidthIn: shortMm / IN_TO_MM,
+    customHeightIn: longMm / IN_TO_MM,
+  };
+}
+
+/**
+ * Placement that makes the underlay cover the whole sheet, edge to edge. A PDF page
+ * whose format the sheet already matches lands 1:1; an image (no physical size) is
+ * fitted inside the sheet with its aspect kept, centered — stretching a scan would
+ * corrupt every distance measured off it.
+ */
+export function fillSheetPlacement(
+  page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">,
+  underlay: Pick<FloorplanUnderlay, "naturalWidthPx" | "naturalHeightPx">,
+): { positionMm: Vec2; sizeMm: { w: number; h: number } } {
+  const sheet = sheetSizeMm(page);
+  const aspect = underlay.naturalHeightPx > 0 ? underlay.naturalWidthPx / underlay.naturalHeightPx : 1;
+  const sheetAspect = sheet.w / sheet.h;
+  // Within a percent of the sheet's aspect the source IS the sheet — cover it exactly so
+  // a rounding difference never leaves a hairline of white at one edge.
+  if (Math.abs(aspect / sheetAspect - 1) < 0.01) {
+    return { positionMm: { x: 0, y: 0 }, sizeMm: { w: sheet.w, h: sheet.h } };
+  }
+  return fitRectInArea(underlay.naturalWidthPx, underlay.naturalHeightPx, { x: 0, y: 0, w: sheet.w, h: sheet.h });
 }

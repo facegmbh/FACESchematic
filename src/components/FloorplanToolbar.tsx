@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import type { FloorplanPage, FloorplanUnderlay } from "../types";
 import { PAPER_SIZES } from "../printConfig";
-import { drawingAreaMm, fitRectInArea, FLOORPLAN_SCALES, formatScale } from "../floorplan";
+import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
 import { UNDERLAY_ACCEPT, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile } from "../floorplanUnderlay";
 import { runFloorplanExport } from "../floorplanExport";
 import type { FloorplanTool } from "./FloorplanPage";
@@ -24,6 +24,8 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   const setFloorplanUnderlay = useSchematicStore((s) => s.setFloorplanUnderlay);
   const updateFloorplanUnderlay = useSchematicStore((s) => s.updateFloorplanUnderlay);
   const updateFloorplanPage = useSchematicStore((s) => s.updateFloorplanPage);
+  const updateFloorplanLegend = useSchematicStore((s) => s.updateFloorplanLegend);
+  const updateFloorplanDrawingBlock = useSchematicStore((s) => s.updateFloorplanDrawingBlock);
   const addToast = useSchematicStore((s) => s.addToast);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,11 +38,42 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
     setImporting(true);
     try {
       const imported = await importUnderlayFile(file, { pageNumber });
-      const area = drawingAreaMm(page);
       // Keep an existing underlay's placement when only the PDF page changes — the user
       // has usually calibrated it already and every sheet of a set shares one scale.
       const keepPlacement = underlay && underlay.sourceName === imported.sourceName;
-      const fitted = fitRectInArea(imported.naturalWidthPx, imported.naturalHeightPx, area, imported.naturalSizeMm);
+
+      // The architect's sheet IS the plan format: a PDF page carries its physical size, so
+      // the sheet adopts it and the drawing covers the sheet edge to edge. Our legend and
+      // drawing block then sit over the architect's own — instead of the plan being parked
+      // on a differently shaped sheet next to a second set of boxes. Images have no
+      // physical size and are fitted into the existing sheet.
+      let sheetPage = page;
+      if (!keepPlacement && imported.naturalSizeMm) {
+        const choice = matchPaperToSize(imported.naturalSizeMm.w, imported.naturalSizeMm.h);
+        setFloorplanPaper(page.id, choice.paperId, choice.orientation, choice.customWidthIn, choice.customHeightIn);
+        sheetPage = { ...page, ...choice };
+        // Boxes parked for the old format may now hang off the sheet (A1 landscape → A1
+        // portrait loses 247 mm of width). Re-park only those — a box the user already
+        // placed inside the new sheet stays where it is.
+        const sheet = sheetSizeMm(sheetPage);
+        const offSheet = (pos: { x: number; y: number }, w: number) => pos.x + w > sheet.w || pos.y > sheet.h;
+        if (offSheet(page.legend.positionMm, page.legend.widthMm)) {
+          updateFloorplanLegend(page.id, { positionMm: createDefaultLegend(sheetPage).positionMm });
+        }
+        if (offSheet(page.drawingBlock.positionMm, page.drawingBlock.widthMm)) {
+          // Flush to the bottom-right of the border, measured with the real content — that is
+          // where the architect's own title block sits, and ours should cover it.
+          const { titleBlock, schematicName } = useSchematicStore.getState();
+          const h = layoutDrawingBlock(page.drawingBlock, { titleBlock, page: sheetPage, projectName: schematicName }, { hasLogo: Boolean(titleBlock.logo) }).heightMm;
+          const area = drawingAreaMm(sheetPage);
+          updateFloorplanDrawingBlock(page.id, {
+            positionMm: { x: area.x + area.w - page.drawingBlock.widthMm, y: Math.max(area.y, area.y + area.h - h) },
+          });
+        }
+      }
+      const fitted = imported.naturalSizeMm
+        ? fillSheetPlacement(sheetPage, imported)
+        : fitRectInArea(imported.naturalWidthPx, imported.naturalHeightPx, drawingAreaMm(sheetPage));
       const next: FloorplanUnderlay = {
         src: imported.src,
         kind: imported.kind,
@@ -63,14 +96,20 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           6000,
         );
       } else if (!keepPlacement) {
-        addToast("Plan imported — calibrate it against a known dimension next.", "success", 4000);
+        addToast(
+          imported.naturalSizeMm
+            ? "Plan imported — the sheet now has the plan's format. Calibrate it against a known dimension next."
+            : "Plan imported — calibrate it against a known dimension next.",
+          "success",
+          4500,
+        );
       }
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Could not import that file.", "error", 6000);
     } finally {
       setImporting(false);
     }
-  }, [page, underlay, setFloorplanUnderlay, addToast]);
+  }, [page, underlay, setFloorplanUnderlay, setFloorplanPaper, updateFloorplanLegend, updateFloorplanDrawingBlock, addToast]);
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
@@ -221,6 +260,13 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             title={underlay.locked ? "Underlay is locked — click to unlock" : "Lock the underlay so it can't be dragged while placing symbols"}
           >
             {underlay.locked ? "🔒 Locked" : "🔓 Unlocked"}
+          </button>
+          <button
+            className="px-2 py-0.5 rounded border border-neutral-200 bg-white text-neutral-600 hover:border-emerald-400 hover:text-emerald-700 transition-colors"
+            onClick={() => updateFloorplanUnderlay(page.id, fillSheetPlacement(page, underlay))}
+            title="Lay the plan over the whole sheet again (edge to edge, aspect kept)"
+          >
+            ⤢ Fill Sheet
           </button>
           <button
             className={`px-2 py-0.5 rounded border text-xs transition-colors ${tool === "calibrate" ? "bg-amber-100 border-amber-400 text-amber-800" : "bg-white border-neutral-200 text-neutral-600 hover:border-amber-400"}`}

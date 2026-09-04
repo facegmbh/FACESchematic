@@ -24,6 +24,8 @@ import {
   layoutNote,
   nextRevisionIndex,
   formatPlanDate,
+  matchPaperToSize,
+  fillSheetPlacement,
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
@@ -420,5 +422,41 @@ describe("notes", () => {
     const layout = layoutNote(note);
     expect(layout.lines.length).toBeGreaterThan(1);
     expect(layout.heightMm).toBeCloseTo(layout.lines.length * layout.lineHeightMm + 3);
+  });
+});
+
+describe("sheet adopts the plan's format", () => {
+  it("recognises standard sizes in either orientation, with plotter tolerance", () => {
+    // A1 portrait as a PDF page box: 594.0 × 840.9 mm (points rounding)
+    expect(matchPaperToSize(594.0, 840.9)).toEqual({ paperId: "iso-a1", orientation: "portrait" });
+    expect(matchPaperToSize(841, 594)).toEqual({ paperId: "iso-a1", orientation: "landscape" });
+    expect(matchPaperToSize(297, 420)).toEqual({ paperId: "iso-a3", orientation: "portrait" });
+    expect(matchPaperToSize(279.4, 431.8)).toEqual({ paperId: "tabloid", orientation: "portrait" });
+  });
+
+  it("falls back to a custom sheet of exactly the source size", () => {
+    const choice = matchPaperToSize(700, 500);
+    expect(choice.paperId).toBe("custom");
+    expect(choice.orientation).toBe("landscape");
+    expect(choice.customWidthIn! * 25.4).toBeCloseTo(500);
+    expect(choice.customHeightIn! * 25.4).toBeCloseTo(700);
+    const sheet = sheetSizeMm({ paperId: "custom", orientation: "landscape", customWidthIn: choice.customWidthIn, customHeightIn: choice.customHeightIn });
+    expect(sheet.w).toBeCloseTo(700);
+    expect(sheet.h).toBeCloseTo(500);
+  });
+
+  it("covers the sheet 1:1 when the source has the sheet's aspect, else fits it inside", () => {
+    const portraitA1 = { paperId: "iso-a1", orientation: "portrait" as const };
+    const sheet = sheetSizeMm(portraitA1);
+    // A PDF page rendered at 1683 × 2384 px (A1 portrait)
+    const exact = fillSheetPlacement(portraitA1, { naturalWidthPx: 1683, naturalHeightPx: 2384 });
+    expect(exact.positionMm).toEqual({ x: 0, y: 0 });
+    expect(exact.sizeMm.w).toBeCloseTo(sheet.w);
+    expect(exact.sizeMm.h).toBeCloseTo(sheet.h);
+    // A square scan is fitted, not stretched
+    const fitted = fillSheetPlacement(portraitA1, { naturalWidthPx: 1000, naturalHeightPx: 1000 });
+    expect(fitted.sizeMm.w).toBeCloseTo(fitted.sizeMm.h);
+    expect(fitted.sizeMm.w).toBeCloseTo(sheet.w);
+    expect(fitted.positionMm.y).toBeGreaterThan(0);
   });
 });
