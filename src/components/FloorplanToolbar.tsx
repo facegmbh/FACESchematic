@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
-import type { FloorplanPage, FloorplanUnderlay } from "../types";
+import type { FloorplanKind, FloorplanPage, FloorplanUnderlay } from "../types";
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
 import { UNDERLAY_ACCEPT, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile } from "../floorplanUnderlay";
@@ -24,6 +24,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   const setFloorplanUnderlay = useSchematicStore((s) => s.setFloorplanUnderlay);
   const updateFloorplanUnderlay = useSchematicStore((s) => s.updateFloorplanUnderlay);
   const updateFloorplanPage = useSchematicStore((s) => s.updateFloorplanPage);
+  const setFloorplanKind = useSchematicStore((s) => s.setFloorplanKind);
   const updateFloorplanLegend = useSchematicStore((s) => s.updateFloorplanLegend);
   const updateFloorplanDrawingBlock = useSchematicStore((s) => s.updateFloorplanDrawingBlock);
   const addToast = useSchematicStore((s) => s.addToast);
@@ -127,6 +128,26 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
 
   return (
     <div className="flex items-center gap-3 px-3 py-1.5 bg-emerald-50 border-b border-emerald-200 text-xs flex-wrap" data-print-hide>
+      {/* Plan type */}
+      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Type</label>
+      <select
+        className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+        value={page.kind ?? "generic"}
+        onChange={(e) => {
+          const kind = e.target.value as FloorplanKind;
+          if (kind === (page.kind ?? "generic")) return;
+          if (confirm(`Switch to a ${kind === "loudspeaker" ? "loudspeaker" : "generic"} plan? Legend title, notes heading, revision headers and drawing block field labels are reset to that type's preset.`)) {
+            setFloorplanKind(page.id, kind);
+          }
+        }}
+        title="Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets"
+      >
+        <option value="generic">Generic plan</option>
+        <option value="loudspeaker">Loudspeaker plan</option>
+      </select>
+
+      <div className="border-l border-neutral-200 h-4" />
+
       {/* Paper size */}
       <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Paper</label>
       <select

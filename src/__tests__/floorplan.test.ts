@@ -34,6 +34,12 @@ import {
   companyProfileLines,
   companyContactLine,
   planSymbolFor,
+  formatSymbolLabel,
+  nextSeqInLine,
+  renumberLine,
+  linesOnPage,
+  labelPlacementFor,
+  effectiveLabelTemplate,
   defaultSymbolShapeFor,
   defaultSymbolColorFor,
   glyphColorOn,
@@ -602,5 +608,51 @@ describe("plan symbols from the library", () => {
   it("picks a readable glyph color", () => {
     expect(glyphColorOn("#facc15")).toBe("#000000");
     expect(glyphColorOn("#1d4ed8")).toBe("#ffffff");
+  });
+});
+
+describe("loudspeaker numbering", () => {
+  it("composes line.speaker labels and drops the separator when there is no line", () => {
+    expect(formatSymbolLabel("{{line}}.{{n}}", { line: "4", n: 2 })).toBe("4.2");
+    expect(formatSymbolLabel("{{line}}.{{n}}", { line: "SB", n: 1 })).toBe("SB.1");
+    expect(formatSymbolLabel("{{line}}.{{n}}", { n: 7 })).toBe("7");
+    expect(formatSymbolLabel("{{group}} {{n}}", { n: 3, group: "Sub" })).toBe("Sub 3");
+  });
+
+  it("numbers per line, one past the highest in use", () => {
+    const syms = [{ lineNo: "4", seq: 1 }, { lineNo: "4", seq: 3 }, { lineNo: "5", seq: 1 }];
+    expect(nextSeqInLine(syms, "4")).toBe(4);
+    expect(nextSeqInLine(syms, "5")).toBe(2);
+    expect(nextSeqInLine(syms, "9")).toBe(1);
+    expect(nextSeqInLine(syms, undefined)).toBe(1);
+  });
+
+  it("renumbers a line in placement order without touching other lines", () => {
+    const syms = [
+      makeSymbol({ id: "a", groupId: "g", label: "4.3", lineNo: "4", seq: 3 }),
+      makeSymbol({ id: "b", groupId: "g", label: "5.1", lineNo: "5", seq: 1 }),
+      makeSymbol({ id: "c", groupId: "g", label: "4.7", lineNo: "4", seq: 7 }),
+    ];
+    const out = renumberLine(syms, "4", "{{line}}.{{n}}", () => undefined);
+    expect(out.map((s) => s.label)).toEqual(["4.1", "5.1", "4.2"]);
+    expect(linesOnPage(out)).toEqual([{ lineNo: "4", count: 2 }, { lineNo: "5", count: 1 }]);
+  });
+
+  it("uses the kind's template unless the page overrides it", () => {
+    expect(effectiveLabelTemplate({ kind: "loudspeaker" })).toBe("{{line}}.{{n}}");
+    expect(effectiveLabelTemplate({})).toBe("{{n}}");
+    expect(effectiveLabelTemplate({ kind: "loudspeaker", labelTemplate: "L{{line}}-{{n}}" })).toBe("L{{line}}-{{n}}");
+  });
+
+  it("places labels clear of the symbol on every side with a sensible alignment", () => {
+    const e = labelPlacementFor("e", 6, 3.5);
+    expect(e.labelOffsetMm.x).toBeGreaterThan(3);
+    expect(e.labelAlign).toBe("start");
+    const w = labelPlacementFor("w", 6, 3.5);
+    expect(w.labelOffsetMm.x).toBeLessThan(-3);
+    expect(w.labelAlign).toBe("end");
+    const n = labelPlacementFor("n", 6, 3.5);
+    expect(n.labelOffsetMm.y).toBeLessThan(-3);
+    expect(n.labelAlign).toBe("middle");
   });
 });

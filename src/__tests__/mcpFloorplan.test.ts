@@ -340,3 +340,45 @@ describe("groups from a library model", () => {
     useSchematicStore.setState({ customTemplates: [] });
   });
 });
+
+describe("loudspeaker plans: lines and label placement", () => {
+  it("numbers per amplifier line on a loudspeaker plan and applies the preset", () => {
+    const res = handlers.create_floorplan({ label: "EG", kind: "loudspeaker" }) as Summary & { kind: string; labelTemplate: string };
+    expect(res.kind).toBe("loudspeaker");
+    expect(res.labelTemplate).toBe("{{line}}.{{n}}");
+    expect(res.legend.title).toBe("BESCHALLUNG - LEGENDE & MONTAGE");
+    expect(res.drawingBlock.revisionHeaders[2]).toBe("ÄNDERUNGEN");
+    expect(res.drawingBlock.fields[0].label).toBe("Bauvorhaben");
+    const g = handlers.add_floorplan_group({ pageId: res.pageId, label: "LS" }) as { groupId: string };
+    const placed = handlers.place_floorplan_symbols({
+      pageId: res.pageId,
+      symbols: [
+        { groupId: g.groupId, lineNo: "4", xM: 1, yM: 1 },
+        { groupId: g.groupId, lineNo: "4", xM: 2, yM: 1, labelPosition: "w", labelRotationDeg: 90 },
+        { groupId: g.groupId, lineNo: "SB", xM: 3, yM: 1 },
+        { groupId: g.groupId, lineNo: "4", xM: 4, yM: 1 },
+      ],
+    }) as { results: { result: { label: string; lineNo?: string; seq?: number } }[] };
+    expect(placed.results.map((r) => r.result.label)).toEqual(["4.1", "4.2", "SB.1", "4.3"]);
+    const page = floorplans()[0];
+    expect(page.symbols[1].labelAlign).toBe("end");
+    expect(page.symbols[1].labelOffsetMm!.x).toBeLessThan(0);
+    expect(page.symbols[1].labelRotationDeg).toBe(90);
+
+    // Moving a speaker to another line rebuilds its label; explicit labels still win.
+    const upd = handlers.update_floorplan_symbol({ pageId: res.pageId, symbolId: page.symbols[3].id, lineNo: "5" }) as { label: string; lineNo?: string; seq?: number };
+    expect(upd.label).toBe("5.3"); // seq kept until renumbered
+    expect(() => handlers.place_floorplan_symbols({ pageId: res.pageId, symbols: [{ groupId: g.groupId, xM: 1, yM: 2, labelPosition: "up" }] })).not.toThrow();
+    const bad = handlers.place_floorplan_symbols({ pageId: res.pageId, symbols: [{ groupId: g.groupId, xM: 1, yM: 2, labelPosition: "up" }] }) as { failed: number; results: { error?: string }[] };
+    expect(bad.failed).toBe(1);
+    expect(bad.results[0].error).toMatch(/labelPosition/);
+  });
+
+  it("update_floorplan switches kind and template", () => {
+    const { pageId } = handlers.create_floorplan({}) as Summary;
+    const res = handlers.update_floorplan({ pageId, kind: "loudspeaker", labelTemplate: "L{{line}}-{{n}}" }) as Summary & { kind: string; labelTemplate: string };
+    expect(res.kind).toBe("loudspeaker");
+    expect(res.labelTemplate).toBe("L{{line}}-{{n}}");
+    expect(() => handlers.update_floorplan({ pageId, kind: "wiring" })).toThrow(/kind must be/);
+  });
+});

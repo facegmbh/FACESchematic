@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import { resolveDeviceLabel } from "../displayName";
-import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, formatPlanDate, glyphColorOn, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
+import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, glyphColorOn, linesOnPage, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
 import { importLegendImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
@@ -15,6 +15,9 @@ interface Props {
   page: FloorplanPage;
   activeGroupId: string | null;
   onActiveGroupChange: (groupId: string | null) => void;
+  /** Amplifier line the next symbols are numbered on ("4" → 4.1, 4.2 …). */
+  activeLine: string;
+  onActiveLineChange: (line: string) => void;
 }
 
 /** Miniature of a group's symbol, used in the group list and the device list. */
@@ -33,7 +36,7 @@ function SymbolChip({ group, size = 14 }: { group: Pick<FloorplanSymbolGroup, "c
   );
 }
 
-export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupChange }: Props) {
+export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupChange, activeLine, onActiveLineChange }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
   const useShortNames = useSchematicStore((s) => s.useShortNames);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
@@ -46,6 +49,10 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
   const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const updateFloorplanPage = useSchematicStore((s) => s.updateFloorplanPage);
+  const renumberFloorplanLine = useSchematicStore((s) => s.renumberFloorplanLine);
+  const isLoudspeaker = page.kind === "loudspeaker";
+  const lines = linesOnPage(page.symbols);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const addToast = useSchematicStore((s) => s.addToast);
 
@@ -313,6 +320,56 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
         className="hidden"
         onChange={(e) => { void handleImagePicked(e.target.files?.[0]); e.target.value = ""; }}
       />
+
+      {/* ── Numbering (line.speaker) ─────────────────────────────── */}
+      <div className="px-2 pt-3 pb-1 font-semibold text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>
+        Numbering
+      </div>
+      <div className="px-2 pb-2 flex flex-col gap-1.5">
+        <label className="flex items-center gap-2 text-neutral-600" title="Amplifier line / circuit the next symbols hang on. Speakers are numbered per line: 4.1, 4.2 …">
+          <span className="shrink-0">Line</span>
+          <input
+            className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
+            value={activeLine}
+            placeholder={isLoudspeaker ? "e.g. 4 or SB" : "optional"}
+            onChange={(e) => onActiveLineChange(e.target.value)}
+            list="floorplan-lines"
+          />
+          <datalist id="floorplan-lines">
+            {lines.map((l) => <option key={l.lineNo} value={l.lineNo} />)}
+          </datalist>
+        </label>
+        <label className="flex items-center gap-2 text-neutral-600" title="How labels are composed: {{line}}, {{n}}, {{group}}, {{device}}">
+          <span className="shrink-0">Label</span>
+          <input
+            className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400 font-mono"
+            value={page.labelTemplate ?? ""}
+            placeholder={effectiveLabelTemplate(page)}
+            onChange={(e) => updateFloorplanPage(page.id, { labelTemplate: e.target.value || undefined })}
+          />
+        </label>
+        {lines.length > 0 && (
+          <div className="flex flex-col gap-0.5">
+            {lines.map((l) => (
+              <div key={l.lineNo} className="flex items-center justify-between text-neutral-600 border border-neutral-200 rounded px-1.5 py-0.5">
+                <button className="text-left flex-1 hover:text-emerald-700" onClick={() => onActiveLineChange(l.lineNo)} title="Make this the active line">
+                  Line <strong>{l.lineNo}</strong> · {l.count} {l.count === 1 ? "speaker" : "speakers"}
+                </button>
+                <button
+                  className="px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600 hover:border-emerald-400 hover:text-emerald-700"
+                  onClick={() => renumberFloorplanLine(page.id, l.lineNo)}
+                  title="Renumber this line 1…n in placement order"
+                >
+                  Renumber
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!isLoudspeaker && !activeLine && (
+          <p className="text-neutral-400 leading-snug">Leave the line empty to continue each group's own numbering (1.1 → 1.2). Set a line to number per amplifier line instead.</p>
+        )}
+      </div>
 
       {/* ── Devices ───────────────────────────────────────────────── */}
       <div className="px-2 pt-3 pb-1 font-semibold text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>

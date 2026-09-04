@@ -14,6 +14,7 @@
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import type {
   CompanyProfile,
+  FloorplanKind,
   PlanSymbolSpec,
   FloorplanDrawingBlock,
   FloorplanDrawingField,
@@ -910,4 +911,124 @@ export function glyphColorOn(fillHex: string): string {
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return lum > 140 ? "#000000" : "#ffffff";
+}
+
+// ── Plan kinds and structured numbering ──────────────────────────────
+
+/** Per-kind defaults for the texts a plan carries. The loudspeaker preset follows the
+ *  FACE Beschallungsplan: German headings, line.speaker numbering. */
+export interface FloorplanKindPreset {
+  labelTemplate: string;
+  legendTitle: string;
+  legendNotesTitle: string;
+  revisionHeaders: [string, string, string, string, string];
+  /** Field labels for the drawing block, matched by position to createDefaultDrawingBlock's fields. */
+  fieldLabels: string[];
+  drawingSubtitle: string;
+}
+
+export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> = {
+  generic: {
+    labelTemplate: "{{n}}",
+    legendTitle: "LEGEND",
+    legendNotesTitle: "INSTALLATION NOTES",
+    revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
+    fieldLabels: ["Project", "Client", "Scale", "Sheet", "Date", "Drawn by"],
+    drawingSubtitle: "{{drawingTitle}}",
+  },
+  loudspeaker: {
+    labelTemplate: "{{line}}.{{n}}",
+    legendTitle: "BESCHALLUNG - LEGENDE & MONTAGE",
+    legendNotesTitle: "MONTAGEHINWEISE",
+    revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
+    fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
+    drawingSubtitle: "Lautsprecherplanung",
+  },
+};
+
+/** The label template a page numbers with, falling back to its kind's preset. */
+export function effectiveLabelTemplate(page: Pick<FloorplanPage, "kind" | "labelTemplate">): string {
+  return page.labelTemplate?.trim() || FLOORPLAN_KIND_PRESETS[page.kind ?? "generic"].labelTemplate;
+}
+
+export interface SymbolLabelFields {
+  line?: string;
+  n?: number;
+  group?: string;
+  device?: string;
+}
+
+/** Compose a symbol label: "{{line}}.{{n}}" with line "4", n 2 → "4.2". A missing line
+ *  drops its separator too ("{{line}}.{{n}}" without a line → "2"), so generic symbols on
+ *  a loudspeaker plan still read cleanly. */
+export function formatSymbolLabel(template: string, f: SymbolLabelFields): string {
+  let out = template;
+  if (!f.line?.trim()) out = out.replace(/\{\{\s*line\s*\}\}\s*[.\-/_: ]?/g, "");
+  return out
+    .replace(/\{\{\s*line\s*\}\}/g, f.line?.trim() ?? "")
+    .replace(/\{\{\s*n\s*\}\}/g, f.n !== undefined ? String(f.n) : "")
+    .replace(/\{\{\s*group\s*\}\}/g, f.group ?? "")
+    .replace(/\{\{\s*device\s*\}\}/g, f.device ?? "")
+    .trim();
+}
+
+/** Next speaker number on a line: one past the highest already used (gaps stay gaps). */
+export function nextSeqInLine(symbols: Pick<FloorplanSymbol, "lineNo" | "seq">[], lineNo: string | undefined): number {
+  const key = (lineNo ?? "").trim();
+  let max = 0;
+  for (const s of symbols) {
+    if ((s.lineNo ?? "").trim() === key && typeof s.seq === "number" && s.seq > max) max = s.seq;
+  }
+  return max + 1;
+}
+
+/** Renumber one line's speakers 1…n in placement order and rebuild their labels. */
+export function renumberLine(symbols: FloorplanSymbol[], lineNo: string, template: string, groupLabel: (groupId: string) => string | undefined): FloorplanSymbol[] {
+  const key = lineNo.trim();
+  let n = 0;
+  return symbols.map((s) => {
+    if ((s.lineNo ?? "").trim() !== key) return s;
+    n += 1;
+    return { ...s, seq: n, label: formatSymbolLabel(template, { line: key, n, group: groupLabel(s.groupId) }) };
+  });
+}
+
+/** Distinct lines on a page, in first-appearance order, with their speaker counts. */
+export function linesOnPage(symbols: Pick<FloorplanSymbol, "lineNo">[]): { lineNo: string; count: number }[] {
+  const out: { lineNo: string; count: number }[] = [];
+  for (const s of symbols) {
+    const key = (s.lineNo ?? "").trim();
+    if (!key) continue;
+    const hit = out.find((l) => l.lineNo === key);
+    if (hit) hit.count += 1; else out.push({ lineNo: key, count: 1 });
+  }
+  return out;
+}
+
+// ── Label placement presets ──────────────────────────────────────────
+
+export type LabelPosition = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+export const LABEL_POSITIONS: LabelPosition[] = ["nw", "n", "ne", "w", "e", "sw", "s", "se"];
+
+/** Offset and alignment that put a label just outside the symbol on the given side. */
+export function labelPlacementFor(
+  pos: LabelPosition,
+  symbolSizeMm: number,
+  labelSizeMm: number,
+): { labelOffsetMm: Vec2; labelAlign: "start" | "middle" | "end" } {
+  const gap = 1.5;
+  const r = symbolSizeMm / 2 + gap;
+  const dy = r + labelSizeMm * 0.6;
+  const map: Record<LabelPosition, { x: number; y: number; align: "start" | "middle" | "end" }> = {
+    e: { x: r, y: 0, align: "start" },
+    w: { x: -r, y: 0, align: "end" },
+    n: { x: 0, y: -dy, align: "middle" },
+    s: { x: 0, y: dy, align: "middle" },
+    ne: { x: r * 0.75, y: -dy * 0.8, align: "start" },
+    se: { x: r * 0.75, y: dy * 0.8, align: "start" },
+    nw: { x: -r * 0.75, y: -dy * 0.8, align: "end" },
+    sw: { x: -r * 0.75, y: dy * 0.8, align: "end" },
+  };
+  const m = map[pos];
+  return { labelOffsetMm: { x: m.x, y: m.y }, labelAlign: m.align };
 }

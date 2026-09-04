@@ -44,6 +44,7 @@ import type {
   FloorplanNote,
   FloorplanMask,
   CompanyProfile,
+  FloorplanKind,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -61,6 +62,11 @@ import {
 import { pairKey } from "./roomDistance";
 import {
   FLOORPLAN_GROUP_COLORS,
+  FLOORPLAN_KIND_PRESETS,
+  effectiveLabelTemplate,
+  formatSymbolLabel,
+  nextSeqInLine,
+  renumberLine,
   computeCalibration,
   createDefaultDrawingBlock,
   createDefaultLegend,
@@ -850,7 +856,14 @@ interface SchematicState {
   removeViewport: (pageId: string, viewportId: string) => void;
   setPrintSheetPaper: (pageId: string, paperId: string, orientation: "landscape" | "portrait", customWidthIn?: number, customHeightIn?: number) => void;
   // Floorplan page CRUD — a scaled plan drawing built on an architect's underlay
-  addFloorplanPage: (label?: string) => string;
+  addFloorplanPage: (label?: string, kind?: FloorplanKind) => string;
+  /** Switch the plan type and apply its preset texts (legend title, notes heading,
+   *  revision headers, drawing block field labels, label template). */
+  setFloorplanKind: (pageId: string, kind: FloorplanKind) => void;
+  /** Renumber one amplifier line 1…n in placement order. */
+  renumberFloorplanLine: (pageId: string, lineNo: string) => void;
+  /** Patch several symbols in one undo step (label placement presets). */
+  updateFloorplanSymbols: (pageId: string, symbolIds: string[], patch: Partial<Omit<FloorplanSymbol, "id">>) => void;
   removeFloorplanPage: (pageId: string) => void;
   renameFloorplanPage: (pageId: string, label: string) => void;
   duplicateFloorplanPage: (pageId: string) => string;
@@ -858,7 +871,7 @@ interface SchematicState {
   /** Change the drawing scale. The underlay is re-fitted so the plan keeps covering the
    *  same real-world extent; symbols keep their paper positions. */
   setFloorplanScale: (pageId: string, scaleDenominator: number) => void;
-  updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm">>) => void;
+  updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm" | "labelTemplate" | "kind">>) => void;
   setFloorplanUnderlay: (pageId: string, underlay: FloorplanUnderlay | undefined) => void;
   updateFloorplanUnderlay: (pageId: string, patch: Partial<FloorplanUnderlay>) => void;
   /** Resize the underlay from a measured reference distance (see computeCalibration). */
@@ -5270,7 +5283,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   // ── Floorplan pages ───────────────────────────────────────────────
 
-  addFloorplanPage: (label) => {
+  addFloorplanPage: (label, kind) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
     const id = nextFloorplanPageId();
@@ -5300,8 +5313,59 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       labelSizeMm: DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
     };
     set({ pages: [...state.pages, page], activePage: id, undoSize: undoStack.length, redoSize: 0 });
+    if (kind && kind !== "generic") get().setFloorplanKind(id, kind);
     get().saveToLocalStorage();
     return id;
+  },
+
+  setFloorplanKind: (pageId, kind) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const preset = FLOORPLAN_KIND_PRESETS[kind];
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        kind,
+        labelTemplate: undefined, // back to the kind's default template
+        legend: { ...p.legend, title: preset.legendTitle, notesTitle: preset.legendNotesTitle },
+        drawingBlock: {
+          ...p.drawingBlock,
+          revisionHeaders: [...preset.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],
+          subtitle: preset.drawingSubtitle,
+          // Field labels are matched by position to the default field set; extra fields keep theirs.
+          fields: p.drawingBlock.fields.map((f, i) => (i < preset.fieldLabels.length ? { ...f, label: preset.fieldLabels[i] } : f)),
+        },
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  renumberFloorplanLine: (pageId, lineNo) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        symbols: renumberLine(p.symbols, lineNo, effectiveLabelTemplate(p), (gid) => p.groups.find((g) => g.id === gid)?.label),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanSymbols: (pageId, symbolIds, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const ids = new Set(symbolIds);
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        symbols: p.symbols.map((sym) => ids.has(sym.id) ? { ...sym, ...patch } : sym),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
   },
 
   removeFloorplanPage: (pageId) => {
@@ -5507,9 +5571,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => {
         const group = p.groups.find((g) => g.id === symbol.groupId);
-        const label = symbol.label
-          ?? nextSymbolLabel(p.symbols.filter((sym) => sym.groupId === symbol.groupId).map((sym) => sym.label), group?.labelPrefix);
-        return { ...p, symbols: [...p.symbols, { ...symbol, id, label }] };
+        // Structured numbering (line.speaker) on loudspeaker plans or whenever a line is
+        // given; otherwise the classic "continue the group's last number".
+        const structured = symbol.lineNo !== undefined || p.kind === "loudspeaker";
+        let seq = symbol.seq;
+        let label = symbol.label;
+        if (structured) {
+          seq = seq ?? nextSeqInLine(p.symbols, symbol.lineNo);
+          const deviceLabel = symbol.deviceNodeId ? (state.nodes.find((n) => n.id === symbol.deviceNodeId)?.data as DeviceData | undefined)?.label : undefined;
+          label = label ?? formatSymbolLabel(effectiveLabelTemplate(p), { line: symbol.lineNo, n: seq, group: group?.label, device: deviceLabel });
+        } else {
+          label = label ?? nextSymbolLabel(p.symbols.filter((sym) => sym.groupId === symbol.groupId).map((sym) => sym.label), group?.labelPrefix);
+        }
+        return { ...p, symbols: [...p.symbols, { ...symbol, id, seq, label }] };
       }),
       undoSize: undoStack.length, redoSize: 0,
     });

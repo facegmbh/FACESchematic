@@ -454,6 +454,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
+        kind: { type: "string", enum: ["generic", "loudspeaker"], description: "\"loudspeaker\" numbers symbols per amplifier line (4.1, 4.2 …) and applies the Beschallungsplan presets (German legend and drawing block headings). Default generic." },
         label: { type: "string", description: "Tab name and default drawing title, e.g. \"Erdgeschoss\" / \"Ground floor\"." },
         paperId: { type: "string", description: "Paper id: iso-a0, iso-a1 (default), iso-a2, iso-a3, iso-a4, letter, tabloid, ansi-c … arch-e." },
         orientation: { type: "string", enum: ["landscape", "portrait"], description: "Default landscape." },
@@ -470,6 +471,8 @@ export const TOOLS: ToolDef[] = [
       properties: {
         pageId: { type: "string", description: "Floorplan page id from list_floorplans." },
         label: { type: "string" },
+        kind: { type: "string", enum: ["generic", "loudspeaker"], description: "Switching resets legend title, notes heading, revision headers and drawing block field labels to the type's preset." },
+        labelTemplate: { type: "string", description: "How symbol labels are composed: {{line}}, {{n}}, {{group}}, {{device}}. Empty string restores the type's default ({{line}}.{{n}} on loudspeaker plans)." },
         paperId: { type: "string" },
         orientation: { type: "string", enum: ["landscape", "portrait"] },
         scaleDenominator: { type: "number", description: "50 means 1:50." },
@@ -527,7 +530,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "place_floorplan_symbols",
     description:
-      "Place device symbols on a floorplan in one call (best-effort, per-item results, applied in array order). Each symbol belongs to a group (its legend row) and may link a schematic device (deviceId from get_schematic) so the plan and the signal flow describe the same gear. Positions are real-world METRES from the drawing area's top-left corner; a position beyond what the sheet covers at its scale is rejected (list_floorplans reports the covered extent). Omit label to continue the group's numbering (4.1 → 4.2, SB.1 → SB.2).",
+      "Place device symbols on a floorplan in one call (best-effort, per-item results, applied in array order). Each symbol belongs to a group (its legend row) and may link a schematic device (deviceId from get_schematic) so the plan and the signal flow describe the same gear. Positions are real-world METRES from the drawing area's top-left corner; a position beyond what the sheet covers at its scale is rejected (list_floorplans reports the covered extent). Numbering: pass lineNo (the amplifier line / circuit, e.g. \"4\" or \"SB\") and the symbol is labelled line.n with n continuing that line (4.1, 4.2 …) — the way loudspeaker plans read; without a line, a generic plan continues the group's own numbering. labelPosition puts the label N/NE/E/SE/S/SW/W/NW of the symbol, labelRotationDeg turns it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -544,6 +547,10 @@ export const TOOLS: ToolDef[] = [
               xM: { type: "number", description: "Metres from the drawing area's left edge." },
               yM: { type: "number", description: "Metres from the drawing area's top edge." },
               label: { type: "string", description: "Symbol number, e.g. \"4.1\". Omit to auto-number." },
+              lineNo: { type: "string", description: "Amplifier line / circuit the speaker hangs on (\"4\", \"SB\"); numbering runs per line." },
+              seq: { type: "number", description: "Speaker number within the line; omit for the next free one." },
+              labelPosition: { type: "string", enum: ["n", "ne", "e", "se", "s", "sw", "w", "nw"], description: "Side of the symbol the label sits on (default e)." },
+              labelRotationDeg: { type: "number", description: "Clockwise label rotation in degrees." },
               notes: { type: "string", description: "Per-symbol remark, kept in the plan's schedule." },
             },
             required: ["groupId", "xM", "yM"],
@@ -557,7 +564,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "update_floorplan_symbol",
-    description: "Move, renumber, regroup or relink one symbol. Positions in metres as in place_floorplan_symbols; pass deviceId null to unlink the device.",
+    description: "Move, renumber, regroup, relink or re-label one symbol. Positions in metres as in place_floorplan_symbols; pass deviceId null to unlink the device. Changing lineNo/seq rebuilds the label from the page's template; labelPosition and labelRotationDeg place and turn the label around the symbol.",
     inputSchema: {
       type: "object",
       properties: {
@@ -568,6 +575,10 @@ export const TOOLS: ToolDef[] = [
         xM: { type: "number" },
         yM: { type: "number" },
         label: { type: "string" },
+        lineNo: { type: ["string", "null"], description: "Amplifier line; null removes it." },
+        seq: { type: "number" },
+        labelPosition: { type: "string", enum: ["n", "ne", "e", "se", "s", "sw", "w", "nw"] },
+        labelRotationDeg: { type: "number" },
         notes: { type: "string" },
       },
       required: ["pageId", "symbolId"],

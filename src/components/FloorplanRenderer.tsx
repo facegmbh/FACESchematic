@@ -18,6 +18,8 @@ import {
   hasCompanyProfile,
   planSymbolFor,
   glyphColorOn,
+  labelPlacementFor,
+  type LabelPosition,
   LEGEND_COMPANY_GAP_MM,
   LEGEND_COMPANY_LINE_MM,
   LEGEND_COMPANY_LOGO_MM,
@@ -54,6 +56,8 @@ interface Props {
   onToolChange: (tool: FloorplanTool) => void;
   activeGroupId: string | null;
   onActiveGroupChange: (groupId: string) => void;
+  /** Amplifier line new symbols are numbered on; empty = none. */
+  activeLine: string;
 }
 
 type Selection =
@@ -114,7 +118,7 @@ function SymbolGlyph({ group, sizePx }: { group: Pick<FloorplanSymbolGroup, "sha
   );
 }
 
-export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange }: Props) {
+export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
   const allPages = useSchematicStore((s) => s.pages);
   const titleBlock = useSchematicStore((s) => s.titleBlock);
@@ -123,6 +127,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const useShortNames = useSchematicStore((s) => s.useShortNames);
   const addFloorplanSymbol = useSchematicStore((s) => s.addFloorplanSymbol);
   const updateFloorplanSymbol = useSchematicStore((s) => s.updateFloorplanSymbol);
+  const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanUnderlay = useSchematicStore((s) => s.updateFloorplanUnderlay);
@@ -354,9 +359,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       groupId,
       deviceNodeId: nodeId,
       positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) },
+      lineNo: activeLine.trim() || undefined,
     });
     setSelection({ kind: "symbols", ids: [id] });
-  }, [deviceDataMap, resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol]);
+  }, [deviceDataMap, resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, activeLine]);
 
   // ── Mouse handling on the sheet ──────────────────────────────────
   const handleSheetMouseDown = useCallback((e: React.MouseEvent) => {
@@ -401,6 +407,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       const id = addFloorplanSymbol(page.id, {
         groupId: activeGroupId,
         positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) },
+        lineNo: activeLine.trim() || undefined,
       });
       setSelection({ kind: "symbols", ids: [id] });
       return;
@@ -412,7 +419,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       setNoteDraft("Note");
       onToolChange("select");
     }
-  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addToast, onToolChange]);
+  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addToast, onToolChange]);
 
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
@@ -800,7 +807,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     style={{
                       left: mmToPx(anchor.x),
                       top: mmToPx(anchor.y),
-                      transform: "translateY(-50%)",
+                      // Rotate about the anchor, after sliding the text so its start/middle/end
+                      // sits on it — the same geometry the PDF export reproduces.
+                      transformOrigin: "0 0",
+                      transform: `rotate(${symbol.labelRotationDeg ?? 0}deg) translate(${symbol.labelAlign === "end" ? "-100%" : symbol.labelAlign === "middle" ? "-50%" : "0"}, -50%)`,
                       fontSize: mmToPx(page.labelSizeMm),
                       fontWeight: 600,
                       color: "#111",
@@ -1121,6 +1131,76 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           )}
         </div>
       </div>
+
+      {/* Label placement for the selected symbols */}
+      {selection.kind === "symbols" && selection.ids.length > 0 && tool === "select" && (() => {
+        const ids = selection.ids;
+        const first = page.symbols.find((s) => s.id === ids[0]);
+        if (!first) return null;
+        const lineIds = first.lineNo ? page.symbols.filter((s) => (s.lineNo ?? "") === (first.lineNo ?? "")).map((s) => s.id) : [];
+        const groupIds = page.symbols.filter((s) => s.groupId === first.groupId).map((s) => s.id);
+        const place = (pos: LabelPosition, targets: string[]) =>
+          updateFloorplanSymbols(page.id, targets, labelPlacementFor(pos, page.symbolSizeMm, page.labelSizeMm));
+        const rotate = (deg: number, targets: string[]) => updateFloorplanSymbols(page.id, targets, { labelRotationDeg: deg });
+        const rot = first.labelRotationDeg ?? 0;
+        const arrows: Record<LabelPosition, string> = { nw: "↖", n: "↑", ne: "↗", w: "←", e: "→", sw: "↙", s: "↓", se: "↘" };
+        return (
+          <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/95 border border-neutral-300 rounded shadow px-2 py-1 text-xs select-none" data-print-hide>
+            <span className="text-neutral-500">Label{ids.length > 1 ? ` (${ids.length})` : ""}</span>
+            <div className="grid grid-cols-3 gap-0.5">
+              {(["nw", "n", "ne", "w", "e", "sw", "s", "se"] as LabelPosition[]).map((pos, i) => (
+                <button
+                  key={pos}
+                  className="w-6 h-5 rounded text-neutral-700 hover:bg-emerald-100 hover:text-emerald-800 cursor-pointer"
+                  style={i === 4 ? { gridColumnStart: 3 } : undefined}
+                  onClick={() => place(pos, ids)}
+                  title={`Put the label ${pos.toUpperCase()} of the symbol`}
+                >
+                  {arrows[pos]}
+                </button>
+              ))}
+            </div>
+            <div className="border-l border-neutral-200 h-4" />
+            <span className="text-neutral-500">Rotate</span>
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot - 45, ids)} title="Rotate label 45° counter-clockwise">⟲</button>
+            <input
+              type="number"
+              step={5}
+              className="w-14 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400"
+              value={rot}
+              onChange={(e) => rotate(Number(e.target.value) || 0, ids)}
+              onKeyDown={(e) => e.stopPropagation()}
+              title="Label rotation in degrees (clockwise)"
+            />
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot + 45, ids)} title="Rotate label 45° clockwise">⟳</button>
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer text-neutral-500" onClick={() => updateFloorplanSymbols(page.id, ids, { labelRotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })} title="Reset label placement">↺</button>
+            {(lineIds.length > 1 || groupIds.length > 1) && (
+              <>
+                <div className="border-l border-neutral-200 h-4" />
+                <span className="text-neutral-500">Apply to</span>
+                {lineIds.length > 1 && (
+                  <button
+                    className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
+                    onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg })}
+                    title={`Copy this label placement to every speaker on line ${first.lineNo}`}
+                  >
+                    line {first.lineNo}
+                  </button>
+                )}
+                {groupIds.length > 1 && (
+                  <button
+                    className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
+                    onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg })}
+                    title="Copy this label placement to every symbol of the group"
+                  >
+                    group
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Calibration prompt */}
       {tool === "calibrate" && (

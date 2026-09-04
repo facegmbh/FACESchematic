@@ -424,7 +424,14 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       doc.setFont("Inter", "bold");
       doc.setFontSize(page.labelSizeMm * MM_TO_PT);
       doc.setTextColor(17, 17, 17);
-      doc.text(symbol.label, anchor.x, anchor.y, { baseline: "middle" });
+      // Alignment is applied by hand along the (possibly rotated) baseline so start /
+      // middle / end land on the anchor exactly as on screen; jsPDF's angle is
+      // counter-clockwise, ours clockwise.
+      const rotDeg = symbol.labelRotationDeg ?? 0;
+      const rad = (rotDeg * Math.PI) / 180;
+      const w = doc.getTextWidth(symbol.label);
+      const shift = symbol.labelAlign === "end" ? -w : symbol.labelAlign === "middle" ? -w / 2 : 0;
+      doc.text(symbol.label, anchor.x + shift * Math.cos(rad), anchor.y + shift * Math.sin(rad), { baseline: "middle", angle: -rotDeg });
     }
 
     // Notes sit above symbols, below the legend and drawing block.

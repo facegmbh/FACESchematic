@@ -341,7 +341,13 @@ export interface FloorplanPageRef {
   pageId: string;
 }
 
+/** Where a symbol's label sits relative to its symbol (compass positions). */
+export const FLOORPLAN_LABEL_POSITIONS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;
+
 export interface CreateFloorplanParams {
+  /** "loudspeaker" numbers symbols per amplifier line (4.1, 4.2 …) and applies the
+   *  Beschallungsplan presets (German legend/drawing block headings); default "generic". */
+  kind?: "generic" | "loudspeaker";
   /** Tab name and default drawing title, e.g. "Ground floor". Default "Floorplan N". */
   label?: string;
   /** Paper id as in the editor ("iso-a1", "iso-a0", "iso-a3", "letter", …). Default "iso-a1". */
@@ -352,6 +358,10 @@ export interface CreateFloorplanParams {
 }
 
 export interface UpdateFloorplanParams extends FloorplanPageRef {
+  /** Switching the kind resets legend title, notes heading, revision headers and field labels to the preset. */
+  kind?: "generic" | "loudspeaker";
+  /** Label template: {{line}}, {{n}}, {{group}}, {{device}}. Empty string → the kind's default. */
+  labelTemplate?: string;
   label?: string;
   paperId?: string;
   orientation?: "landscape" | "portrait";
@@ -397,8 +407,18 @@ export interface FloorplanSymbolSpec {
   /** Real-world position in metres from the drawing area's top-left corner. */
   xM: number;
   yM: number;
-  /** Symbol number, e.g. "4.1". Omit to continue the group's numbering. */
+  /** Symbol number, e.g. "4.1". Omit to number automatically (see lineNo). */
   label?: string;
+  /** Amplifier line / circuit ("4", "SB"). With a line the symbol is numbered line.n from the
+   *  page's label template, n continuing that line; without one, on a generic plan, the
+   *  group's own numbering continues. */
+  lineNo?: string;
+  /** Speaker number within the line; omit to take the next free one. */
+  seq?: number;
+  /** Where the label sits around the symbol; default east. */
+  labelPosition?: (typeof FLOORPLAN_LABEL_POSITIONS)[number];
+  /** Clockwise label rotation in degrees. */
+  labelRotationDeg?: number;
   notes?: string;
 }
 
@@ -414,6 +434,11 @@ export interface UpdateFloorplanSymbolParams extends FloorplanPageRef {
   xM?: number;
   yM?: number;
   label?: string;
+  /** Changing lineNo or seq rebuilds the label from the page's template unless label is passed too. */
+  lineNo?: string | null;
+  seq?: number;
+  labelPosition?: (typeof FLOORPLAN_LABEL_POSITIONS)[number];
+  labelRotationDeg?: number;
   notes?: string;
 }
 

@@ -16,6 +16,8 @@ export default function FloorplanPage() {
 
   const [tool, setTool] = useState<FloorplanTool>("select");
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  // Amplifier line new symbols are numbered on (loudspeaker plans): "4" → 4.1, 4.2 …
+  const [activeLine, setActiveLine] = useState("");
 
   const page = pages.find((p) => p.id === activePage);
   if (!page || page.type !== "floorplan") return null;
@@ -35,6 +37,8 @@ export default function FloorplanPage() {
           page={fp}
           activeGroupId={effectiveGroupId}
           onActiveGroupChange={setActiveGroupId}
+          activeLine={activeLine}
+          onActiveLineChange={setActiveLine}
         />
         <FloorplanRenderer
           page={fp}
@@ -42,6 +46,7 @@ export default function FloorplanPage() {
           onToolChange={setTool}
           activeGroupId={effectiveGroupId}
           onActiveGroupChange={setActiveGroupId}
+          activeLine={activeLine}
         />
       </div>
     </div>

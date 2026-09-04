@@ -952,10 +952,21 @@ export interface FloorplanSymbol {
   deviceNodeId?: string;
   /** Symbol center on the sheet, in paper mm from the paper's top-left corner. */
   positionMm: { x: number; y: number };
-  /** Displayed number, e.g. "4.1". Auto-assigned on placement, editable afterwards. */
+  /** Displayed number, e.g. "4.1". Auto-assigned on placement, editable afterwards. On a
+   *  loudspeaker plan it is composed from lineNo + seq through the page's labelTemplate. */
   label: string;
+  /** Amplifier line / circuit the speaker hangs on ("4", "SB"). Loudspeaker plans number
+   *  speakers per line: 4.1, 4.2, … */
+  lineNo?: string;
+  /** Speaker number within its line (1-based). */
+  seq?: number;
   /** Label offset from the symbol center, in paper mm. */
   labelOffsetMm?: { x: number; y: number };
+  /** Text alignment at the label anchor — set by the position presets so a label west
+   *  of the symbol ends at the anchor instead of running into it. */
+  labelAlign?: "start" | "middle" | "end";
+  /** Clockwise rotation of the label about its anchor, in degrees. */
+  labelRotationDeg?: number;
   /** Per-symbol note, surfaced in the floorplan schedule. */
   notes?: string;
 }
@@ -1117,7 +1128,17 @@ export interface FloorplanPage {
   symbolSizeMm: number;
   /** Label font size in paper mm (cap height), drawn next to each symbol. */
   labelSizeMm: number;
+  /** What the plan documents. "loudspeaker" numbers symbols per amplifier line
+   *  (line.speaker), and its preset fills legend and drawing block the way a
+   *  Beschallungsplan reads. Undefined = generic. */
+  kind?: FloorplanKind;
+  /** How a symbol's label is composed from its fields: {{line}}, {{n}}, {{group}},
+   *  {{device}}. Default "{{n}}" (generic) / "{{line}}.{{n}}" (loudspeaker). */
+  labelTemplate?: string;
 }
+
+export type FloorplanKind = "generic" | "loudspeaker";
+export const FLOORPLAN_KINDS: FloorplanKind[] = ["generic", "loudspeaker"];
 
 export const DEFAULT_FLOORPLAN_SCALE = 50;
 export const DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM = 6;

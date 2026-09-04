@@ -66,6 +66,7 @@ import {
   type SetFloorplanMasksParams,
   type FloorplanMaskSpec,
   FLOORPLAN_SHAPES,
+  FLOORPLAN_LABEL_POSITIONS,
 } from "./mcp/protocol";
 import {
   classifyDeviceProperties,
@@ -110,6 +111,9 @@ import {
   legendDescriptionFor,
   legendInstallNoteFor,
   planSymbolFor,
+  labelPlacementFor,
+  formatSymbolLabel,
+  effectiveLabelTemplate,
   nextDrawingFieldId,
   nextRevisionIndex,
   paperMmToRealMm,
@@ -352,6 +356,23 @@ function validateOrientation(o: unknown): "landscape" | "portrait" {
   return o;
 }
 
+function validateKind(k: unknown): "generic" | "loudspeaker" {
+  if (k !== "generic" && k !== "loudspeaker") throw new CommandError('kind must be "generic" or "loudspeaker".');
+  return k;
+}
+
+function validateLabelPosition(p: unknown): (typeof FLOORPLAN_LABEL_POSITIONS)[number] {
+  if (typeof p !== "string" || !(FLOORPLAN_LABEL_POSITIONS as readonly string[]).includes(p)) {
+    throw new CommandError(`labelPosition must be one of ${FLOORPLAN_LABEL_POSITIONS.join(", ")}.`);
+  }
+  return p as (typeof FLOORPLAN_LABEL_POSITIONS)[number];
+}
+
+function validateRotation(deg: unknown): number {
+  if (typeof deg !== "number" || !Number.isFinite(deg)) throw new CommandError("labelRotationDeg must be a number of degrees (clockwise).");
+  return deg;
+}
+
 /** Group patch from an MCP spec: validates colors/shapes, drops undefined keys so a
  *  partial update never blanks a field the caller did not mention. */
 function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omit<FloorplanSymbolGroup, "id">> {
@@ -393,6 +414,8 @@ function floorplanSummary(page: FloorplanPage) {
     orientation: page.orientation,
     scale: `1:${page.scaleDenominator}`,
     scaleDenominator: page.scaleDenominator,
+    kind: page.kind ?? "generic",
+    labelTemplate: effectiveLabelTemplate(page),
     /** Real-world extent the drawing area covers at this scale, in metres. */
     coversM: {
       width: Math.round(paperMmToRealMm(area.w, page.scaleDenominator)) / 1000,
@@ -408,8 +431,9 @@ function floorplanSummary(page: FloorplanPage) {
       symbolCount: counts.get(g.id) ?? 0,
     })),
     symbols: page.symbols.map((sym) => ({
-      symbolId: sym.id, groupId: sym.groupId, label: sym.label, deviceId: sym.deviceNodeId,
+      symbolId: sym.id, groupId: sym.groupId, label: sym.label, lineNo: sym.lineNo, seq: sym.seq, deviceId: sym.deviceNodeId,
       deviceLabel: deviceLabel(sym.deviceNodeId), ...paperToRealM(page, sym.positionMm), notes: sym.notes,
+      labelRotationDeg: sym.labelRotationDeg ?? 0,
     })),
     legend: {
       visible: page.legend.visible, title: page.legend.title, notesTitle: page.legend.notesTitle,
@@ -441,15 +465,21 @@ function placeSymbolCore(page: FloorplanPage, spec: FloorplanSymbolSpec) {
   if (!pos.ok) throw new CommandError(pos.error);
   const positionMm = realMToPaper(live, pos.xM, pos.yM);
   const label = spec.label !== undefined ? requireText(spec.label, "label") : undefined;
+  if (spec.seq !== undefined && (!Number.isInteger(spec.seq) || spec.seq < 1)) throw new CommandError("seq must be a whole number ≥ 1.");
+  const placement = spec.labelPosition !== undefined ? labelPlacementFor(validateLabelPosition(spec.labelPosition), live.symbolSizeMm, live.labelSizeMm) : {};
   const symbolId = st().addFloorplanSymbol(live.id, {
     groupId: group.id,
     deviceNodeId: spec.deviceId ?? undefined,
     positionMm,
     label,
+    lineNo: spec.lineNo !== undefined ? String(spec.lineNo).trim() || undefined : undefined,
+    seq: spec.seq,
+    ...placement,
+    labelRotationDeg: spec.labelRotationDeg !== undefined ? validateRotation(spec.labelRotationDeg) : undefined,
     notes: spec.notes ? String(spec.notes) : undefined,
   });
   const placed = requireFloorplan(page.id).symbols.find((sym) => sym.id === symbolId);
-  return { symbolId, label: placed?.label ?? label, groupId: group.id, deviceId: spec.deviceId ?? undefined, xM: pos.xM, yM: pos.yM };
+  return { symbolId, label: placed?.label ?? label, lineNo: placed?.lineNo, seq: placed?.seq, groupId: group.id, deviceId: spec.deviceId ?? undefined, xM: pos.xM, yM: pos.yM };
 }
 
 function addNoteCore(page: FloorplanPage, spec: FloorplanNoteSpec) {
@@ -1155,7 +1185,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
   },
 
   create_floorplan: (params) => {
-    const { label, paperId, orientation, scaleDenominator } = (params ?? {}) as unknown as CreateFloorplanParams;
+    const { label, paperId, orientation, scaleDenominator, kind } = (params ?? {}) as unknown as CreateFloorplanParams;
+    const planKind = kind !== undefined ? validateKind(kind) : "generic";
     const paper = paperId !== undefined ? validatePaper(paperId) : "iso-a1";
     const orient = orientation !== undefined ? validateOrientation(orientation) : "landscape";
     let scale = 50;
@@ -1167,16 +1198,18 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const pageLabel = typeof label === "string" && label.trim() ? label.trim() : undefined;
     // addFloorplanPage pushes one undo entry; the follow-up paper/scale sets each push
     // their own, which is acceptable for a create — the page is new either way.
-    const pageId = st().addFloorplanPage(pageLabel);
+    const pageId = st().addFloorplanPage(pageLabel, planKind);
     if (paper !== "iso-a1" || orient !== "landscape") st().setFloorplanPaper(pageId, paper, orient);
     if (scale !== 50) st().setFloorplanScale(pageId, scale);
     return floorplanSummary(requireFloorplan(pageId));
   },
 
   update_floorplan: (params) => {
-    const { pageId, label, paperId, orientation, scaleDenominator } = (params ?? {}) as unknown as UpdateFloorplanParams;
+    const { pageId, label, paperId, orientation, scaleDenominator, kind, labelTemplate } = (params ?? {}) as unknown as UpdateFloorplanParams;
     const page = requireFloorplan(pageId);
     if (label !== undefined) st().renameFloorplanPage(page.id, requireText(label, "label"));
+    if (kind !== undefined && validateKind(kind) !== (page.kind ?? "generic")) st().setFloorplanKind(page.id, kind);
+    if (labelTemplate !== undefined) st().updateFloorplanPage(page.id, { labelTemplate: String(labelTemplate).trim() || undefined });
     if (paperId !== undefined || orientation !== undefined) {
       const live = requireFloorplan(page.id);
       st().setFloorplanPaper(
@@ -1252,12 +1285,26 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       if (!pos.ok) throw new CommandError(pos.error);
       patch.positionMm = realMToPaper(page, pos.xM, pos.yM);
     }
+    if (p.lineNo !== undefined) patch.lineNo = p.lineNo === null ? undefined : String(p.lineNo).trim() || undefined;
+    if (p.seq !== undefined) {
+      if (!Number.isInteger(p.seq) || p.seq < 1) throw new CommandError("seq must be a whole number ≥ 1.");
+      patch.seq = p.seq;
+    }
     if (p.label !== undefined) patch.label = requireText(p.label, "label");
+    else if (p.lineNo !== undefined || p.seq !== undefined) {
+      // Structured fields changed and no explicit label: rebuild it from the template.
+      const line = p.lineNo !== undefined ? patch.lineNo : symbol.lineNo;
+      const seq = patch.seq ?? symbol.seq;
+      const group = page.groups.find((g) => g.id === (patch.groupId ?? symbol.groupId));
+      patch.label = formatSymbolLabel(effectiveLabelTemplate(page), { line, n: seq, group: group?.label });
+    }
+    if (p.labelPosition !== undefined) Object.assign(patch, labelPlacementFor(validateLabelPosition(p.labelPosition), page.symbolSizeMm, page.labelSizeMm));
+    if (p.labelRotationDeg !== undefined) patch.labelRotationDeg = validateRotation(p.labelRotationDeg);
     if (p.notes !== undefined) patch.notes = String(p.notes) || undefined;
     if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one symbol property.");
     st().updateFloorplanSymbol(page.id, symbol.id, patch);
     const updated = requireSymbol(requireFloorplan(page.id), symbol.id);
-    return { symbolId: updated.id, groupId: updated.groupId, label: updated.label, deviceId: updated.deviceNodeId, ...paperToRealM(page, updated.positionMm) };
+    return { symbolId: updated.id, groupId: updated.groupId, label: updated.label, lineNo: updated.lineNo, seq: updated.seq, deviceId: updated.deviceNodeId, ...paperToRealM(page, updated.positionMm) };
   },
 
   remove_floorplan_symbol: (params) => {

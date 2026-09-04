@@ -111,6 +111,26 @@ export default function FloorplansPage() {
         </li>
       </ul>
 
+      <h2>Loudspeaker plans: lines and labels</h2>
+      <p>
+        The toolbar&apos;s <strong>Type</strong> switches a page to a <strong>loudspeaker plan</strong>. That
+        applies the Beschallungsplan presets — German legend title and notes heading, revision
+        headers <em>Index · Datum · Änderungen · Bearb. · Gepr.</em>, drawing block fields Bauvorhaben,
+        Bauherr, Maßstab, Blattgröße, Datum, Planersteller:in — and changes how symbols are numbered:
+        per <strong>amplifier line</strong>. Set the active <strong>Line</strong> in the sidebar
+        (&quot;4&quot;, &quot;SB&quot;) and every symbol you drop reads <em>line.speaker</em>: 4.1, 4.2, …
+        The sidebar lists the lines on the plan with their counts and renumbers a line in placement
+        order. The label template (<code>{"{{line}}.{{n}}"}</code> by default, also{" "}
+        <code>{"{{group}}"}</code> and <code>{"{{device}}"}</code>) is editable per page.
+      </p>
+      <p>
+        Every label can be <strong>placed around its symbol and rotated</strong>: select one or more
+        symbols and a panel appears with the eight compass positions, a rotation field and ±45°
+        buttons, and &quot;apply to line / group&quot; to copy the placement to all speakers on that
+        line or in that group. Dragging the number itself still works for free placement. The PDF
+        reproduces alignment and rotation exactly.
+      </p>
+
       <h2>Placing symbols</h2>
       <p>
         Drag a device from the sidebar onto the plan — the symbol stays linked to that device on the
