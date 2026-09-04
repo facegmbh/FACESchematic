@@ -292,3 +292,25 @@ describe("images and covers", () => {
     expect(list.pages[0].masks).toEqual([]);
   });
 });
+
+describe("legend text from the library", () => {
+  it("a group bound to a template inherits model, install cable and install note", () => {
+    useSchematicStore.setState({
+      customTemplates: [{
+        id: "tpl-dm6se", deviceType: "speaker", label: "Bose DM6SE", manufacturer: "Bose Professional", modelNumber: "DesignMax DM6SE",
+        installCable: "Kabel aus Decke: 2x2,5 mm²", installNotes: "Montage an der Decke; Kabel 5 cm von der Wand.", ports: [],
+      }],
+    });
+    const { pageId } = handlers.create_floorplan({}) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS Gastro", templateId: "tpl-dm6se" }) as { description?: string; installNoteAdded: string | null };
+    expect(g.description).toBe("Bose Professional DesignMax DM6SE | Kabel aus Decke: 2x2,5 mm²");
+    expect(g.installNoteAdded).toBe("DesignMax DM6SE: Montage an der Decke; Kabel 5 cm von der Wand.");
+    expect(floorplans()[0].legend.notes).toEqual(["DesignMax DM6SE: Montage an der Decke; Kabel 5 cm von der Wand."]);
+    expect(floorplans()[0].groups[0].imageCaption).toBe("DesignMax DM6SE");
+    // A second group of the same model does not duplicate the note; an explicit description wins.
+    const g2 = handlers.add_floorplan_group({ pageId, label: "LS Bar", templateId: "tpl-dm6se", description: "own text" }) as { description?: string };
+    expect(g2.description).toBe("own text");
+    expect(floorplans()[0].legend.notes).toHaveLength(1);
+    useSchematicStore.setState({ customTemplates: [] });
+  });
+});

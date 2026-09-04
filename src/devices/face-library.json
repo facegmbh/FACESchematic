@@ -5749,6 +5749,8 @@
     "manufacturer": "Bose Professional",
     "modelNumber": "DesignMax DM2C-LP",
     "referenceUrl": "https://boseprofessional.com/de/products/loudspeakers/ceiling-mount/designmax/designmax-dm2c-lp-1-pair",
+    "installCable": "Ausschnitt: 170 mm",
+    "installNotes": "Eintauchtiefe 99 mm.",
     "searchTerms": [
       "bose",
       "lautsprecher",
@@ -6189,6 +6191,8 @@
     "manufacturer": "Bose Professional",
     "modelNumber": "DesignMax DM6SE",
     "referenceUrl": "https://boseprofessional.com/de/products/loudspeakers/surface-mount/designmax-surface-mount/designmax-dm6se-surface-mount-loudspeaker",
+    "installCable": "Kabel aus Decke: 2x2,5 mm²",
+    "installNotes": "Montage an der Decke; Kabeldurchführung durch die Decke mit 5 cm Abstand zur Wand.",
     "searchTerms": [
       "bose",
       "lautsprecher",

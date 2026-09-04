@@ -75,6 +75,16 @@ export default function FloorplansPage() {
         legend.
       </p>
       <p>
+        The description line does not have to be typed per plan. A device template can carry a
+        fixed <strong>install cable</strong> (&quot;Kabel aus Decke: 2x2,5 mm²&quot;) and a standing{" "}
+        <strong>install note</strong> — both editable in the device editor and saved with the
+        template. A group created from such a model (dropping the device on the plan, or
+        <code>add_floorplan_group</code> with a templateId) gets{" "}
+        <em>Manufacturer Model | install cable</em> as its description and the note appended to the
+        legend&apos;s installation notes as <em>Model: note</em>. Write the cable once on the
+        loudspeaker in the library and every plan&apos;s legend reads the same.
+      </p>
+      <p>
         Product shots come from three places, in this order: an image you <strong>upload</strong>{" "}
         (stored in the project, always printed), the <strong>device template&apos;s image</strong> when the
         group is bound to one (offered as a button, or picked up automatically when a device is

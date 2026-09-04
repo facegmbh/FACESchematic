@@ -164,6 +164,8 @@ export default function DeviceEditor() {
   const [manufacturer, setManufacturer] = useState("");
   const [modelNumber, setModelNumber] = useState("");
   const [referenceUrl, setReferenceUrl] = useState("");
+  const [installCable, setInstallCable] = useState("");
+  const [installNotes, setInstallNotes] = useState("");
   const [category, setCategory] = useState("");
   const [color, setColor] = useState<string | undefined>(undefined);
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
@@ -263,6 +265,8 @@ export default function DeviceEditor() {
     setManufacturer(node.data.manufacturer ?? "");
     setModelNumber(node.data.modelNumber ?? "");
     setReferenceUrl(node.data.referenceUrl ?? tpl?.referenceUrl ?? "");
+    setInstallCable(node.data.installCable ?? tpl?.installCable ?? "");
+    setInstallNotes(node.data.installNotes ?? tpl?.installNotes ?? "");
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
@@ -416,6 +420,8 @@ export default function DeviceEditor() {
       ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
       ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
+      ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
+      ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.templateId ? { templateId: existing.templateId } : {}),
       ...(existing?.templateVersion ? { templateVersion: existing.templateVersion } : {}),
@@ -465,7 +471,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -509,6 +515,10 @@ export default function DeviceEditor() {
         ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
         ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
         ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
+        ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
+        ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
+      ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
         ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
         ...(powerDrawW != null ? { powerDrawW } : {}),
         ...(powerCapacityW != null ? { powerCapacityW } : {}),
@@ -542,7 +552,7 @@ export default function DeviceEditor() {
         ...overrides,
       };
     },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, category, auxiliaryData, searchTermsRaw],
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -646,6 +656,8 @@ export default function DeviceEditor() {
       ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
       ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
+      ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
+      ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.slots ? { slots: existing.slots } : {}),
       ...(existing?.slotFamily ? { slotFamily: existing.slotFamily } : {}),
@@ -692,7 +704,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -778,6 +790,8 @@ export default function DeviceEditor() {
       setManufacturer(tpl.manufacturer ?? "");
       setModelNumber(tpl.modelNumber ?? "");
       setReferenceUrl(tpl.referenceUrl ?? "");
+      setInstallCable(tpl.installCable ?? "");
+      setInstallNotes(tpl.installNotes ?? "");
       setCategory(tpl.category ?? "");
       setHostname(tpl.hostname ?? "");
       setPowerDrawW(tpl.powerDrawW);
@@ -1124,6 +1138,24 @@ export default function DeviceEditor() {
                 value={referenceUrl}
                 onChange={(e) => setReferenceUrl(e.target.value)}
                 placeholder="https://…"
+              />
+            </Field>
+            <Field label="Install cable">
+              <input
+                className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                value={installCable}
+                onChange={(e) => setInstallCable(e.target.value)}
+                placeholder="e.g. Kabel aus Decke: 2x2,5 mm²"
+                title="Fixed installation cable for this model — appears in the floorplan legend row (saved with the template)"
+              />
+            </Field>
+            <Field label="Install notes">
+              <input
+                className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                value={installNotes}
+                onChange={(e) => setInstallNotes(e.target.value)}
+                placeholder="e.g. Montage an der Decke; Kabel 5 cm von der Wand"
+                title="Standing installation note for this model — listed under the floorplan legend's installation notes"
               />
             </Field>
             {ports.some((p) => p.signalType === "knx") && (

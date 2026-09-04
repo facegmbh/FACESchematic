@@ -91,6 +91,8 @@ export default function DeviceTemplateSchemaPage() {
           <tr><td><code>category</code></td><td>string</td><td>Auto-derived from <code>deviceType</code> if omitted</td></tr>
           <tr><td><code>heightMm</code> / <code>widthMm</code> / <code>depthMm</code></td><td>number</td><td>Physical dimensions in millimeters. Drive rack auto-classification, side-view depth conflicts, and rack stats — see <a href="/racks">Rack Builder</a></td></tr>
           <tr><td><code>weightKg</code></td><td>number</td><td>Weight in kilograms; rolls up into per-rack total weight stats</td></tr>
+          <tr><td><code>installCable</code></td><td>string</td><td>Fixed installation cable for the model as it should read on a plan legend, e.g. <code>"Kabel aus Decke: 2x2,5 mm²"</code>. Copied onto placed devices; <a href="/floorplans">floorplan</a> legend rows bound to the model show it after the model name</td></tr>
+          <tr><td><code>installNotes</code></td><td>string</td><td>Standing installation note for the model (mounting method, clearance). Floorplan legends list it under their installation notes as <code>Model: note</code></td></tr>
           <tr><td><code>rackForm</code></td><td>string</td><td>Rack-form override — <code>"full"</code>, <code>"half"</code>, or <code>"shelf-only"</code>. Bypasses the size heuristic for edge cases like desktop units with optional rack ears</td></tr>
           <tr><td><code>facePlateLayout</code></td><td>object</td><td>Custom face-plate connector layout (set via the Face-Plate Editor in-app); persists with the template so future placements inherit it</td></tr>
           <tr><td><code>powerDrawW</code></td><td>number</td><td>Max power consumption in watts</td></tr>

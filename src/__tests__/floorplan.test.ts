@@ -28,6 +28,9 @@ import {
   fillSheetPlacement,
   legendRowImage,
   rectFromDrag,
+  legendDescriptionFor,
+  legendInstallNoteFor,
+  appendLegendNote,
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
@@ -508,5 +511,27 @@ describe("drawing block min height", () => {
     const f1 = stretched.sections.find((s) => s.kind === "fields")!;
     expect(f1.yMm).toBeCloseTo(f0.yMm + 50);
     expect(stretched.fieldCells[0].yMm).toBeCloseTo(natural.fieldCells[0].yMm + 50);
+  });
+});
+
+describe("legend text from the device library", () => {
+  it("joins manufacturer, model and the fixed cable spec", () => {
+    expect(legendDescriptionFor({ manufacturer: "Bose Professional", modelNumber: "DesignMax DM6SE", installCable: "Kabel aus Decke: 2x2,5 mm²" }))
+      .toBe("Bose Professional DesignMax DM6SE | Kabel aus Decke: 2x2,5 mm²");
+    expect(legendDescriptionFor({ manufacturer: "Bose", model: "MB210" })).toBe("Bose MB210");
+    expect(legendDescriptionFor({ label: "Sub links", installCable: "2x4 mm²" })).toBe("Sub links | 2x4 mm²");
+    expect(legendDescriptionFor({})).toBeUndefined();
+  });
+
+  it("prefixes the installation note with the model", () => {
+    expect(legendInstallNoteFor({ modelNumber: "DM6SE", installNotes: "Montage an der Decke." })).toBe("DM6SE: Montage an der Decke.");
+    expect(legendInstallNoteFor({ modelNumber: "DM6SE" })).toBeUndefined();
+  });
+
+  it("appends a note once", () => {
+    expect(appendLegendNote(undefined, "a")).toEqual(["a"]);
+    expect(appendLegendNote(["a"], "a")).toEqual(["a"]);
+    expect(appendLegendNote(["a", ""], "b")).toEqual(["a", "b"]);
+    expect(appendLegendNote(["a"], undefined)).toEqual(["a"]);
   });
 });

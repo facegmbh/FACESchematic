@@ -59,6 +59,8 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     manufacturer: str(raw.manufacturer),
     modelNumber: str(raw.modelNumber),
     referenceUrl: str(raw.referenceUrl),
+    installCable: str(raw.installCable),
+    installNotes: str(raw.installNotes),
     color: str(raw.color),
     headerColor: str(raw.headerColor),
     imageUrl: str(raw.imageUrl),

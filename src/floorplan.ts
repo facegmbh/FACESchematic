@@ -790,3 +790,41 @@ export function rectFromDrag(
   const y = Math.min(p.y, q.y);
   return { positionMm: { x, y }, sizeMm: { w: Math.abs(q.x - p.x), h: Math.abs(q.y - p.y) } };
 }
+
+// ── Legend text from the device library ─────────────────────────────
+
+/** The fields a legend row can be derived from — a device template or a placed device. */
+export interface LegendSource {
+  label?: string;
+  manufacturer?: string;
+  modelNumber?: string;
+  model?: string;
+  installCable?: string;
+  installNotes?: string;
+}
+
+/** Legend description line for a model: "Bose Professional DesignMax DM6SE | Kabel aus
+ *  Decke: 2x2,5 mm²". The cable spec comes from the library, so it reads the same on
+ *  every plan the model appears on. */
+export function legendDescriptionFor(src: LegendSource): string | undefined {
+  const name = [src.manufacturer, src.modelNumber ?? src.model].filter((v) => v && v.trim()).join(" ").trim() || src.label?.trim();
+  const cable = src.installCable?.trim();
+  if (!name && !cable) return undefined;
+  return [name, cable].filter(Boolean).join(" | ");
+}
+
+/** Installation note line for the legend's notes block: "DM6SE: Montage an der Decke …". */
+export function legendInstallNoteFor(src: LegendSource): string | undefined {
+  const note = src.installNotes?.trim();
+  if (!note) return undefined;
+  const key = (src.modelNumber ?? src.model ?? src.label ?? "").trim();
+  return key ? `${key}: ${note}` : note;
+}
+
+/** Append `line` to a legend's notes unless an identical line is already there. */
+export function appendLegendNote(notes: string[] | undefined, line: string | undefined): string[] | undefined {
+  if (!line) return notes;
+  const existing = (notes ?? []).map((n) => n.trim());
+  if (existing.includes(line.trim())) return notes;
+  return [...(notes ?? []).filter((n, i, arr) => !(n.trim() === "" && i === arr.length - 1)), line];
+}

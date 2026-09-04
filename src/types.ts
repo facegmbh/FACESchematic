@@ -291,6 +291,10 @@ export interface DeviceData {
   modelNumber?: string;
   /** Manufacturer spec sheet / product page URL — inherited from the source template but editable per-device */
   referenceUrl?: string;
+  /** Fixed installation cable spec, inherited from the template (see DeviceTemplate.installCable). */
+  installCable?: string;
+  /** Standing installation note, inherited from the template (see DeviceTemplate.installNotes). */
+  installNotes?: string;
   /** Device category (e.g. "video", "audio") — meaningful for custom templates and community submissions */
   category?: string;
   showAllPorts?: boolean;
@@ -616,6 +620,13 @@ export interface DeviceTemplate {
   modelNumber?: string;
   imageUrl?: string;
   referenceUrl?: string;
+  /** Fixed installation cable for this model, as it should read on a plan legend —
+   *  e.g. "Kabel aus Decke: 2x2,5 mm²" or "Ausschnitt: 170 mm". Copied onto placed
+   *  devices and pulled into the floorplan legend row of any group bound to the model. */
+  installCable?: string;
+  /** Standing installation note for this model ("Montage an der Decke; Kabeldurchführung
+   *  5 cm von der Wand"). Floorplan legends list it under their installation notes. */
+  installNotes?: string;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts

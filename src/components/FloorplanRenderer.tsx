@@ -11,6 +11,9 @@ import {
   layoutNote,
   legendHeightMm,
   legendRowImage,
+  legendDescriptionFor,
+  legendInstallNoteFor,
+  appendLegendNote,
   measureRealDistanceMm,
   rectFromDrag,
   MASK_MIN_SIZE_MM,
@@ -279,20 +282,30 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     }
     if (activeGroupId) return activeGroupId;
     if (!data) return null;
-    const modelLine = [data.manufacturer, data.modelNumber ?? data.model].filter(Boolean).join(" ");
-    // The template's product shot (community library today, Odoo product image later)
-    // becomes the legend row's picture without anyone uploading one.
+    // The library speaks for the model: manufacturer, model number, the fixed install
+    // cable and the standing install note come from the template (device values win when
+    // the planner overrode them), and the template's product shot becomes the row's picture.
     const template = data.templateId ? getTemplateById(data.templateId, customTemplates) : undefined;
+    const source = {
+      label: data.label,
+      manufacturer: data.manufacturer ?? template?.manufacturer,
+      modelNumber: data.modelNumber ?? template?.modelNumber,
+      model: data.model,
+      installCable: data.installCable ?? template?.installCable,
+      installNotes: data.installNotes ?? template?.installNotes,
+    };
     const id = addFloorplanGroup(page.id, {
       label: data.model ?? data.label,
-      description: modelLine || undefined,
+      description: legendDescriptionFor(source),
       templateId: data.templateId,
       imageUrl: template?.imageUrl || undefined,
-      imageCaption: data.modelNumber ?? undefined,
+      imageCaption: source.modelNumber ?? undefined,
     });
+    const note = legendInstallNoteFor(source);
+    if (note) updateFloorplanLegend(page.id, { notes: appendLegendNote(page.legend.notes, note) });
     onActiveGroupChange(id);
     return id;
-  }, [page.groups, page.id, activeGroupId, addFloorplanGroup, onActiveGroupChange, customTemplates]);
+  }, [page.groups, page.id, page.legend.notes, activeGroupId, addFloorplanGroup, updateFloorplanLegend, onActiveGroupChange, customTemplates]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     const nodeId = e.dataTransfer.getData(FLOORPLAN_DEVICE_MIME);

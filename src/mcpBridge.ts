@@ -104,8 +104,11 @@ import type {
 } from "./types";
 import { PAPER_SIZES } from "./printConfig";
 import {
+  appendLegendNote,
   drawingAreaMm,
   formatPlanDate,
+  legendDescriptionFor,
+  legendInstallNoteFor,
   nextDrawingFieldId,
   nextRevisionIndex,
   paperMmToRealMm,
@@ -1191,9 +1194,18 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const p = (params ?? {}) as unknown as AddFloorplanGroupParams;
     const page = requireFloorplan(p.pageId);
     const patch = groupPatchFromSpec({ ...p, label: requireText(p.label, "label") });
+    // A group bound to a library model inherits its legend line and install note, so the
+    // fixed cable spec written on the template reads the same on every plan.
+    const template = p.templateId ? getTemplateById(String(p.templateId), st().customTemplates) : undefined;
+    if (template) {
+      if (patch.description === undefined) patch.description = legendDescriptionFor(template);
+      if (patch.imageCaption === undefined && template.modelNumber) patch.imageCaption = template.modelNumber;
+    }
     const groupId = st().addFloorplanGroup(page.id, patch);
+    const note = template ? legendInstallNoteFor(template) : undefined;
+    if (note) st().updateFloorplanLegend(page.id, { notes: appendLegendNote(requireFloorplan(page.id).legend.notes, note) });
     const group = requireGroup(requireFloorplan(page.id), groupId);
-    return { groupId, label: group.label, color: group.color, shape: group.shape, description: group.description, labelPrefix: group.labelPrefix };
+    return { groupId, label: group.label, color: group.color, shape: group.shape, description: group.description, labelPrefix: group.labelPrefix, imageUrl: group.imageUrl, installNoteAdded: note ?? null };
   },
 
   update_floorplan_group: (params) => {
