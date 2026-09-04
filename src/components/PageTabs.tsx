@@ -20,6 +20,10 @@ export default function PageTabs() {
   const duplicateRackPage = useSchematicStore((s) => s.duplicateRackPage);
   const duplicatePrintSheetPage = useSchematicStore((s) => s.duplicatePrintSheetPage);
   const addPatchPanelPage = useSchematicStore((s) => s.addPatchPanelPage);
+  const addFloorplanPage = useSchematicStore((s) => s.addFloorplanPage);
+  const removeFloorplanPage = useSchematicStore((s) => s.removeFloorplanPage);
+  const renameFloorplanPage = useSchematicStore((s) => s.renameFloorplanPage);
+  const duplicateFloorplanPage = useSchematicStore((s) => s.duplicateFloorplanPage);
   const removePatchPanelPage = useSchematicStore((s) => s.removePatchPanelPage);
   const renamePatchPanelPage = useSchematicStore((s) => s.renamePatchPanelPage);
 
@@ -58,9 +62,10 @@ export default function PageTabs() {
     if (!page) { setEditingId(null); return; }
     if (page.type === "print-sheet") renamePrintSheetPage(editingId, editValue.trim());
     else if (page.type === "patch-panel") renamePatchPanelPage(editingId, editValue.trim());
+    else if (page.type === "floorplan") renameFloorplanPage(editingId, editValue.trim());
     else renameRackPage(editingId, editValue.trim());
     setEditingId(null);
-  }, [editingId, editValue, pages, renameRackPage, renamePrintSheetPage, renamePatchPanelPage]);
+  }, [editingId, editValue, pages, renameRackPage, renamePrintSheetPage, renamePatchPanelPage, renameFloorplanPage]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, pageId: string) => {
     e.preventDefault();
@@ -71,6 +76,7 @@ export default function PageTabs() {
   const menuPage = contextMenu ? pages.find((p) => p.id === contextMenu.pageId) : null;
   const isPrintSheet = menuPage?.type === "print-sheet";
   const isPatchBay = menuPage?.type === "patch-panel";
+  const isFloorplan = menuPage?.type === "floorplan";
 
   const handleRename = () => {
     if (!menuPage) return;
@@ -81,6 +87,7 @@ export default function PageTabs() {
     if (!menuPage || menuPage.type === "patch-panel") return;
     setContextMenu(null);
     if (menuPage.type === "print-sheet") duplicatePrintSheetPage(menuPage.id);
+    else if (menuPage.type === "floorplan") duplicateFloorplanPage(menuPage.id);
     else duplicateRackPage(menuPage.id);
   };
 
@@ -89,6 +96,10 @@ export default function PageTabs() {
     setContextMenu(null);
     if (menuPage.type === "print-sheet") {
       if (confirm(`Delete print sheet "${menuPage.label}"?`)) removePrintSheetPage(menuPage.id);
+    } else if (menuPage.type === "floorplan") {
+      if (confirm(`Delete floorplan "${menuPage.label}"? The underlay and every symbol on it are removed; devices stay on the schematic.`)) {
+        removeFloorplanPage(menuPage.id);
+      }
     } else if (menuPage.type === "patch-panel") {
       if (confirm(`Delete patch bay page "${menuPage.label}"? Panels and patch assignments are kept — only the tab is removed.`)) {
         removePatchPanelPage(menuPage.id);
@@ -100,7 +111,7 @@ export default function PageTabs() {
     }
   };
 
-  type TabVariant = "rack" | "print" | "patch";
+  type TabVariant = "rack" | "print" | "patch" | "floorplan";
   const tabClass = (isActive: boolean, variant: TabVariant = "rack") =>
     `px-3 py-1 rounded-t border border-b-0 whitespace-nowrap transition-colors ${
       isActive
@@ -108,12 +119,16 @@ export default function PageTabs() {
           ? "bg-white border-violet-400 font-semibold text-violet-900"
           : variant === "patch"
             ? "bg-white border-sky-400 font-semibold text-sky-900"
-            : "bg-white border-neutral-300 font-semibold text-neutral-900"
+            : variant === "floorplan"
+              ? "bg-white border-emerald-400 font-semibold text-emerald-900"
+              : "bg-white border-neutral-300 font-semibold text-neutral-900"
         : variant === "print"
           ? "bg-violet-50 border-transparent text-violet-600 hover:bg-violet-100"
           : variant === "patch"
             ? "bg-sky-50 border-transparent text-sky-600 hover:bg-sky-100"
-            : "bg-neutral-200 border-transparent text-neutral-600 hover:bg-neutral-50"
+            : variant === "floorplan"
+              ? "bg-emerald-50 border-transparent text-emerald-600 hover:bg-emerald-100"
+              : "bg-neutral-200 border-transparent text-neutral-600 hover:bg-neutral-50"
     }`;
 
   return (
@@ -131,7 +146,10 @@ export default function PageTabs() {
         {/* Page tabs */}
         {pages.map((page) => {
           const variant: TabVariant =
-            page.type === "print-sheet" ? "print" : page.type === "patch-panel" ? "patch" : "rack";
+            page.type === "print-sheet" ? "print"
+              : page.type === "patch-panel" ? "patch"
+                : page.type === "floorplan" ? "floorplan"
+                  : "rack";
           const isPrint = page.type === "print-sheet";
           return (
             <button
@@ -157,7 +175,7 @@ export default function PageTabs() {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <>{isPrint ? "📄 " : page.type === "patch-panel" ? "🔌 " : ""}{page.label}</>
+                <>{isPrint ? "📄 " : page.type === "patch-panel" ? "🔌 " : page.type === "floorplan" ? "🗺 " : ""}{page.label}</>
               )}
             </button>
           );
@@ -181,6 +199,15 @@ export default function PageTabs() {
           📄+
         </button>
 
+        {/* Add floorplan page */}
+        <button
+          className="px-2 py-1 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-100 rounded"
+          onClick={() => addFloorplanPage()}
+          title="Add floorplan page — an architect's drawing with device symbols"
+        >
+          🗺+
+        </button>
+
         {/* Add patch bay page (single instance — hidden once it exists) */}
         {!pages.some((p) => p.type === "patch-panel") && (
           <button
@@ -202,7 +229,7 @@ export default function PageTabs() {
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-neutral-400 border-b border-neutral-100 mb-1 truncate">
-            {isPrintSheet ? "📄 " : isPatchBay ? "🔌 " : ""}{menuPage.label}
+            {isPrintSheet ? "📄 " : isPatchBay ? "🔌 " : isFloorplan ? "🗺 " : ""}{menuPage.label}
           </div>
           <button
             className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer"

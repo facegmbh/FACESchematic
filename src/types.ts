@@ -848,7 +848,132 @@ export interface PatchPanelViewPage {
   type: "patch-panel";
 }
 
-export type SchematicPage = RackElevationPage | PrintSheetPage | PatchPanelViewPage;
+/** Shape a floorplan symbol is drawn with. Circles match the reference plans
+ *  (loudspeakers); the others exist so several device families stay distinguishable
+ *  on a monochrome print. */
+export type FloorplanSymbolShape = "circle" | "square" | "triangle" | "diamond";
+
+export const FLOORPLAN_SYMBOL_SHAPES: FloorplanSymbolShape[] = ["circle", "square", "triangle", "diamond"];
+
+/** The architect's drawing a floorplan page is built on. Both PDF pages and images
+ *  are stored rasterized as a data URL — the sheet only ever needs pixels, and this
+ *  keeps the schematic file self-contained (no external file references to lose).
+ *  `mmPerPx` is what calibration solves for; everything else is placement on paper. */
+export interface FloorplanUnderlay {
+  /** Rasterized drawing as a data URL (PNG or JPEG). */
+  src: string;
+  /** Where the raster came from — a PDF page or an image file. */
+  kind: "pdf" | "image";
+  /** Original file name, shown in the toolbar so the source stays traceable. */
+  sourceName?: string;
+  /** 1-based page number when kind === "pdf". */
+  pageNumber?: number;
+  /** Total pages of the source PDF, so the toolbar can offer a page switch. */
+  pageCount?: number;
+  naturalWidthPx: number;
+  naturalHeightPx: number;
+  /** Top-left corner on the sheet, in paper mm from the paper's top-left corner. */
+  positionMm: { x: number; y: number };
+  /** Rendered size on the sheet, in paper mm. */
+  sizeMm: { w: number; h: number };
+  /** 0–1; lets symbols stay readable over a dense architect's drawing. */
+  opacity?: number;
+  /** Locked underlays ignore drag/resize so symbols can be placed without nudging the plan. */
+  locked?: boolean;
+  /** Real-world mm per underlay pixel, set by the calibration tool. Undefined until the
+   *  user calibrates — measurements are unavailable rather than wrong. */
+  mmPerPx?: number;
+}
+
+/** One legend entry: a color + shape that a set of symbols on the plan share.
+ *  Groups are the unit the legend box is generated from. */
+export interface FloorplanSymbolGroup {
+  id: string;
+  /** Legend headline, e.g. "LS Gastro". */
+  label: string;
+  color: string;
+  shape: FloorplanSymbolShape;
+  /** Legend sub-line, e.g. "Bose DM6SE schwarz | Kabel: 2x2,5 mm²". */
+  description?: string;
+  /** Product shot for the legend, as a data URL. */
+  imageSrc?: string;
+  /** Caption next to the product shot, e.g. "DM6SE". */
+  imageCaption?: string;
+  /** Template this group stands for. Devices dropped on the plan land in the group
+   *  whose templateId matches, so the legend stays in sync with the schematic. */
+  templateId?: string;
+  /** Seed for auto-numbering: the next symbol is numbered from the group's last one,
+   *  falling back to this prefix (e.g. "SB." → "SB.1"). */
+  labelPrefix?: string;
+  /** Hide this group from the legend box without deleting it. */
+  hiddenInLegend?: boolean;
+}
+
+/** A symbol placed on the plan. Positions are paper mm — real-world distances follow
+ *  from the page's scale — and `deviceNodeId` shares the device by reference with the
+ *  schematic, exactly like a rack placement. */
+export interface FloorplanSymbol {
+  id: string;
+  groupId: string;
+  /** Links to the device's node ID in the schematic. Undefined for symbols that only
+   *  document a position (e.g. a planned outlet with no device yet). */
+  deviceNodeId?: string;
+  /** Symbol center on the sheet, in paper mm from the paper's top-left corner. */
+  positionMm: { x: number; y: number };
+  /** Displayed number, e.g. "4.1". Auto-assigned on placement, editable afterwards. */
+  label: string;
+  /** Label offset from the symbol center, in paper mm. */
+  labelOffsetMm?: { x: number; y: number };
+  /** Per-symbol note, surfaced in the floorplan schedule. */
+  notes?: string;
+}
+
+/** The "LEGENDE & MONTAGE" box: generated rows per symbol group plus free-text
+ *  installation notes. */
+export interface FloorplanLegendBox {
+  visible: boolean;
+  title: string;
+  /** Top-left corner on the sheet, in paper mm. */
+  positionMm: { x: number; y: number };
+  widthMm: number;
+  /** Show each group's product shot in the legend. */
+  showImages: boolean;
+  /** Only list groups that actually have symbols on this plan. */
+  onlyUsedGroups: boolean;
+  /** Heading above the free-text notes, e.g. "MONTAGEHINWEISE". */
+  notesTitle?: string;
+  /** One line per note. */
+  notes?: string[];
+}
+
+/** A scaled plan drawing: an architect's drawing as underlay, device symbols placed on
+ *  it, a generated legend, and the project title block. */
+export interface FloorplanPage {
+  id: string;
+  label: string;
+  type: "floorplan";
+  paperId: string;
+  orientation: "landscape" | "portrait";
+  customWidthIn?: number;
+  customHeightIn?: number;
+  /** Drawing scale denominator — 50 means 1:50, so 1 mm on paper is 50 mm in the building. */
+  scaleDenominator: number;
+  underlay?: FloorplanUnderlay;
+  groups: FloorplanSymbolGroup[];
+  symbols: FloorplanSymbol[];
+  legend: FloorplanLegendBox;
+  showTitleBlock: boolean;
+  /** Symbol diameter in paper mm — constant size, independent of the drawing scale. */
+  symbolSizeMm: number;
+  /** Label font size in paper mm (cap height), drawn next to each symbol. */
+  labelSizeMm: number;
+}
+
+export const DEFAULT_FLOORPLAN_SCALE = 50;
+export const DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM = 6;
+export const DEFAULT_FLOORPLAN_LABEL_SIZE_MM = 3.5;
+
+export type SchematicPage = RackElevationPage | PrintSheetPage | PatchPanelViewPage | FloorplanPage;
 
 /** Per-bundle metadata. Membership is on each connection's `data.bundleId`; this holds
  *  the label, an optional user-dragged trunk override, and collapse state. */

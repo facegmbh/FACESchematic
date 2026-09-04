@@ -35,6 +35,11 @@ import type {
   PatchHop,
   PatchSegmentOverride,
   PatchPanelViewPage,
+  FloorplanPage,
+  FloorplanUnderlay,
+  FloorplanSymbol,
+  FloorplanSymbolGroup,
+  FloorplanLegendBox,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -42,7 +47,21 @@ import { defaultStubPlacement, healStubPortAlignment, STUB_W_EST } from "./stubP
 import { getPortAbsolutePositions } from "./snapUtils";
 import { textStubSideForPort, textStubBoxPosition } from "./textStub";
 import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR, portSide } from "./types";
+import {
+  DEFAULT_FLOORPLAN_SCALE,
+  DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
+  DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
+} from "./types";
 import { pairKey } from "./roomDistance";
+import {
+  FLOORPLAN_GROUP_COLORS,
+  computeCalibration,
+  createDefaultLegend,
+  nextSymbolLabel,
+  renumberGroup,
+  rescaleUnderlayForScale,
+  underlayMmPerPx,
+} from "./floorplan";
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
 import { CURRENT_SCHEMA_VERSION, STUB_LABEL_Z_INDEX, migrateSchematic } from "./migrations";
@@ -802,6 +821,30 @@ interface SchematicState {
   updateViewport: (pageId: string, viewportId: string, patch: Partial<PrintViewport>) => void;
   removeViewport: (pageId: string, viewportId: string) => void;
   setPrintSheetPaper: (pageId: string, paperId: string, orientation: "landscape" | "portrait", customWidthIn?: number, customHeightIn?: number) => void;
+  // Floorplan page CRUD — a scaled plan drawing built on an architect's underlay
+  addFloorplanPage: (label?: string) => string;
+  removeFloorplanPage: (pageId: string) => void;
+  renameFloorplanPage: (pageId: string, label: string) => void;
+  duplicateFloorplanPage: (pageId: string) => string;
+  setFloorplanPaper: (pageId: string, paperId: string, orientation: "landscape" | "portrait", customWidthIn?: number, customHeightIn?: number) => void;
+  /** Change the drawing scale. The underlay is re-fitted so the plan keeps covering the
+   *  same real-world extent; symbols keep their paper positions. */
+  setFloorplanScale: (pageId: string, scaleDenominator: number) => void;
+  updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm">>) => void;
+  setFloorplanUnderlay: (pageId: string, underlay: FloorplanUnderlay | undefined) => void;
+  updateFloorplanUnderlay: (pageId: string, patch: Partial<FloorplanUnderlay>) => void;
+  /** Resize the underlay from a measured reference distance (see computeCalibration). */
+  calibrateFloorplan: (pageId: string, pickA: { x: number; y: number }, pickB: { x: number; y: number }, realDistanceMm: number) => boolean;
+  addFloorplanGroup: (pageId: string, group?: Partial<Omit<FloorplanSymbolGroup, "id">>) => string;
+  updateFloorplanGroup: (pageId: string, groupId: string, patch: Partial<Omit<FloorplanSymbolGroup, "id">>) => void;
+  /** Remove a group. Its symbols move to `reassignToGroupId`, or are deleted with it. */
+  removeFloorplanGroup: (pageId: string, groupId: string, reassignToGroupId?: string) => void;
+  addFloorplanSymbol: (pageId: string, symbol: Omit<FloorplanSymbol, "id" | "label"> & { label?: string }) => string;
+  updateFloorplanSymbol: (pageId: string, symbolId: string, patch: Partial<Omit<FloorplanSymbol, "id">>) => void;
+  removeFloorplanSymbol: (pageId: string, symbolId: string) => void;
+  /** Renumber a group's symbols sequentially from `startLabel`, in placement order. */
+  renumberFloorplanGroup: (pageId: string, groupId: string, startLabel: string) => void;
+  updateFloorplanLegend: (pageId: string, patch: Partial<FloorplanLegendBox>) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -867,6 +910,21 @@ function nextRackPageId(): string {
   return `rackpage-${++rackPageIdCounter}`;
 }
 
+let floorplanPageIdCounter = 0;
+function nextFloorplanPageId(): string {
+  return `floorplan-${++floorplanPageIdCounter}`;
+}
+
+let floorplanGroupIdCounter = 0;
+function nextFloorplanGroupId(): string {
+  return `fpgroup-${++floorplanGroupIdCounter}`;
+}
+
+let floorplanSymbolIdCounter = 0;
+function nextFloorplanSymbolId(): string {
+  return `fpsym-${++floorplanSymbolIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -895,6 +953,10 @@ function nextViewportId(): string {
 /** Apply fn to the rack-elevation page with the given id; leave other pages untouched. */
 function mapElevationPage(pages: SchematicPage[], pageId: string, fn: (p: RackElevationPage) => RackElevationPage): SchematicPage[] {
   return pages.map((p) => (p.id === pageId && p.type === "rack-elevation") ? fn(p) : p);
+}
+
+function mapFloorplanPage(pages: SchematicPage[], pageId: string, fn: (p: FloorplanPage) => FloorplanPage): SchematicPage[] {
+  return pages.map((p) => (p.id === pageId && p.type === "floorplan") ? fn(p) : p);
 }
 
 /** Remove patch hops that reference deleted panel nodes. Segment overrides are dropped
@@ -931,6 +993,19 @@ function syncRackCounters(pages: SchematicPage[]) {
       continue;
     }
     if (page.type === "patch-panel") continue;
+    if (page.type === "floorplan") {
+      const fm = page.id.match(/^floorplan-(\d+)$/);
+      if (fm) floorplanPageIdCounter = Math.max(floorplanPageIdCounter, Number(fm[1]));
+      for (const g of page.groups ?? []) {
+        const gm = g.id.match(/^fpgroup-(\d+)$/);
+        if (gm) floorplanGroupIdCounter = Math.max(floorplanGroupIdCounter, Number(gm[1]));
+      }
+      for (const sym of page.symbols ?? []) {
+        const sm2 = sym.id.match(/^fpsym-(\d+)$/);
+        if (sm2) floorplanSymbolIdCounter = Math.max(floorplanSymbolIdCounter, Number(sm2[1]));
+      }
+      continue;
+    }
     for (const rack of page.racks ?? []) {
       const rm = rack.id.match(/^rack-(\d+)$/);
       if (rm) rackIdCounter = Math.max(rackIdCounter, Number(rm[1]));
@@ -1904,9 +1979,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       (n) => n.type !== "text-stub" || survivingNodeIds.has((n.data as import("./types").TextStubData).anchorNodeId),
     );
 
-    // Cascade-remove rack placements for deleted devices; clear room links for deleted rooms
+    // Cascade-remove rack placements and floorplan symbols for deleted devices;
+    // clear room links for deleted rooms
     const pages = state.pages.length > 0 && selectedNodeIds.size > 0
       ? state.pages.map((page): SchematicPage => {
+          if (page.type === "floorplan") {
+            return { ...page, symbols: page.symbols.filter((sym) => !sym.deviceNodeId || !selectedNodeIds.has(sym.deviceNodeId)) };
+          }
           if (page.type !== "rack-elevation") return page;
           return {
             ...page,
@@ -1920,13 +1999,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         })
       : state.pages;
 
-    // Notify user if rack placements were removed
+    // Notify user if rack placements or floorplan symbols were removed
     if (pages !== state.pages) {
       const elevPages = (ps: SchematicPage[]) => ps.filter((p): p is RackElevationPage => p.type === "rack-elevation");
       const removedCount = elevPages(state.pages).reduce((sum, p) => sum + p.placements.length, 0) -
         elevPages(pages).reduce((sum, p) => sum + p.placements.length, 0);
       if (removedCount > 0) {
         get().addToast(`Removed ${removedCount} rack placement${removedCount > 1 ? "s" : ""} for deleted device${selectedNodeIds.size > 1 ? "s" : ""}`, "info");
+      }
+      const planPages = (ps: SchematicPage[]) => ps.filter((p): p is FloorplanPage => p.type === "floorplan");
+      const removedSymbols = planPages(state.pages).reduce((sum, p) => sum + p.symbols.length, 0) -
+        planPages(pages).reduce((sum, p) => sum + p.symbols.length, 0);
+      if (removedSymbols > 0) {
+        get().addToast(`Removed ${removedSymbols} floorplan symbol${removedSymbols > 1 ? "s" : ""} for deleted device${selectedNodeIds.size > 1 ? "s" : ""}`, "info");
       }
     }
 
@@ -5112,6 +5197,290 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ pages, activePage: newPageId, undoSize: undoStack.length, redoSize: 0 });
     get().saveToLocalStorage();
     return newPageId;
+  },
+
+  // ── Floorplan pages ───────────────────────────────────────────────
+
+  addFloorplanPage: (label) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanPageId();
+    const pageLabel = label ?? `Floorplan ${state.pages.filter((p) => p.type === "floorplan").length + 1}`;
+    // Plans are drawn on large sheets; A1 landscape matches the reference drawings and
+    // is what the title block was laid out for.
+    const base = {
+      paperId: "iso-a1",
+      orientation: "landscape" as const,
+    };
+    const page: FloorplanPage = {
+      id,
+      label: pageLabel,
+      type: "floorplan",
+      ...base,
+      scaleDenominator: DEFAULT_FLOORPLAN_SCALE,
+      groups: [],
+      symbols: [],
+      legend: createDefaultLegend(base),
+      showTitleBlock: true,
+      symbolSizeMm: DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
+      labelSizeMm: DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
+    };
+    set({ pages: [...state.pages, page], activePage: id, undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  removeFloorplanPage: (pageId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const pages = state.pages.filter((p) => p.id !== pageId);
+    const activePage = state.activePage === pageId ? "schematic" : state.activePage;
+    set({ pages, activePage, undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+  },
+
+  renameFloorplanPage: (pageId, label) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({ pages: state.pages.map((p) => p.id === pageId ? { ...p, label } : p), undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+  },
+
+  duplicateFloorplanPage: (pageId) => {
+    const state = get();
+    const src = state.pages.find((p) => p.id === pageId && p.type === "floorplan") as FloorplanPage | undefined;
+    if (!src) return "";
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const newPageId = nextFloorplanPageId();
+    // Remap group ids so the copy's symbols point at the copy's legend rows.
+    const groupIdMap = new Map<string, string>();
+    const groups = src.groups.map((g) => {
+      const nid = nextFloorplanGroupId();
+      groupIdMap.set(g.id, nid);
+      return { ...g, id: nid };
+    });
+    const newPage: FloorplanPage = {
+      ...src,
+      id: newPageId,
+      label: `${src.label} (copy)`,
+      groups,
+      symbols: src.symbols.map((sym) => ({
+        ...sym,
+        id: nextFloorplanSymbolId(),
+        groupId: groupIdMap.get(sym.groupId) ?? sym.groupId,
+      })),
+      legend: { ...src.legend, notes: [...(src.legend.notes ?? [])] },
+      underlay: src.underlay ? { ...src.underlay } : undefined,
+    };
+    const idx = state.pages.findIndex((p) => p.id === pageId);
+    const pages = [...state.pages.slice(0, idx + 1), newPage, ...state.pages.slice(idx + 1)];
+    set({ pages, activePage: newPageId, undoSize: undoStack.length, redoSize: 0 });
+    get().saveToLocalStorage();
+    return newPageId;
+  },
+
+  setFloorplanPaper: (pageId, paperId, orientation, customWidthIn, customHeightIn) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        paperId,
+        orientation,
+        customWidthIn: paperId === "custom" ? customWidthIn : undefined,
+        customHeightIn: paperId === "custom" ? customHeightIn : undefined,
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  setFloorplanScale: (pageId, scaleDenominator) => {
+    const state = get();
+    if (!(scaleDenominator > 0)) return;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        if (!p.underlay) return { ...p, scaleDenominator };
+        // A plan drawn at 1:50 covers half the paper at 1:100 — resize the underlay so
+        // the building keeps its real-world size, and carry the calibration along.
+        const fitted = rescaleUnderlayForScale(p.underlay, p.scaleDenominator, scaleDenominator);
+        const underlay: FloorplanUnderlay = { ...p.underlay, ...fitted };
+        return { ...p, scaleDenominator, underlay: { ...underlay, mmPerPx: underlayMmPerPx(underlay, scaleDenominator) } };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanPage: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, ...patch })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  setFloorplanUnderlay: (pageId, underlay) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        underlay: underlay ? { ...underlay, mmPerPx: underlayMmPerPx(underlay, p.scaleDenominator) } : undefined,
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanUnderlay: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        if (!p.underlay) return p;
+        const underlay: FloorplanUnderlay = { ...p.underlay, ...patch };
+        return { ...p, underlay: { ...underlay, mmPerPx: underlayMmPerPx(underlay, p.scaleDenominator) } };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  calibrateFloorplan: (pageId, pickA, pickB, realDistanceMm) => {
+    const state = get();
+    const page = state.pages.find((p) => p.id === pageId && p.type === "floorplan") as FloorplanPage | undefined;
+    if (!page?.underlay) return false;
+    const result = computeCalibration(page.underlay, pickA, pickB, realDistanceMm, page.scaleDenominator);
+    if (!result) return false;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => p.underlay ? ({
+        ...p,
+        underlay: { ...p.underlay, positionMm: result.positionMm, sizeMm: result.sizeMm, mmPerPx: result.mmPerPx },
+      }) : p),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return true;
+  },
+
+  addFloorplanGroup: (pageId, group) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanGroupId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        const newGroup: FloorplanSymbolGroup = {
+          id,
+          label: group?.label ?? `Group ${p.groups.length + 1}`,
+          color: group?.color ?? FLOORPLAN_GROUP_COLORS[p.groups.length % FLOORPLAN_GROUP_COLORS.length],
+          shape: group?.shape ?? "circle",
+          ...group,
+        };
+        return { ...p, groups: [...p.groups, newGroup] };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanGroup: (pageId, groupId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        groups: p.groups.map((g) => g.id === groupId ? { ...g, ...patch } : g),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanGroup: (pageId, groupId, reassignToGroupId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        groups: p.groups.filter((g) => g.id !== groupId),
+        symbols: reassignToGroupId
+          ? p.symbols.map((sym) => sym.groupId === groupId ? { ...sym, groupId: reassignToGroupId } : sym)
+          : p.symbols.filter((sym) => sym.groupId !== groupId),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanSymbol: (pageId, symbol) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanSymbolId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        const group = p.groups.find((g) => g.id === symbol.groupId);
+        const label = symbol.label
+          ?? nextSymbolLabel(p.symbols.filter((sym) => sym.groupId === symbol.groupId).map((sym) => sym.label), group?.labelPrefix);
+        return { ...p, symbols: [...p.symbols, { ...symbol, id, label }] };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanSymbol: (pageId, symbolId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        symbols: p.symbols.map((sym) => sym.id === symbolId ? { ...sym, ...patch } : sym),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanSymbol: (pageId, symbolId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, symbols: p.symbols.filter((sym) => sym.id !== symbolId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  renumberFloorplanGroup: (pageId, groupId, startLabel) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        const renumbered = new Map(
+          renumberGroup(p.symbols.filter((sym) => sym.groupId === groupId), startLabel).map((sym) => [sym.id, sym.label]),
+        );
+        return { ...p, symbols: p.symbols.map((sym) => renumbered.has(sym.id) ? { ...sym, label: renumbered.get(sym.id)! } : sym) };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanLegend: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, legend: { ...p.legend, ...patch } })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
   },
 
   addViewport: (pageId, viewportData) => {

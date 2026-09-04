@@ -137,6 +137,20 @@ Paper-based layout pages for composing rack viewports into a printable drawing.
 - **Inter Italic** font shipped (Latin subset, ~70 KB) so face labels render italic in PDF without depending on system fonts
 - **Pan and zoom** parity with the schematic — trackpad pinch, two-finger pan, middle-click drag, Space+drag
 
+### Floorplans
+
+Scaled plan drawings built on the architect's drawing — where the gear physically goes, as a counterpart to the signal flow.
+
+- **Architect's drawing as underlay** — import a **PDF** page (rendered in the browser) or an image (PNG/JPEG/WebP/SVG); multi-page PDFs get a page switcher, and the raster is stored in the project file so the plan travels with the schematic. DWG has no browser-side parser — plot it to PDF first
+- **Drawing scale** — 1:20 through 1:500 or any custom denominator; changing the scale re-fits the underlay so the building keeps its real-world size
+- **Calibration** — click two ends of a known dimension, type it in metres, and the underlay is resized so the plan measures true at the page scale; the toolbar then reports the drawing's mm-per-pixel resolution
+- **Symbol groups** — one legend row each: color, shape (circle / square / diamond / triangle), model + cable description, product image, and a number prefix that seeds auto-numbering
+- **Device-linked symbols** — drag a device from the sidebar onto the plan and the symbol stays bound to that schematic device; deleting the device clears its symbols the same way it clears rack placements
+- **Auto-numbering** that continues the group's series (4.1 → 4.2, SB.09 → SB.10), with per-symbol rename, draggable number labels, and group renumbering
+- **Generated legend box** — swatch, title, description and product shot per group, plus free-text installation notes; draggable, resizable, and optionally limited to the groups actually used
+- **Title block** — the same project block the print sheets use, in the sheet corner
+- **True-to-scale PDF export** — one PDF page per floorplan at real paper size, so a 100 % print can be measured off on site
+
 ### Pack List & Reports
 
 - **Pack list** — auto-generated bill of materials from your schematic (devices + cables)
@@ -184,6 +198,7 @@ Responses are JSON, cached for 5 minutes. See the [full API reference](https://d
 - **Print** — configurable paper size (Standard, ISO A0–A4, ANSI, Architectural, or custom dimensions), orientation, scale, title block
 - **PNG** — 4x resolution raster export
 - **SVG** — vector export
+- **Floorplan PDF** — every floorplan page at true paper size, underlay + symbols + legend + title block (File → Export → Export Floorplans)
 - **DXF** — AutoCAD R2000 (AC1015) export with canvas-faithful visuals and organized layer hierarchy (`EasySchematic-Devices`, `EasySchematic-Connections-SDI`, etc.) for Vectorworks, AutoCAD, and similar CAD tools
 - **Template import/export** — export and import user device templates as JSON
 - **Bulk device-template import** — import many templates at once from a JSON or CSV file (e.g. a vendor catalog dump) straight into your user-template library

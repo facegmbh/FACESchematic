@@ -527,6 +527,11 @@ export default function MenuBar() {
     await runPrintSheetExport();
   };
 
+  const doExportFloorplans = async () => {
+    const { runFloorplanExport } = await import("../floorplanExport");
+    await runFloorplanExport();
+  };
+
   // ─── Name editing ──────────────────────────────────────
 
   const commitName = () => {
@@ -665,6 +670,7 @@ export default function MenuBar() {
       { type: "item", label: "Export as PDF", onClick: doExportPdf },
       { type: "item", label: "Export Rack PDF", onClick: doExportRackPdf },
       { type: "item", label: "Export Print Sheets", onClick: doExportPrintSheets },
+      { type: "item", label: "Export Floorplans", onClick: doExportFloorplans },
       { type: "separator" },
       { type: "item", label: "Title Block...", onClick: () => setShowTitleBlockDialog(true) },
     ],

@@ -28,8 +28,9 @@ export interface PrintSheetPdfOptions {
   schematicDefaults?: import("./displayName").SchematicDisplayDefaults;
 }
 
-/** Draw the full title block grid (mirrors pdfExport.ts drawTitleBlock, but in mm units). */
-async function drawTitleBlockMm(
+/** Draw the full title block grid (mirrors pdfExport.ts drawTitleBlock, but in mm units).
+ *  Shared with the floorplan export so every sheet-style page prints the same block. */
+export async function drawTitleBlockMm(
   doc: jsPDF,
   pageWMm: number,
   pageHMm: number,

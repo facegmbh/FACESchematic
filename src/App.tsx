@@ -58,6 +58,7 @@ import PageTabs from "./components/PageTabs";
 import RackPage from "./components/RackPage";
 import PatchPanelPage from "./components/PatchPanelPage";
 import PrintSheetPage from "./components/PrintSheetPage";
+import FloorplanPage from "./components/FloorplanPage";
 import { computeSnap, enforceMinSpacing, detectOverlap, speculativeReparent, type GuideLine } from "./snapUtils";
 import type { ConnectionEdge, DeviceData, DeviceTemplate, SchematicFile, SchematicNode, StubLabelData, TextStubData } from "./types";
 import { findAdaptersForSignalBridge, findAdaptersForConnectorBridge, areConnectorsCompatible } from "./connectorTypes";
@@ -1925,6 +1926,8 @@ export default function App() {
         <PrintSheetPage />
       ) : activePgType === "patch-panel" ? (
         <PatchPanelPage />
+      ) : activePgType === "floorplan" ? (
+        <FloorplanPage />
       ) : (
         <RackPage />
       )}

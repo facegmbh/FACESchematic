@@ -14,6 +14,7 @@ const navItems = [
     { hash: "racks", label: "Rack Builder" },
     { hash: "patch-panels", label: "Patch Panels & Patch Bay" },
     { hash: "print-sheets", label: "Print Sheets" },
+    { hash: "floorplans", label: "Floorplans" },
     { hash: "notes", label: "Notes & Annotations" },
     { hash: "device-library", label: "Device Library" },
   ]},
