@@ -31,6 +31,14 @@ import {
   legendDescriptionFor,
   legendInstallNoteFor,
   appendLegendNote,
+  companyProfileLines,
+  companyContactLine,
+  planSymbolFor,
+  defaultSymbolShapeFor,
+  defaultSymbolColorFor,
+  glyphColorOn,
+  hasCompanyProfile,
+  legendCompanyHeightMm,
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
@@ -533,5 +541,66 @@ describe("legend text from the device library", () => {
     expect(appendLegendNote(["a"], "a")).toEqual(["a"]);
     expect(appendLegendNote(["a", ""], "b")).toEqual(["a", "b"]);
     expect(appendLegendNote(["a"], undefined)).toEqual(["a"]);
+  });
+});
+
+describe("company block", () => {
+  const face = { name: "FACE GmbH", addressLines: ["Musterstraße 1", "", "49074 Osnabrück"], phone: "0541 123", email: "info@face-gmbh.com", web: "www.face-gmbh.com", logo: "data:image/png;base64,x" };
+
+  it("knows when there is something to print", () => {
+    expect(hasCompanyProfile(null)).toBe(false);
+    expect(hasCompanyProfile({ name: " ", addressLines: [""] })).toBe(false);
+    expect(hasCompanyProfile({ name: "FACE", addressLines: [] })).toBe(true);
+    expect(hasCompanyProfile({ name: "", addressLines: [], logo: "data:x" })).toBe(true);
+  });
+
+  it("lists name, address and a joined contact line, skipping blanks", () => {
+    expect(companyContactLine(face)).toBe("Tel. 0541 123 · info@face-gmbh.com · www.face-gmbh.com");
+    expect(companyProfileLines(face)).toEqual(["FACE GmbH", "Musterstraße 1", "49074 Osnabrück", "Tel. 0541 123 · info@face-gmbh.com · www.face-gmbh.com"]);
+  });
+
+  it("adds its height to the legend unless switched off", () => {
+    const page = makePage({ groups: [{ id: "g1", label: "LS", color: "#e11d1d", shape: "circle" }] });
+    const rows = buildLegendRows(page);
+    const without = legendHeightMm(rows, page.legend);
+    expect(legendHeightMm(rows, page.legend, face)).toBeCloseTo(without + legendCompanyHeightMm(face));
+    expect(legendHeightMm(rows, { ...page.legend, showCompany: false }, face)).toBeCloseTo(without);
+    expect(legendHeightMm(rows, page.legend, { name: "", addressLines: [] })).toBeCloseTo(without);
+  });
+
+  it("resolves the company tokens in the drawing block", () => {
+    const ctx = {
+      titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "" },
+      page: { label: "EG", scaleDenominator: 50, paperId: "iso-a1", orientation: "portrait" as const },
+      projectName: "",
+      company: face,
+    };
+    expect(resolveFloorplanTokens("{{companyName}}", ctx)).toBe("FACE GmbH");
+    expect(resolveFloorplanTokens("{{companyAddress}}", ctx)).toBe("Musterstraße 1\n49074 Osnabrück");
+    expect(resolveFloorplanTokens("{{companyContact}}", { ...ctx, company: null })).toBe("");
+  });
+});
+
+describe("plan symbols from the library", () => {
+  it("takes the template's own symbol when it has one", () => {
+    const sym = planSymbolFor({ planSymbol: { shape: "square", color: "#1d4ed8", glyph: "Sub" }, deviceType: "speaker", templateId: "t1" });
+    expect(sym).toEqual({ shape: "square", color: "#1d4ed8", glyph: "Su" }); // glyph capped at two chars
+  });
+
+  it("derives shape from the device type and a stable color from the id otherwise", () => {
+    expect(defaultSymbolShapeFor("speaker")).toBe("circle");
+    expect(defaultSymbolShapeFor("subwoofer")).toBe("square");
+    expect(defaultSymbolShapeFor("microphone")).toBe("triangle");
+    expect(defaultSymbolShapeFor("display")).toBe("diamond");
+    expect(defaultSymbolColorFor("face-0015")).toBe(defaultSymbolColorFor("face-0015"));
+    const sym = planSymbolFor({ deviceType: "subwoofer", templateId: "face-0015" });
+    expect(sym.shape).toBe("square");
+    expect(sym.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(sym.glyph).toBeUndefined();
+  });
+
+  it("picks a readable glyph color", () => {
+    expect(glyphColorOn("#facc15")).toBe("#000000");
+    expect(glyphColorOn("#1d4ed8")).toBe("#ffffff");
   });
 });

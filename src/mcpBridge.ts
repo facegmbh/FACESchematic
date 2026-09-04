@@ -109,6 +109,7 @@ import {
   formatPlanDate,
   legendDescriptionFor,
   legendInstallNoteFor,
+  planSymbolFor,
   nextDrawingFieldId,
   nextRevisionIndex,
   paperMmToRealMm,
@@ -366,6 +367,7 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
   if (spec.labelPrefix !== undefined) patch.labelPrefix = String(spec.labelPrefix) || undefined;
   if (spec.templateId !== undefined) patch.templateId = String(spec.templateId) || undefined;
   if (spec.imageCaption !== undefined) patch.imageCaption = String(spec.imageCaption) || undefined;
+  if (spec.glyph !== undefined) patch.glyph = String(spec.glyph).trim().slice(0, 2) || undefined;
   if (spec.imageUrl !== undefined) {
     const url = String(spec.imageUrl).trim();
     if (url && !/^(https?:|data:image\/)/i.test(url)) throw new CommandError("imageUrl must be an https URL (or a data:image URL).");
@@ -402,7 +404,7 @@ function floorplanSummary(page: FloorplanPage) {
     groups: page.groups.map((g) => ({
       groupId: g.id, label: g.label, color: g.color, shape: g.shape, description: g.description,
       labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
-      imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption,
+      imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption, glyph: g.glyph,
       symbolCount: counts.get(g.id) ?? 0,
     })),
     symbols: page.symbols.map((sym) => ({
@@ -413,7 +415,10 @@ function floorplanSummary(page: FloorplanPage) {
       visible: page.legend.visible, title: page.legend.title, notesTitle: page.legend.notesTitle,
       notes: page.legend.notes ?? [], showImages: page.legend.showImages, onlyUsedGroups: page.legend.onlyUsedGroups,
       positionMm: page.legend.positionMm, widthMm: page.legend.widthMm, minHeightMm: page.legend.minHeightMm,
+      showCompany: page.legend.showCompany !== false,
     },
+    /** The planning company's block (Preferences → Company) prints at the foot of the legend when set. */
+    companyProfile: { present: Boolean(st().companyProfile.name.trim() || st().companyProfile.logo), name: st().companyProfile.name },
     /** White covers over the underlay, in paper mm. */
     masks: page.masks.map((m) => ({ maskId: m.id, xMm: m.positionMm.x, yMm: m.positionMm.y, wMm: m.sizeMm.w, hMm: m.sizeMm.h })),
     drawingBlock: {
@@ -1200,6 +1205,11 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     if (template) {
       if (patch.description === undefined) patch.description = legendDescriptionFor(template);
       if (patch.imageCaption === undefined && template.modelNumber) patch.imageCaption = template.modelNumber;
+      // The model's standing symbol, unless the caller chose shape/color/glyph explicitly.
+      const symbol = planSymbolFor({ ...template, templateId: template.id });
+      if (patch.shape === undefined) patch.shape = symbol.shape;
+      if (patch.color === undefined) patch.color = symbol.color;
+      if (patch.glyph === undefined && symbol.glyph) patch.glyph = symbol.glyph;
     }
     const groupId = st().addFloorplanGroup(page.id, patch);
     const note = template ? legendInstallNoteFor(template) : undefined;

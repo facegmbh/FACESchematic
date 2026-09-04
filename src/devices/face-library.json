@@ -5795,7 +5795,11 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "planSymbol": {
+      "shape": "circle",
+      "color": "#facc15"
+    }
   },
   {
     "id": "face-bose-spkr-0008-0000-0000-000000000000",
@@ -6241,7 +6245,11 @@
         "connectorType": "terminal-block",
         "section": "Speaker Loop"
       }
-    ]
+    ],
+    "planSymbol": {
+      "shape": "circle",
+      "color": "#e11d1d"
+    }
   },
   {
     "id": "face-bose-spkr-0016-0000-0000-000000000000",

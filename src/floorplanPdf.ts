@@ -7,7 +7,7 @@
  */
 
 import { jsPDF } from "jspdf";
-import type { FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
+import type { CompanyProfile, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
@@ -18,8 +18,14 @@ import {
   layoutNote,
   legendHeightMm,
   legendRowImage,
+  companyProfileLines,
+  hasCompanyProfile,
+  LEGEND_COMPANY_GAP_MM,
+  LEGEND_COMPANY_LINE_MM,
+  LEGEND_COMPANY_LOGO_MM,
   symbolLabelAnchor,
   symbolPolygon,
+  glyphColorOn,
   DB_DISCLAIMER_FONT_MM,
   DB_FIELD_LABEL_FONT_MM,
   DB_FIELD_VALUE_FONT_MM,
@@ -50,6 +56,7 @@ export interface FloorplanPdfOptions {
   nodes: SchematicNode[];
   schematicName: string;
   titleBlock?: TitleBlock;
+  companyProfile?: CompanyProfile;
 }
 
 const EMPTY_TITLE_BLOCK: TitleBlock = {
@@ -68,30 +75,38 @@ function imageFormat(dataUrl: string): "PNG" | "JPEG" {
   return dataUrl.startsWith("data:image/jpeg") || dataUrl.startsWith("data:image/jpg") ? "JPEG" : "PNG";
 }
 
-/** Draw one symbol at (cx, cy) in mm. */
-function drawSymbol(doc: jsPDF, group: FloorplanSymbolGroup, cx: number, cy: number, sizeMm: number) {
+/** Draw one symbol at (cx, cy) in mm, with the group's glyph inside when it has one. */
+function drawSymbol(doc: jsPDF, group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph">, cx: number, cy: number, sizeMm: number) {
   const [r, g, b] = hexToRgb(group.color);
   doc.setFillColor(r, g, b);
   doc.setDrawColor(60, 60, 60);
   doc.setLineWidth(0.2);
   if (group.shape === "circle") {
     doc.circle(cx, cy, sizeMm / 2, "FD");
-    return;
+  } else {
+    const pts = symbolPolygon(group.shape, sizeMm);
+    if (pts.length === 0) return;
+    // jsPDF wants relative segments from the starting point.
+    const deltas: [number, number][] = [];
+    for (let i = 1; i < pts.length; i++) {
+      deltas.push([pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y]);
+    }
+    doc.lines(deltas, cx + pts[0].x, cy + pts[0].y, [1, 1], "FD", true);
   }
-  const pts = symbolPolygon(group.shape, sizeMm);
-  if (pts.length === 0) return;
-  // jsPDF wants relative segments from the starting point.
-  const deltas: [number, number][] = [];
-  for (let i = 1; i < pts.length; i++) {
-    deltas.push([pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y]);
+  const glyph = group.glyph?.trim().slice(0, 2);
+  if (glyph) {
+    const [gr, gg, gb] = hexToRgb(glyphColorOn(group.color));
+    doc.setFont("Inter", "bold");
+    doc.setFontSize(sizeMm * (glyph.length > 1 ? 0.42 : 0.55) * MM_TO_PT);
+    doc.setTextColor(gr, gg, gb);
+    doc.text(glyph, cx, cy + (group.shape === "triangle" ? sizeMm * 0.12 : 0), { align: "center", baseline: "middle" });
   }
-  doc.lines(deltas, cx + pts[0].x, cy + pts[0].y, [1, 1], "FD", true);
 }
 
 /** Legend box: one row per symbol group, then the free-text installation notes. */
-function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>) {
+function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined) {
   const { positionMm: pos, widthMm } = page.legend;
-  const heightMm = legendHeightMm(rows, page.legend);
+  const heightMm = legendHeightMm(rows, page.legend, company);
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(68, 68, 68);
@@ -115,7 +130,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
   const rowH = page.legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   for (const row of rows) {
     const centerY = y + rowH / 2;
-    drawSymbol(doc, { id: row.groupId, label: row.label, color: row.color, shape: row.shape }, innerX + page.symbolSizeMm / 2, centerY, page.symbolSizeMm);
+    drawSymbol(doc, row, innerX + page.symbolSizeMm / 2, centerY, page.symbolSizeMm);
 
     const textX = innerX + page.symbolSizeMm + 2;
     const rowImage = images.get(row.groupId);
@@ -171,6 +186,34 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
       y += LEGEND_NOTE_LINE_MM;
     }
   }
+
+  // Company block: logo left, name/address/contact right.
+  if (page.legend.showCompany !== false && hasCompanyProfile(company)) {
+    y += LEGEND_COMPANY_GAP_MM;
+    doc.setDrawColor(153, 153, 153);
+    doc.setLineWidth(0.15);
+    doc.line(innerX, y, innerX + innerW, y);
+    y += 1;
+    let textX = innerX;
+    if (company.logo) {
+      try {
+        const img = new Image();
+        img.src = company.logo;
+        const aspect = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 2.5;
+        const logoW = Math.min(LEGEND_COMPANY_LOGO_MM * aspect, 40);
+        doc.addImage(company.logo, imageFormat(company.logo), innerX, y, logoW, LEGEND_COMPANY_LOGO_MM, undefined, "FAST");
+        textX = innerX + logoW + 3;
+      } catch {
+        // No logo is better than no plan.
+      }
+    }
+    companyProfileLines(company).forEach((line, i) => {
+      doc.setFont("Inter", i === 0 ? "bold" : "normal");
+      doc.setFontSize((i === 0 ? 2.8 : 2.4) * MM_TO_PT);
+      doc.setTextColor(34, 34, 34);
+      doc.text(line, textX, y + i * LEGEND_COMPANY_LINE_MM + LEGEND_COMPANY_LINE_MM / 2, { baseline: "middle", maxWidth: innerX + innerW - textX });
+    });
+  }
 }
 
 /** Draw the north arrow: filled left half, outlined right half, "N" below — matches NorthArrow in the view. */
@@ -199,9 +242,10 @@ function drawNorthArrow(doc: jsPDF, cx: number, cy: number, sizeMm: number, rota
 }
 
 /** The drawing block (Plankopf), walking the same layout the on-screen view renders. */
-function drawDrawingBlock(doc: jsPDF, page: FloorplanPage, titleBlock: TitleBlock, projectName: string) {
+function drawDrawingBlock(doc: jsPDF, page: FloorplanPage, titleBlock: TitleBlock, projectName: string, company: CompanyProfile | undefined) {
   const block = page.drawingBlock;
-  const layout = layoutDrawingBlock(block, { titleBlock, page, projectName }, { hasLogo: Boolean(titleBlock.logo) });
+  const logo = titleBlock.logo || company?.logo || "";
+  const layout = layoutDrawingBlock(block, { titleBlock, page, projectName, company }, { hasLogo: Boolean(logo) });
   const { positionMm: pos } = block;
   const innerX = pos.x + layout.innerXMm;
   const innerW = layout.innerWMm;
@@ -285,14 +329,14 @@ function drawDrawingBlock(doc: jsPDF, page: FloorplanPage, titleBlock: TitleBloc
       }
     } else if (section.kind === "footer") {
       const h = section.heightMm;
-      if (block.showLogo && titleBlock.logo) {
+      if (block.showLogo && logo) {
         try {
           const img = new Image();
-          img.src = titleBlock.logo;
+          img.src = logo;
           const aspect = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 3;
           const logoH = h - 6;
           const logoW = Math.min(logoH * aspect, innerW * 0.55);
-          doc.addImage(titleBlock.logo, imageFormat(titleBlock.logo), innerX, top + 3, logoW, logoH, undefined, "FAST");
+          doc.addImage(logo, imageFormat(logo), innerX, top + 3, logoW, logoH, undefined, "FAST");
         } catch {
           // A logo jsPDF can't decode is not worth failing the whole plan for.
         }
@@ -401,11 +445,11 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           if (data) images.set(row.groupId, data);
         }));
       }
-      drawLegend(doc, page, rows, notes, images);
+      drawLegend(doc, page, rows, notes, images, opts.companyProfile);
     }
 
     if (page.drawingBlock.visible) {
-      drawDrawingBlock(doc, page, opts.titleBlock ?? EMPTY_TITLE_BLOCK, opts.schematicName);
+      drawDrawingBlock(doc, page, opts.titleBlock ?? EMPTY_TITLE_BLOCK, opts.schematicName, opts.companyProfile);
     }
 
     if (page.showTitleBlock && opts.titleBlock) {

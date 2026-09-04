@@ -5,6 +5,11 @@ import { generatePortId, generateTemplateId, type ParseResult, type ParsedTempla
 
 /** Parse a JSON string into one or more device templates.
  * Accepts either a single object or an array. Unknown fields are stripped. */
+const PLAN_SHAPES = new Set(["circle", "square", "triangle", "diamond"]);
+function isPlanSymbol(v: unknown): v is { shape: "circle" | "square" | "triangle" | "diamond"; color?: unknown; glyph?: unknown } {
+  return !!v && typeof v === "object" && PLAN_SHAPES.has(String((v as { shape?: unknown }).shape));
+}
+
 export function parseJsonImport(raw: string): ParseResult {
   let json: unknown;
   try {
@@ -61,6 +66,7 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     referenceUrl: str(raw.referenceUrl),
     installCable: str(raw.installCable),
     installNotes: str(raw.installNotes),
+    planSymbol: isPlanSymbol(raw.planSymbol) ? { shape: raw.planSymbol.shape, color: str(raw.planSymbol.color), glyph: str(raw.planSymbol.glyph) } : undefined,
     color: str(raw.color),
     headerColor: str(raw.headerColor),
     imageUrl: str(raw.imageUrl),

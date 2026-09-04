@@ -18,5 +18,6 @@ export async function runFloorplanExport(): Promise<void> {
     nodes: state.nodes,
     schematicName: state.schematicName,
     titleBlock: state.titleBlock,
+    companyProfile: state.companyProfile,
   });
 }

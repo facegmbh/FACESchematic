@@ -295,6 +295,8 @@ export interface DeviceData {
   installCable?: string;
   /** Standing installation note, inherited from the template (see DeviceTemplate.installNotes). */
   installNotes?: string;
+  /** Floorplan symbol, inherited from the template (see DeviceTemplate.planSymbol). */
+  planSymbol?: PlanSymbolSpec;
   /** Device category (e.g. "video", "audio") — meaningful for custom templates and community submissions */
   category?: string;
   showAllPorts?: boolean;
@@ -627,6 +629,10 @@ export interface DeviceTemplate {
   /** Standing installation note for this model ("Montage an der Decke; Kabeldurchführung
    *  5 cm von der Wand"). Floorplan legends list it under their installation notes. */
   installNotes?: string;
+  /** How this model is drawn on a floorplan: shape, color and an optional glyph inside the
+   *  symbol. A group created for the model inherits it, so the same speaker looks the same
+   *  on every plan. Without one, the shape follows the device type and the color the id. */
+  planSymbol?: PlanSymbolSpec;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -866,6 +872,15 @@ export type FloorplanSymbolShape = "circle" | "square" | "triangle" | "diamond";
 
 export const FLOORPLAN_SYMBOL_SHAPES: FloorplanSymbolShape[] = ["circle", "square", "triangle", "diamond"];
 
+/** A model's standing floorplan symbol (see DeviceTemplate.planSymbol). */
+export interface PlanSymbolSpec {
+  shape: FloorplanSymbolShape;
+  /** #rrggbb; omitted → derived from the model's id so it stays stable. */
+  color?: string;
+  /** One or two characters drawn inside the symbol, e.g. "S" for a subwoofer. */
+  glyph?: string;
+}
+
 /** The architect's drawing a floorplan page is built on. Both PDF pages and images
  *  are stored rasterized as a data URL — the sheet only ever needs pixels, and this
  *  keeps the schematic file self-contained (no external file references to lose).
@@ -920,6 +935,8 @@ export interface FloorplanSymbolGroup {
   /** Seed for auto-numbering: the next symbol is numbered from the group's last one,
    *  falling back to this prefix (e.g. "SB." → "SB.1"). */
   labelPrefix?: string;
+  /** One or two characters drawn inside every symbol of the group, e.g. "S". */
+  glyph?: string;
   /** Hide this group from the legend box without deleting it. */
   hiddenInLegend?: boolean;
 }
@@ -962,7 +979,26 @@ export interface FloorplanLegendBox {
   /** Stretch the box below its content, in paper mm — lets the legend sit exactly over
    *  the architect's legend instead of leaving a strip of it showing. */
   minHeightMm?: number;
+  /** Print the company block (logo, name, address, contact) at the foot of the legend.
+   *  Undefined counts as on — the planner's company belongs on every plan. */
+  showCompany?: boolean;
 }
+
+/** Who drew the plan: the planning company's identity as it prints on every sheet —
+ *  logo, name, address, contact. An editor-level setting (it rarely changes), snapshotted
+ *  into each project file so a plan exported elsewhere still carries it. */
+export interface CompanyProfile {
+  name: string;
+  /** Street, postcode + town, … one entry per printed line. */
+  addressLines: string[];
+  phone?: string;
+  email?: string;
+  web?: string;
+  /** Logo as a data URL. */
+  logo?: string;
+}
+
+export const EMPTY_COMPANY_PROFILE: CompanyProfile = { name: "", addressLines: [] };
 
 /** A white cover laid over part of the underlay — hides the architect's own legend,
  *  title block or notes so the plan carries one set of boxes: ours. */
@@ -1048,6 +1084,7 @@ export interface FloorplanNote {
 export const FLOORPLAN_TOKENS = [
   "showName", "venue", "designer", "engineer", "date", "drawingTitle", "company", "revision",
   "scale", "sheetSize", "pageLabel", "projectName",
+  "companyName", "companyAddress", "companyContact",
 ] as const;
 export type FloorplanToken = (typeof FLOORPLAN_TOKENS)[number];
 
@@ -1207,6 +1244,8 @@ export interface SchematicFile {
   wrapDeviceLabels?: boolean;
   /** Project lifecycle status, surfaced in project metadata / file lists (#P2-007) */
   status?: ProjectStatus;
+  /** The planning company's identity block, snapshotted from the editor setting. */
+  companyProfile?: CompanyProfile;
 }
 
 export type ProjectStatus = "active" | "dormant" | "cancelled" | "pending";

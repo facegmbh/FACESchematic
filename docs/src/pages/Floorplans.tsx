@@ -94,6 +94,14 @@ export default function FloorplansPage() {
         its picture when it does not. The legend lists every group by default; switch it to
         &quot;only groups used on this plan&quot; for a shared legend across a sheet set.
       </p>
+      <p>
+        Where the symbol comes from: a group created from a library model takes the model&apos;s{" "}
+        <strong>plan symbol</strong> — shape, color and an optional one- or two-letter glyph inside
+        the symbol — set once in the device editor and saved with the template. A model without
+        one is drawn by type: loudspeakers round, subwoofers square, microphones as triangles, video
+        as diamonds, with a color derived from the model so it never changes between plans. Every
+        value stays editable on the group afterwards.
+      </p>
       <ul>
         <li><strong>Color</strong> — from the swatch row or any custom color.</li>
         <li><strong>Shape</strong> — circle, square, diamond or triangle, so groups stay apart on a monochrome print.</li>
@@ -136,6 +144,17 @@ export default function FloorplansPage() {
       <p>
         Switch it to list every group, not just the ones placed, when the plan is one sheet of a set
         that shares a legend.
+      </p>
+
+      <h3>Your company on every plan</h3>
+      <p>
+        <strong>Preferences → Company</strong> holds the planning company&apos;s identity: logo, name,
+        address lines, phone, e-mail, web. It is saved in the browser and snapshotted into each project
+        file, and prints at the foot of every floorplan legend without anyone typing it — switch it
+        off per legend if a sheet must not carry it. The drawing block falls back to the company logo
+        when the project title block has none, and its fields can use{" "}
+        <code>{"{{companyName}}"}</code>, <code>{"{{companyAddress}}"}</code> and{" "}
+        <code>{"{{companyContact}}"}</code>.
       </p>
 
       <h2>Taking things out of the architect&apos;s plan</h2>

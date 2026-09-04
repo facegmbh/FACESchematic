@@ -377,6 +377,8 @@ export interface FloorplanGroupSpec {
   /** Remote product image (https URL). Defaults to the template's image when templateId
    *  is given; the Odoo product image can be passed here later. */
   imageUrl?: string;
+  /** One or two characters drawn inside every symbol of the group, e.g. "S". */
+  glyph?: string;
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
 }

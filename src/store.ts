@@ -43,6 +43,7 @@ import type {
   FloorplanDrawingBlock,
   FloorplanNote,
   FloorplanMask,
+  CompanyProfile,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
 import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
@@ -129,6 +130,24 @@ const TEMPLATES_KEY = "easyschematic-custom-templates";
 const TEMPLATE_META_KEY = "easyschematic-custom-template-meta";
 const CATEGORY_ORDER_KEY = "easyschematic-category-order";
 const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
+const COMPANY_PROFILE_KEY = "easyschematic-company-profile";
+
+/** The planning company's identity is an editor setting: read it once at startup and
+ *  whenever a project without its own snapshot is loaded. */
+function loadCompanyProfile(): CompanyProfile {
+  try {
+    const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<CompanyProfile>;
+      return { name: parsed.name ?? "", addressLines: Array.isArray(parsed.addressLines) ? parsed.addressLines : [], phone: parsed.phone, email: parsed.email, web: parsed.web, logo: parsed.logo };
+    }
+  } catch { /* ignore */ }
+  return { name: "", addressLines: [] };
+}
+
+function hasProfileContent(p: CompanyProfile): boolean {
+  return Boolean(p.name.trim() || p.addressLines.some((l) => l.trim()) || p.logo || p.phone || p.email || p.web);
+}
 const MCP_ENABLED_KEY = "easyschematic-mcp-enabled";
 const MCP_TOKEN_KEY = "easyschematic-mcp-token";
 const MCP_PORT_KEY = "easyschematic-mcp-port";
@@ -598,6 +617,9 @@ interface SchematicState {
   // Title block
   titleBlock: TitleBlock;
   setTitleBlock: (tb: TitleBlock) => void;
+  /** The planning company's identity block — editor setting, snapshotted into the file. */
+  companyProfile: CompanyProfile;
+  setCompanyProfile: (profile: CompanyProfile) => void;
   titleBlockLayout: TitleBlockLayout;
   setTitleBlockLayout: (layout: TitleBlockLayout) => void;
 
@@ -1631,6 +1653,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   status: undefined,
   showLineJumps: true,
   showMinimap: loadShowMinimap(),
+  companyProfile: loadCompanyProfile(),
   mcpBridgeEnabled: loadMcpEnabled(),
   mcpBridgeToken: loadMcpToken(),
   mcpBridgePort: loadMcpPort(),
@@ -1903,6 +1926,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(template.referenceUrl ? { referenceUrl: template.referenceUrl } : {}),
         ...(template.installCable ? { installCable: template.installCable } : {}),
         ...(template.installNotes ? { installNotes: template.installNotes } : {}),
+        ...(template.planSymbol ? { planSymbol: { ...template.planSymbol } } : {}),
         ...(template.category ? { category: template.category } : {}),
         ...(template.powerDrawW != null ? { powerDrawW: template.powerDrawW } : {}),
         ...(template.powerCapacityW != null ? { powerCapacityW: template.powerCapacityW } : {}),
@@ -2963,6 +2987,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ...(newTemplate.referenceUrl ? { referenceUrl: newTemplate.referenceUrl } : {}),
       ...(newTemplate.installCable ? { installCable: newTemplate.installCable } : {}),
       ...(newTemplate.installNotes ? { installNotes: newTemplate.installNotes } : {}),
+      ...(newTemplate.planSymbol ? { planSymbol: { ...newTemplate.planSymbol } } : {}),
       ...(newTemplate.category ? { category: newTemplate.category } : {}),
       ...(newTemplate.powerDrawW != null ? { powerDrawW: newTemplate.powerDrawW } : {}),
       ...(newTemplate.powerCapacityW != null ? { powerCapacityW: newTemplate.powerCapacityW } : {}),
@@ -4039,6 +4064,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(template.referenceUrl ? { referenceUrl: template.referenceUrl } : {}),
         ...(template.installCable ? { installCable: template.installCable } : {}),
         ...(template.installNotes ? { installNotes: template.installNotes } : {}),
+        ...(template.planSymbol ? { planSymbol: { ...template.planSymbol } } : {}),
         ...(template.category ? { category: template.category } : {}),
         ...(hiddenPorts && hiddenPorts.length > 0 ? { hiddenPorts } : {}),
       },
@@ -4182,6 +4208,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
   setTitleBlock: (tb) => { set({ titleBlock: tb }); get().saveToLocalStorage(); },
+  setCompanyProfile: (profile) => {
+    // Editor-level so the next project starts with it, and into this project's autosave.
+    try { localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(profile)); } catch { /* ignore */ }
+    set({ companyProfile: profile });
+    get().saveToLocalStorage();
+  },
   setTitleBlockLayout: (layout) => { set({ titleBlockLayout: layout }); get().saveToLocalStorage(); },
 
   setSignalColors: (colors) => {
@@ -5741,6 +5773,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       printOriginOffsetX: state.printOriginOffsetX || undefined,
       printOriginOffsetY: state.printOriginOffsetY || undefined,
       titleBlock: state.titleBlock,
+      companyProfile: hasProfileContent(state.companyProfile) ? state.companyProfile : undefined,
       titleBlockLayout: state.titleBlockLayout,
       hiddenSignalTypes: state.hiddenSignalTypes ? state.hiddenSignalTypes.split(",") as SignalType[] : undefined,
       hiddenPinSignalTypes: state.hiddenPinSignalTypes ? state.hiddenPinSignalTypes.split(",") as SignalType[] : undefined,
@@ -5839,6 +5872,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             printOriginOffsetY: data.printOriginOffsetY ?? 0,
             titleBlock: data.titleBlock ?? { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
             titleBlockLayout: data.titleBlockLayout ?? createDefaultLayout(),
+      companyProfile: data.companyProfile ?? loadCompanyProfile(),
             hiddenSignalTypes: data.hiddenSignalTypes?.length ? [...data.hiddenSignalTypes].sort().join(",") : "",
             hiddenPinSignalTypes: data.hiddenPinSignalTypes?.length ? [...data.hiddenPinSignalTypes].sort().join(",") : "",
             hideUnconnectedPorts: data.hideUnconnectedPorts ?? false,
@@ -5923,6 +5957,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         printOriginOffsetY: data.printOriginOffsetY ?? 0,
         titleBlock: data.titleBlock ?? { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
         titleBlockLayout: data.titleBlockLayout ?? createDefaultLayout(),
+      companyProfile: data.companyProfile ?? loadCompanyProfile(),
         hiddenSignalTypes: data.hiddenSignalTypes?.length ? [...data.hiddenSignalTypes].sort().join(",") : "",
         hiddenPinSignalTypes: data.hiddenPinSignalTypes?.length ? [...data.hiddenPinSignalTypes].sort().join(",") : "",
         hideUnconnectedPorts: data.hideUnconnectedPorts ?? false,
@@ -6003,6 +6038,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       printOriginOffsetX: state.printOriginOffsetX || undefined,
       printOriginOffsetY: state.printOriginOffsetY || undefined,
       titleBlock: state.titleBlock,
+      companyProfile: hasProfileContent(state.companyProfile) ? state.companyProfile : undefined,
       titleBlockLayout: state.titleBlockLayout,
       hiddenSignalTypes: state.hiddenSignalTypes ? state.hiddenSignalTypes.split(",") as SignalType[] : undefined,
       hiddenPinSignalTypes: state.hiddenPinSignalTypes ? state.hiddenPinSignalTypes.split(",") as SignalType[] : undefined,
@@ -6106,6 +6142,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       printOriginOffsetY: data.printOriginOffsetY ?? 0,
       titleBlock: data.titleBlock ?? { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
       titleBlockLayout: data.titleBlockLayout ?? createDefaultLayout(),
+      companyProfile: data.companyProfile ?? loadCompanyProfile(),
       hiddenSignalTypes: data.hiddenSignalTypes?.length ? [...data.hiddenSignalTypes].sort().join(",") : "",
       hiddenPinSignalTypes: data.hiddenPinSignalTypes?.length ? [...data.hiddenPinSignalTypes].sort().join(",") : "",
       hideUnconnectedPorts: data.hideUnconnectedPorts ?? false,

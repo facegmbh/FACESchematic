@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import { resolveDeviceLabel } from "../displayName";
-import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, formatPlanDate, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
+import { FLOORPLAN_GROUP_COLORS, drawingAreaMm, formatPlanDate, glyphColorOn, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
 import { importLegendImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
@@ -18,15 +18,17 @@ interface Props {
 }
 
 /** Miniature of a group's symbol, used in the group list and the device list. */
-function SymbolChip({ group, size = 14 }: { group: Pick<FloorplanSymbolGroup, "color" | "shape">; size?: number }) {
+function SymbolChip({ group, size = 14 }: { group: Pick<FloorplanSymbolGroup, "color" | "shape" | "glyph">; size?: number }) {
   const common = { fill: group.color, stroke: "#00000055", strokeWidth: 0.5 };
   const r = size / 2;
+  const glyph = group.glyph?.trim().slice(0, 2);
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       {group.shape === "circle" && <circle cx={r} cy={r} r={r - 1} {...common} />}
       {group.shape === "square" && <rect x={1} y={1} width={size - 2} height={size - 2} {...common} />}
       {group.shape === "diamond" && <polygon points={`${r},1 ${size - 1},${r} ${r},${size - 1} 1,${r}`} {...common} />}
       {group.shape === "triangle" && <polygon points={`${r},1 ${size - 1},${size - 1} 1,${size - 1}`} {...common} />}
+      {glyph && <text x={r} y={r + 0.5} textAnchor="middle" dominantBaseline="central" fontSize={size * (glyph.length > 1 ? 0.42 : 0.55)} fontWeight={700} fill={glyphColorOn(group.color)}>{glyph}</text>}
     </svg>
   );
 }
@@ -185,6 +187,14 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
                     >
                       {FLOORPLAN_SYMBOL_SHAPES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <input
+                      className="w-10 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400 text-center"
+                      value={group.glyph ?? ""}
+                      maxLength={2}
+                      placeholder="S"
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { glyph: e.target.value.trim() || undefined })}
+                      title="Up to two characters drawn inside the symbol"
+                    />
                     <input
                       className="flex-1 min-w-0 border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"
                       value={group.labelPrefix ?? ""}
@@ -382,6 +392,14 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
             onChange={(e) => updateFloorplanLegend(page.id, { onlyUsedGroups: e.target.checked })}
           />
           Only groups used on this plan
+        </label>
+        <label className="flex items-center gap-1 text-neutral-600 cursor-pointer" title="Logo, name, address and contact from Preferences → Company">
+          <input
+            type="checkbox"
+            checked={page.legend.showCompany !== false}
+            onChange={(e) => updateFloorplanLegend(page.id, { showCompany: e.target.checked })}
+          />
+          Company block (logo, address)
         </label>
         <input
           className="w-full border border-neutral-200 rounded px-1.5 py-0.5 outline-none focus:border-emerald-400"

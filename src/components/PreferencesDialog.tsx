@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSchematicStore } from "../store";
+import { importLegendImage } from "../floorplanUnderlay";
+import type { CompanyProfile } from "../types";
 import { DEFAULT_SCROLL_CONFIG, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_PAGE_MODE, PROJECT_STATUS_LABELS } from "../types";
 import type { LabelCaseMode, PanMode, ProjectStatus, ScrollAction, ScrollConfig, StubLabelPageMode } from "../types";
 
@@ -71,11 +73,12 @@ function SensitivityRow({
   );
 }
 
-type PrefTab = "canvas" | "display" | "ai";
+type PrefTab = "canvas" | "display" | "company" | "ai";
 
 const TAB_LABELS: Record<PrefTab, string> = {
   canvas: "Canvas",
   display: "Display",
+  company: "Company",
   ai: "AI (Beta)",
 };
 
@@ -117,6 +120,10 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   const setMcpPort = useSchematicStore((s) => s.setMcpBridgePort);
   const mcpStatus = useSchematicStore((s) => s.mcpBridgeStatus);
   const mcpStatusDetail = useSchematicStore((s) => s.mcpBridgeStatusDetail);
+  const companyProfile = useSchematicStore((s) => s.companyProfile);
+  const setCompanyProfile = useSchematicStore((s) => s.setCompanyProfile);
+  const companyLogoInputRef = useRef<HTMLInputElement>(null);
+  const patchCompany = (patch: Partial<CompanyProfile>) => setCompanyProfile({ ...companyProfile, ...patch });
   const [autoRoutePref, setAutoRoutePref] = useState(
     () => localStorage.getItem(AUTOROUTE_PREF_KEY) ?? "ask",
   );
@@ -490,6 +497,95 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                   Symbol used for cost fields in reports. All entered costs are assumed to be in this currency — no conversion is applied.
                 </p>
+              </div>
+            </>
+          )}
+
+          {activeTab === "company" && (
+            <>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                  Planning company
+                </div>
+                <p className="text-[11px] text-[var(--color-text-muted)] mb-3 leading-relaxed">
+                  Printed at the foot of every floorplan legend and used for the drawing block&apos;s logo and the{" "}
+                  <code>{"{{companyName}}"}</code> / <code>{"{{companyAddress}}"}</code> / <code>{"{{companyContact}}"}</code> tokens.
+                  Saved in this browser and snapshotted into each project file.
+                </p>
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="text-xs text-[var(--color-text)]">Company name</span>
+                    <input
+                      className={`${selectClass} w-full mt-1`}
+                      value={companyProfile.name}
+                      onChange={(e) => patchCompany({ name: e.target.value })}
+                      placeholder="FACE GmbH"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-[var(--color-text)]">Address (one line per row)</span>
+                    <textarea
+                      className={`${selectClass} w-full mt-1 resize-y`}
+                      rows={3}
+                      value={companyProfile.addressLines.join("\n")}
+                      onChange={(e) => patchCompany({ addressLines: e.target.value.split("\n") })}
+                      placeholder={"Musterstraße 1\n12345 Musterstadt"}
+                    />
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="block">
+                      <span className="text-xs text-[var(--color-text)]">Phone</span>
+                      <input className={`${selectClass} w-full mt-1`} value={companyProfile.phone ?? ""} onChange={(e) => patchCompany({ phone: e.target.value || undefined })} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-[var(--color-text)]">E-mail</span>
+                      <input className={`${selectClass} w-full mt-1`} value={companyProfile.email ?? ""} onChange={(e) => patchCompany({ email: e.target.value || undefined })} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-[var(--color-text)]">Web</span>
+                      <input className={`${selectClass} w-full mt-1`} value={companyProfile.web ?? ""} onChange={(e) => patchCompany({ web: e.target.value || undefined })} />
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="w-28 h-14 border border-[var(--color-border)] rounded flex items-center justify-center bg-white overflow-hidden">
+                      {companyProfile.logo ? (
+                        <img src={companyProfile.logo} alt="Company logo" className="max-w-full max-h-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-[var(--color-text-muted)]">No logo</span>
+                      )}
+                    </div>
+                    <input
+                      ref={companyLogoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        try {
+                          patchCompany({ logo: await importLegendImage(file, 480) });
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : "Could not load that image.");
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => companyLogoInputRef.current?.click()}
+                      className="px-2 py-1 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] cursor-pointer"
+                    >
+                      {companyProfile.logo ? "Replace logo…" : "Upload logo…"}
+                    </button>
+                    {companyProfile.logo && (
+                      <button
+                        onClick={() => patchCompany({ logo: undefined })}
+                        className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </>
           )}

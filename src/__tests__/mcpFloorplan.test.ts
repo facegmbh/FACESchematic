@@ -314,3 +314,29 @@ describe("legend text from the library", () => {
     useSchematicStore.setState({ customTemplates: [] });
   });
 });
+
+describe("groups from a library model", () => {
+  it("inherits symbol, legend line and install note from the template", () => {
+    useSchematicStore.setState({
+      customTemplates: [{
+        id: "tpl-dm6se", deviceType: "speaker", label: "Bose DM6SE", manufacturer: "Bose", modelNumber: "DM6SE", ports: [],
+        installCable: "Kabel aus Decke: 2x2,5 mm²", installNotes: "Montage an der Decke.",
+        planSymbol: { shape: "circle", color: "#e11d1d", glyph: "L" },
+      }],
+    });
+    const { pageId } = handlers.create_floorplan({}) as Summary;
+    const g = handlers.add_floorplan_group({ pageId, label: "LS Gastro", templateId: "tpl-dm6se" }) as { shape: string; color: string; description: string; installNoteAdded: string | null };
+    expect(g.shape).toBe("circle");
+    expect(g.color).toBe("#e11d1d");
+    expect(g.description).toBe("Bose DM6SE | Kabel aus Decke: 2x2,5 mm²");
+    expect(g.installNoteAdded).toBe("DM6SE: Montage an der Decke.");
+    const page = floorplans()[0];
+    expect(page.groups[0].glyph).toBe("L");
+    expect(page.legend.notes).toContain("DM6SE: Montage an der Decke.");
+    // Explicit choices still win
+    const g2 = handlers.add_floorplan_group({ pageId, label: "Other", templateId: "tpl-dm6se", shape: "diamond", glyph: "X" }) as { shape: string };
+    expect(g2.shape).toBe("diamond");
+    expect(floorplans()[0].groups[1].glyph).toBe("X");
+    useSchematicStore.setState({ customTemplates: [] });
+  });
+});

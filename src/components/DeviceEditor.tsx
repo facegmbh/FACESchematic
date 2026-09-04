@@ -33,6 +33,8 @@ import TemplateSyncDialog from "./TemplateSyncDialog";
 import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from "../networkValidation";
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
+import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
+import type { FloorplanSymbolShape } from "../types";
 import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
@@ -166,6 +168,9 @@ export default function DeviceEditor() {
   const [referenceUrl, setReferenceUrl] = useState("");
   const [installCable, setInstallCable] = useState("");
   const [installNotes, setInstallNotes] = useState("");
+  const [planShape, setPlanShape] = useState<"" | FloorplanSymbolShape>("");
+  const [planColor, setPlanColor] = useState("");
+  const [planGlyph, setPlanGlyph] = useState("");
   const [category, setCategory] = useState("");
   const [color, setColor] = useState<string | undefined>(undefined);
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
@@ -267,6 +272,10 @@ export default function DeviceEditor() {
     setReferenceUrl(node.data.referenceUrl ?? tpl?.referenceUrl ?? "");
     setInstallCable(node.data.installCable ?? tpl?.installCable ?? "");
     setInstallNotes(node.data.installNotes ?? tpl?.installNotes ?? "");
+    const ps = node.data.planSymbol ?? tpl?.planSymbol;
+    setPlanShape(ps?.shape ?? "");
+    setPlanColor(ps?.color ?? "");
+    setPlanGlyph(ps?.glyph ?? "");
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
@@ -422,6 +431,7 @@ export default function DeviceEditor() {
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.templateId ? { templateId: existing.templateId } : {}),
       ...(existing?.templateVersion ? { templateVersion: existing.templateVersion } : {}),
@@ -471,7 +481,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -517,8 +527,11 @@ export default function DeviceEditor() {
         ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
         ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
         ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+        ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
+      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
         ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
         ...(powerDrawW != null ? { powerDrawW } : {}),
         ...(powerCapacityW != null ? { powerCapacityW } : {}),
@@ -552,7 +565,7 @@ export default function DeviceEditor() {
         ...overrides,
       };
     },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, auxiliaryData, searchTermsRaw],
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -658,6 +671,7 @@ export default function DeviceEditor() {
       ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
+      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.slots ? { slots: existing.slots } : {}),
       ...(existing?.slotFamily ? { slotFamily: existing.slotFamily } : {}),
@@ -704,7 +718,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, planShape, planColor, planGlyph, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -792,6 +806,9 @@ export default function DeviceEditor() {
       setReferenceUrl(tpl.referenceUrl ?? "");
       setInstallCable(tpl.installCable ?? "");
       setInstallNotes(tpl.installNotes ?? "");
+      setPlanShape(tpl.planSymbol?.shape ?? "");
+      setPlanColor(tpl.planSymbol?.color ?? "");
+      setPlanGlyph(tpl.planSymbol?.glyph ?? "");
       setCategory(tpl.category ?? "");
       setHostname(tpl.hostname ?? "");
       setPowerDrawW(tpl.powerDrawW);
@@ -1148,6 +1165,36 @@ export default function DeviceEditor() {
                 placeholder="e.g. Kabel aus Decke: 2x2,5 mm²"
                 title="Fixed installation cable for this model — appears in the floorplan legend row (saved with the template)"
               />
+            </Field>
+            <Field label="Plan symbol">
+              <div className="flex items-center gap-1.5">
+                <select
+                  className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                  value={planShape}
+                  onChange={(e) => setPlanShape(e.target.value as "" | FloorplanSymbolShape)}
+                  title="Shape on floorplans — empty follows the device type"
+                >
+                  <option value="">Auto (by type)</option>
+                  {FLOORPLAN_SYMBOL_SHAPES.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+                </select>
+                <input
+                  type="color"
+                  className="w-8 h-7 border border-[var(--color-border)] rounded cursor-pointer disabled:opacity-40"
+                  value={planColor || "#e11d1d"}
+                  disabled={!planShape}
+                  onChange={(e) => setPlanColor(e.target.value)}
+                  title="Symbol color on floorplans"
+                />
+                <input
+                  className="w-12 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 disabled:opacity-40"
+                  value={planGlyph}
+                  maxLength={2}
+                  disabled={!planShape}
+                  onChange={(e) => setPlanGlyph(e.target.value)}
+                  placeholder="S"
+                  title="Up to two characters drawn inside the symbol"
+                />
+              </div>
             </Field>
             <Field label="Install notes">
               <input

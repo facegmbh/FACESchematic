@@ -14,6 +14,13 @@ import {
   legendDescriptionFor,
   legendInstallNoteFor,
   appendLegendNote,
+  companyProfileLines,
+  hasCompanyProfile,
+  planSymbolFor,
+  glyphColorOn,
+  LEGEND_COMPANY_GAP_MM,
+  LEGEND_COMPANY_LINE_MM,
+  LEGEND_COMPANY_LOGO_MM,
   measureRealDistanceMm,
   rectFromDrag,
   MASK_MIN_SIZE_MM,
@@ -75,18 +82,33 @@ type DragState =
   | { kind: "mask-resize"; maskId: string; startClient: Vec2; startSize: { w: number; h: number } }
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
-/** One symbol drawn on the sheet: the shape plus its number. */
-function SymbolGlyph({ group, sizePx }: { group: FloorplanSymbolGroup; sizePx: number }) {
+/** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
+function SymbolGlyph({ group, sizePx }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph">; sizePx: number }) {
   const half = sizePx / 2;
   const pts = symbolPolygon(group.shape, sizePx)
     .map((p) => `${p.x + half},${p.y + half}`)
     .join(" ");
+  const glyph = group.glyph?.trim().slice(0, 2);
   return (
     <svg width={sizePx} height={sizePx} style={{ display: "block", overflow: "visible" }}>
       {group.shape === "circle" ? (
         <circle cx={half} cy={half} r={half} fill={group.color} stroke="#00000066" strokeWidth={Math.max(0.5, sizePx * 0.04)} />
       ) : (
         <polygon points={pts} fill={group.color} stroke="#00000066" strokeWidth={Math.max(0.5, sizePx * 0.04)} />
+      )}
+      {glyph && (
+        <text
+          x={half}
+          y={group.shape === "triangle" ? half + sizePx * 0.12 : half}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={sizePx * (glyph.length > 1 ? 0.42 : 0.55)}
+          fontWeight={700}
+          fill={glyphColorOn(group.color)}
+          style={{ pointerEvents: "none" }}
+        >
+          {glyph}
+        </text>
       )}
     </svg>
   );
@@ -113,6 +135,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
+  const companyProfile = useSchematicStore((s) => s.companyProfile);
   const schematicName = useSchematicStore((s) => s.schematicName);
   const calibrateFloorplan = useSchematicStore((s) => s.calibrateFloorplan);
   const addToast = useSchematicStore((s) => s.addToast);
@@ -294,7 +317,19 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       installCable: data.installCable ?? template?.installCable,
       installNotes: data.installNotes ?? template?.installNotes,
     };
+    // The model's standing symbol (library) beats the palette rotation, so the same
+    // speaker looks the same on every plan.
+    const symbol = planSymbolFor({
+      planSymbol: data.planSymbol ?? template?.planSymbol,
+      deviceType: data.deviceType ?? template?.deviceType,
+      templateId: data.templateId,
+      modelNumber: source.modelNumber,
+      label: data.label,
+    });
     const id = addFloorplanGroup(page.id, {
+      shape: symbol.shape,
+      color: symbol.color,
+      glyph: symbol.glyph,
       label: data.model ?? data.label,
       description: legendDescriptionFor(source),
       templateId: data.templateId,
@@ -552,11 +587,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   // ── Legend ───────────────────────────────────────────────────────
   const legendRows = useMemo(() => buildLegendRows(page), [page]);
   const legendNotes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
-  const legendH = legendHeightMm(legendRows, page.legend);
+  const showCompany = page.legend.showCompany !== false && hasCompanyProfile(companyProfile);
+  const legendH = legendHeightMm(legendRows, page.legend, companyProfile);
 
+  const blockLogo = titleBlock.logo || companyProfile.logo || undefined;
   const drawingLayout = useMemo(
-    () => layoutDrawingBlock(page.drawingBlock, { titleBlock, page, projectName: schematicName }, { hasLogo: Boolean(titleBlock.logo) }),
-    [page, titleBlock, schematicName],
+    () => layoutDrawingBlock(page.drawingBlock, { titleBlock, page, projectName: schematicName, company: companyProfile }, { hasLogo: Boolean(blockLogo) }),
+    [page, titleBlock, schematicName, companyProfile, blockLogo],
   );
 
   const selectedSymbolIds = selection.kind === "symbols" ? selection.ids : [];
@@ -858,7 +895,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     className="flex items-center"
                     style={{ height: mmToPx(page.legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM), gap: mmToPx(2) }}
                   >
-                    <SymbolGlyph group={{ ...row, id: row.groupId, label: row.label }} sizePx={mmToPx(page.symbolSizeMm)} />
+                    <SymbolGlyph group={row} sizePx={mmToPx(page.symbolSizeMm)} />
                     <div className="flex-1 min-w-0">
                       <div style={{ fontSize: mmToPx(3.2), fontWeight: 700 }}>{row.label}</div>
                       {row.description && (
@@ -887,6 +924,20 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                         {note}
                       </div>
                     ))}
+                  </div>
+                )}
+                {showCompany && (
+                  <div className="flex items-center" style={{ marginTop: mmToPx(LEGEND_COMPANY_GAP_MM), gap: mmToPx(3), borderTop: "0.5px solid #999", paddingTop: mmToPx(1) }}>
+                    {companyProfile.logo && (
+                      <img src={companyProfile.logo} alt="" style={{ height: mmToPx(LEGEND_COMPANY_LOGO_MM), maxWidth: mmToPx(40), objectFit: "contain" }} />
+                    )}
+                    <div className="min-w-0">
+                      {companyProfileLines(companyProfile).map((l, i) => (
+                        <div key={i} className="truncate" style={{ fontSize: mmToPx(i === 0 ? 2.8 : 2.4), fontWeight: i === 0 ? 700 : 400, height: mmToPx(LEGEND_COMPANY_LINE_MM), color: "#222" }}>
+                          {l}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1019,7 +1070,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 setDragging({ kind: "drawing", startClient: { x: e.clientX, y: e.clientY }, start: { ...page.drawingBlock.positionMm } });
               }}
             >
-              <FloorplanDrawingBlockView block={page.drawingBlock} layout={drawingLayout} mmToPx={mmToPx} logoSrc={titleBlock.logo || undefined} />
+              <FloorplanDrawingBlockView block={page.drawingBlock} layout={drawingLayout} mmToPx={mmToPx} logoSrc={blockLogo} />
               {selection.kind === "drawing" && (
                 <>
                   <div className="absolute inset-0 border-2 border-blue-500 pointer-events-none" />

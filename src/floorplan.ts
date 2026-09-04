@@ -13,6 +13,8 @@
 
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import type {
+  CompanyProfile,
+  PlanSymbolSpec,
   FloorplanDrawingBlock,
   FloorplanDrawingField,
   FloorplanLegendBox,
@@ -270,6 +272,7 @@ export interface LegendRow {
   imageSrc?: string;
   imageUrl?: string;
   imageCaption?: string;
+  glyph?: string;
   /** How many symbols of this group sit on the plan. */
   count: number;
 }
@@ -298,17 +301,19 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
       imageSrc: g.imageSrc,
       imageUrl: g.imageUrl,
       imageCaption: g.imageCaption,
+      glyph: g.glyph,
       count: counts.get(g.id) ?? 0,
     }));
 }
 
 /** Legend box height in mm for the given rows — the renderer and the PDF export share
  *  this so the on-screen box and the printed one agree. */
-export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox): number {
+export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null): number {
   const notes = (legend.notes ?? []).filter((n) => n.trim().length > 0);
   const rowH = legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   let h = LEGEND_TITLE_MM + rows.length * rowH + LEGEND_PAD_MM * 2;
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
+  if (legend.showCompany !== false && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
   // A stretched box covers what sits under it — the planner's way of hiding the
   // architect's legend without a separate cover.
   return Math.max(h, legend.minHeightMm ?? 0);
@@ -449,6 +454,8 @@ export interface FloorplanTokenContext {
   titleBlock: Pick<TitleBlock, "showName" | "venue" | "designer" | "engineer" | "date" | "drawingTitle" | "company" | "revision">;
   page: Pick<FloorplanPage, "label" | "scaleDenominator" | "paperId" | "orientation" | "customWidthIn" | "customHeightIn">;
   projectName: string;
+  /** The planning company, for the {{companyName}} / {{companyAddress}} / {{companyContact}} tokens. */
+  company?: CompanyProfile | null;
 }
 
 /** Replace every `{{token}}` (see FLOORPLAN_TOKENS) in `text`. Unknown tokens are
@@ -461,6 +468,9 @@ export function resolveFloorplanTokens(text: string, ctx: FloorplanTokenContext)
       case "sheetSize": return formatSheetSize(ctx.page);
       case "pageLabel": return ctx.page.label;
       case "projectName": return ctx.projectName;
+      case "companyName": return ctx.company?.name ?? "";
+      case "companyAddress": return (ctx.company?.addressLines ?? []).filter((l) => l.trim()).join("\n");
+      case "companyContact": return companyContactLine(ctx.company ?? null);
       case "showName": case "venue": case "designer": case "engineer":
       case "date": case "drawingTitle": case "company": case "revision":
         return ctx.titleBlock[token] ?? "";
@@ -827,4 +837,77 @@ export function appendLegendNote(notes: string[] | undefined, line: string | und
   const existing = (notes ?? []).map((n) => n.trim());
   if (existing.includes(line.trim())) return notes;
   return [...(notes ?? []).filter((n, i, arr) => !(n.trim() === "" && i === arr.length - 1)), line];
+}
+
+// ── Company block ────────────────────────────────────────────────────
+
+export const LEGEND_COMPANY_LOGO_MM = 12;
+export const LEGEND_COMPANY_LINE_MM = 3.2;
+export const LEGEND_COMPANY_GAP_MM = 3;
+
+/** A profile is worth printing once it has a name, a line of address or a logo. */
+export function hasCompanyProfile(p: CompanyProfile | null | undefined): p is CompanyProfile {
+  return Boolean(p && (p.name.trim() || p.addressLines.some((l) => l.trim()) || p.logo));
+}
+
+/** "Tel. 05… · mail@… · www.…" — the contact line under the address. */
+export function companyContactLine(p: CompanyProfile | null): string {
+  if (!p) return "";
+  return [p.phone && `Tel. ${p.phone.trim()}`, p.email?.trim(), p.web?.trim()].filter(Boolean).join(" · ");
+}
+
+/** Text lines of the company block: name first, then address, then the contact line. */
+export function companyProfileLines(p: CompanyProfile): string[] {
+  const lines = [p.name.trim(), ...p.addressLines.map((l) => l.trim()).filter(Boolean)];
+  const contact = companyContactLine(p);
+  if (contact) lines.push(contact);
+  return lines.filter(Boolean);
+}
+
+/** Height the company block adds to the legend. */
+export function legendCompanyHeightMm(p: CompanyProfile): number {
+  const textH = companyProfileLines(p).length * LEGEND_COMPANY_LINE_MM;
+  return LEGEND_COMPANY_GAP_MM + Math.max(p.logo ? LEGEND_COMPANY_LOGO_MM : 0, textH) + 1;
+}
+
+// ── Plan symbols from the device library ─────────────────────────────
+
+/** Shape by device type when a model has no symbol of its own: what installers expect to
+ *  read at a glance — round for loudspeakers, square for subs, triangles for microphones,
+ *  diamonds for video. */
+export function defaultSymbolShapeFor(deviceType: string | undefined): FloorplanSymbolGroup["shape"] {
+  const t = (deviceType ?? "").toLowerCase();
+  if (/sub/.test(t)) return "square";
+  if (/mic/.test(t)) return "triangle";
+  if (/display|monitor|projector|camera|screen|video/.test(t)) return "diamond";
+  return "circle";
+}
+
+/** Stable palette color for a seed (template id, model), so a model keeps its color across
+ *  plans without anyone assigning one. */
+export function defaultSymbolColorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return FLOORPLAN_GROUP_COLORS[h % FLOORPLAN_GROUP_COLORS.length];
+}
+
+/** The symbol a group for this model should start with: the library's own, completed
+ *  with derived defaults where it says nothing. */
+export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph"> {
+  const seed = src.templateId ?? src.id ?? src.modelNumber ?? src.label ?? "";
+  return {
+    shape: src.planSymbol?.shape ?? defaultSymbolShapeFor(src.deviceType),
+    color: src.planSymbol?.color ?? defaultSymbolColorFor(seed),
+    glyph: src.planSymbol?.glyph?.trim().slice(0, 2) || undefined,
+  };
+}
+
+/** Black or white, whichever reads on the given fill. */
+export function glyphColorOn(fillHex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(fillHex.trim());
+  if (!m) return "#000000";
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 140 ? "#000000" : "#ffffff";
 }
