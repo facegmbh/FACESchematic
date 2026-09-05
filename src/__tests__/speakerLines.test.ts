@@ -246,3 +246,13 @@ describe("live sync (rewiring follows the schematic)", () => {
     expect(wiringSignature(nodes, rewired)).not.toBe(wiringSignature(nodes, edges));
   });
 });
+
+describe("robustness", () => {
+  it("tolerates device nodes without a ports array and ports without labels", () => {
+    const bare = { id: "x", type: "device", position: { x: 0, y: 0 }, data: { label: "X", deviceType: "amplifier" } } as unknown as SchematicNode;
+    const odd = { ...amp("C", "C", 1), data: { ...(amp("C", "C", 1).data as DeviceData), ports: [{ id: "C-out1", direction: "output", signalType: "speaker-level" }] } } as unknown as SchematicNode;
+    expect(() => wiringSignature([...nodes, bare, odd], edges)).not.toThrow();
+    expect(() => amplifiersOnSchematic([...nodes, bare, odd], edges)).not.toThrow();
+    expect(channelShortLabel({ portLabel: undefined as unknown as string, channelIndex: 2 })).toBe("CH 2");
+  });
+});

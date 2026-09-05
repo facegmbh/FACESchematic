@@ -60,7 +60,7 @@ export function isSpeakerDevice(data: DeviceData | undefined): boolean {
 
 /** The amplifier's channel ports: speaker-level outputs, in port order. */
 export function speakerLevelOutputs(data: DeviceData): Port[] {
-  return data.ports.filter(isSpeakerLevelOutput);
+  return (data.ports ?? []).filter(isSpeakerLevelOutput);
 }
 
 /** A device drives lines when it is not itself a loudspeaker and has speaker-level outputs. */
@@ -136,7 +136,7 @@ export function amplifiersOnSchematic(nodes: SchematicNode[], edges: ConnectionE
           visited.add(hop.node);
           speakers.push(hop.node);
           // Continue over every other speaker-level port of this speaker (loop / link).
-          for (const p of d.ports) {
+          for (const p of d.ports ?? []) {
             if (p.signalType !== "speaker-level" || p.id === hop.port) continue;
             for (const n of byEnd.get(key(hop.node, p.id)) ?? []) if (!visited.has(n.node)) next.push(n);
           }
@@ -162,8 +162,9 @@ export function findChannelForSpeaker(amps: SchematicAmplifier[], speakerNodeId:
 
 /** Short channel name for tables: "Speaker Out 3" → "CH 3" when the port only carries the index; else the port label. */
 export function channelShortLabel(ch: Pick<AmplifierChannel, "portLabel" | "channelIndex">): string {
-  const m = /(\d+(?:\s*\/\s*\d+)?)\s*$/.exec(ch.portLabel.trim());
-  return m ? `CH ${m[1].replace(/\s+/g, "")}` : ch.portLabel;
+  const label = (ch.portLabel ?? "").trim();
+  const m = /(\d+(?:\s*\/\s*\d+)?)\s*$/.exec(label);
+  return m ? `CH ${m[1].replace(/\s+/g, "")}` : label || `CH ${ch.channelIndex}`;
 }
 
 // ── Plan lines ───────────────────────────────────────────────────────
@@ -429,8 +430,8 @@ export function wiringSignature(nodes: SchematicNode[], edges: ConnectionEdge[])
   const parts: string[] = [];
   for (const n of nodes) {
     if (n.type !== "device") continue;
-    const d = n.data as DeviceData;
-    parts.push(`${n.id}:${d.deviceType}:${d.ports.filter((p) => p.signalType === "speaker-level").map((p) => p.id).join(",")}`);
+    const d = n.data as DeviceData | undefined;
+    parts.push(`${n.id}:${d?.deviceType ?? ""}:${(d?.ports ?? []).filter((p) => p.signalType === "speaker-level").map((p) => p.id).join(",")}`);
   }
   for (const e of edges) {
     if (e.data?.signalType !== "speaker-level") continue;

@@ -7480,6 +7480,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 let lastWiringSignature: string | null = null;
 useSchematicStore.subscribe((state, prev) => {
   if (state.nodes === prev.nodes && state.edges === prev.edges) return;
+  try {
+    followSchematicWiring(state);
+  } catch (err) {
+    // A convenience must never take a store update down with it.
+    console.warn("[floorplan] live line sync skipped:", err);
+  }
+});
+
+function followSchematicWiring(state: SchematicState) {
   const signature = wiringSignature(state.nodes, state.edges);
   if (signature === lastWiringSignature) return;
   const first = lastWiringSignature === null;
@@ -7497,4 +7506,4 @@ useSchematicStore.subscribe((state, prev) => {
   if (!changed) return;
   useSchematicStore.setState({ pages });
   useSchematicStore.getState().saveToLocalStorage();
-});
+}

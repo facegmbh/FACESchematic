@@ -148,7 +148,7 @@ export default function FloorplanSidebar({ page, activeGroupId, onActiveGroupCha
   const notesText = (page.legend.notes ?? []).join("\n");
 
   return (
-    <div className="w-64 bg-white border-r border-neutral-300 flex flex-col text-xs overflow-y-auto" data-print-hide data-allow-scroll>
+    <div className="w-64 shrink-0 bg-white border-r border-neutral-300 flex flex-col text-xs overflow-y-auto" data-print-hide data-allow-scroll>
       {/* ── Symbol groups ─────────────────────────────────────────── */}
       <div className="px-2 pt-2 pb-1 flex items-center justify-between">
         <span className="font-semibold text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>
