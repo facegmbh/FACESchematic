@@ -3,8 +3,12 @@ import { useSchematicStore, loadSpecLookup } from "../store";
 import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
-import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
-import type { CoverageShape, DoriLevel, DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
+import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
+  DEFAULT_HEATMAP, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
+  WALL_MATERIAL_LABELS, WALL_THICKNESS_PRESETS_MM, WIFI_BANDS, WIFI_BAND_LABELS } from "../types";
+import { collectAccessPoints, coveredFraction, computeHeatmap, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
+import { getTemplateById as lookupTemplate } from "../templateApi";
+import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
@@ -68,6 +72,12 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
+  const addFloorplanWall = useSchematicStore((s) => s.addFloorplanWall);
+  const updateFloorplanWall = useSchematicStore((s) => s.updateFloorplanWall);
+  const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
+  const updateFloorplanHeatmap = useSchematicStore((s) => s.updateFloorplanHeatmap);
+  const wallMaterials = useSchematicStore((s) => s.wallMaterials);
+  const setWallMaterial = useSchematicStore((s) => s.setWallMaterial);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanGroup = useSchematicStore((s) => s.removeFloorplanGroup);
@@ -1375,6 +1385,304 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               </label>
             </div>
           ))}
+        </div>
+      </details>
+
+      {/* ── Walls ─────────────────────────────────────────────────── */}
+      <details className="border-t border-[var(--color-border)]" open={(page.walls ?? []).length > 0}>
+        <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          {t("Walls ({n})", { n: (page.walls ?? []).length })}
+        </summary>
+        <div className="px-2 pb-3 flex flex-col gap-1">
+          <p className="text-[var(--color-text-muted)] leading-snug">
+            {t("Trace the building with")} <strong>▨ {t("Wall")}</strong>{" "}
+            {t("on the sheet: click along a run, click the last point again or press Enter to finish. Thickness is real millimetres — it is what the Wi-Fi heatmap attenuates through.")}
+          </p>
+          {(page.walls ?? []).map((w, i) => {
+            const isSel = selection.kind === "wall" && selection.id === w.id;
+            const band = (page.heatmap ?? DEFAULT_HEATMAP).band;
+            return (
+              <div
+                key={w.id}
+                className={`border rounded px-1.5 py-1 flex flex-col gap-1 cursor-pointer ${isSel ? "border-sky-400 bg-sky-500/10" : "border-[var(--color-border)] hover:border-sky-300"}`}
+                onClick={() => onSelectionChange({ kind: "wall", id: w.id })}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="shrink-0 rounded-sm" style={{ width: 12, height: 12, background: WALL_MATERIAL_COLORS[w.material] }} />
+                  <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">
+                    {w.label || t("Wall {n}", { n: i + 1 })}
+                    <span className="text-[var(--color-text-muted)]">
+                      {" · "}{w.thicknessMm} mm · {wallAttenuationDb(w, band, wallMaterials).toFixed(1)} dB
+                    </span>
+                  </span>
+                  <button
+                    className={`px-1 shrink-0 ${w.hidden ? "text-amber-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                    onClick={(e) => { e.stopPropagation(); updateFloorplanWall(page.id, w.id, { hidden: w.hidden ? undefined : true }); }}
+                    title={w.hidden ? t("Hidden — and not counted in the heatmap") : t("Hide it, and take it out of the heatmap")}
+                  >
+                    {w.hidden ? "🚫" : "👁"}
+                  </button>
+                  <button
+                    className="px-1 shrink-0 text-[var(--color-text-muted)] hover:text-red-600"
+                    onClick={(e) => { e.stopPropagation(); removeFloorplanWall(page.id, w.id); if (isSel) onSelectionChange({ kind: "none" }); }}
+                    title={t("Remove wall")}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {isSel && (
+                  <>
+                    <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" onClick={(e) => e.stopPropagation()}>
+                      <span className="shrink-0 w-12">{t("Build-up")}</span>
+                      <select
+                        className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={w.material}
+                        onChange={(e) => updateFloorplanWall(page.id, w.id, { material: e.target.value as WallMaterial })}
+                      >
+                        {WALL_MATERIALS.map((m) => <option key={m} value={m}>{t(WALL_MATERIAL_LABELS[m])}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" onClick={(e) => e.stopPropagation()}>
+                      <span className="shrink-0 w-12">{t("Thickness")}</span>
+                      <input
+                        type="number"
+                        step={5}
+                        min={5}
+                        max={1000}
+                        className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={w.thicknessMm}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v) && v > 0) updateFloorplanWall(page.id, w.id, { thicknessMm: v });
+                        }}
+                      />
+                      <span style={{ fontSize: 10 }}>mm</span>
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {WALL_THICKNESS_PRESETS_MM.map((mm) => (
+                        <button
+                          key={mm}
+                          className={`px-1.5 py-0.5 rounded border ${w.thicknessMm === mm ? "border-sky-400 text-sky-700 bg-sky-500/10" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-sky-300"}`}
+                          onClick={() => updateFloorplanWall(page.id, w.id, { thicknessMm: mm })}
+                          style={{ fontSize: 10 }}
+                        >
+                          {mm}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" onClick={(e) => e.stopPropagation()}>
+                      <span className="shrink-0 w-12">{t("Label")}</span>
+                      <input
+                        className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={w.label ?? ""}
+                        placeholder={t("e.g. Brandwand")}
+                        onChange={(e) => updateFloorplanWall(page.id, w.id, { label: e.target.value || undefined })}
+                      />
+                    </label>
+                    <button
+                      className="self-start px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-sky-400 hover:text-sky-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Same run, offset a little, so a parallel wall is two clicks
+                        // rather than a re-trace.
+                        const id = addFloorplanWall(page.id, {
+                          ...w,
+                          pointsMm: w.pointsMm.map((pt) => ({ x: pt.x + 5, y: pt.y + 5 })),
+                          label: undefined,
+                        });
+                        onSelectionChange({ kind: "wall", id });
+                      }}
+                      title={t("Copy this run, offset slightly — for the parallel wall of a corridor.")}
+                    >
+                      {t("Duplicate")}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </details>
+
+      {/* ── Wi-Fi heatmap ─────────────────────────────────────────── */}
+      {(() => {
+        const cfg = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
+        const patchMap = (p: Parameters<typeof updateFloorplanHeatmap>[1]) => updateFloorplanHeatmap(page.id, p);
+        const aps = collectAccessPoints(page, cfg.band, (nodeId) => {
+          const node = nodes.find((n) => n.id === nodeId);
+          const templateId = (node?.data as DeviceData | undefined)?.templateId;
+          return templateId ? lookupTemplate(templateId, customTemplates)?.wifi : undefined;
+        });
+        // The covered share is the number a hand-over is argued with, so it is computed
+        // on a coarse grid here rather than reusing the drawn one — it has to be cheap
+        // enough to sit in a panel that re-renders on every edit.
+        const share = cfg.visible && aps.length > 0
+          ? coveredFraction(
+              computeHeatmap(aps, drawingAreaMm(page), {
+                band: cfg.band,
+                scaleDenominator: page.scaleDenominator,
+                pathLossExponent: cfg.pathLossExponent,
+                walls: page.walls ?? [],
+                materialOverrides: wallMaterials,
+                pitchMm: Math.max(6, cfg.gridMm * 3),
+              }),
+              -67,
+            )
+          : null;
+        return (
+          <details className="border-t border-[var(--color-border)]" open={cfg.visible}>
+            <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+              {t("Wi-Fi heatmap")}
+            </summary>
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                <input type="checkbox" checked={cfg.visible} onChange={(e) => patchMap({ visible: e.target.checked })} />
+                <span>{t("Show the heatmap")}</span>
+              </label>
+
+              {aps.length === 0 ? (
+                <p className="text-[var(--color-text-muted)] leading-snug">
+                  {t("No access points on this plan yet. Drop a UniFi AP from the device library onto the sheet — a symbol linked to a model with a radio counts as one.")}
+                </p>
+              ) : (
+                <p className="text-[var(--color-text-muted)] leading-snug">
+                  {t("{n} access point(s) on this band", { n: aps.length })}
+                  {share !== null && <> · <strong>{Math.round(share * 100)}%</strong> {t("at -67 dBm or better")}</>}
+                </p>
+              )}
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-12">{t("Band")}</span>
+                <select
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={cfg.band}
+                  onChange={(e) => patchMap({ band: e.target.value as typeof cfg.band })}
+                >
+                  {WIFI_BANDS.map((b) => <option key={b} value={b}>{WIFI_BAND_LABELS[b]}</option>)}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("2.0 is free space, 2.6 a normal office, 3.2 a subdivided or cluttered building. After the walls this is the biggest lever on the result.")}>
+                <span className="shrink-0 w-12">{t("Building")}</span>
+                <input
+                  type="range"
+                  min={2}
+                  max={4}
+                  step={0.1}
+                  value={cfg.pathLossExponent}
+                  onChange={(e) => patchMap({ pathLossExponent: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>n = {cfg.pathLossExponent.toFixed(1)}</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-12">{t("Opacity")}</span>
+                <input
+                  type="range"
+                  min={0.15}
+                  max={0.9}
+                  step={0.05}
+                  value={cfg.opacity}
+                  onChange={(e) => patchMap({ opacity: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{Math.round(cfg.opacity * 100)}%</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Sample spacing on paper. Finer is smoother and slower — the cost is samples × access points × walls.")}>
+                <span className="shrink-0 w-12">{t("Detail")}</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  step={0.5}
+                  value={cfg.gridMm}
+                  onChange={(e) => patchMap({ gridMm: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{cfg.gridMm} mm</span>
+              </label>
+
+              {/* Legend: the -67 dBm step is the one installations are signed off against. */}
+              <div className="flex flex-col gap-0.5 pt-0.5">
+                {RSSI_STEPS.map((step) => (
+                  <div key={step.label} className="flex items-center gap-1.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                    <span className="shrink-0 rounded-sm" style={{ width: 14, height: 10, background: step.color }} />
+                    <span>{step.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {aps.length > 0 && (
+                <p className="text-[var(--color-text-muted)] leading-snug" style={{ fontSize: 10 }}>
+                  {t("Free-run reach to -67 dBm, no walls:")}{" "}
+                  {rangeForRssiM(aps[0], -67, cfg.band, cfg.pathLossExponent).toFixed(0)} m
+                </p>
+              )}
+            </div>
+          </details>
+        );
+      })()}
+
+      {/* ── Measured wall attenuation ─────────────────────────────── */}
+      <details className="border-t border-[var(--color-border)]">
+        <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          {t("Calibrate materials")}
+        </summary>
+        <div className="px-2 pb-3 flex flex-col gap-1">
+          <p className="text-[var(--color-text-muted)] leading-snug">
+            {t("The starting values are calibrated to typical measurements. Once you have measured on site, correct them here — a wall costs a fixed amount plus a share per centimetre, and the figures travel in the project file.")}
+          </p>
+          {WALL_MATERIALS.map((m) => {
+            const spec = wallMaterials?.[m] ?? WALL_MATERIAL_DEFAULTS[m];
+            const overridden = Boolean(wallMaterials?.[m]);
+            return (
+              <div key={m} className={`border rounded px-1.5 py-1 flex flex-col gap-1 ${overridden ? "border-sky-400 bg-sky-500/5" : "border-[var(--color-border)]"}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="shrink-0 rounded-sm" style={{ width: 10, height: 10, background: WALL_MATERIAL_COLORS[m] }} />
+                  <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">{t(WALL_MATERIAL_LABELS[m])}</span>
+                  {overridden && (
+                    <button
+                      className="px-1 shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                      onClick={() => setWallMaterial(m, undefined)}
+                      title={t("Back to the calibrated default")}
+                      style={{ fontSize: 10 }}
+                    >
+                      {t("Reset")}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                  <span className="shrink-0">{t("fixed")}</span>
+                  <input
+                    type="number"
+                    step={0.5}
+                    min={0}
+                    className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={spec.baseDb}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v >= 0) setWallMaterial(m, { ...spec, baseDb: v });
+                    }}
+                  />
+                  <span className="shrink-0">dB +</span>
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={0}
+                    className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={spec.perCmDb}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v >= 0) setWallMaterial(m, { ...spec, perCmDb: v });
+                    }}
+                  />
+                  <span className="shrink-0">{t("dB/cm")}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </details>
 

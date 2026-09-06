@@ -7,7 +7,10 @@
  */
 
 import { jsPDF } from "jspdf";
-import type { CompanyProfile, ConnectionEdge, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
+import type { CompanyProfile, ConnectionEdge, DeviceData, DeviceTemplate, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock, WallMaterial, WallMaterialSpec } from "./types";
+import { DEFAULT_HEATMAP, WALL_MATERIAL_COLORS } from "./types";
+import { collectAccessPoints, computeHeatmap, rssiColor } from "./wifiCoverage";
+import { getTemplateById } from "./templateApi";
 import { buildLegendLineRows, computeLineLoads, legendShowsLines, type LegendLineRow, type LoadSpecLookup } from "./speakerLines";
 import { t } from "./i18n";
 import { getPaperSize } from "./printConfig";
@@ -16,6 +19,8 @@ import { drawTitleBlockMm } from "./printSheetPdf";
 import { fetchImageAsDataUrl, rotatedImageDataUrl } from "./floorplanUnderlay";
 import {
   buildLegendRows,
+  realMmToPaperMm,
+  drawingAreaMm,
   coverageColor,
   coverageLabelAnchorMm,
   coveragePointsOnSheet,
@@ -74,6 +79,10 @@ const LEGEND_TITLE_RULE_MM = LEGEND_TITLE_MM - 3;
 export interface FloorplanPdfOptions {
   pages: SchematicPage[];
   nodes: SchematicNode[];
+  /** Custom templates, so an access point's radio spec can be resolved for the heatmap. */
+  customTemplates?: DeviceTemplate[];
+  /** Measured wall attenuation overriding the calibrated defaults (store.wallMaterials). */
+  wallMaterials?: Partial<Record<WallMaterial, WallMaterialSpec>>;
   /** Connections — needed for the legend's line table (amplifier channel per line). */
   edges?: ConnectionEdge[];
   /** Where speaker / amplifier load specs come from (store.loadSpecLookup). */
@@ -91,6 +100,34 @@ const EMPTY_TITLE_BLOCK: TitleBlock = {
 /** Fill/stroke alpha. jsPDF exposes it only through a graphics state, and older builds
  *  have neither setGState nor GState — there a faded shape prints opaque rather than not
  *  at all, which is the safer of the two failures on a plan. */
+/** The heatmap grid as a PNG data URL, one pixel per sample. Returns undefined where
+ *  there is no canvas (a non-browser export), and the plan then prints without it. */
+function heatmapPng(grid: { cols: number; rows: number; dbm: Float32Array }): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const canvas = document.createElement("canvas");
+  canvas.width = grid.cols;
+  canvas.height = grid.rows;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return undefined;
+  const img = ctx.createImageData(grid.cols, grid.rows);
+  for (let i = 0; i < grid.dbm.length; i++) {
+    const dbm = grid.dbm[i];
+    const o = i * 4;
+    if (!Number.isFinite(dbm)) continue; // transparent: no access point reaches here
+    const [r, g, b] = hexToRgb(rssiColor(dbm));
+    img.data[o] = r;
+    img.data[o + 1] = g;
+    img.data[o + 2] = b;
+    img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  try {
+    return canvas.toDataURL("image/png");
+  } catch {
+    return undefined;
+  }
+}
+
 function setPdfAlpha(doc: jsPDF, alpha: number): void {
   const gs = (doc as unknown as { setGState?: (s: unknown) => void; GState?: (o: unknown) => unknown });
   if (gs.setGState && gs.GState) gs.setGState(gs.GState({ opacity: alpha }));
@@ -555,6 +592,58 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       }
       if (opacity < 1) setPdfAlpha(doc, 1);
     }
+
+    // Wi-Fi heatmap: rasterised to a canvas and placed as one image. Drawing a rectangle
+    // per sample would put tens of thousands of paths in the file for a picture that is a
+    // raster by nature.
+    const heat = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
+    if (heat.visible) {
+      const aps = collectAccessPoints(page, heat.band, (nodeId) => {
+        const node = opts.nodes.find((n) => n.id === nodeId);
+        const templateId = (node?.data as DeviceData | undefined)?.templateId;
+        return templateId ? getTemplateById(templateId, opts.customTemplates ?? [])?.wifi : undefined;
+      });
+      if (aps.length > 0) {
+        const area = drawingAreaMm(page);
+        const grid = computeHeatmap(aps, area, {
+          band: heat.band,
+          scaleDenominator: page.scaleDenominator,
+          pathLossExponent: heat.pathLossExponent,
+          walls: page.walls ?? [],
+          materialOverrides: opts.wallMaterials,
+          pitchMm: heat.gridMm,
+        });
+        const png = heatmapPng(grid);
+        if (png) {
+          const alpha = Math.min(1, Math.max(0, heat.opacity));
+          if (alpha < 1) setPdfAlpha(doc, alpha);
+          try {
+            doc.addImage(png, "PNG", area.x, area.y, (grid.cols - 1) * grid.pitchMm, (grid.rows - 1) * grid.pitchMm, undefined, "FAST");
+          } catch {
+            // A heatmap that will not embed is left out rather than taking the plan down.
+          }
+          if (alpha < 1) setPdfAlpha(doc, 1);
+        }
+      }
+    }
+
+    // Walls at their real thickness — the same conversion the screen uses, so the printed
+    // plan measures the way the editor showed it.
+    for (const wall of page.walls ?? []) {
+      if (wall.hidden || wall.pointsMm.length < 2) continue;
+      const [wr, wg, wb] = hexToRgb(WALL_MATERIAL_COLORS[wall.material]);
+      doc.setDrawColor(wr, wg, wb);
+      doc.setLineWidth(Math.max(0.2, realMmToPaperMm(wall.thicknessMm, page.scaleDenominator)));
+      doc.setLineJoin("miter");
+      doc.setLineCap("butt");
+      const deltas: [number, number][] = [];
+      for (let k = 1; k < wall.pointsMm.length; k++) {
+        deltas.push([wall.pointsMm[k].x - wall.pointsMm[k - 1].x, wall.pointsMm[k].y - wall.pointsMm[k - 1].y]);
+      }
+      doc.lines(deltas, wall.pointsMm[0].x, wall.pointsMm[0].y, [1, 1], "S", false);
+    }
+    doc.setLineJoin("round");
+    doc.setLineCap("round");
 
     // Detection and surveillance areas, over the plan but under the symbols — the same
     // order the screen draws them in, so the print is what was judged on screen.

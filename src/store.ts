@@ -44,6 +44,10 @@ import type {
   FloorplanNote,
   FloorplanMask,
   FloorplanCoverage,
+  FloorplanWall,
+  FloorplanHeatmap,
+  WallMaterial,
+  WallMaterialSpec,
   CompanyProfile,
   FloorplanKind,
   FloorplanLine,
@@ -56,6 +60,7 @@ import { textStubSideForPort, textStubBoxPosition } from "./textStub";
 import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR, portSide } from "./types";
 import {
   DEFAULT_FLOORPLAN_SCALE,
+  DEFAULT_HEATMAP,
   DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
   DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
   DEFAULT_FLOORPLAN_NOTE_FONT_MM,
@@ -636,6 +641,10 @@ interface SchematicState {
 
   // Signal colors & line styles
   signalColors: Partial<Record<SignalType, string>> | undefined;
+  /** Measured wall attenuation, overriding the calibrated defaults. Travels in the
+   *  project file, because a calibration belongs to the company, not the machine. */
+  wallMaterials: Partial<Record<WallMaterial, WallMaterialSpec>> | undefined;
+  setWallMaterial: (material: WallMaterial, spec: WallMaterialSpec | undefined) => void;
   setSignalColors: (colors: Record<SignalType, string>) => void;
   signalLineStyles: Partial<Record<SignalType, LineStyle>> | undefined;
   setSignalLineStyles: (styles: Partial<Record<SignalType, LineStyle>>) => void;
@@ -908,6 +917,10 @@ interface SchematicState {
   addFloorplanCoverage: (pageId: string, coverage: Omit<FloorplanCoverage, "id">) => string;
   updateFloorplanCoverage: (pageId: string, coverageId: string, patch: Partial<Omit<FloorplanCoverage, "id">>) => void;
   removeFloorplanCoverage: (pageId: string, coverageId: string) => void;
+  addFloorplanWall: (pageId: string, wall: Omit<FloorplanWall, "id">) => string;
+  updateFloorplanWall: (pageId: string, wallId: string, patch: Partial<Omit<FloorplanWall, "id">>) => void;
+  removeFloorplanWall: (pageId: string, wallId: string) => void;
+  updateFloorplanHeatmap: (pageId: string, patch: Partial<FloorplanHeatmap>) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -1021,6 +1034,11 @@ function nextFloorplanCoverageId(): string {
   return `fpcov-${++floorplanCoverageIdCounter}`;
 }
 
+let floorplanWallIdCounter = 0;
+function nextFloorplanWallId(): string {
+  return `fpwall-${++floorplanWallIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -1111,6 +1129,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const coverage of page.coverages ?? []) {
         const cm2 = coverage.id.match(/^fpcov-(\d+)$/);
         if (cm2) floorplanCoverageIdCounter = Math.max(floorplanCoverageIdCounter, Number(cm2[1]));
+      }
+      for (const wall of page.walls ?? []) {
+        const wm2 = wall.id.match(/^fpwall-(\d+)$/);
+        if (wm2) floorplanWallIdCounter = Math.max(floorplanWallIdCounter, Number(wm2[1]));
       }
       continue;
     }
@@ -1689,6 +1711,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
   titleBlockLayout: createDefaultLayout(),
   signalColors: undefined,
+  wallMaterials: undefined,
   signalLineStyles: undefined,
   reportLayouts: {},
   reportHiddenColumns: {},
@@ -5373,6 +5396,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       notes: [],
       masks: [],
       coverages: [],
+      walls: [],
       // The movable drawing block carries the title-block data; the fixed corner block
       // would only duplicate it.
       showTitleBlock: false,
@@ -5538,6 +5562,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       label: `${src.label} (copy)`,
       groups,
       symbols,
+      walls: (src.walls ?? []).map((w) => ({ ...w, id: nextFloorplanWallId(), pointsMm: w.pointsMm.map((pt) => ({ ...pt })) })),
       coverages: (src.coverages ?? []).map((c) => ({
         ...c,
         id: nextFloorplanCoverageId(),
@@ -5917,6 +5942,63 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  addFloorplanWall: (pageId, wall) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanWallId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, walls: [...(p.walls ?? []), { ...wall, id }] })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanWall: (pageId, wallId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        walls: (p.walls ?? []).map((w) => w.id === wallId ? { ...w, ...patch } : w),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanWall: (pageId, wallId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, walls: (p.walls ?? []).filter((w) => w.id !== wallId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  setWallMaterial: (material, spec) => {
+    const state = get();
+    const next = { ...(state.wallMaterials ?? {}) };
+    // Clearing an override falls back to the calibrated default rather than to zero.
+    if (spec) next[material] = spec; else delete next[material];
+    set({ wallMaterials: Object.keys(next).length ? next : undefined });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanHeatmap: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        heatmap: { ...DEFAULT_HEATMAP, ...(p.heatmap ?? {}), ...patch },
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
   addViewport: (pageId, viewportData) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
@@ -6039,6 +6121,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       edges: state.edges.map(({ zIndex: _, selected: _s, ...rest }) => rest) as ConnectionEdge[],
       ownedGear: state.ownedGear.length > 0 ? state.ownedGear : undefined,
       signalColors: state.signalColors,
+      wallMaterials: state.wallMaterials,
       signalLineStyles: state.signalLineStyles,
       printPaperId: state.printPaperId,
       printOrientation: state.printOrientation,
@@ -6137,6 +6220,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             schematicName: data.name ?? "Demo Schematic",
             ownedGear: data.ownedGear ?? [],
             signalColors: data.signalColors,
+            wallMaterials: data.wallMaterials,
             signalLineStyles: data.signalLineStyles,
             printPaperId: data.printPaperId ?? "arch-d",
             printOrientation: data.printOrientation ?? "landscape",
@@ -6223,6 +6307,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         schematicName: data.name ?? "Untitled Schematic",
         ownedGear: data.ownedGear ?? [],
         signalColors: data.signalColors,
+        wallMaterials: data.wallMaterials,
         signalLineStyles: data.signalLineStyles,
         printPaperId: data.printPaperId ?? "arch-d",
         printOrientation: data.printOrientation ?? "landscape",
@@ -6312,6 +6397,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       customTemplates: state.customTemplates.length > 0 ? state.customTemplates : undefined,
       ownedGear: state.ownedGear.length > 0 ? state.ownedGear : undefined,
       signalColors: state.signalColors,
+      wallMaterials: state.wallMaterials,
       signalLineStyles: state.signalLineStyles,
       printPaperId: state.printPaperId,
       printOrientation: state.printOrientation,
@@ -6415,6 +6501,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       isDemo: false,
       ownedGear: data.ownedGear ?? [],
       signalColors: data.signalColors,
+      wallMaterials: data.wallMaterials,
       signalLineStyles: data.signalLineStyles,
       printPaperId: data.printPaperId ?? "arch-d",
       printOrientation: data.printOrientation ?? "landscape",

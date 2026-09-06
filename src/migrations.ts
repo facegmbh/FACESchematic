@@ -17,7 +17,7 @@ import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 46;
+export const CURRENT_SCHEMA_VERSION = 47;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -661,6 +661,18 @@ const migrations: Record<number, Migration> = {
       );
     }
     data.version = 46;
+    return data;
+  },
+  46: (data) => {
+    // v46 → v47: floorplan pages gain walls (build-up + thickness) and the Wi-Fi heatmap
+    // they attenuate. Existing plans have no walls and the heatmap stays off.
+    if (Array.isArray(data.pages)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration page
+      data.pages = data.pages.map((page: any) =>
+        page?.type === "floorplan" ? { ...page, walls: Array.isArray(page.walls) ? page.walls : [] } : page,
+      );
+    }
+    data.version = 47;
     return data;
   },
 };

@@ -654,6 +654,8 @@ export interface DeviceTemplate {
   speakerLoad?: SpeakerLoadSpec;
   /** What the amplifier can deliver per channel and in total. Same purpose. */
   ampLoad?: AmplifierLoadSpec;
+  /** What an access point radiates, per band. Feeds the Wi-Fi heatmap on floorplans. */
+  wifi?: WifiRadioSpec;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -1190,6 +1192,178 @@ export type CoverageShape = "sector" | "circle" | "rect";
 
 export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect"];
 
+// ── Wi-Fi coverage ───────────────────────────────────────────────────
+
+/** The bands a heatmap can be computed for. 6 GHz is what Wi-Fi 7 leads with and is the
+ *  one walls punish hardest, so it is modelled even where a plan does not show it. */
+export type WifiBand = "2.4" | "5" | "6";
+
+export const WIFI_BANDS: WifiBand[] = ["2.4", "5", "6"];
+
+/** Centre frequency per band in MHz — what the free-space term is computed from. */
+export const WIFI_BAND_MHZ: Record<WifiBand, number> = { "2.4": 2442, "5": 5500, "6": 6000 };
+
+export const WIFI_BAND_LABELS: Record<WifiBand, string> = {
+  "2.4": "2,4 GHz",
+  "5": "5 GHz",
+  "6": "6 GHz",
+};
+
+/** What an access point radiates, per band. Sits on the device template the way
+ *  speakerLoad does: the model supplies it, the installation may override the power. */
+export interface WifiRadioSpec {
+  /** Bands this model actually has radios for. */
+  bands: WifiBand[];
+  /** Conducted transmit power in dBm per band, at the default (full) setting. */
+  txDbm: Partial<Record<WifiBand, number>>;
+  /** Antenna gain in dBi per band. */
+  gainDbi: Partial<Record<WifiBand, number>>;
+}
+
+/** Wall build-ups a plan distinguishes. The list is deliberately short: these are the
+ *  cases whose attenuation genuinely differs, not a materials catalogue. */
+export type WallMaterial =
+  | "drywall"
+  | "wood"
+  | "glass"
+  | "glass-coated"
+  | "brick-hollow"
+  | "brick-solid"
+  | "concrete"
+  | "concrete-reinforced"
+  | "metal";
+
+export const WALL_MATERIALS: WallMaterial[] = [
+  "drywall", "wood", "glass", "glass-coated",
+  "brick-hollow", "brick-solid", "concrete", "concrete-reinforced", "metal",
+];
+
+/**
+ * How much one wall costs a signal: a fixed term for the surface transitions plus a term
+ * that grows with thickness. A purely per-centimetre model overshoots badly on thick
+ * dense walls (25 cm of concrete comes out at 45 dB instead of the ~25 dB you measure),
+ * which would make every concrete building look unplannable.
+ *
+ * Values are for 5 GHz; the other bands scale by WIFI_BAND_ATTENUATION_FACTOR. They are
+ * defaults, not truth — a project can override them once someone has measured on site.
+ */
+export interface WallMaterialSpec {
+  /** Fixed loss in dB, independent of thickness. */
+  baseDb: number;
+  /** Additional loss in dB per centimetre of thickness. */
+  perCmDb: number;
+}
+
+/** Calibrated so each material lands inside its measured range at a typical thickness:
+ *  drywall 10 cm → 3.5 dB, solid brick 20 cm → 14 dB, concrete 20 cm → 20 dB. */
+export const WALL_MATERIAL_DEFAULTS: Record<WallMaterial, WallMaterialSpec> = {
+  drywall: { baseDb: 2.0, perCmDb: 0.15 },
+  wood: { baseDb: 2.0, perCmDb: 0.3 },
+  glass: { baseDb: 2.0, perCmDb: 0.5 },
+  "glass-coated": { baseDb: 20.0, perCmDb: 0.5 },
+  "brick-hollow": { baseDb: 3.0, perCmDb: 0.35 },
+  "brick-solid": { baseDb: 4.0, perCmDb: 0.5 },
+  concrete: { baseDb: 6.0, perCmDb: 0.7 },
+  "concrete-reinforced": { baseDb: 8.0, perCmDb: 0.9 },
+  metal: { baseDb: 30.0, perCmDb: 0 },
+};
+
+/** Attenuation scales with frequency: 2.4 GHz gets through more easily than 5, and 6 GHz
+ *  less. Applied to the 5 GHz figures above. */
+export const WIFI_BAND_ATTENUATION_FACTOR: Record<WifiBand, number> = {
+  "2.4": 0.7,
+  "5": 1.0,
+  "6": 1.1,
+};
+
+/** Material names as they belong on a plan legend. English source strings; the German
+ *  dictionary carries the Bau-Begriffe. */
+export const WALL_MATERIAL_LABELS: Record<WallMaterial, string> = {
+  drywall: "Drywall / stud partition",
+  wood: "Wood / door",
+  glass: "Glass",
+  "glass-coated": "Coated glass",
+  "brick-hollow": "Hollow brick",
+  "brick-solid": "Solid brick",
+  concrete: "Concrete",
+  "concrete-reinforced": "Reinforced concrete",
+  metal: "Metal / lift shaft",
+};
+
+/** How each build-up is drawn. Architects draw walls dark; the tint is what tells a
+ *  stud partition from a concrete core at a glance. */
+export const WALL_MATERIAL_COLORS: Record<WallMaterial, string> = {
+  drywall: "#94a3b8",
+  wood: "#a16207",
+  glass: "#38bdf8",
+  "glass-coated": "#0369a1",
+  "brick-hollow": "#f97316",
+  "brick-solid": "#c2410c",
+  concrete: "#525252",
+  "concrete-reinforced": "#262626",
+  metal: "#6d28d9",
+};
+
+/** Typical wall thicknesses in mm, offered when a wall is drawn. */
+export const WALL_THICKNESS_PRESETS_MM = [12, 25, 100, 115, 175, 200, 240, 300];
+
+export const DEFAULT_WALL_THICKNESS_MM = 100;
+export const DEFAULT_WALL_MATERIAL: WallMaterial = "drywall";
+
+/**
+ * A wall on the plan, drawn as a polyline so a whole run of one build-up is one object.
+ * Positions are paper mm like everything else; the thickness is real millimetres on site,
+ * because that is what the attenuation depends on and what an architect's plan states.
+ */
+export interface FloorplanWall {
+  id: string;
+  /** Polyline vertices in paper mm. Two points is a single wall, more is a run. */
+  pointsMm: { x: number; y: number }[];
+  material: WallMaterial;
+  /** Real-world thickness in mm — 100 for a stud partition, 240 for solid brick. */
+  thicknessMm: number;
+  label?: string;
+  /** Hidden walls are not drawn and not counted in the heatmap. */
+  hidden?: boolean;
+  locked?: boolean;
+}
+
+/** How the Wi-Fi heatmap is drawn on a plan. */
+export interface FloorplanHeatmap {
+  visible: boolean;
+  /** Which band the picture shows. One at a time: two overlaid heatmaps read as neither. */
+  band: WifiBand;
+  /** Path-loss exponent. 2.0 is free space, 2.6 a normal office, 3.2 a subdivided or
+   *  cluttered building. The single biggest lever on the result after the walls. */
+  pathLossExponent: number;
+  /** Fill opacity over the architect's drawing. */
+  opacity: number;
+  /** Grid pitch in paper mm. Smaller is smoother and slower. */
+  gridMm: number;
+  /** Draw the -67 dBm line (the usual VoIP / roaming floor) as a contour. */
+  showThresholdLine?: boolean;
+}
+
+export const DEFAULT_HEATMAP: FloorplanHeatmap = {
+  visible: false,
+  band: "5",
+  pathLossExponent: 2.6,
+  opacity: 0.55,
+  gridMm: 2.5,
+  showThresholdLine: true,
+};
+
+/** RSSI bands a heatmap is coloured by, strongest first. The -67 dBm step is the one
+ *  installations are actually signed off against. */
+export const RSSI_STEPS: { minDbm: number; color: string; label: string }[] = [
+  { minDbm: -50, color: "#15803d", label: "≥ -50 dBm" },
+  { minDbm: -60, color: "#65a30d", label: "-50 … -60" },
+  { minDbm: -67, color: "#eab308", label: "-60 … -67" },
+  { minDbm: -75, color: "#f97316", label: "-67 … -75" },
+  { minDbm: -85, color: "#dc2626", label: "-75 … -85" },
+  { minDbm: -Infinity, color: "#7f1d1d", label: "< -85 dBm" },
+];
+
 /** The four operational levels of EN 62676-4 (DORI) and, with them, how much of the
  *  picture a person has to fill before that level is actually reachable. */
 export type DoriLevel = "detect" | "observe" | "recognise" | "identify";
@@ -1386,6 +1560,11 @@ export interface FloorplanPage {
   /** Detection and surveillance areas — what the cameras see, what the detectors reach.
    *  Drawn under the symbols so a device never disappears behind its own area. */
   coverages: FloorplanCoverage[];
+  /** Walls with their build-up and thickness. They document the building and they are
+   *  what the Wi-Fi heatmap attenuates through. */
+  walls: FloorplanWall[];
+  /** Wi-Fi heatmap settings. Undefined counts as DEFAULT_HEATMAP (off). */
+  heatmap?: FloorplanHeatmap;
   /** Show the fixed project title block in the sheet corner as well. Off by default on
    *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;
@@ -1438,6 +1617,9 @@ export interface SchematicFile {
   edges: ConnectionEdge[];
   customTemplates?: DeviceTemplate[];
   ownedGear?: OwnedGearItem[];
+  /** Measured wall attenuation, overriding WALL_MATERIAL_DEFAULTS. Travels in the project
+   *  file so a calibration done on one site is not retyped on the next. */
+  wallMaterials?: Partial<Record<WallMaterial, WallMaterialSpec>>;
   signalColors?: Partial<Record<SignalType, string>>;
   signalLineStyles?: Partial<Record<SignalType, LineStyle>>;
   printPaperId?: string;

@@ -115,6 +115,7 @@ function makePage(over: Partial<FloorplanPage> = {}): FloorplanPage {
     notes: [],
     masks: [],
     coverages: [],
+    walls: [],
     showTitleBlock: false,
     symbolSizeMm: 6,
     labelSizeMm: 3.5,

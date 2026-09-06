@@ -105,6 +105,30 @@ describe("v44→v45 floorplan masks migration", () => {
   });
 });
 
+describe("v46→v47 floorplan walls migration", () => {
+  it("adds an empty wall list to floorplan pages and leaves others alone", () => {
+    const out = migrateSchematic({
+      version: 46, nodes: [], edges: [],
+      pages: [
+        { id: "floorplan-1", type: "floorplan", drawingBlock: {}, notes: [], masks: [], coverages: [] },
+        { id: "printsheet-1", type: "print-sheet", viewports: [] },
+      ],
+    });
+    expect(out.version).toBe(CURRENT_SCHEMA_VERSION);
+    expect(out.pages[0].walls).toEqual([]);
+    expect(out.pages[1]).not.toHaveProperty("walls");
+  });
+
+  it("keeps walls a newer file already carries", () => {
+    const walls = [{ id: "fpwall-1", material: "concrete", thicknessMm: 240, pointsMm: [{ x: 0, y: 0 }, { x: 50, y: 0 }] }];
+    const out = migrateSchematic({
+      version: 46, nodes: [], edges: [],
+      pages: [{ id: "floorplan-1", type: "floorplan", drawingBlock: {}, notes: [], masks: [], coverages: [], walls }],
+    });
+    expect(out.pages[0].walls).toBe(walls);
+  });
+});
+
 describe("v45→v46 floorplan coverage migration", () => {
   it("adds an empty coverage list to floorplan pages and leaves others alone", () => {
     const out = migrateSchematic({

@@ -18,6 +18,10 @@ export async function runFloorplanExport(): Promise<void> {
     nodes: state.nodes,
     edges: state.edges,
     loadSpecLookup: loadSpecLookup(state),
+    // The heatmap needs to resolve each access point's radio, and to honour a measured
+    // wall calibration rather than silently printing the defaults.
+    customTemplates: state.customTemplates,
+    wallMaterials: state.wallMaterials,
     schematicName: state.schematicName,
     titleBlock: state.titleBlock,
     companyProfile: state.companyProfile,

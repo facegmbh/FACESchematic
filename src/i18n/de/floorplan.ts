@@ -550,4 +550,57 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Öffnet den vorhandenen Bereich rechts im Panel.",
   "A second area on the same device — a corridor lens beside a wide one, say.":
     "Ein zweiter Bereich am selben Gerät — etwa eine Vorhanglinse neben einer Weitwinkel-Erfassung.",
+
+  // ─── Wände und WLAN-Heatmap ────────────────────────────────────
+  "Wall": "Wand",
+  "Walls ({n})": "Wände ({n})",
+  "Wall {n}": "Wand {n}",
+  "Remove wall": "Wand entfernen",
+  "Build-up": "Aufbau",
+  "Thickness": "Dicke",
+  "e.g. Brandwand": "z. B. Brandwand",
+  "Click the plan to trace a wall run — click the last point again or press Enter to finish, Esc to abandon. Set the build-up and thickness in the panel on the right.":
+    "In den Plan klicken, um einen Wandzug zu zeichnen — letzten Punkt erneut klicken oder Enter zum Abschließen, Esc zum Abbrechen. Aufbau und Dicke rechts im Panel.",
+  "Trace the building with": "Den Bau nachzeichnen mit",
+  "on the sheet: click along a run, click the last point again or press Enter to finish. Thickness is real millimetres — it is what the Wi-Fi heatmap attenuates through.":
+    "auf dem Blatt: entlang eines Zuges klicken, letzten Punkt erneut klicken oder Enter zum Abschließen. Die Dicke sind echte Millimeter — sie ist es, wodurch die WLAN-Heatmap dämpft.",
+  "Copy this run, offset slightly — for the parallel wall of a corridor.":
+    "Diesen Zug leicht versetzt kopieren — für die Gegenwand eines Flurs.",
+  "Hidden — and not counted in the heatmap": "Ausgeblendet — und nicht in der Heatmap gerechnet",
+  "Hide it, and take it out of the heatmap": "Ausblenden und aus der Heatmap nehmen",
+
+  // Wandaufbauten
+  "Drywall / stud partition": "Gipskarton / Ständerwand",
+  "Wood / door": "Holz / Tür",
+  "Glass": "Glas",
+  "Coated glass": "Beschichtetes Glas",
+  "Hollow brick": "Hohlblockziegel",
+  "Solid brick": "Vollziegel",
+  "Concrete": "Beton",
+  "Reinforced concrete": "Stahlbeton",
+  "Metal / lift shaft": "Metall / Aufzugsschacht",
+
+  // Heatmap
+  "Wi-Fi heatmap": "WLAN-Heatmap",
+  "Show the heatmap": "Heatmap anzeigen",
+  "Band": "Band",
+  "Building": "Gebäude",
+  "Detail": "Detail",
+  "2.0 is free space, 2.6 a normal office, 3.2 a subdivided or cluttered building. After the walls this is the biggest lever on the result.":
+    "2,0 ist Freifeld, 2,6 ein normales Büro, 3,2 ein stark unterteiltes oder verbautes Gebäude. Nach den Wänden ist das der größte Hebel am Ergebnis.",
+  "Sample spacing on paper. Finer is smoother and slower — the cost is samples × access points × walls.":
+    "Abtastweite auf dem Papier. Feiner ist glatter und langsamer — der Aufwand ist Abtastpunkte × Access Points × Wände.",
+  "No access points on this plan yet. Drop a UniFi AP from the device library onto the sheet — a symbol linked to a model with a radio counts as one.":
+    "Noch keine Access Points auf diesem Plan. Einen UniFi-AP aus der Gerätebibliothek auf das Blatt ziehen — ein Symbol mit verknüpftem Funkmodell zählt als AP.",
+  "{n} access point(s) on this band": "{n} Access Point(s) auf diesem Band",
+  "at -67 dBm or better": "bei -67 dBm oder besser",
+  "Free-run reach to -67 dBm, no walls:": "Freie Reichweite bis -67 dBm, ohne Wände:",
+
+  // Kalibrierung
+  "Calibrate materials": "Materialien kalibrieren",
+  "The starting values are calibrated to typical measurements. Once you have measured on site, correct them here — a wall costs a fixed amount plus a share per centimetre, and the figures travel in the project file.":
+    "Die Startwerte sind an typische Messungen angepasst. Sobald du am Bau gemessen hast, hier korrigieren — eine Wand kostet einen festen Anteil plus einen Anteil pro Zentimeter, und die Werte reisen in der Projektdatei mit.",
+  "Back to the calibrated default": "Zurück zum kalibrierten Startwert",
+  "fixed": "fest",
+  "dB/cm": "dB/cm",
 };

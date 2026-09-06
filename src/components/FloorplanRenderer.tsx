@@ -53,9 +53,13 @@ import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
+import FloorplanWallLayer from "./FloorplanWallLayer";
+import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
+import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM } from "../types";
+import { collectAccessPoints } from "../wifiCoverage";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
 import { useT } from "../i18n";
@@ -87,7 +91,8 @@ export type Selection =
   | { kind: "drawing" }
   | { kind: "note"; id: string }
   | { kind: "mask"; id: string }
-  | { kind: "coverage"; id: string };
+  | { kind: "coverage"; id: string }
+  | { kind: "wall"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -139,6 +144,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
+  const addFloorplanWall = useSchematicStore((s) => s.addFloorplanWall);
+  const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
+  const wallMaterials = useSchematicStore((s) => s.wallMaterials);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const companyProfile = useSchematicStore((s) => s.companyProfile);
   const schematicName = useSchematicStore((s) => s.schematicName);
@@ -257,6 +265,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const [symbolMenu, setSymbolMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [maskMenu, setMaskMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [coverageMenu, setCoverageMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  /** The wall run being drawn: vertices fixed so far, plus where the cursor is. */
+  const [wallDraft, setWallDraft] = useState<{ pointsMm: Vec2[]; cursorMm: Vec2 } | null>(null);
   const [panning, setPanning] = useState<{ startClient: Vec2; startPan: Vec2 } | null>(null);
   const didMoveRef = useRef(false);
   // State mirror of didMoveRef, used only for cursor styling during render — the ref
@@ -368,6 +378,32 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setSelection({ kind: "symbols", ids: [id] });
   }, [deviceDataMap, resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, activeLine]);
 
+  // Which symbols are access points, for the band the heatmap shows. Recomputed when a
+  // symbol moves or the band changes — a stale AP list would draw coverage from nowhere.
+  const heatmapCfg = useMemo(() => ({ ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) }), [page.heatmap]);
+  const accessPoints = useMemo(() => {
+    if (!heatmapCfg.visible) return [];
+    return collectAccessPoints(page, heatmapCfg.band, (nodeId) => {
+      const data = deviceDataMap.get(nodeId);
+      const templateId = data?.templateId;
+      return templateId ? getTemplateById(templateId, customTemplates)?.wifi : undefined;
+    });
+  }, [heatmapCfg.visible, heatmapCfg.band, page, deviceDataMap, customTemplates]);
+
+  const snapVec = useCallback((p: Vec2, free: boolean): Vec2 => ({ x: snap(p.x, free), y: snap(p.y, free) }), []);
+
+  /** Commit a drawn run. Two vertices is the shortest wall worth keeping; one is a
+   *  slipped click. The build-up starts at a stud partition and is changed in the panel. */
+  const finishWall = useCallback((pointsMm: Vec2[]) => {
+    if (pointsMm.length < 2) return;
+    const id = addFloorplanWall(page.id, {
+      pointsMm,
+      material: DEFAULT_WALL_MATERIAL,
+      thicknessMm: DEFAULT_WALL_THICKNESS_MM,
+    });
+    setSelection({ kind: "wall", id });
+  }, [addFloorplanWall, page.id]);
+
   // ── Mouse handling on the sheet ──────────────────────────────────
   const handleSheetMouseDown = useCallback((e: React.MouseEvent) => {
     if (tool === "calibrate") return; // handled on click
@@ -377,7 +413,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setDidMove(false);
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
-    if (tool === "place" || tool === "note" || tool === "coverage") return; // handled on click
+    if (tool === "place" || tool === "note" || tool === "coverage" || tool === "wall") return; // handled on click
     if (tool === "erase") {
       // Drag out a white cover — the only way to "remove" something from a raster plan.
       setPanning(null);
@@ -401,6 +437,21 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       if (picks.length === 2) {
         setCalibInput((measureRealDistanceMm(picks[0], picks[1], page.scaleDenominator) / 1000).toFixed(2));
       }
+      return;
+    }
+    if (tool === "wall") {
+      // A run is built vertex by vertex. Clicking the last point again closes it, which
+      // is how every CAD polyline behaves and saves reaching for a key.
+      setWallDraft((cur) => {
+        const next = snapVec(pos, e.altKey);
+        if (!cur) return { pointsMm: [next], cursorMm: next };
+        const last = cur.pointsMm[cur.pointsMm.length - 1];
+        if (Math.hypot(next.x - last.x, next.y - last.y) < 1) {
+          finishWall(cur.pointsMm);
+          return null;
+        }
+        return { pointsMm: [...cur.pointsMm, next], cursorMm: next };
+      });
       return;
     }
     if (tool === "coverage") {
@@ -435,7 +486,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       setNoteDraft(t("Note"));
       onToolChange("select");
     }
-  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addFloorplanCoverage, addToast, onToolChange]);
+  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addFloorplanCoverage, finishWall, snapVec, addToast, onToolChange]);
 
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
@@ -467,6 +518,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (tool === "calibrate" && calibPicks.length === 1) {
       setCalibCursor(clientToPaperMm(e.clientX, e.clientY));
+    }
+    if (tool === "wall") {
+      // Deliberately no `wallDraft` read here: the updater sees the live value, so the
+      // rubber band cannot lag behind a captured one.
+      setWallDraft((cur) => cur ? { ...cur, cursorMm: clientToPaperMm(e.clientX, e.clientY) } : cur);
     }
 
     if (dragging) {
@@ -591,9 +647,27 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
+      // A half-drawn run is abandoned first — Escape should not also drop the tool and
+      // the selection in one press.
+      if (wallDraft) {
+        setWallDraft(null);
+        return;
+      }
       if (tool !== "select") onToolChange("select");
       setSelection({ kind: "none" });
       setCalibPicks([]);
+      return;
+    }
+    if (e.key === "Enter" && wallDraft) {
+      e.preventDefault();
+      finishWall(wallDraft.pointsMm);
+      setWallDraft(null);
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "wall") {
+      e.preventDefault();
+      removeFloorplanWall(page.id, selection.id);
+      setSelection({ kind: "none" });
       return;
     }
     if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "symbols") {
@@ -617,7 +691,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       removeFloorplanMask(page.id, selection.id);
       setSelection({ kind: "none" });
     }
-  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, removeFloorplanCoverage, editingNoteId]);
+  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, removeFloorplanCoverage, removeFloorplanWall, wallDraft, finishWall, editingNoteId]);
 
   // ── Calibration dialog ───────────────────────────────────────────
   const calibDistanceMm = calibPicks.length === 2
@@ -669,7 +743,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" || tool === "wall" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -807,6 +881,27 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               />
             );
           })()}
+
+          {/* Wi-Fi coverage, computed from the access points on the plan and attenuated
+              through the walls. Under everything else — it is the ground, not an overlay. */}
+          <FloorplanHeatmapLayer
+            page={page}
+            mmToPx={mmToPx}
+            aps={accessPoints}
+            materialOverrides={wallMaterials}
+          />
+
+          {/* The building's walls: their own geometry, and what the heatmap attenuates through. */}
+          <FloorplanWallLayer
+            page={page}
+            mmToPx={mmToPx}
+            sheetPx={{ w: pageWPx, h: pageHPx }}
+            interactive={tool === "select"}
+            selectedId={selection.kind === "wall" ? selection.id : null}
+            drawing={tool === "wall" ? wallDraft : null}
+            onSelect={(id) => setSelection({ kind: "wall", id })}
+            onContextMenu={() => { /* the panel on the right edits walls */ }}
+          />
 
           {/* What the cameras see and the detectors reach — under the symbols, so a device
               is never hidden behind its own area. */}
@@ -1252,7 +1347,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           )}
 
           {/* Empty state */}
-          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (page.coverages ?? []).length === 0 && (
+          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (page.coverages ?? []).length === 0 && (page.walls ?? []).length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
               {t("Import the architect's drawing from the toolbar, then drag devices onto it.")}
             </div>
@@ -1353,6 +1448,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title={t("Click the plan to add a text note (installation hint, remark)")}
         >
           ✎ {t("Note")}
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "wall" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => { setWallDraft(null); onToolChange(tool === "wall" ? "select" : "wall"); }}
+          title={t("Click the plan to trace a wall run — click the last point again or press Enter to finish, Esc to abandon. Set the build-up and thickness in the panel on the right.")}
+        >
+          ▨ {t("Wall")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "coverage" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
