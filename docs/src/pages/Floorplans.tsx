@@ -52,10 +52,18 @@ export default function FloorplansPage() {
         fixed pixel count: 2400 px is 203 dpi on A4 but only 72 dpi on A1, so a pixel cap made
         exactly the large drawings — the ones carrying the most detail — come out the coarsest.
         The default is 150 dpi, the usual plotting resolution, which keeps room labels and
-        dimension text readable when zoomed. <em>Quality</em> in the toolbar switches between 100
-        and 300 dpi; line art compresses so well as PNG that a dense A1 sheet is about 0.6 MB at
-        150 dpi and 1.8 MB at 300. Changing it redraws from the PDF, which the app keeps for you
-        (see below).
+        dimension text readable when zoomed. <em>Quality</em> in the toolbar goes from 100 to
+        500 dpi. Changing it redraws from the PDF, which the app keeps for you (see below).
+      </p>
+      <p>
+        What each step costs, measured on a dense A1 plan: 0.36 MB at 100 dpi, 0.57 at 150,
+        0.98 at 200, 1.8 at 300, 3.0 at 400 and 4.5 at 500. Line art compresses well as PNG,
+        but two ceilings apply. Above roughly 300 dpi an A1 plan outgrows the browser&apos;s
+        autosave budget, so the project has to be saved to a file. And the raster itself cannot
+        exceed what a browser will allocate, about 16384 px on the long edge and 260
+        megapixels, which works out to around 495 dpi on A1 and 350 on A0. The toolbar shows
+        the resolution actually achieved, and says so when the sheet size capped your choice.
+        For detail beyond that the answer is a vector export rather than a bigger image.
       </p>
       <ul>
         <li>

@@ -13,11 +13,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: "list",
-  // Playwright defaults to half the cores, which on a developer machine that is also being
-  // used for actual work means five browsers plus one dev server competing — the heavier
-  // specs (rasterizing a plan, driving wheel gestures) then time out at random and say
-  // nothing about the app. Three is reliable here; CI gets a machine to itself.
-  workers: process.env.CI ? undefined : 3,
+  // Serial locally. Playwright defaults to half the cores, but on a developer machine that
+  // is also being used for actual work, several browsers plus one dev server competing made
+  // the heavier specs (rasterizing a plan, driving wheel gestures) fail at random — which
+  // says nothing about the app and costs more time than it saves. A serial run of the whole
+  // suite is about two minutes and can be trusted. CI gets a machine to itself.
+  workers: process.env.CI ? undefined : 1,
   outputDir: "./e2e/test-results",
   use: {
     baseURL: "http://localhost:5173",

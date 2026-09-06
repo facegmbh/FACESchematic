@@ -109,6 +109,13 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           7000,
         );
       }
+      if (dpi !== undefined && imported.dpi !== undefined && imported.dpi < dpi * 0.9) {
+        addToast(
+          `Rasterized at ${imported.dpi} dpi — ${dpi} dpi would need a bigger image than the browser can build for this sheet size.`,
+          "info",
+          6000,
+        );
+      }
       if (imported.approxBytes > UNDERLAY_SIZE_WARN_BYTES) {
         addToast(
           `The plan is ${(imported.approxBytes / 1_000_000).toFixed(1)} MB — autosave to browser storage may fail. Save the project to a file.`,
@@ -310,7 +317,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             </label>
           )}
           {underlay.kind === "pdf" && (
-            <label className="flex items-center gap-1 text-[var(--color-text)]" title="How finely the PDF is rasterized, in dots per inch of the real sheet. Higher keeps room labels and dimension text readable when zoomed, at the cost of project size.">
+            <label className="flex items-center gap-1 text-[var(--color-text)]" title="How finely the PDF is rasterized, in dots per inch of the real sheet. Higher keeps room labels and dimension text readable when zoomed, at the cost of project size. Above roughly 300 dpi an A1 plan outgrows the browser autosave, so save the project to a file. The value shown is what was actually achieved — a big sheet caps it.">
               <span style={{ fontSize: 9 }}>QUALITY</span>
               <select
                 className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"

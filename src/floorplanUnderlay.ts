@@ -25,11 +25,14 @@ export const DEFAULT_MAX_LONG_EDGE_PX = 2400;
  *  room labels and dimension text readable when zoomed; line art compresses so well as PNG
  *  that an A1 sheet still lands well under a megabyte. */
 export const DEFAULT_UNDERLAY_DPI = 150;
-export const UNDERLAY_DPI_CHOICES = [100, 150, 200, 300] as const;
+export const UNDERLAY_DPI_CHOICES = [100, 150, 200, 300, 400, 500] as const;
 
-/** Hard ceiling on the rasterized long edge. Browsers refuse to allocate canvases beyond
- *  roughly 16 k px a side, and a plan that large would blow the autosave budget anyway. */
-export const MAX_RASTER_LONG_EDGE_PX = 10000;
+/** Hard ceiling on the rasterized long edge: what a browser will still allocate. Measured in
+ *  Chromium, 16384 x 16384 is fine and a little over 268 megapixels is not, so the area is
+ *  capped as well. What this means in dpi depends on the sheet: about 495 dpi on A1, 350 on
+ *  A0, far more on A3 — which is why the toolbar reports the resolution actually achieved. */
+export const MAX_RASTER_LONG_EDGE_PX = 16384;
+export const MAX_RASTER_PIXELS = 260_000_000;
 
 /** Warn above this — localStorage autosave is a ~5 MB budget for the whole project. */
 export const UNDERLAY_SIZE_WARN_BYTES = 3_000_000;
@@ -131,16 +134,25 @@ async function renderPdfPage(file: File, pageNumber: number, dpi: number, layers
     // A point is 1/72 inch, so the dpi target is a scale factor directly — capped so a
     // poster-sized sheet cannot ask for a canvas the browser will refuse.
     const base = page.getViewport({ scale: 1 });
-    const wanted = Math.max(1, dpi) / 72;
-    const ceiling = MAX_RASTER_LONG_EDGE_PX / Math.max(base.width, base.height);
-    const scale = Math.min(wanted, ceiling);
-    const viewport = page.getViewport({ scale });
+    let scale = rasterScaleFor(base.width, base.height, dpi);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(viewport.width);
-    canvas.height = Math.round(viewport.height);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Could not create a canvas to render the PDF page.");
+    // A canvas the browser accepts on paper but cannot really back would hand us a blank
+    // plan, which is worse than a coarser one. Probe it, and step down until it draws.
+    let canvas: HTMLCanvasElement | undefined;
+    let ctx: CanvasRenderingContext2D | null = null;
+    let viewport = page.getViewport({ scale });
+    for (let attempt = 0; attempt < 4; attempt++) {
+      viewport = page.getViewport({ scale });
+      canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      ctx = canvas.getContext("2d");
+      if (ctx && canvasIsUsable(ctx)) break;
+      ctx = null;
+      canvas = undefined;
+      scale = scale / 1.5;
+    }
+    if (!canvas || !ctx) throw new Error("This plan is too large to rasterize in the browser. Pick a lower resolution.");
     // Plans are drawn on transparent backgrounds; paint paper white so the raster
     // doesn't turn into black-on-black in dark mode.
     ctx.fillStyle = "#ffffff";
@@ -318,6 +330,33 @@ function layerChoice(id: string, group: { name?: unknown; visible?: unknown } | 
     name: typeof group?.name === "string" && group.name.trim() ? group.name.trim() : `Layer ${i + 1}`,
     visible: group?.visible !== false,
   };
+}
+
+/**
+ * Scale factor for rasterizing a PDF page of `widthPt` x `heightPt` at `dpi` of the real
+ * sheet. A PDF point is 1/72 inch, so the dpi target is the scale factor directly, capped by
+ * what a browser will allocate: the long edge and the total area. Which cap bites depends on
+ * the sheet, so the caller reports the resolution actually achieved rather than the one asked
+ * for.
+ */
+export function rasterScaleFor(widthPt: number, heightPt: number, dpi: number): number {
+  const wanted = Math.max(1, dpi) / 72;
+  const byEdge = MAX_RASTER_LONG_EDGE_PX / Math.max(widthPt, heightPt);
+  const byArea = Math.sqrt(MAX_RASTER_PIXELS / (widthPt * heightPt));
+  return Math.min(wanted, byEdge, byArea);
+}
+
+/** Whether a freshly created canvas actually backs its pixels. An oversized one can be
+ *  accepted and then quietly refuse to draw, which would produce a blank plan. */
+function canvasIsUsable(ctx: CanvasRenderingContext2D): boolean {
+  try {
+    ctx.fillStyle = "#ff00ff";
+    ctx.fillRect(0, 0, 2, 2);
+    const px = ctx.getImageData(0, 0, 1, 1).data;
+    return px[0] > 200 && px[2] > 200;
+  } catch {
+    return false;
+  }
 }
 
 /** Whether this file is a PDF, by extension or declared type. */
