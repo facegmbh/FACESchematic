@@ -550,6 +550,13 @@ export interface FloorplanMaskSpec {
   yMm: number;
   wMm: number;
   hMm: number;
+  /** Clockwise rotation about the cover's center, in degrees. An architect's title block is
+   *  not always square to the sheet. */
+  rotationDeg?: number;
+  /** 0–1. Below 1 the cover fades what is under it instead of erasing it. */
+  opacity?: number;
+  /** A locked cover ignores drag and resize on the sheet. */
+  locked?: boolean;
 }
 
 export interface SetFloorplanMasksParams extends FloorplanPageRef {

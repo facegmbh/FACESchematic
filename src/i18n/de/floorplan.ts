@@ -405,4 +405,23 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "average power": "Durchschnittsleistung",
   "minimum impedance": "Mindestimpedanz",
   "operating mode": "Betriebsart",
+
+  // Covers (the white patches over the architect's own boxes) and their menu
+  "Cover": "Abdeckung",
+  "Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove. Right-click for turn, fade and lock.":
+    "Abdeckung — verdeckt den Plan darunter. Ziehen zum Verschieben, Ecke zum Ändern der Größe, Entf zum Entfernen. Rechtsklick für Drehen, Transparenz und Sperren.",
+  "Cover (locked) — right-click to turn, fade or unlock it.":
+    "Abdeckung (gesperrt) — Rechtsklick zum Drehen, Faden oder Entsperren.",
+  "15° clockwise": "15° im Uhrzeigersinn",
+  "15° counter-clockwise": "15° gegen den Uhrzeigersinn",
+  "Square to the sheet again": "Wieder im Winkel zum Blatt",
+  "Fade": "Transparenz",
+  "Opaque — erases what is under it": "Deckend — löscht, was darunter liegt",
+  "Lock in place": "An Ort und Stelle sperren",
+  "Unlock": "Entsperren",
+  "Pin it, so placing symbols on top of it cannot nudge it. It stays editable from here.":
+    "Festsetzen, damit das Platzieren von Symbolen darüber sie nicht verschiebt. Bearbeiten geht weiterhin von hier.",
+  "Let it be dragged and resized again.": "Wieder verschiebbar und in der Größe änderbar machen.",
+  "Locked — click to let it be dragged again": "Gesperrt — klicken, um sie wieder verschiebbar zu machen",
+  "Lock it so placing symbols cannot nudge it": "Sperren, damit das Platzieren von Symbolen sie nicht verschiebt",
 };

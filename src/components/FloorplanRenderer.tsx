@@ -45,6 +45,7 @@ import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "
 import TitleBlockSVG from "./TitleBlockSVG";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
+import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
@@ -240,6 +241,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [hoverMaskId, setHoverMaskId] = useState<string | null>(null);
   const [symbolMenu, setSymbolMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  const [maskMenu, setMaskMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [panning, setPanning] = useState<{ startClient: Vec2; startPan: Vec2 } | null>(null);
   const didMoveRef = useRef(false);
   // State mirror of didMoveRef, used only for cursor styling during render — the ref
@@ -696,7 +698,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   // dashed hint appears only under the pointer, or when it is selected.
                   outline: isSel ? "2px solid #3b82f6" : tool === "select" && hoverMaskId === mask.id ? "1px dashed #cbd5e1" : undefined,
                   outlineOffset: -1,
-                  cursor: tool === "select" ? "move" : "inherit",
+                  cursor: tool === "select" ? (mask.locked ? "default" : "move") : "inherit",
                   zIndex: isSel ? 6 : 5,
                 }}
                 onMouseDown={(e) => {
@@ -704,11 +706,21 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   e.stopPropagation();
                   didMoveRef.current = false;
                   setSelection({ kind: "mask", id: mask.id });
+                  // A locked cover can still be selected and edited — it just does not move.
+                  if (mask.locked) return;
                   setDragging({ kind: "mask", maskId: mask.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...mask.positionMm } });
                 }}
-                title={t("Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove.")}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelection({ kind: "mask", id: mask.id });
+                  setMaskMenu({ x: e.clientX, y: e.clientY, id: mask.id });
+                }}
+                title={mask.locked
+                  ? t("Cover (locked) — right-click to turn, fade or unlock it.")
+                  : t("Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove. Right-click for turn, fade and lock.")}
               >
-                {isSel && (
+                {isSel && !mask.locked && (
                   <div
                     className="absolute bg-blue-500"
                     style={{ right: -5, bottom: -5, width: 10, height: 10, cursor: "nwse-resize" }}
@@ -1170,6 +1182,17 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           y={symbolMenu.y}
           ids={symbolMenu.ids}
           onClose={() => setSymbolMenu(null)}
+        />
+      )}
+
+      {/* Right-click on a cover */}
+      {maskMenu && (
+        <FloorplanMaskContextMenu
+          page={page}
+          x={maskMenu.x}
+          y={maskMenu.y}
+          maskId={maskMenu.id}
+          onClose={() => setMaskMenu(null)}
         />
       )}
 

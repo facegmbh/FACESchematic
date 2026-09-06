@@ -777,6 +777,9 @@ export const TOOLS: ToolDef[] = [
             properties: {
               xMm: { type: "number" }, yMm: { type: "number" },
               wMm: { type: "number" }, hMm: { type: "number" },
+              rotationDeg: { type: "number", description: "Clockwise rotation about the cover's center — an architect's title block is not always square to the sheet." },
+              opacity: { type: "number", description: "0–1. Below 1 the cover fades what is under it instead of erasing it." },
+              locked: { type: "boolean", description: "A locked cover ignores drag and resize on the sheet." },
             },
             required: ["xMm", "yMm", "wMm", "hMm"],
             additionalProperties: false,

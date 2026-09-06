@@ -972,6 +972,13 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             <div key={m.id} className="border border-[var(--color-border)] rounded px-1.5 py-1 flex flex-col gap-1">
               <div className="flex items-center justify-between text-[var(--color-text)]">
                 <span>{t("Cover {n}", { n: i + 1 })} · {Math.round(m.sizeMm.w)} × {Math.round(m.sizeMm.h)} mm</span>
+                <button
+                  className={`px-1 shrink-0 ${m.locked ? "text-emerald-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                  onClick={() => updateFloorplanMask(page.id, m.id, { locked: m.locked ? undefined : true })}
+                  title={m.locked ? t("Locked — click to let it be dragged again") : t("Lock it so placing symbols cannot nudge it")}
+                >
+                  {m.locked ? "🔒" : "🔓"}
+                </button>
                 <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" onClick={() => removeFloorplanMask(page.id, m.id)} title={t("Remove cover")}>✕</button>
               </div>
               <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">

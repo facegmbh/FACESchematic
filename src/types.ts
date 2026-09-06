@@ -1167,6 +1167,10 @@ export interface FloorplanMask {
   /** 0–1. Below 1 the cover fades what is underneath instead of erasing it, which is what
    *  you want to keep a dimension readable while quieting the rest. Default 1, opaque. */
   opacity?: number;
+  /** A locked cover ignores drag and resize, the way a locked underlay does. Once a cover
+   *  sits right over the architect's title block it should stay there while symbols are
+   *  placed on top of it. */
+  locked?: boolean;
 }
 
 /** One row of a drawing block's revision table — the "Index" history every issued plan

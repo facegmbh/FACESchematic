@@ -1464,7 +1464,16 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       if (m.xMm < 0 || m.yMm < 0 || m.xMm + m.wMm > sheet.w + 0.01 || m.yMm + m.hMm > sheet.h + 0.01) {
         throw new CommandError(`masks[${i}] is off the sheet — the sheet is ${Math.round(sheet.w)} × ${Math.round(sheet.h)} mm.`);
       }
-      return { positionMm: { x: m.xMm, y: m.yMm }, sizeMm: { w: m.wMm, h: m.hMm } };
+      if (m.opacity !== undefined && (typeof m.opacity !== "number" || m.opacity <= 0 || m.opacity > 1)) {
+        throw new CommandError(`masks[${i}]: opacity must be greater than 0 and at most 1.`);
+      }
+      return {
+        positionMm: { x: m.xMm, y: m.yMm },
+        sizeMm: { w: m.wMm, h: m.hMm },
+        ...(m.rotationDeg ? { rotationDeg: Number(m.rotationDeg) } : {}),
+        ...(m.opacity !== undefined && m.opacity < 1 ? { opacity: m.opacity } : {}),
+        ...(m.locked ? { locked: true } : {}),
+      };
     });
     for (const existing of page.masks) st().removeFloorplanMask(page.id, existing.id);
     const ids = rects.map((r) => st().addFloorplanMask(page.id, r));

@@ -329,8 +329,16 @@ export default function FloorplansPage() {
         The underlay is a raster, so nothing in it can be deleted — but it can be covered. The{" "}
         <strong>▭ Erase</strong> tool drags out a white cover over any part of the plan: the
         architect&apos;s symbol legend, revision table, title block, a note that no longer applies.
-        Covers move, resize from the corner and go with <kbd>Delete</kbd>; the sidebar lists them.
+        Covers move, resize from the corner and go with <kbd>Delete</kbd>; the panel lists them.
         Your legend and drawing block sit on top, so the printed sheet carries one set of boxes.
+      </p>
+      <p>
+        <strong>Right-click a cover</strong> for everything else it can do: turn it by 15° or 90°
+        when the block underneath is not square to the sheet, fade it to 75, 50 or 25 % so the
+        linework goes quiet instead of disappearing, <strong>lock</strong> it in place, or remove
+        it. Both the turn and the fade print. Lock one once it sits right — symbols then get
+        placed on top of it, and every one of those clicks would otherwise risk nudging it. Set
+        the size before turning: the corner handle measures in the cover&apos;s unturned frame.
       </p>
       <p>
         Both boxes also stretch: the bottom handle on the legend and on the drawing block sets a
