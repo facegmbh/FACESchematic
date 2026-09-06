@@ -40,6 +40,7 @@ import {
   type Vec2,
 } from "../floorplan";
 import { TITLE_BLOCK_HEIGHT_IN } from "../printConfig";
+import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "../wheelViewport";
 import TitleBlockSVG from "./TitleBlockSVG";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
@@ -201,8 +202,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     };
   }, []);
 
+  const trackpadRef = useRef<TrackpadGesture | null>(null);
+  if (!trackpadRef.current) trackpadRef.current = createTrackpadGesture();
   useEffect(() => {
     const el = containerRef.current;
+    const gesture = trackpadRef.current!;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest("[data-allow-scroll]")) return;
@@ -210,22 +214,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       const cfg = useSchematicStore.getState().scrollConfig;
       const { zoom: z, pan: p } = vpRef.current;
       const rect = el.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const action = e.ctrlKey ? cfg.ctrlScroll : e.shiftKey ? cfg.shiftScroll : cfg.scroll;
-      if (action === "zoom" || (cfg.trackpadEnabled && e.ctrlKey && !ctrlHeldRef.current)) {
-        const factor = 1 - e.deltaY * 0.001 * cfg.zoomSpeed;
-        const newZ = Math.min(6, Math.max(0.05, z * factor));
-        const ratio = newZ / z;
-        setViewport(newZ, { x: mx * (1 - ratio) + p.x * ratio, y: my * (1 - ratio) + p.y * ratio });
-      } else if (action === "pan-x") {
-        setViewport(z, { x: p.x - e.deltaY * cfg.panSpeed, y: p.y });
-      } else {
-        setViewport(z, { x: p.x - e.deltaX * cfg.panSpeed, y: p.y - e.deltaY * cfg.panSpeed });
-      }
+      gesture.saw(e, cfg.trackpadEnabled, ctrlHeldRef.current);
+      const next = nextWheelViewport(e, { x: p.x, y: p.y, zoom: z }, cfg, {
+        pointer: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        ctrlHeld: ctrlHeldRef.current,
+        trackpadActive: gesture.isActive(),
+        minZoom: 0.05,
+        maxZoom: 6,
+      });
+      setViewport(next.zoom, { x: next.x, y: next.y });
     };
     el.addEventListener("wheel", handler, { passive: false, capture: true });
-    return () => el.removeEventListener("wheel", handler, { capture: true });
+    return () => { el.removeEventListener("wheel", handler, { capture: true }); gesture.dispose(); };
   }, [setViewport]);
 
   // ── Interaction state ────────────────────────────────────────────
@@ -234,6 +234,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   useEffect(() => { selectionRef.current = selection; }, [selection]);
 
   const [dragging, setDragging] = useState<DragState | null>(null);
+  const [hoverMaskId, setHoverMaskId] = useState<string | null>(null);
   const [panning, setPanning] = useState<{ startClient: Vec2; startPan: Vec2 } | null>(null);
   const didMoveRef = useRef(false);
   // State mirror of didMoveRef, used only for cursor styling during render — the ref
@@ -676,12 +677,17 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 key={mask.id}
                 data-floorplan-mask
                 className="absolute bg-white"
+                onMouseEnter={() => setHoverMaskId(mask.id)}
+                onMouseLeave={() => setHoverMaskId((cur) => (cur === mask.id ? null : cur))}
                 style={{
                   left: mmToPx(mask.positionMm.x),
                   top: mmToPx(mask.positionMm.y),
                   width: mmToPx(mask.sizeMm.w),
                   height: mmToPx(mask.sizeMm.h),
-                  outline: isSel ? "2px solid #3b82f6" : tool === "select" ? "1px dashed #cbd5e1" : undefined,
+                  // A cover is a white patch over the architect's drawing — it has to look
+                  // like nothing at all, or the plan cannot be judged as it will print. The
+                  // dashed hint appears only under the pointer, or when it is selected.
+                  outline: isSel ? "2px solid #3b82f6" : tool === "select" && hoverMaskId === mask.id ? "1px dashed #cbd5e1" : undefined,
                   outlineOffset: -1,
                   cursor: tool === "select" ? "move" : "inherit",
                   zIndex: isSel ? 6 : 5,

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
+import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "../wheelViewport";
 import type { PrintSheetPage, PrintViewport, RackElevationPage, DeviceData, RackData } from "../types";
 import { getPaperSize, PAGE_MARGIN_IN, TITLE_BLOCK_HEIGHT_IN } from "../printConfig";
 import { PX_PER_MM } from "../rackUtils";
@@ -87,8 +88,6 @@ export default function PrintSheetRenderer({ page }: Props) {
   const [spaceHeld, setSpaceHeld] = useState(false);
   const ctrlHeldRef = useRef(false);
   const spaceHeldRef = useRef(false);
-  const trackpadActiveRef = useRef(false);
-  const trackpadTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const fitView = useCallback(() => {
     const el = containerRef.current;
@@ -126,48 +125,30 @@ export default function PrintSheetRenderer({ page }: Props) {
     };
   }, []);
 
+  const trackpadRef = useRef<TrackpadGesture | null>(null);
+  if (!trackpadRef.current) trackpadRef.current = createTrackpadGesture();
   useEffect(() => {
     const el = containerRef.current;
+    const gesture = trackpadRef.current!;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest("[data-allow-scroll]")) return;
       e.preventDefault();
       const cfg = useSchematicStore.getState().scrollConfig;
       const { zoom: z, pan: p } = vpRef.current;
-      if (cfg.trackpadEnabled) {
-        if (e.deltaX !== 0 || (e.ctrlKey && !ctrlHeldRef.current)) trackpadActiveRef.current = true;
-        clearTimeout(trackpadTimerRef.current);
-        trackpadTimerRef.current = setTimeout(() => { trackpadActiveRef.current = false; }, 400);
-      }
       const rect = el.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      if (cfg.trackpadEnabled && e.ctrlKey && !ctrlHeldRef.current) {
-        const factor = 1 - e.deltaY * 0.01 * cfg.zoomSpeed;
-        const newZ = Math.min(4, Math.max(0.1, z * factor));
-        const ratio = newZ / z;
-        setViewport(newZ, { x: mx * (1 - ratio) + p.x * ratio, y: my * (1 - ratio) + p.y * ratio });
-        return;
-      }
-      if (!e.ctrlKey && !e.shiftKey && trackpadActiveRef.current) {
-        setViewport(z, { x: p.x - e.deltaX * cfg.panSpeed, y: p.y - e.deltaY * cfg.panSpeed });
-        return;
-      }
-      const action = e.ctrlKey ? cfg.ctrlScroll : e.shiftKey ? cfg.shiftScroll : cfg.scroll;
-      const delta = e.deltaY;
-      if (action === "zoom") {
-        const factor = 1 - delta * 0.001 * cfg.zoomSpeed;
-        const newZ = Math.min(4, Math.max(0.1, z * factor));
-        const ratio = newZ / z;
-        setViewport(newZ, { x: mx * (1 - ratio) + p.x * ratio, y: my * (1 - ratio) + p.y * ratio });
-      } else if (action === "pan-x") {
-        setViewport(z, { x: p.x - delta * cfg.panSpeed, y: p.y });
-      } else {
-        setViewport(z, { x: p.x, y: p.y - delta * cfg.panSpeed });
-      }
+      gesture.saw(e, cfg.trackpadEnabled, ctrlHeldRef.current);
+      const next = nextWheelViewport(e, { x: p.x, y: p.y, zoom: z }, cfg, {
+        pointer: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        ctrlHeld: ctrlHeldRef.current,
+        trackpadActive: gesture.isActive(),
+        minZoom: 0.1,
+        maxZoom: 4,
+      });
+      setViewport(next.zoom, { x: next.x, y: next.y });
     };
     el.addEventListener("wheel", handler, { passive: false, capture: true });
-    return () => { el.removeEventListener("wheel", handler, { capture: true }); clearTimeout(trackpadTimerRef.current); };
+    return () => { el.removeEventListener("wheel", handler, { capture: true }); gesture.dispose(); };
   }, [setViewport]);
 
   // ── Viewport interaction ─────────────────────────────────────────

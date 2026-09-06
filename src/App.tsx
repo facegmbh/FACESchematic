@@ -63,6 +63,7 @@ import { computeSnap, enforceMinSpacing, detectOverlap, speculativeReparent, typ
 import type { ConnectionEdge, DeviceData, DeviceTemplate, SchematicFile, SchematicNode, StubLabelData, TextStubData } from "./types";
 import { findAdaptersForSignalBridge, findAdaptersForConnectorBridge, areConnectorsCompatible } from "./connectorTypes";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
+import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "./wheelViewport";
 import { loadSharedSchematic, checkSession } from "./templateApi";
 import { refreshCloudCache } from "./cloudSync";
 import { useTheme } from "./hooks/useTheme";
@@ -484,8 +485,6 @@ function SchematicCanvas() {
 
   // Sticky trackpad detection: once a trackpad gesture is detected, treat all
   // subsequent wheel events as trackpad until 400ms of silence (gesture end).
-  const trackpadActiveRef = useRef(false);
-  const trackpadTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Edge reconnection state (React Flow's reconnection path)
   const reconnectingRef = useRef(false);
@@ -682,87 +681,37 @@ function SchematicCanvas() {
   }, [cableIdDigest, labelDigest, cableNamingScheme, nodeCount, edgeCount]);
 
   // Custom wheel handler for configurable scroll/zoom/pan (#19)
+  const trackpadRef = useRef<TrackpadGesture | null>(null);
+  if (!trackpadRef.current) trackpadRef.current = createTrackpadGesture();
   useEffect(() => {
     // Find the React Flow viewport element
     const el = document.querySelector(".react-flow") as HTMLElement | null;
+    const gesture = trackpadRef.current!;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       // Don't interfere with scrolling inside overlays (dialogs, panels, etc.)
-      const target = e.target as HTMLElement;
-      if (target.closest("[data-allow-scroll]")) return;
-
+      if ((e.target as HTMLElement).closest("[data-allow-scroll]")) return;
       e.preventDefault();
       e.stopPropagation();
 
       const cfg = useSchematicStore.getState().scrollConfig;
-
-      // Detect trackpad from gesture evidence: any deltaX or synthetic ctrlKey (pinch)
-      if (cfg.trackpadEnabled) {
-        if (e.deltaX !== 0 || (e.ctrlKey && !ctrlHeldRef.current)) {
-          trackpadActiveRef.current = true;
-        }
-        // Reset trackpad mode after gesture ends (no wheel events for 400ms)
-        clearTimeout(trackpadTimerRef.current);
-        trackpadTimerRef.current = setTimeout(() => { trackpadActiveRef.current = false; }, 400);
-      }
-
       let vp: { x: number; y: number; zoom: number };
       try { vp = rfInstance.getViewport(); } catch { return; }
 
-      // Trackpad pinch-to-zoom: browser synthesizes ctrlKey on pinch gestures.
-      // If ctrlKey is set but the physical key isn't held, it's a pinch — always zoom.
-      if (cfg.trackpadEnabled && e.ctrlKey && !ctrlHeldRef.current) {
-        const factor = 1 - e.deltaY * 0.01 * cfg.zoomSpeed;
-        const newZoom = Math.min(8, Math.max(0.05, vp.zoom * factor));
-        const rect = el.getBoundingClientRect();
-        const sx = e.clientX - rect.left;
-        const sy = e.clientY - rect.top;
-        const ratio = newZoom / vp.zoom;
-        rfInstance.setViewport({
-          x: sx - (sx - vp.x) * ratio,
-          y: sy - (sy - vp.y) * ratio,
-          zoom: newZoom,
-        });
-        return;
-      }
-
-      // Trackpad scroll: once trackpad mode is detected, pan both axes for all
-      // unmodified events (including pure-vertical scrolls that lack deltaX).
-      if (!e.ctrlKey && !e.shiftKey && trackpadActiveRef.current) {
-        rfInstance.setViewport({
-          x: vp.x - e.deltaX * cfg.panSpeed,
-          y: vp.y - e.deltaY * cfg.panSpeed,
-          zoom: vp.zoom,
-        });
-        return;
-      }
-
-      // Standard mouse wheel: use ScrollConfig
-      const action = e.ctrlKey ? cfg.ctrlScroll : e.shiftKey ? cfg.shiftScroll : cfg.scroll;
-      const delta = e.deltaY;
-
-      if (action === "zoom") {
-        const factor = 1 - delta * 0.001 * cfg.zoomSpeed;
-        const newZoom = Math.min(8, Math.max(0.05, vp.zoom * factor));
-        const rect = el.getBoundingClientRect();
-        const sx = e.clientX - rect.left;
-        const sy = e.clientY - rect.top;
-        const ratio = newZoom / vp.zoom;
-        rfInstance.setViewport({
-          x: sx - (sx - vp.x) * ratio,
-          y: sy - (sy - vp.y) * ratio,
-          zoom: newZoom,
-        });
-      } else if (action === "pan-x") {
-        rfInstance.setViewport({ x: vp.x - delta * cfg.panSpeed, y: vp.y, zoom: vp.zoom });
-      } else {
-        rfInstance.setViewport({ x: vp.x, y: vp.y - delta * cfg.panSpeed, zoom: vp.zoom });
-      }
+      const rect = el.getBoundingClientRect();
+      gesture.saw(e, cfg.trackpadEnabled, ctrlHeldRef.current);
+      rfInstance.setViewport(nextWheelViewport(e, vp, cfg, {
+        pointer: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        ctrlHeld: ctrlHeldRef.current,
+        trackpadActive: gesture.isActive(),
+        minZoom: 0.05,
+        maxZoom: 8,
+      }));
     };
     el.addEventListener("wheel", handler, { passive: false, capture: true });
     return () => {
       el.removeEventListener("wheel", handler, { capture: true });
-      clearTimeout(trackpadTimerRef.current);
+      gesture.dispose();
     };
   }, [rfInstance]);
 

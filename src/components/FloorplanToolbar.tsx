@@ -324,7 +324,35 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           max={30}
           step={0.5}
           value={page.symbolSizeMm}
-          onChange={(e) => updateFloorplanPage(page.id, { symbolSizeMm: Number(e.target.value) })}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            if (!Number.isFinite(next) || next <= 0) return;
+            // The number beside a symbol grows with it: a 20 mm symbol labelled at 3.5 mm
+            // reads as a mistake on a plan. It stays adjustable on its own below.
+            const ratio = page.symbolSizeMm > 0 ? next / page.symbolSizeMm : 1;
+            updateFloorplanPage(page.id, {
+              symbolSizeMm: next,
+              labelSizeMm: Math.round(page.labelSizeMm * ratio * 100) / 100,
+            });
+          }}
+          className="w-14 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
+        />
+        <span style={{ fontSize: 9 }}>MM</span>
+      </label>
+
+      {/* Label size — follows the symbol, and can be set on its own afterwards */}
+      <label className="flex items-center gap-1 text-[var(--color-text)]" title="Height of the number next to a symbol on paper (mm)">
+        <span style={{ fontSize: 9 }}>LABEL</span>
+        <input
+          type="number"
+          min={0.5}
+          max={20}
+          step={0.5}
+          value={page.labelSizeMm}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            if (Number.isFinite(next) && next > 0) updateFloorplanPage(page.id, { labelSizeMm: next });
+          }}
           className="w-14 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
         />
         <span style={{ fontSize: 9 }}>MM</span>
