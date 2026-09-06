@@ -461,6 +461,13 @@ function floorplanSummary(page: FloorplanPage) {
     lines: planLines(page).map((l) => ({ lineNo: l.lineNo, name: l.name, ampDeviceId: l.ampNodeId, ampPortId: l.ampPortId, mode: l.mode, tapW: l.tapW })),
     /** White covers over the underlay, in paper mm. */
     masks: page.masks.map((m) => ({ maskId: m.id, xMm: m.positionMm.x, yMm: m.positionMm.y, wMm: m.sizeMm.w, hMm: m.sizeMm.h })),
+    /** Detection and surveillance areas — what the cameras see, what the detectors reach.
+     *  Ranges are metres on site; an area with a symbolId follows and turns with that device. */
+    coverages: (page.coverages ?? []).map((c) => ({
+      coverageId: c.id, shape: c.shape, rangeM: c.rangeM, apertureDeg: c.apertureDeg, widthM: c.widthM,
+      rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: c.label,
+      xMm: c.positionMm.x, yMm: c.positionMm.y, hidden: c.hidden ?? false,
+    })),
     drawingBlock: {
       visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
       fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),

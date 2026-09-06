@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, defaultCoverage, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
-import { FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
-import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
+import { COVERAGE_SHAPES, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
+import type { CoverageShape, DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
@@ -65,6 +65,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
   const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
+  const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
+  const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
+  const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanGroup = useSchematicStore((s) => s.removeFloorplanGroup);
@@ -361,6 +364,28 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     {t("Edit symbol…")}
                   </button>
                 )}
+                <button
+                  className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-sky-400 hover:text-sky-700"
+                  onClick={() => {
+                    // One area per selected device, anchored to it and filed under its own
+                    // group so it switches with that layer. Aimed by the device from the
+                    // start — the offset is 0.
+                    let last: string | null = null;
+                    for (const sym of selectedSymbols) {
+                      last = addFloorplanCoverage(page.id, {
+                        ...defaultCoverage("sector"),
+                        symbolId: sym.id,
+                        groupId: sym.groupId,
+                        positionMm: { ...sym.positionMm },
+                        label: sym.label,
+                      });
+                    }
+                    if (last && !many) onSelectionChange({ kind: "coverage", id: last });
+                  }}
+                  title={t("Draw what this device covers — a camera's field of view, a detector's reach. It follows the device and turns with it.")}
+                >
+                  ◔ {t("Coverage")}
+                </button>
                 <div className="flex-1" />
                 <button
                   className="px-1.5 py-0.5 rounded text-red-500 hover:bg-red-500/10 hover:text-red-700"
@@ -369,6 +394,221 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     onSelectionChange({ kind: "none" });
                   }}
                   title={t("Remove from the plan")}
+                >
+                  {t("Delete")}
+                </button>
+              </div>
+            </div>
+          </details>
+        );
+      })()}
+
+      {/* ── Selected coverage area ────────────────────────────────── */}
+      {selection.kind === "coverage" && (() => {
+        const coverage = (page.coverages ?? []).find((c) => c.id === selection.id);
+        if (!coverage) return null;
+        const patch = (p: Parameters<typeof updateFloorplanCoverage>[2]) => updateFloorplanCoverage(page.id, coverage.id, p);
+        const anchoredTo = coverage.symbolId ? page.symbols.find((sym) => sym.id === coverage.symbolId) : undefined;
+        const shapeLabels: Record<CoverageShape, string> = {
+          sector: t("Sector"),
+          circle: t("Circle"),
+          rect: t("Corridor"),
+        };
+        return (
+          <details className="border-b-2 border-sky-400/60 bg-sky-500/5" open>
+            <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+              {t("Selected coverage")}
+            </summary>
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="shrink-0 rounded-sm border border-[var(--color-border)]"
+                  style={{ width: 18, height: 18, background: coverageColor(coverage, page.groups), opacity: coverage.opacity ?? DEFAULT_COVERAGE_OPACITY }}
+                />
+                <div className="min-w-0">
+                  <div className="font-semibold text-[var(--color-text)] truncate">{coverage.label || t("Coverage")}</div>
+                  <div className="text-[var(--color-text-muted)] truncate" style={{ fontSize: 10 }}>
+                    {formatCoverageSpec(coverage)}
+                    {anchoredTo ? ` · ${t("follows")} ${anchoredTo.label}` : ` · ${t("free-standing")}`}
+                  </div>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-12">{t("Caption")}</span>
+                <input
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={coverage.label ?? ""}
+                  placeholder={t("e.g. BM 1")}
+                  onChange={(e) => patch({ label: e.target.value || undefined })}
+                  title={t("Printed just past the area's far edge. Leave empty for an unlabelled area.")}
+                />
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-12">{t("Shape")}</span>
+                <select
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={coverage.shape}
+                  onChange={(e) => {
+                    const shape = e.target.value as CoverageShape;
+                    // A shape needs its own field filled, or it would draw nothing.
+                    patch({
+                      shape,
+                      apertureDeg: shape === "sector" ? coverageApertureDeg(coverage) : coverage.apertureDeg,
+                      widthM: shape === "rect" ? (coverage.widthM ?? 2) : coverage.widthM,
+                    });
+                  }}
+                >
+                  {COVERAGE_SHAPES.map((sh) => <option key={sh} value={sh}>{shapeLabels[sh]}</option>)}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Reach on site, in metres — the number off the datasheet. It is converted through the drawing scale, so it stays true when the plan is re-scaled.")}>
+                <span className="shrink-0 w-12">{t("Range")}</span>
+                <input
+                  type="number"
+                  step={0.5}
+                  min={COVERAGE_MIN_RANGE_M}
+                  max={COVERAGE_MAX_RANGE_M}
+                  className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={coverage.rangeM}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) patch({ rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, v)) });
+                  }}
+                />
+                <span style={{ fontSize: 10 }}>m</span>
+              </label>
+
+              {coverage.shape === "sector" && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Opening angle — a wide-angle PIR's 90°, a lens's horizontal field of view. 360° covers the full circle.")}>
+                  <span className="shrink-0 w-12">{t("Angle")}</span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={360}
+                    step={5}
+                    value={coverageApertureDeg(coverage)}
+                    onChange={(e) => patch({ apertureDeg: Number(e.target.value) })}
+                    className="flex-1 min-w-0"
+                  />
+                  <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{Math.round(coverageApertureDeg(coverage))}°</span>
+                </label>
+              )}
+
+              {coverage.shape === "rect" && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("How wide the corridor is, in metres on site.")}>
+                  <span className="shrink-0 w-12">{t("Width")}</span>
+                  <input
+                    type="number"
+                    step={0.5}
+                    min={0.1}
+                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={coverage.widthM ?? 2}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v > 0) patch({ widthM: v });
+                    }}
+                  />
+                  <span style={{ fontSize: 10 }}>m</span>
+                </label>
+              )}
+
+              {coverage.shape !== "circle" && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={anchoredTo
+                  ? t("Offset on top of the device's own rotation — 0° means the area faces exactly where the device faces.")
+                  : t("Direction the area faces, in degrees clockwise. 0° points to the right of the sheet.")}>
+                  <span className="shrink-0 w-12">{anchoredTo ? t("Offset") : t("Facing")}</span>
+                  <input
+                    type="number"
+                    step={5}
+                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={Math.round(coverage.rotationDeg ?? 0)}
+                    onChange={(e) => patch({ rotationDeg: Number(e.target.value) || 0 })}
+                  />
+                  <span style={{ fontSize: 10 }}>°</span>
+                </label>
+              )}
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Areas overlap constantly — two detectors on one room is normal. A light fill keeps the overlap readable.")}>
+                <span className="shrink-0 w-12">{t("Opacity")}</span>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={0.8}
+                  step={0.05}
+                  value={coverage.opacity ?? DEFAULT_COVERAGE_OPACITY}
+                  onChange={(e) => patch({ opacity: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{Math.round((coverage.opacity ?? DEFAULT_COVERAGE_OPACITY) * 100)}%</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Its own color, or the group's when left on automatic — that keeps the detector plan and the camera plan telling themselves apart.")}>
+                <span className="shrink-0 w-12">{t("Color")}</span>
+                <input
+                  type="color"
+                  className="w-8 h-6 bg-transparent border border-[var(--color-border)] rounded cursor-pointer"
+                  value={coverageColor(coverage, page.groups)}
+                  onChange={(e) => patch({ color: e.target.value })}
+                />
+                {coverage.color && (
+                  <button
+                    className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                    onClick={() => patch({ color: undefined })}
+                    title={t("Back to the group's color")}
+                  >
+                    {t("Auto")}
+                  </button>
+                )}
+              </label>
+
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                <input
+                  type="checkbox"
+                  checked={coverage.showOutline !== false}
+                  onChange={(e) => patch({ showOutline: e.target.checked ? undefined : false })}
+                />
+                <span>{t("Draw the boundary line")}</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Filing the area under a group makes it switch off with that group's layer, so one drawing yields a detector sheet and a camera sheet.")}>
+                <span className="shrink-0 w-12">{t("Layer")}</span>
+                <select
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={coverage.groupId ?? ""}
+                  onChange={(e) => patch({ groupId: e.target.value || undefined })}
+                >
+                  <option value="">{t("— always shown —")}</option>
+                  {page.groups.map((g) => <option key={g.id} value={g.id}>{g.label || t("(unnamed)")}</option>)}
+                </select>
+              </label>
+
+              <div className="flex items-center gap-1 pt-0.5">
+                <button
+                  className={`px-1.5 py-0.5 rounded border ${coverage.locked ? "border-emerald-300 text-emerald-700" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-emerald-400"}`}
+                  onClick={() => patch({ locked: coverage.locked ? undefined : true })}
+                  title={coverage.locked ? t("Locked — click to let it be dragged and aimed again") : t("Lock it so placing symbols inside it cannot nudge it")}
+                >
+                  {coverage.locked ? "🔒" : "🔓"}
+                </button>
+                {anchoredTo && (
+                  <button
+                    className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-emerald-400 hover:text-emerald-700"
+                    onClick={() => patch({ symbolId: undefined, positionMm: { ...anchoredTo.positionMm } })}
+                    title={t("The area stays where it is but stops following the device.")}
+                  >
+                    {t("Detach")}
+                  </button>
+                )}
+                <button
+                  className="ml-auto px-1.5 py-0.5 rounded border border-transparent text-red-600 hover:bg-red-500/10 hover:border-red-200"
+                  onClick={() => {
+                    removeFloorplanCoverage(page.id, coverage.id);
+                    onSelectionChange({ kind: "none" });
+                  }}
+                  title={t("Remove coverage")}
                 >
                   {t("Delete")}
                 </button>
@@ -1022,6 +1262,55 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               </label>
             </div>
           ))}
+        </div>
+      </details>
+
+      {/* ── Coverage areas ────────────────────────────────────────── */}
+      <details className="border-t border-[var(--color-border)]" open={(page.coverages ?? []).length > 0}>
+        <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          {t("Coverage areas ({n})", { n: (page.coverages ?? []).length })}
+        </summary>
+        <div className="px-2 pb-3 flex flex-col gap-1">
+          <p className="text-[var(--color-text-muted)] leading-snug">
+            {t("What the cameras see and the detectors reach. Select a device above and hit")} <strong>◔ {t("Coverage")}</strong>{" "}
+            {t("to give it an area that follows and turns with it, or use")} <strong>◔ {t("Coverage")}</strong>{" "}
+            {t("on the sheet for a free-standing one. Drag the dot on its far edge to aim it and set the reach; ranges are metres on site.")}
+          </p>
+          {(page.coverages ?? []).map((c) => {
+            const anchoredTo = c.symbolId ? page.symbols.find((sym) => sym.id === c.symbolId) : undefined;
+            const isSel = selection.kind === "coverage" && selection.id === c.id;
+            return (
+              <div
+                key={c.id}
+                className={`border rounded px-1.5 py-1 flex items-center gap-1.5 cursor-pointer ${isSel ? "border-sky-400 bg-sky-500/10" : "border-[var(--color-border)] hover:border-sky-300"}`}
+                onClick={() => onSelectionChange({ kind: "coverage", id: c.id })}
+              >
+                <span
+                  className="shrink-0 rounded-sm border border-[var(--color-border)]"
+                  style={{ width: 12, height: 12, background: coverageColor(c, page.groups), opacity: c.opacity ?? DEFAULT_COVERAGE_OPACITY }}
+                />
+                <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">
+                  {c.label || t("Coverage")}
+                  <span className="text-[var(--color-text-muted)]"> · {formatCoverageSpec(c)}</span>
+                  {anchoredTo && <span className="text-[var(--color-text-muted)]"> · {anchoredTo.label}</span>}
+                </span>
+                <button
+                  className={`px-1 shrink-0 ${c.hidden ? "text-amber-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                  onClick={(e) => { e.stopPropagation(); updateFloorplanCoverage(page.id, c.id, { hidden: c.hidden ? undefined : true }); }}
+                  title={c.hidden ? t("Hidden — click to draw it again") : t("Hide it on this sheet")}
+                >
+                  {c.hidden ? "🚫" : "👁"}
+                </button>
+                <button
+                  className="px-1 shrink-0 text-[var(--color-text-muted)] hover:text-red-600"
+                  onClick={(e) => { e.stopPropagation(); removeFloorplanCoverage(page.id, c.id); if (isSel) onSelectionChange({ kind: "none" }); }}
+                  title={t("Remove coverage")}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
         </div>
       </details>
 

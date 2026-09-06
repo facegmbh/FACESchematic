@@ -126,6 +126,12 @@ export type SignalType =
   | "knx"
   | "nlight"
   | "sensor"
+  // Intrusion-alarm buses. Fibra and BUS-2 are wired detector lines many devices share;
+  // Jeweller is Ajax's radio link, modelled as a signal so the plan documents which hub a
+  // wireless detector is enrolled on — that pairing is real cabling-equivalent information.
+  | "fibra"
+  | "jeweller"
+  | "bus-2"
   | "custom";
 
 export type LineStyle = "solid" | "dashed" | "dotted" | "dash-dot";
@@ -278,6 +284,10 @@ export interface DeviceData {
   knxAddress?: string;
   /** DALI short address (0–63) or address range for documentation/commissioning. */
   daliAddress?: string;
+  /** Address on an intrusion-alarm bus, for documentation and commissioning: a Telenot
+   *  BUS-2 detector address, an Ajax Fibra line + device slot. Free text, because each
+   *  system numbers its own way and the plan has to carry what the installer typed. */
+  busAddress?: string;
   /** Link to the Odoo counterpart (FACE Asset-ID, product, sale-order provenance). */
   odoo?: OdooDeviceLink;
   /** Original template label — present while device participates in auto-numbering.
@@ -1173,6 +1183,65 @@ export interface FloorplanMask {
   locked?: boolean;
 }
 
+/** How a coverage area is shaped. "sector" is the wedge a PIR or a lens throws, "circle"
+ *  the all-round reach of a ceiling detector or a siren, "rect" the corridor a curtain
+ *  lens or a rectangular sensor field covers. */
+export type CoverageShape = "sector" | "circle" | "rect";
+
+export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect"];
+
+/**
+ * A detection or surveillance area drawn on the plan: what a camera sees, what a motion
+ * detector reaches. Unlike a symbol, this is measured in the building — the range is
+ * metres on site, converted to paper mm through the page's drawing scale, so a 12 m PIR
+ * stays 12 m when the plan is re-scaled from 1:100 to 1:50.
+ *
+ * Anchored to a symbol (`symbolId`), the area follows the device as it is dragged and
+ * turns with it, which is what a camera being aimed on the plan should do. Standalone
+ * areas carry their own `positionMm` and are the way to document a requirement before a
+ * device is chosen.
+ */
+export interface FloorplanCoverage {
+  id: string;
+  /** The symbol this area belongs to. Set → the symbol's position is the apex and the
+   *  symbol's rotation is added to `rotationDeg`, so aiming the device aims the area.
+   *  A dangling id (symbol deleted) falls back to `positionMm`. */
+  symbolId?: string;
+  /** Symbol group this area is filed under, so it switches off with its layer — the
+   *  detector plan and the camera plan come off one drawing. Undefined = always shown. */
+  groupId?: string;
+  shape: CoverageShape;
+  /** Apex ("sector"), center ("circle") or the middle of the near edge ("rect") on the
+   *  sheet, in paper mm. Ignored while `symbolId` resolves to a symbol. */
+  positionMm: { x: number; y: number };
+  /** Reach in metres on site: a sector's and a rect's depth, a circle's radius. This is
+   *  the number off the datasheet ("12 m / 90°"). */
+  rangeM: number;
+  /** Opening angle in degrees for "sector" — a PIR's 90°, a lens's horizontal field of
+   *  view. 360 covers the full circle. Ignored by the other shapes. */
+  apertureDeg?: number;
+  /** Width in metres for "rect" — how wide the corridor is. Ignored by the other shapes. */
+  widthM?: number;
+  /** Direction the area faces, in degrees clockwise, 0 = to the right of the sheet. On an
+   *  anchored area this is an offset on top of the symbol's own rotation, so a lens
+   *  mounted off-axis can still be drawn true. */
+  rotationDeg?: number;
+  /** Fill color, #rrggbb. Undefined = the group's color, else the default coverage blue. */
+  color?: string;
+  /** Fill opacity, 0–1. Overlapping areas have to stay readable, so this is well below 1
+   *  by default. */
+  opacity?: number;
+  /** Draw the boundary line as well as the fill. Undefined counts as on — the edge is
+   *  where the detector stops, and that is the line being documented. */
+  showOutline?: boolean;
+  /** Caption drawn at the area's far edge, e.g. "BM 1 · 12 m / 90°". */
+  label?: string;
+  /** A locked area ignores drag and resize on the sheet, the way a locked cover does. */
+  locked?: boolean;
+  /** Hidden on its own, independent of its group's layer. */
+  hidden?: boolean;
+}
+
 /** One row of a drawing block's revision table — the "Index" history every issued plan
  *  carries (A · 04.09.26 · Loudspeaker layout ground floor · SP · JL). */
 export interface FloorplanRevision {
@@ -1274,6 +1343,9 @@ export interface FloorplanPage {
   notes: FloorplanNote[];
   /** White covers over parts of the underlay. */
   masks: FloorplanMask[];
+  /** Detection and surveillance areas — what the cameras see, what the detectors reach.
+   *  Drawn under the symbols so a device never disappears behind its own area. */
+  coverages: FloorplanCoverage[];
   /** Show the fixed project title block in the sheet corner as well. Off by default on
    *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;
@@ -1572,6 +1644,9 @@ export const SIGNAL_COLORS: Record<SignalType, string> = {
   dali: "var(--color-dali)",
   knx: "var(--color-knx)",
   nlight: "var(--color-nlight)",
+  fibra: "var(--color-fibra)",
+  jeweller: "var(--color-jeweller)",
+  "bus-2": "var(--color-bus-2)",
   sensor: "var(--color-sensor)",
   custom: "var(--color-custom)",
 };
@@ -1746,6 +1821,9 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   cresnet: "Cresnet",
   dali: "DALI",
   knx: "KNX",
+  fibra: "Ajax Fibra",
+  jeweller: "Ajax Jeweller",
+  "bus-2": "Telenot BUS-2",
   nlight: "nLight",
   sensor: "Sensor",
   custom: "Custom",
@@ -1759,6 +1837,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
   "Network": ["ethernet", "fiber"],
   "Control / Data": ["dmx", "artnet", "sacn", "rs422", "rs485", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "nlight", "sensor"],
   "Building Automation": ["dali", "knx"],
+  "Security": ["fibra", "jeweller", "bus-2"],
   "Sync / Clock": ["genlock", "wordclock", "timecode", "dars", "gps"],
   "Power": ["power", "power-l1", "power-l2", "power-l3", "power-neutral", "power-ground"],
   "Streaming": ["rtmp", "rtsp", "mpeg-ts", "rf"],

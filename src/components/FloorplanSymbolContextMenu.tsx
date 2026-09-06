@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { defaultCoverage } from "../floorplan";
 import type { FloorplanPage } from "../types";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import { useT } from "../i18n";
@@ -30,6 +31,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
   const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
+  const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -80,6 +82,25 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
       <Item label={t("90° clockwise")} onClick={() => turn(90)} />
       <Item label={t("90° counter-clockwise")} onClick={() => turn(-90)} />
       <Item label={t("Upright again")} onClick={() => act(() => updateFloorplanSymbols(page.id, ids, { rotationDeg: 0 }))} />
+
+      <Divider />
+      <Item
+        label={many ? t("Add a coverage area to each") : t("Add a coverage area")}
+        onClick={() => act(() => {
+          // Anchored and filed under the device's own group, so aiming the camera aims what
+          // it sees and the area switches off with that layer.
+          for (const sym of symbols) {
+            addFloorplanCoverage(page.id, {
+              ...defaultCoverage("sector"),
+              symbolId: sym.id,
+              groupId: sym.groupId,
+              positionMm: { ...sym.positionMm },
+              label: sym.label,
+            });
+          }
+        })}
+        title={t("Draw what the device covers — a camera's field of view, a detector's reach. Adjust the reach and the angle in the panel on the right.")}
+      />
 
       {page.groups.length > 1 && (
         <>

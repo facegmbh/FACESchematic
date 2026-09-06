@@ -17,7 +17,7 @@ import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 45;
+export const CURRENT_SCHEMA_VERSION = 46;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -649,6 +649,18 @@ const migrations: Record<number, Migration> = {
       );
     }
     data.version = 45;
+    return data;
+  },
+  45: (data) => {
+    // v45 → v46: floorplan pages gain coverage areas — what a camera sees, what a motion
+    // detector reaches. Existing plans have none.
+    if (Array.isArray(data.pages)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration page
+      data.pages = data.pages.map((page: any) =>
+        page?.type === "floorplan" ? { ...page, coverages: Array.isArray(page.coverages) ? page.coverages : [] } : page,
+      );
+    }
+    data.version = 46;
     return data;
   },
 };

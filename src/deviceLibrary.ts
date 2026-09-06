@@ -23,6 +23,7 @@ import { templates as codecs } from "./devices/codecs";
 import { templates as expansionCards } from "./devices/expansion-cards";
 import { templates as storageMedia } from "./devices/storage-media";
 import { templates as buildingAutomation } from "./devices/building-automation";
+import { templates as security } from "./devices/security";
 import { templates as faceProducts } from "./devices/face-products";
 import { templates as faceLibrary } from "./devices/face-library";
 
@@ -52,6 +53,7 @@ export const DEVICE_TEMPLATES: DeviceTemplate[] = [
   ...cloudServices,
   ...codecs,
   ...buildingAutomation,
+  ...security,
   ...faceProducts,
   ...faceLibrary,
 ];

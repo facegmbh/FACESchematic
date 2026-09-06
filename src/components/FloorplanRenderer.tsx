@@ -24,6 +24,11 @@ import {
   measureRealDistanceMm,
   rectFromDrag,
   MASK_MIN_SIZE_MM,
+  coverageAnchorMm,
+  defaultCoverage,
+  paperMmToRealMm,
+  COVERAGE_MAX_RANGE_M,
+  COVERAGE_MIN_RANGE_M,
   sheetSizeMm,
   isGroupVisible,
   symbolLabelAnchor,
@@ -46,9 +51,11 @@ import TitleBlockSVG from "./TitleBlockSVG";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
+import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
+import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
-import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
+import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
 import { useT } from "../i18n";
@@ -79,7 +86,8 @@ export type Selection =
   | { kind: "legend" }
   | { kind: "drawing" }
   | { kind: "note"; id: string }
-  | { kind: "mask"; id: string };
+  | { kind: "mask"; id: string }
+  | { kind: "coverage"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -96,6 +104,9 @@ type DragState =
   | { kind: "mask-draw"; start: Vec2; current: Vec2 }
   | { kind: "mask"; maskId: string; startClient: Vec2; start: Vec2 }
   | { kind: "mask-resize"; maskId: string; startClient: Vec2; startSize: { w: number; h: number } }
+  | { kind: "coverage"; coverageId: string; startClient: Vec2; start: Vec2 }
+  /** Dragging an area's far edge: the pointer sets direction and reach at once. */
+  | { kind: "coverage-aim"; coverageId: string }
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
@@ -125,6 +136,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const addFloorplanMask = useSchematicStore((s) => s.addFloorplanMask);
   const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
+  const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
+  const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const companyProfile = useSchematicStore((s) => s.companyProfile);
   const schematicName = useSchematicStore((s) => s.schematicName);
@@ -242,6 +256,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const [hoverMaskId, setHoverMaskId] = useState<string | null>(null);
   const [symbolMenu, setSymbolMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [maskMenu, setMaskMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [coverageMenu, setCoverageMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [panning, setPanning] = useState<{ startClient: Vec2; startPan: Vec2 } | null>(null);
   const didMoveRef = useRef(false);
   // State mirror of didMoveRef, used only for cursor styling during render — the ref
@@ -362,7 +377,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setDidMove(false);
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
-    if (tool === "place" || tool === "note") return; // handled on click
+    if (tool === "place" || tool === "note" || tool === "coverage") return; // handled on click
     if (tool === "erase") {
       // Drag out a white cover — the only way to "remove" something from a raster plan.
       setPanning(null);
@@ -388,6 +403,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       }
       return;
     }
+    if (tool === "coverage") {
+      // Dropped where it was clicked and left selected, so the aim handle is right there
+      // to point it — placing and aiming is one gesture.
+      const id = addFloorplanCoverage(page.id, {
+        ...defaultCoverage("sector"),
+        positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) },
+        groupId: activeGroupId ?? undefined,
+      });
+      setSelection({ kind: "coverage", id });
+      onToolChange("select");
+      return;
+    }
     if (tool === "place") {
       if (!activeGroupId) {
         addToast(t("Add a symbol group first — it defines the color and legend row."), "info");
@@ -408,7 +435,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       setNoteDraft(t("Note"));
       onToolChange("select");
     }
-  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addToast, onToolChange]);
+  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addFloorplanCoverage, addToast, onToolChange]);
 
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
@@ -499,6 +526,32 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         updateFloorplanMask(page.id, dragging.maskId, {
           sizeMm: { w: Math.max(MASK_MIN_SIZE_MM, snap(dragging.startSize.w + d.x, free)), h: Math.max(MASK_MIN_SIZE_MM, snap(dragging.startSize.h + d.y, free)) },
         });
+      } else if (dragging.kind === "coverage") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanCoverage(page.id, dragging.coverageId, { positionMm: { x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) } });
+      } else if (dragging.kind === "coverage-aim") {
+        const coverage = (page.coverages ?? []).find((c) => c.id === dragging.coverageId);
+        if (coverage) {
+          const anchor = coverageAnchorMm(coverage, page.symbols);
+          const at = clientToPaperMm(e.clientX, e.clientY);
+          const dx = at.x - anchor.x, dy = at.y - anchor.y;
+          // Reach comes out of the pointer distance measured in the building, not on paper.
+          const rangeM = paperMmToRealMm(Math.hypot(dx, dy), page.scaleDenominator) / 1000;
+          const patch: Partial<FloorplanCoverage> = {
+            rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, free ? rangeM : Math.round(rangeM * 10) / 10)),
+          };
+          // A ring has no direction to set; for everything else the pointer aims it. On an
+          // anchored area rotationDeg is an offset, so the device's own aim comes back out.
+          if (coverage.shape !== "circle" && Math.hypot(dx, dy) > 0.5) {
+            const absolute = (Math.atan2(dy, dx) * 180) / Math.PI;
+            const deviceAim = coverage.symbolId
+              ? page.symbols.find((sym) => sym.id === coverage.symbolId)?.rotationDeg ?? 0
+              : 0;
+            const own = absolute - deviceAim;
+            patch.rotationDeg = free ? own : Math.round(own / 5) * 5;
+          }
+          updateFloorplanCoverage(page.id, dragging.coverageId, patch);
+        }
       }
       return;
     }
@@ -514,7 +567,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setViewport(vpRef.current.zoom, { x: panning.startPan.x + dx, y: panning.startPan.y + dy });
       }
     }
-  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, setViewport]);
+  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, updateFloorplanCoverage, setViewport]);
 
   const handleMouseUp = useCallback(() => {
     if (dragging?.kind === "mask-draw") {
@@ -550,12 +603,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       removeFloorplanNote(page.id, selection.id);
       setSelection({ kind: "none" });
     }
+    if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "coverage") {
+      e.preventDefault();
+      removeFloorplanCoverage(page.id, selection.id);
+      setSelection({ kind: "none" });
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "mask") {
       e.preventDefault();
       removeFloorplanMask(page.id, selection.id);
       setSelection({ kind: "none" });
     }
-  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, editingNoteId]);
+  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, removeFloorplanCoverage, editingNoteId]);
 
   // ── Calibration dialog ───────────────────────────────────────────
   const calibDistanceMm = calibPicks.length === 2
@@ -607,7 +666,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" || tool === "erase" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -745,6 +804,31 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               />
             );
           })()}
+
+          {/* What the cameras see and the detectors reach — under the symbols, so a device
+              is never hidden behind its own area. */}
+          <FloorplanCoverageLayer
+            page={page}
+            mmToPx={mmToPx}
+            sheetPx={{ w: pageWPx, h: pageHPx }}
+            interactive={tool === "select"}
+            selectedId={selection.kind === "coverage" ? selection.id : null}
+            aimingId={dragging?.kind === "coverage-aim" ? dragging.coverageId : null}
+            onSelect={(id) => setSelection({ kind: "coverage", id })}
+            onContextMenu={(e, id) => setCoverageMenu({ x: e.clientX, y: e.clientY, id })}
+            onMoveStart={(e, coverage) => {
+              didMoveRef.current = false;
+              // An anchored area is moved by moving its device — dragging the wedge itself
+              // would silently break the link the plan relies on.
+              if (coverage.symbolId) return;
+              setDragging({ kind: "coverage", coverageId: coverage.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...coverage.positionMm } });
+            }}
+            onAimStart={(_e, coverage) => {
+              didMoveRef.current = false;
+              setSelection({ kind: "coverage", id: coverage.id });
+              setDragging({ kind: "coverage-aim", coverageId: coverage.id });
+            }}
+          />
 
           {/* Symbols */}
           {page.symbols.map((symbol) => {
@@ -1165,7 +1249,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           )}
 
           {/* Empty state */}
-          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (
+          {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (page.coverages ?? []).length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
               {t("Import the architect's drawing from the toolbar, then drag devices onto it.")}
             </div>
@@ -1186,6 +1270,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       )}
 
       {/* Right-click on a cover */}
+      {coverageMenu && (
+        <FloorplanCoverageContextMenu
+          page={page}
+          x={coverageMenu.x}
+          y={coverageMenu.y}
+          coverageId={coverageMenu.id}
+          onClose={() => setCoverageMenu(null)}
+        />
+      )}
+
       {maskMenu && (
         <FloorplanMaskContextMenu
           page={page}
@@ -1255,6 +1349,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title={t("Click the plan to add a text note (installation hint, remark)")}
         >
           ✎ {t("Note")}
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "coverage" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => onToolChange(tool === "coverage" ? "select" : "coverage")}
+          title={t("Click the plan to drop a detection area — what a camera sees, what a motion detector reaches. Drag its edge to aim it.")}
+        >
+          ◔ {t("Coverage")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "erase" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}

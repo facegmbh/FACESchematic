@@ -129,6 +129,25 @@ export const DEVICE_TYPE_TO_CATEGORY: Record<string, string> = {
   "dali-gateway": "Building Automation",
   "dali-driver": "Building Automation",
   "dali-sensor": "Building Automation",
+  // ── Security: intrusion alarm and surveillance ──────────────────
+  // "occupancy-sensor" above is the building-automation kind (presence for light and
+  // HVAC); "motion-detector" here is the intrusion kind, which is a different device on
+  // a different bus and belongs on a different plan.
+  "alarm-panel": "Security",
+  "alarm-expander": "Security",
+  "alarm-keypad": "Security",
+  "alarm-transmitter": "Security",
+  "radio-extender": "Security",
+  "motion-detector": "Security",
+  "opening-detector": "Security",
+  "glass-break-detector": "Security",
+  "smoke-detector": "Security",
+  "water-leak-detector": "Security",
+  "siren-indoor": "Security",
+  "siren-outdoor": "Security",
+  "transponder-reader": "Security",
+  "ip-camera": "Security",
+  "nvr": "Security",
 };
 
 /** Human-readable labels for device types (kebab-case → Title Case with known acronyms) */
@@ -140,7 +159,7 @@ export const DEVICE_TYPE_LABELS: Record<string, string> = Object.fromEntries(
       .map((word) => {
         const upper = word.toUpperCase();
         // Preserve known acronyms
-        if (["ptz", "ccu", "da", "tv", "ndi", "dsp", "kvm", "led", "nas", "usb", "hdmi", "knx", "dali"].includes(word)) return upper;
+        if (["ptz", "ccu", "da", "tv", "ndi", "dsp", "kvm", "led", "nas", "usb", "hdmi", "knx", "dali", "nvr"].includes(word)) return upper;
         if (word === "av") return "AV";
         if (word === "ip") return "IP";
         if (word === "wifi") return "Wi-Fi";

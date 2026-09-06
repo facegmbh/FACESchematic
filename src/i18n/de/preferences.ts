@@ -45,6 +45,7 @@ export const DE_PREFERENCES: Record<string, string> = {
   "Audio": "Audio",
   "Control / Data": "Steuerung / Daten",
   "Building Automation": "Gebäudeautomation",
+  "Security": "Sicherheitstechnik",
   "Sync / Clock": "Sync / Takt",
   "Streaming": "Streaming",
   "Other": "Sonstige",

@@ -16,6 +16,11 @@ import { drawTitleBlockMm } from "./printSheetPdf";
 import { fetchImageAsDataUrl, rotatedImageDataUrl } from "./floorplanUnderlay";
 import {
   buildLegendRows,
+  coverageColor,
+  coverageLabelAnchorMm,
+  coveragePointsOnSheet,
+  isCoverageVisible,
+  DEFAULT_COVERAGE_OPACITY,
   layoutDrawingBlock,
   layoutNote,
   legendHeightMm,
@@ -83,6 +88,14 @@ const EMPTY_TITLE_BLOCK: TitleBlock = {
 };
 
 /** #rrggbb → [r, g, b]; falls back to black for anything unparseable. */
+/** Fill/stroke alpha. jsPDF exposes it only through a graphics state, and older builds
+ *  have neither setGState nor GState — there a faded shape prints opaque rather than not
+ *  at all, which is the safer of the two failures on a plan. */
+function setPdfAlpha(doc: jsPDF, alpha: number): void {
+  const gs = (doc as unknown as { setGState?: (s: unknown) => void; GState?: (o: unknown) => unknown });
+  if (gs.setGState && gs.GState) gs.setGState(gs.GState({ opacity: alpha }));
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return [0, 0, 0];
@@ -524,13 +537,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       const half = { x: mask.sizeMm.w / 2, y: mask.sizeMm.h / 2 };
       const cx = mask.positionMm.x + half.x;
       const cy = mask.positionMm.y + half.y;
-      const setAlpha = (a: number) => {
-        // jsPDF exposes alpha only through a graphics state; older builds have neither, in
-        // which case a faded cover prints opaque rather than not at all.
-        const gs = (doc as unknown as { setGState?: (s: unknown) => void; GState?: (o: unknown) => unknown });
-        if (gs.setGState && gs.GState) gs.setGState(gs.GState({ opacity: a }));
-      };
-      if (opacity < 1) setAlpha(opacity);
+      if (opacity < 1) setPdfAlpha(doc, opacity);
       if (!turn) {
         doc.rect(mask.positionMm.x, mask.positionMm.y, mask.sizeMm.w, mask.sizeMm.h, "F");
       } else {
@@ -546,7 +553,41 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         }
         doc.lines(deltas, cx + corners[0].x, cy + corners[0].y, [1, 1], "F", true);
       }
-      if (opacity < 1) setAlpha(1);
+      if (opacity < 1) setPdfAlpha(doc, 1);
+    }
+
+    // Detection and surveillance areas, over the plan but under the symbols — the same
+    // order the screen draws them in, so the print is what was judged on screen.
+    for (const coverage of page.coverages ?? []) {
+      if (!isCoverageVisible(coverage, page.groups)) continue;
+      const points = coveragePointsOnSheet(coverage, page);
+      if (points.length < 3) continue;
+      const [cr2, cg2, cb2] = hexToRgb(coverageColor(coverage, page.groups));
+      const alpha = Math.min(1, Math.max(0, coverage.opacity ?? DEFAULT_COVERAGE_OPACITY));
+      const outline = coverage.showOutline !== false;
+      // jsPDF has no transform stack for filled paths, so the polygon arrives already
+      // turned and placed; only the per-segment deltas it wants are computed here.
+      const deltas: [number, number][] = [];
+      for (let k = 1; k < points.length; k++) {
+        deltas.push([points[k].x - points[k - 1].x, points[k].y - points[k - 1].y]);
+      }
+      doc.setFillColor(cr2, cg2, cb2);
+      doc.setDrawColor(cr2, cg2, cb2);
+      doc.setLineWidth(0.25);
+      if (alpha < 1) setPdfAlpha(doc, alpha);
+      doc.lines(deltas, points[0].x, points[0].y, [1, 1], "F", true);
+      if (alpha < 1) setPdfAlpha(doc, 1);
+      // The boundary is the line being documented — where the detector stops — so it is
+      // drawn at full strength rather than through the fill's alpha.
+      if (outline) doc.lines(deltas, points[0].x, points[0].y, [1, 1], "S", true);
+
+      if (coverage.label) {
+        const at = coverageLabelAnchorMm(coverage, page);
+        doc.setFont("Inter", "bold");
+        doc.setFontSize(page.labelSizeMm * 0.85 * MM_TO_PT);
+        doc.setTextColor(17, 17, 17);
+        doc.text(coverage.label, at.x, at.y, { baseline: "middle", align: "center" });
+      }
     }
 
     // Content border

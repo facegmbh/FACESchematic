@@ -43,6 +43,7 @@ import type {
   FloorplanDrawingBlock,
   FloorplanNote,
   FloorplanMask,
+  FloorplanCoverage,
   CompanyProfile,
   FloorplanKind,
   FloorplanLine,
@@ -904,6 +905,9 @@ interface SchematicState {
   addFloorplanMask: (pageId: string, mask: Omit<FloorplanMask, "id">) => string;
   updateFloorplanMask: (pageId: string, maskId: string, patch: Partial<Omit<FloorplanMask, "id">>) => void;
   removeFloorplanMask: (pageId: string, maskId: string) => void;
+  addFloorplanCoverage: (pageId: string, coverage: Omit<FloorplanCoverage, "id">) => string;
+  updateFloorplanCoverage: (pageId: string, coverageId: string, patch: Partial<Omit<FloorplanCoverage, "id">>) => void;
+  removeFloorplanCoverage: (pageId: string, coverageId: string) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -1012,6 +1016,11 @@ function nextFloorplanMaskId(): string {
   return `fpmask-${++floorplanMaskIdCounter}`;
 }
 
+let floorplanCoverageIdCounter = 0;
+function nextFloorplanCoverageId(): string {
+  return `fpcov-${++floorplanCoverageIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -1098,6 +1107,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const mask of page.masks ?? []) {
         const mm2 = mask.id.match(/^fpmask-(\d+)$/);
         if (mm2) floorplanMaskIdCounter = Math.max(floorplanMaskIdCounter, Number(mm2[1]));
+      }
+      for (const coverage of page.coverages ?? []) {
+        const cm2 = coverage.id.match(/^fpcov-(\d+)$/);
+        if (cm2) floorplanCoverageIdCounter = Math.max(floorplanCoverageIdCounter, Number(cm2[1]));
       }
       continue;
     }
@@ -5359,6 +5372,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       drawingBlock: createDefaultDrawingBlock(base),
       notes: [],
       masks: [],
+      coverages: [],
       // The movable drawing block carries the title-block data; the fixed corner block
       // would only duplicate it.
       showTitleBlock: false,
@@ -5509,15 +5523,26 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       groupIdMap.set(g.id, nid);
       return { ...g, id: nid };
     });
+    // Coverage areas anchor to symbols, so the copy's areas have to follow the copy's
+    // symbols — otherwise every camera cone on the duplicate would still be aimed by the
+    // original page's camera.
+    const symbolIdMap = new Map<string, string>();
+    const symbols = src.symbols.map((sym) => {
+      const nid = nextFloorplanSymbolId();
+      symbolIdMap.set(sym.id, nid);
+      return { ...sym, id: nid, groupId: groupIdMap.get(sym.groupId) ?? sym.groupId };
+    });
     const newPage: FloorplanPage = {
       ...src,
       id: newPageId,
       label: `${src.label} (copy)`,
       groups,
-      symbols: src.symbols.map((sym) => ({
-        ...sym,
-        id: nextFloorplanSymbolId(),
-        groupId: groupIdMap.get(sym.groupId) ?? sym.groupId,
+      symbols,
+      coverages: (src.coverages ?? []).map((c) => ({
+        ...c,
+        id: nextFloorplanCoverageId(),
+        symbolId: c.symbolId ? symbolIdMap.get(c.symbolId) ?? c.symbolId : undefined,
+        groupId: c.groupId ? groupIdMap.get(c.groupId) ?? c.groupId : undefined,
       })),
       legend: { ...src.legend, notes: [...(src.legend.notes ?? [])] },
       drawingBlock: {
@@ -5734,7 +5759,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
-      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, symbols: p.symbols.filter((sym) => sym.id !== symbolId) })),
+      // An area anchored to the symbol documented *that* device's reach, so it goes with
+      // it rather than being left floating over the plan. Undo brings both back.
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        symbols: p.symbols.filter((sym) => sym.id !== symbolId),
+        coverages: (p.coverages ?? []).filter((c) => c.symbolId !== symbolId),
+      })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();
@@ -5846,6 +5877,41 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, masks: p.masks.filter((m) => m.id !== maskId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanCoverage: (pageId, coverage) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanCoverageId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, coverages: [...(p.coverages ?? []), { ...coverage, id }] })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanCoverage: (pageId, coverageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        coverages: (p.coverages ?? []).map((c) => c.id === coverageId ? { ...c, ...patch } : c),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanCoverage: (pageId, coverageId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, coverages: (p.coverages ?? []).filter((c) => c.id !== coverageId) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();

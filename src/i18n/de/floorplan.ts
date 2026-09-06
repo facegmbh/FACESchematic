@@ -424,4 +424,92 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Let it be dragged and resized again.": "Wieder verschiebbar und in der Größe änderbar machen.",
   "Locked — click to let it be dragged again": "Gesperrt — klicken, um sie wieder verschiebbar zu machen",
   "Lock it so placing symbols cannot nudge it": "Sperren, damit das Platzieren von Symbolen sie nicht verschiebt",
+
+  // ─── Abdeckungsbereiche (Kameras, Melder) ──────────────────────
+  "Coverage": "Abdeckung",
+  "Coverage areas ({n})": "Abdeckungsbereiche ({n})",
+  "Selected coverage": "Ausgewählte Abdeckung",
+  "Click the plan to drop a detection area — what a camera sees, what a motion detector reaches. Drag its edge to aim it.":
+    "In den Plan klicken, um einen Erfassungsbereich zu setzen — was eine Kamera sieht, was ein Bewegungsmelder erreicht. Am Rand ziehen, um ihn auszurichten.",
+  "Drag to set range and direction": "Reichweite und Richtung ziehen",
+  "Remove coverage": "Abdeckung entfernen",
+  "Add a coverage area": "Abdeckungsbereich hinzufügen",
+  "Add a coverage area to each": "Je Symbol einen Abdeckungsbereich hinzufügen",
+  "Draw what the device covers — a camera's field of view, a detector's reach. Adjust the reach and the angle in the panel on the right.":
+    "Zeichnet, was das Gerät abdeckt — das Blickfeld einer Kamera, die Reichweite eines Melders. Reichweite und Winkel rechts im Panel einstellen.",
+  "Draw what this device covers — a camera's field of view, a detector's reach. It follows the device and turns with it.":
+    "Zeichnet, was dieses Gerät abdeckt — das Blickfeld einer Kamera, die Reichweite eines Melders. Der Bereich folgt dem Gerät und dreht mit.",
+
+  // Formen
+  "Sector": "Sektor",
+  "Corridor": "Korridor",
+  "Sector — detector or lens wedge": "Sektor — Melder- oder Objektivkeil",
+  "Circle — all-round, ceiling mounted": "Kreis — Rundumsicht, Deckenmontage",
+  "Corridor — rectangular field": "Korridor — rechteckiges Feld",
+
+  // Maße und Ausrichtung
+  "Range": "Reichweite",
+  "Reach on site, in metres — the number off the datasheet. It is converted through the drawing scale, so it stays true when the plan is re-scaled.":
+    "Reichweite am Bau, in Metern — die Zahl aus dem Datenblatt. Sie wird über den Zeichnungsmaßstab umgerechnet und bleibt darum richtig, wenn der Plan umskaliert wird.",
+  "Angle": "Winkel",
+  "Opening angle": "Öffnungswinkel",
+  "Opening angle — a wide-angle PIR's 90°, a lens's horizontal field of view. 360° covers the full circle.":
+    "Öffnungswinkel — die 90° eines Weitwinkel-PIR, das horizontale Blickfeld eines Objektivs. 360° deckt den Vollkreis ab.",
+  "Width": "Breite",
+  "How wide the corridor is, in metres on site.": "Wie breit der Korridor ist, in Metern am Bau.",
+  "Facing": "Richtung",
+  "Offset": "Versatz",
+  "Direction the area faces, in degrees clockwise. 0° points to the right of the sheet.":
+    "Richtung, in die der Bereich zeigt, in Grad im Uhrzeigersinn. 0° zeigt nach rechts auf dem Blatt.",
+  "Offset on top of the device's own rotation — 0° means the area faces exactly where the device faces.":
+    "Versatz zur Drehung des Geräts — bei 0° zeigt der Bereich genau dorthin, wohin das Gerät zeigt.",
+  "Aim it with the device again": "Wieder mit dem Gerät ausrichten",
+  "Drop the offset — the area then faces wherever the device faces.":
+    "Versatz aufheben — der Bereich zeigt dann dorthin, wohin das Gerät zeigt.",
+
+  // Darstellung
+  "Caption": "Beschriftung",
+  "e.g. BM 1": "z. B. BM 1",
+  "Printed just past the area's far edge. Leave empty for an unlabelled area.":
+    "Wird knapp hinter der Außenkante gedruckt. Leer lassen für einen Bereich ohne Beschriftung.",
+  "Areas overlap constantly — two detectors on one room is normal. A light fill keeps the overlap readable.":
+    "Bereiche überlappen ständig — zwei Melder auf einen Raum sind der Normalfall. Eine leichte Füllung hält die Überlappung lesbar.",
+  "Back to the group's color": "Zurück zur Farbe der Gruppe",
+  "Its own color, or the group's when left on automatic — that keeps the detector plan and the camera plan telling themselves apart.":
+    "Eigene Farbe, oder die der Gruppe bei Automatik — so bleiben Melderplan und Kameraplan unterscheidbar.",
+  "Draw the boundary line": "Umrisslinie zeichnen",
+  "Show the boundary line": "Umrisslinie zeigen",
+  "Hide the boundary line": "Umrisslinie ausblenden",
+
+  // Ebenen, Sperren, Verknüpfung
+  "Layer": "Ebene",
+  "— always shown —": "— immer sichtbar —",
+  "Filing the area under a group makes it switch off with that group's layer, so one drawing yields a detector sheet and a camera sheet.":
+    "Einer Gruppe zugeordnet schaltet sich der Bereich mit deren Ebene ab — so werden aus einer Zeichnung ein Melderblatt und ein Kamerablatt.",
+  "follows": "folgt",
+  "free-standing": "freistehend",
+  "on": "an",
+  "Detach": "Lösen",
+  "Detach from the device": "Vom Gerät lösen",
+  "The area stays where it is but stops following the device.":
+    "Der Bereich bleibt, wo er ist, folgt dem Gerät aber nicht mehr.",
+  "Let it be dragged and aimed again.": "Wieder verschiebbar und ausrichtbar machen.",
+  "Locked — click to let it be dragged and aimed again":
+    "Gesperrt — klicken, um sie wieder verschieb- und ausrichtbar zu machen",
+  "Lock it so placing symbols inside it cannot nudge it":
+    "Sperren, damit das Platzieren von Symbolen darin sie nicht verschiebt",
+  "Pin it, so placing symbols inside it cannot nudge it. It stays editable from here.":
+    "Festsetzen, damit das Platzieren von Symbolen darin sie nicht verschiebt. Bearbeiten geht weiterhin von hier.",
+  "Hide on this sheet": "Auf diesem Blatt ausblenden",
+  "Hidden — click to draw it again": "Ausgeblendet — klicken, um sie wieder zu zeichnen",
+  "Hide it on this sheet": "Auf diesem Blatt ausblenden",
+  "Show again": "Wieder einblenden",
+
+  // Erklärtext im Panel
+  "What the cameras see and the detectors reach. Select a device above and hit":
+    "Was die Kameras sehen und die Melder erreichen. Oben ein Gerät auswählen und",
+  "to give it an area that follows and turns with it, or use":
+    "drücken für einen Bereich, der mitfolgt und mitdreht, oder",
+  "on the sheet for a free-standing one. Drag the dot on its far edge to aim it and set the reach; ranges are metres on site.":
+    "auf dem Blatt für einen freistehenden. Den Punkt an der Außenkante ziehen, um Richtung und Reichweite zu setzen; Reichweiten sind Meter am Bau.",
 };

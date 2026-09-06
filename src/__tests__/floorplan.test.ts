@@ -28,6 +28,18 @@ import {
   matchPaperToSize,
   fillSheetPlacement,
   legendRowImage,
+  coverageOutlineMm,
+  coverageApertureDeg,
+  coverageAnchorMm,
+  coverageRotationDeg,
+  coveragePointsOnSheet,
+  coverageColor,
+  isCoverageVisible,
+  formatCoverageSpec,
+  defaultCoverage,
+  COVERAGE_MAX_RANGE_M,
+  COVERAGE_MIN_RANGE_M,
+  DEFAULT_COVERAGE_COLOR,
   rectFromDrag,
   legendDescriptionFor,
   legendInstallNoteFor,
@@ -58,7 +70,7 @@ import {
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
-import type { FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
+import type { FloorplanCoverage, FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
 
 const paper = { paperId: "iso-a1", orientation: "landscape" as const };
@@ -93,6 +105,7 @@ function makePage(over: Partial<FloorplanPage> = {}): FloorplanPage {
     drawingBlock: createDefaultDrawingBlock(paper),
     notes: [],
     masks: [],
+    coverages: [],
     showTitleBlock: false,
     symbolSizeMm: 6,
     labelSizeMm: 3.5,
@@ -764,5 +777,122 @@ describe("loudspeaker numbering", () => {
     const n = labelPlacementFor("n", 6, 3.5);
     expect(n.labelOffsetMm.y).toBeLessThan(-3);
     expect(n.labelAlign).toBe("middle");
+  });
+});
+
+describe("coverage areas", () => {
+  /** A 12 m reach at 1:50 is 240 mm of paper — the bridge every shape is measured by. */
+  const scale = 50;
+
+  function makeCoverage(over: Partial<FloorplanCoverage> = {}): FloorplanCoverage {
+    return { id: "c1", shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 12, apertureDeg: 90, ...over };
+  }
+
+  it("measures a sector's reach through the drawing scale, not the paper", () => {
+    const wedge = makeCoverage();
+    const at50 = coverageOutlineMm(wedge, 50);
+    const at100 = coverageOutlineMm(wedge, 100);
+    // 12 m = 12000 real mm → 240 paper mm at 1:50, 120 mm at 1:100.
+    expect(Math.hypot(at50[1].x, at50[1].y)).toBeCloseTo(240, 5);
+    expect(Math.hypot(at100[1].x, at100[1].y)).toBeCloseTo(120, 5);
+  });
+
+  it("opens a sector symmetrically about the direction it faces, starting at the device", () => {
+    const pts = coverageOutlineMm(makeCoverage({ apertureDeg: 90 }), scale);
+    // First point is the apex — the device itself.
+    expect(pts[0]).toEqual({ x: 0, y: 0 });
+    const angles = pts.slice(1).map((p) => (Math.atan2(p.y, p.x) * 180) / Math.PI);
+    expect(Math.min(...angles)).toBeCloseTo(-45, 5);
+    expect(Math.max(...angles)).toBeCloseTo(45, 5);
+  });
+
+  it("drops the apex once a sector has opened all the way round", () => {
+    const ring = coverageOutlineMm(makeCoverage({ apertureDeg: 360 }), scale);
+    // No point sits at the centre, or the ring would close through the device.
+    expect(ring.every((p) => Math.hypot(p.x, p.y) > 1)).toBe(true);
+    // And it does not double back on its own first point.
+    expect(Math.hypot(ring[0].x - ring[ring.length - 1].x, ring[0].y - ring[ring.length - 1].y)).toBeGreaterThan(1);
+  });
+
+  it("clamps the aperture to something drawable", () => {
+    expect(coverageApertureDeg({ apertureDeg: 0 })).toBe(1);
+    expect(coverageApertureDeg({ apertureDeg: 999 })).toBe(360);
+    expect(coverageApertureDeg({ apertureDeg: undefined })).toBe(90);
+    expect(coverageApertureDeg({ apertureDeg: NaN })).toBe(90);
+  });
+
+  it("draws a circle centred on the device and a corridor reaching away from it", () => {
+    const ring = coverageOutlineMm(makeCoverage({ shape: "circle", rangeM: 8 }), scale);
+    for (const p of ring) expect(Math.hypot(p.x, p.y)).toBeCloseTo(160, 5);
+
+    const corridor = coverageOutlineMm(makeCoverage({ shape: "rect", rangeM: 15, widthM: 2 }), scale);
+    expect(corridor).toHaveLength(4);
+    // 15 m deep = 300 mm, 2 m wide = 40 mm, i.e. ±20 mm about the axis.
+    expect(corridor.map((p) => p.x)).toEqual([0, 300, 300, 0]);
+    expect(corridor.map((p) => p.y)).toEqual([-20, -20, 20, 20]);
+  });
+
+  it("keeps a mistyped range inside what a device could plausibly reach", () => {
+    const tiny = coverageOutlineMm(makeCoverage({ shape: "circle", rangeM: 0 }), scale);
+    expect(Math.hypot(tiny[0].x, tiny[0].y)).toBeCloseTo((COVERAGE_MIN_RANGE_M * 1000) / scale, 5);
+    const huge = coverageOutlineMm(makeCoverage({ shape: "circle", rangeM: 99999 }), scale);
+    expect(Math.hypot(huge[0].x, huge[0].y)).toBeCloseTo((COVERAGE_MAX_RANGE_M * 1000) / scale, 5);
+  });
+
+  it("anchors to its symbol and adds the device's own aim to its offset", () => {
+    const symbols = [makeSymbol({ id: "s1", groupId: "g", label: "K1", positionMm: { x: 100, y: 60 }, rotationDeg: 90 })];
+    const anchored = makeCoverage({ symbolId: "s1", rotationDeg: 10, positionMm: { x: 0, y: 0 } });
+    expect(coverageAnchorMm(anchored, symbols)).toEqual({ x: 100, y: 60 });
+    expect(coverageRotationDeg(anchored, symbols)).toBe(100);
+    // Free-standing areas keep their own position and facing.
+    const free = makeCoverage({ positionMm: { x: 20, y: 30 }, rotationDeg: 45 });
+    expect(coverageAnchorMm(free, symbols)).toEqual({ x: 20, y: 30 });
+    expect(coverageRotationDeg(free, symbols)).toBe(45);
+  });
+
+  it("falls back to its own position when the symbol it pointed at is gone", () => {
+    const orphan = makeCoverage({ symbolId: "deleted", positionMm: { x: 7, y: 9 }, rotationDeg: 30 });
+    expect(coverageAnchorMm(orphan, [])).toEqual({ x: 7, y: 9 });
+    expect(coverageRotationDeg(orphan, [])).toBe(30);
+  });
+
+  it("places a turned area on the sheet where the device points", () => {
+    const symbols = [makeSymbol({ id: "s1", groupId: "g", label: "K1", positionMm: { x: 100, y: 100 }, rotationDeg: 90 })];
+    const page = makePage({ symbols, scaleDenominator: scale });
+    const pts = coveragePointsOnSheet(makeCoverage({ symbolId: "s1", rangeM: 5, apertureDeg: 90 }), page);
+    // Apex on the device; a camera aimed at 90° looks down the sheet, so the wedge is below it.
+    expect(pts[0]).toEqual({ x: 100, y: 100 });
+    expect(Math.max(...pts.map((p) => p.y))).toBeGreaterThan(100);
+    expect(pts.every((p) => p.y >= 99.99)).toBe(true);
+  });
+
+  it("takes its color from the group unless it carries its own", () => {
+    const groups = [{ id: "g1", color: "#ff0000" }];
+    expect(coverageColor(makeCoverage({ groupId: "g1" }), groups)).toBe("#ff0000");
+    expect(coverageColor(makeCoverage({ groupId: "g1", color: "#00ff00" }), groups)).toBe("#00ff00");
+    expect(coverageColor(makeCoverage(), groups)).toBe(DEFAULT_COVERAGE_COLOR);
+  });
+
+  it("switches off with its group's layer, and on its own", () => {
+    const groups = [{ id: "g1", hidden: true }, { id: "g2" }];
+    expect(isCoverageVisible(makeCoverage({ groupId: "g1" }), groups)).toBe(false);
+    expect(isCoverageVisible(makeCoverage({ groupId: "g2" }), groups)).toBe(true);
+    expect(isCoverageVisible(makeCoverage({ groupId: "g2", hidden: true }), groups)).toBe(false);
+    // No group at all is always shown; a group that no longer exists is orphaned, not hidden.
+    expect(isCoverageVisible(makeCoverage(), groups)).toBe(true);
+    expect(isCoverageVisible(makeCoverage({ groupId: "gone" }), groups)).toBe(true);
+  });
+
+  it("reads out the way a datasheet states it", () => {
+    expect(formatCoverageSpec(makeCoverage({ rangeM: 12, apertureDeg: 90 }))).toBe("12.0 m / 90°");
+    expect(formatCoverageSpec(makeCoverage({ shape: "circle", rangeM: 8 }))).toBe("R 8.0 m");
+    expect(formatCoverageSpec(makeCoverage({ shape: "rect", rangeM: 15, widthM: 2 }))).toBe("15.0 × 2.0 m");
+  });
+
+  it("gives each shape the field that shape needs", () => {
+    expect(defaultCoverage("sector").apertureDeg).toBe(90);
+    expect(defaultCoverage("sector").widthM).toBeUndefined();
+    expect(defaultCoverage("rect").widthM).toBe(2);
+    expect(defaultCoverage("circle").apertureDeg).toBeUndefined();
   });
 });

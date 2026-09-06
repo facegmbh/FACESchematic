@@ -74,6 +74,10 @@ export const DEFAULT_CONNECTOR: Record<SignalType, ConnectorType> = {
   cresnet: "terminal-block",
   dali: "terminal-block",
   knx: "terminal-block",
+  // Alarm detector lines are screw/spring terminals in the housing; Jeweller is radio.
+  fibra: "terminal-block",
+  "bus-2": "terminal-block",
+  jeweller: "wireless",
   nlight: "rj45",
   sensor: "phoenix",
   custom: "other",
@@ -541,6 +545,9 @@ export const MULTI_CONNECT_DEFAULT_SIGNALS: Set<SignalType> = new Set([
   "srt", "custom",
   // Bus topologies — many devices share one line, fan-in/out is the norm
   "dali", "knx",
+  // Alarm buses: a Fibra or BUS-2 line carries many detectors, and one Jeweller hub
+  // holds dozens of wireless devices.
+  "fibra", "bus-2", "jeweller",
 ]);
 
 /** Connector types whose new ports default to multi-connect — wireless/RF carriers where many TX → one RX. */

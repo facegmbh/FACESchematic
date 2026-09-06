@@ -213,6 +213,7 @@ export default function DeviceEditor() {
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
   const [knxAddress, setKnxAddress] = useState("");
   const [daliAddress, setDaliAddress] = useState("");
+  const [busAddress, setBusAddress] = useState("");
   const [assetCode, setAssetCode] = useState("");
   // Preserves import-managed Odoo fields (productRef, orderRef, …) across an edit.
   const [odooLink, setOdooLink] = useState<OdooDeviceLink | undefined>(undefined);
@@ -323,6 +324,7 @@ export default function DeviceEditor() {
     setHeaderColor(node.data.headerColor);
     setKnxAddress(node.data.knxAddress ?? "");
     setDaliAddress(node.data.daliAddress ?? "");
+    setBusAddress(node.data.busAddress ?? "");
     setOdooLink(node.data.odoo);
     setAssetCode(node.data.odoo?.assetCode ?? "");
     setShowAllPorts(node.data.showAllPorts ?? false);
@@ -483,6 +485,7 @@ export default function DeviceEditor() {
       ...(headerColor ? { headerColor } : {}),
       ...(knxAddress.trim() ? { knxAddress: knxAddress.trim() } : {}),
       ...(daliAddress.trim() ? { daliAddress: daliAddress.trim() } : {}),
+      ...(busAddress.trim() ? { busAddress: busAddress.trim() } : {}),
       ...(() => {
         // Merge the editable asset code back into the preserved Odoo link; drop if empty.
         const merged: OdooDeviceLink = { ...(odooLink ?? {}) };
@@ -525,7 +528,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, busAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -1366,6 +1369,16 @@ export default function DeviceEditor() {
                   value={daliAddress}
                   onChange={(e) => setDaliAddress(e.target.value)}
                   placeholder="z. B. 0–7 oder 12"
+                />
+              </Field>
+            )}
+            {ports.some((p) => p.signalType === "bus-2" || p.signalType === "fibra" || p.signalType === "jeweller") && (
+              <Field label="Bus-/Melderadresse">
+                <input
+                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+                  value={busAddress}
+                  onChange={(e) => setBusAddress(e.target.value)}
+                  placeholder="z. B. BUS-2 Linie 1 / Adresse 7"
                 />
               </Field>
             )}

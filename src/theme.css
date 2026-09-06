@@ -77,6 +77,9 @@
   --color-knx: #0f766e;       /* teal — KNX building automation bus */
   --color-nlight: #ca8a04;    /* golden amber — Acuity nLight lighting control bus */
   --color-sensor: #71717a;    /* zinc gray — ambient sensor input */
+  --color-fibra: #86198f;     /* deep plum — Ajax Fibra wired detector bus */
+  --color-jeweller: #4c1d95;  /* deep violet — Ajax Jeweller radio link */
+  --color-bus-2: #0f5132;     /* dark green — Telenot BUS-2 detector bus */
   --color-custom: #64748b;    /* cool gray */
 }
 

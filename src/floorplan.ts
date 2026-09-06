@@ -14,6 +14,8 @@
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import type { FloorplanSymbolShape,
   CompanyProfile,
+  CoverageShape,
+  FloorplanCoverage,
   FloorplanKind,
   PlanSymbolSpec,
   FloorplanDrawingBlock,
@@ -946,6 +948,196 @@ export function rectFromDrag(
   const x = Math.min(p.x, q.x);
   const y = Math.min(p.y, q.y);
   return { positionMm: { x, y }, sizeMm: { w: Math.abs(q.x - p.x), h: Math.abs(q.y - p.y) } };
+}
+
+// ── Coverage areas ───────────────────────────────────────────────────
+
+export const DEFAULT_COVERAGE_COLOR = "#0ea5e9";
+/** Areas overlap constantly — two detectors watching one room is the normal case, and a
+ *  plan is only judgeable if the overlap is still readable. Hence a light fill. */
+export const DEFAULT_COVERAGE_OPACITY = 0.22;
+export const DEFAULT_COVERAGE_RANGE_M = 12;
+export const DEFAULT_COVERAGE_APERTURE_DEG = 90;
+export const DEFAULT_COVERAGE_WIDTH_M = 2;
+/** Smallest reach worth drawing, and the largest that is still a device rather than a
+ *  mistyped field. */
+export const COVERAGE_MIN_RANGE_M = 0.5;
+export const COVERAGE_MAX_RANGE_M = 300;
+
+/** Arc resolution: one point every few degrees keeps a circle smooth at plan scale while
+ *  a page full of areas stays a few hundred points, not a few thousand. */
+const COVERAGE_ARC_STEP_DEG = 4;
+
+function clampRange(m: number): number {
+  if (!Number.isFinite(m)) return DEFAULT_COVERAGE_RANGE_M;
+  return Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, m));
+}
+
+/** The aperture a sector actually draws with, in degrees (1–360). */
+export function coverageApertureDeg(coverage: Pick<FloorplanCoverage, "apertureDeg">): number {
+  const a = coverage.apertureDeg ?? DEFAULT_COVERAGE_APERTURE_DEG;
+  if (!Number.isFinite(a)) return DEFAULT_COVERAGE_APERTURE_DEG;
+  return Math.min(360, Math.max(1, a));
+}
+
+/**
+ * The outline of a coverage area in paper mm, relative to its anchor point and unrotated
+ * (0° faces +x, to the right of the sheet). One closed polygon serves both renderers:
+ * the screen draws it as an SVG path, the PDF as a filled path, so what is judged on
+ * screen is what prints.
+ *
+ * The shapes are anchored the way the device sits: a sector and a rect start at the
+ * device and reach away from it, a circle is centred on it.
+ */
+export function coverageOutlineMm(
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM">,
+  scaleDenominator: number,
+): Vec2[] {
+  const r = realMmToPaperMm(clampRange(coverage.rangeM) * 1000, scaleDenominator);
+  if (r <= 0) return [];
+
+  const arc = (fromDeg: number, toDeg: number): Vec2[] => {
+    const span = toDeg - fromDeg;
+    const steps = Math.max(2, Math.ceil(Math.abs(span) / COVERAGE_ARC_STEP_DEG));
+    const pts: Vec2[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const rad = ((fromDeg + (span * i) / steps) * Math.PI) / 180;
+      pts.push({ x: r * Math.cos(rad), y: r * Math.sin(rad) });
+    }
+    return pts;
+  };
+
+  switch (coverage.shape) {
+    case "circle":
+      // A full ring: no apex, or the polygon would close through the centre.
+      return arc(0, 360).slice(0, -1);
+    case "rect": {
+      const halfW = realMmToPaperMm(Math.max(0.1, coverage.widthM ?? DEFAULT_COVERAGE_WIDTH_M) * 1000, scaleDenominator) / 2;
+      return [
+        { x: 0, y: -halfW },
+        { x: r, y: -halfW },
+        { x: r, y: halfW },
+        { x: 0, y: halfW },
+      ];
+    }
+    case "sector":
+    default: {
+      const aperture = coverageApertureDeg(coverage);
+      // At 360° the wedge has become a ring — drawing the apex would leave a seam.
+      if (aperture >= 360) return arc(0, 360).slice(0, -1);
+      return [{ x: 0, y: 0 }, ...arc(-aperture / 2, aperture / 2)];
+    }
+  }
+}
+
+/** Where the area sits on the sheet: its symbol's position when anchored, else its own. */
+export function coverageAnchorMm(
+  coverage: Pick<FloorplanCoverage, "symbolId" | "positionMm">,
+  symbols: readonly Pick<FloorplanSymbol, "id" | "positionMm">[],
+): Vec2 {
+  if (coverage.symbolId) {
+    const symbol = symbols.find((s) => s.id === coverage.symbolId);
+    if (symbol) return { ...symbol.positionMm };
+  }
+  return { ...coverage.positionMm };
+}
+
+/** Which way the area faces: the symbol's own aim plus the area's offset when anchored,
+ *  so turning a camera on the plan turns what it sees. */
+export function coverageRotationDeg(
+  coverage: Pick<FloorplanCoverage, "symbolId" | "rotationDeg">,
+  symbols: readonly Pick<FloorplanSymbol, "id" | "rotationDeg">[],
+): number {
+  const own = coverage.rotationDeg ?? 0;
+  if (!coverage.symbolId) return own;
+  const symbol = symbols.find((s) => s.id === coverage.symbolId);
+  return own + (symbol?.rotationDeg ?? 0);
+}
+
+/** The area's outline placed on the sheet: turned, then moved onto its anchor. Absolute
+ *  paper mm, ready to draw. */
+export function coveragePointsOnSheet(
+  coverage: FloorplanCoverage,
+  page: Pick<FloorplanPage, "symbols" | "scaleDenominator">,
+): Vec2[] {
+  const anchor = coverageAnchorMm(coverage, page.symbols);
+  const turn = coverageRotationDeg(coverage, page.symbols);
+  return coverageOutlineMm(coverage, page.scaleDenominator).map((p) => {
+    const r = rotateVec(p, turn);
+    return { x: anchor.x + r.x, y: anchor.y + r.y };
+  });
+}
+
+/** An SVG path for a coverage outline — the same points the PDF fills. */
+export function coveragePathD(points: readonly Vec2[], mmToPx: (mm: number) => number): string {
+  if (points.length === 0) return "";
+  const seg = points.map((p, i) => `${i === 0 ? "M" : "L"}${mmToPx(p.x).toFixed(2)} ${mmToPx(p.y).toFixed(2)}`);
+  return `${seg.join(" ")} Z`;
+}
+
+/** The fill an area is drawn with: its own color, else its group's, else the default. */
+export function coverageColor(
+  coverage: Pick<FloorplanCoverage, "color" | "groupId">,
+  groups: readonly Pick<FloorplanSymbolGroup, "id" | "color">[],
+): string {
+  if (coverage.color) return coverage.color;
+  const group = coverage.groupId ? groups.find((g) => g.id === coverage.groupId) : undefined;
+  return group?.color ?? DEFAULT_COVERAGE_COLOR;
+}
+
+/** Is this area drawn at all? Its own switch first, then its group's layer. */
+export function isCoverageVisible(
+  coverage: Pick<FloorplanCoverage, "hidden" | "groupId">,
+  groups: readonly Pick<FloorplanSymbolGroup, "id" | "hidden">[],
+): boolean {
+  if (coverage.hidden) return false;
+  if (!coverage.groupId) return true;
+  const group = groups.find((g) => g.id === coverage.groupId);
+  // An area filed under a group that no longer exists is orphaned, not hidden.
+  return group ? isGroupVisible(group) : true;
+}
+
+/** How an area reads in a legend or a list: "12,0 m / 90°", "R 8,0 m", "15,0 × 2,0 m". */
+export function formatCoverageSpec(
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM">,
+): string {
+  const range = clampRange(coverage.rangeM).toFixed(1);
+  switch (coverage.shape) {
+    case "circle":
+      return `R ${range} m`;
+    case "rect":
+      return `${range} × ${Math.max(0.1, coverage.widthM ?? DEFAULT_COVERAGE_WIDTH_M).toFixed(1)} m`;
+    case "sector":
+    default:
+      return `${range} m / ${Math.round(coverageApertureDeg(coverage))}°`;
+  }
+}
+
+/** Where an area's caption goes: just past the far edge, along the direction it faces, so
+ *  the text sits outside the fill instead of being swallowed by it. */
+export function coverageLabelAnchorMm(
+  coverage: FloorplanCoverage,
+  page: Pick<FloorplanPage, "symbols" | "scaleDenominator">,
+): Vec2 {
+  const anchor = coverageAnchorMm(coverage, page.symbols);
+  const turn = coverageRotationDeg(coverage, page.symbols);
+  const r = realMmToPaperMm(clampRange(coverage.rangeM) * 1000, page.scaleDenominator) + 2;
+  // A circle has no direction to write along, so its caption drops below the ring.
+  const out = rotateVec(coverage.shape === "circle" ? { x: 0, y: r } : { x: r, y: 0 }, turn);
+  return { x: anchor.x + out.x, y: anchor.y + out.y };
+}
+
+/** A new area for a device that has just been aimed on the plan, taking its reach from
+ *  the shape's defaults. Callers override whatever the datasheet says. */
+export function defaultCoverage(shape: CoverageShape = "sector"): Omit<FloorplanCoverage, "id"> {
+  return {
+    shape,
+    positionMm: { x: 0, y: 0 },
+    rangeM: DEFAULT_COVERAGE_RANGE_M,
+    apertureDeg: shape === "sector" ? DEFAULT_COVERAGE_APERTURE_DEG : undefined,
+    widthM: shape === "rect" ? DEFAULT_COVERAGE_WIDTH_M : undefined,
+    opacity: DEFAULT_COVERAGE_OPACITY,
+  };
 }
 
 // ── Legend text from the device library ─────────────────────────────
