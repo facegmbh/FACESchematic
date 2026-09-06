@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
@@ -448,6 +448,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         if (!coverage) return null;
         const patch = (p: Parameters<typeof updateFloorplanCoverage>[2]) => updateFloorplanCoverage(page.id, coverage.id, p);
         const anchoredTo = coverage.symbolId ? page.symbols.find((sym) => sym.id === coverage.symbolId) : undefined;
+        // What the area hangs on decides which controls make sense: an access point has
+        // no lens, so nothing about computing a reach from one belongs on its panel.
+        const anchoredDevice = anchoredTo?.deviceNodeId ? nodes.find((n) => n.id === anchoredTo.deviceNodeId) : undefined;
+        const anchoredType = (anchoredDevice?.data as DeviceData | undefined)?.deviceType;
+        const offersOptics = coverageOffersOptics(coverage, anchoredType);
         const shapeLabels: Record<CoverageShape, string> = {
           sector: t("Sector"),
           circle: t("Circle"),
@@ -504,14 +509,16 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               </label>
 
               {/* A camera is set by its lens; everything else by a measured reach. */}
-              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("A camera has no range of its own — it has pixels spread over an angle. Switch this on and the reach is computed from the megapixels, the opening angle and the DORI level you need.")}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(coverage.optics)}
-                  onChange={(e) => patch({ optics: e.target.checked ? defaultCameraOptics() : undefined })}
-                />
-                <span>{t("Camera — compute the reach from the lens")}</span>
-              </label>
+              {offersOptics && (
+                <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("A camera has no range of its own — it has pixels spread over an angle. Switch this on and the reach is computed from the megapixels, the opening angle and the DORI level you need.")}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(coverage.optics)}
+                    onChange={(e) => patch({ optics: e.target.checked ? defaultCameraOptics() : undefined })}
+                  />
+                  <span>{t("Camera — compute the reach from the lens")}</span>
+                </label>
+              )}
 
               {coverage.optics ? (() => {
                 const optics = coverage.optics;

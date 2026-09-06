@@ -603,4 +603,11 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Back to the calibrated default": "Zurück zum kalibrierten Startwert",
   "fixed": "fest",
   "dB/cm": "dB/cm",
+
+  // ─── Plantyp WLAN-Ausleuchtung ─────────────────────────────────
+  "Wi-Fi coverage plan": "WLAN-Ausleuchtungsplan",
+  "Switch to a Wi-Fi coverage plan? Legend title, notes heading, revision headers and drawing block field labels are reset to that type's preset, symbols are numbered AP1, AP2 … and the heatmap is switched on.":
+    "Auf WLAN-Ausleuchtungsplan umstellen? Legendentitel, Hinweis-Überschrift, Revisionsspalten und Plankopf-Felder werden auf die Vorgabe dieses Typs zurückgesetzt, Symbole heißen AP1, AP2 … und die Heatmap wird eingeschaltet.",
+  "Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend.":
+    "Lautsprecherpläne nummerieren je Endstufenlinie (4.1, 4.2 …) und tragen die Beschallungsplan-Vorgaben. Ein WLAN-Ausleuchtungsplan nummeriert Access Points AP1, AP2 …, schaltet die Heatmap ein und druckt die Signalfarbskala in die Legende.",
 };

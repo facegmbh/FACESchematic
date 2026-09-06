@@ -323,11 +323,12 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
 
 /** Legend box height in mm for the given rows — the renderer and the PDF export share
  *  this so the on-screen box and the printed one agree. */
-export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0): number {
+export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0, rssiStepCount = 0): number {
   const notes = (legend.notes ?? []).filter((n) => n.trim().length > 0);
   const rowH = legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   let h = LEGEND_TITLE_MM + rows.length * rowH + LEGEND_PAD_MM * 2;
   if (lineRowCount > 0) h += LEGEND_LINES_GAP_MM + LEGEND_LINES_TITLE_MM + LEGEND_LINE_ROW_MM * (lineRowCount + 1);
+  if (rssiStepCount > 0) h += LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM + LEGEND_RSSI_ROW_MM * rssiStepCount;
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
   if (legend.showCompany !== false && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
   // A stretched box covers what sits under it — the planner's way of hiding the
@@ -349,6 +350,22 @@ export const LEGEND_LINE_ROW_MM = 4.2;
 /** Column shares of the line table: line, name/feed, count, load. */
 export const LEGEND_LINE_COLS = [0.12, 0.5, 0.1, 0.28] as const;
 export const DEFAULT_LEGEND_LINES_TITLE = "LINES / AMPLIFIER CHANNELS";
+/** Wi-Fi colour key: gap above, heading, one row per RSSI step. */
+export const LEGEND_RSSI_GAP_MM = 3;
+export const LEGEND_RSSI_TITLE_MM = 6;
+export const LEGEND_RSSI_ROW_MM = 4.2;
+/** Swatch width as a share of the legend's inner width. */
+export const LEGEND_RSSI_SWATCH_SHARE = 0.16;
+export const DEFAULT_RSSI_SCALE_TITLE = "SIGNALSTÄRKE";
+
+/** Does this plan print the Wi-Fi colour key? Explicit setting first, else a coverage
+ *  plan with its heatmap switched on. */
+export function legendShowsRssiScale(
+  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap">,
+): boolean {
+  if (page.legend.showRssiScale !== undefined) return page.legend.showRssiScale;
+  return page.kind === "wifi" && Boolean(page.heatmap?.visible);
+}
 
 /** Default legend box, parked in the sheet's top-right corner. */
 export function createDefaultLegend(page: Pick<FloorplanPage, "paperId" | "orientation" | "customWidthIn" | "customHeightIn">): FloorplanLegendBox {
@@ -1237,6 +1254,26 @@ export function defaultCoverageForDevice(
   return { ...withRange, optics: defaultCameraOptics() };
 }
 
+/**
+ * Should this area offer the camera-optics control at all?
+ *
+ * Only where a lens is a possibility. An area anchored to an access point has no lens —
+ * it radiates — and one anchored to a motion detector is judged in metres off a
+ * datasheet. A free-standing area keeps the control, because it may well stand for a
+ * camera nobody has chosen yet.
+ *
+ * An area that already carries optics always keeps the control, whatever it is anchored
+ * to: hiding the only way out of a state is worse than showing an odd choice.
+ */
+export function coverageOffersOptics(
+  coverage: Pick<FloorplanCoverage, "optics">,
+  anchoredDeviceType?: string,
+): boolean {
+  if (coverage.optics) return true;
+  if (!anchoredDeviceType) return true;
+  return isCameraDeviceType(anchoredDeviceType);
+}
+
 /** Where an area's caption goes: just past the far edge, along the direction it faces, so
  *  the text sits outside the fill instead of being swallowed by it. */
 export function coverageLabelAnchorMm(
@@ -1424,6 +1461,17 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
     revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
     fieldLabels: ["Project", "Client", "Scale", "Sheet", "Date", "Drawn by"],
     drawingSubtitle: "{{drawingTitle}}",
+  },
+  wifi: {
+    // Access points are numbered plainly and read as AP1, AP2 … on the sheet.
+    labelTemplate: "AP{{n}}",
+    legendTitle: "WLAN-AUSLEUCHTUNG - LEGENDE & MONTAGE",
+    legendNotesTitle: "MONTAGEHINWEISE",
+    // No amplifier lines on a radio plan; the heading is carried only for completeness.
+    legendLinesTitle: "LINIEN",
+    revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
+    fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
+    drawingSubtitle: "WLAN-Ausleuchtung",
   },
   loudspeaker: {
     labelTemplate: "{{line}}.{{n}}",

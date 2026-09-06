@@ -49,6 +49,12 @@ import {
   defaultCoverageForDevice,
   isCameraDeviceType,
   isAccessPointDeviceType,
+  coverageOffersOptics,
+  legendShowsRssiScale,
+  FLOORPLAN_KIND_PRESETS,
+  LEGEND_RSSI_GAP_MM,
+  LEGEND_RSSI_TITLE_MM,
+  LEGEND_RSSI_ROW_MM,
   rectFromDrag,
   legendDescriptionFor,
   legendInstallNoteFor,
@@ -1038,5 +1044,60 @@ describe("camera optics — reach from the lens", () => {
     expect(defaultCoverageForDevice("ip-camera").optics).toEqual(defaultCameraOptics());
     expect(defaultCoverageForDevice("motion-detector").optics).toBeUndefined();
     expect(defaultCoverageForDevice(undefined).optics).toBeUndefined();
+  });
+});
+
+describe("the Wi-Fi coverage plan type", () => {
+  it("numbers access points AP1, AP2 … and carries the German presets", () => {
+    const preset = FLOORPLAN_KIND_PRESETS.wifi;
+    expect(preset.labelTemplate).toBe("AP{{n}}");
+    expect(formatSymbolLabel(preset.labelTemplate, { n: 3 })).toBe("AP3");
+    expect(effectiveLabelTemplate({ kind: "wifi" })).toBe("AP{{n}}");
+    expect(preset.drawingSubtitle).toBe("WLAN-Ausleuchtung");
+    expect(preset.legendTitle).toMatch(/WLAN-AUSLEUCHTUNG/);
+    expect(preset.revisionHeaders[0]).toBe("INDEX");
+  });
+
+  it("prints the signal colour key on a coverage plan whose heatmap is on", () => {
+    const legend = createDefaultLegend(paper);
+    const heatOn = { visible: true, band: "5" as const, pathLossExponent: 2.6, opacity: 0.5, gridMm: 2.5 };
+    expect(legendShowsRssiScale({ legend, kind: "wifi", heatmap: heatOn })).toBe(true);
+    // Heatmap off: nothing to key.
+    expect(legendShowsRssiScale({ legend, kind: "wifi", heatmap: { ...heatOn, visible: false } })).toBe(false);
+    // A loudspeaker plan with a heatmap on is not a coverage plan and gets no key by default …
+    expect(legendShowsRssiScale({ legend, kind: "loudspeaker", heatmap: heatOn })).toBe(false);
+    // … but an explicit choice always wins, in either direction.
+    expect(legendShowsRssiScale({ legend: { ...legend, showRssiScale: true }, kind: "generic" })).toBe(true);
+    expect(legendShowsRssiScale({ legend: { ...legend, showRssiScale: false }, kind: "wifi", heatmap: heatOn })).toBe(false);
+  });
+
+  it("grows the legend by exactly the colour key's rows", () => {
+    const legend = createDefaultLegend(paper);
+    const base = legendHeightMm([], legend, null, 0, 0);
+    const withKey = legendHeightMm([], legend, null, 0, 6);
+    expect(withKey - base).toBeCloseTo(LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM + 6 * LEGEND_RSSI_ROW_MM, 6);
+  });
+});
+
+describe("which areas offer the camera-optics control", () => {
+  it("hides it on an access point — it has no lens — and on a detector", () => {
+    const plain = { optics: undefined };
+    expect(coverageOffersOptics(plain, "access-point")).toBe(false);
+    expect(coverageOffersOptics(plain, "network-wifi")).toBe(false);
+    expect(coverageOffersOptics(plain, "motion-detector")).toBe(false);
+  });
+
+  it("keeps it for a camera and for a free-standing area", () => {
+    const plain = { optics: undefined };
+    expect(coverageOffersOptics(plain, "ip-camera")).toBe(true);
+    expect(coverageOffersOptics(plain, "ptz-camera")).toBe(true);
+    // Free-standing: it may well be a camera nobody has picked yet.
+    expect(coverageOffersOptics(plain, undefined)).toBe(true);
+  });
+
+  it("never hides the only way out of an optics state", () => {
+    // Anchored to an AP yet carrying optics (a leftover): the control must stay so it
+    // can be switched off.
+    expect(coverageOffersOptics({ optics: defaultCameraOptics() }, "access-point")).toBe(true);
   });
 });

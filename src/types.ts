@@ -1147,6 +1147,12 @@ export interface FloorplanLegendBox {
   showLines?: boolean;
   /** Heading of the line table, e.g. "LINIEN / ENDSTUFENKANÄLE". */
   linesTitle?: string;
+  /** Print the Wi-Fi signal colour key. Undefined counts as on for a coverage plan whose
+   *  heatmap is visible — a coverage plan without its scale cannot be read by the
+   *  customer it is handed to. */
+  showRssiScale?: boolean;
+  /** Heading above the colour key, e.g. "SIGNALSTÄRKE". */
+  rssiScaleTitle?: string;
 }
 
 /** Who drew the plan: the planning company's identity as it prints on every sheet —
@@ -1591,8 +1597,8 @@ export interface FloorplanPage {
   lines?: FloorplanLine[];
 }
 
-export type FloorplanKind = "generic" | "loudspeaker";
-export const FLOORPLAN_KINDS: FloorplanKind[] = ["generic", "loudspeaker"];
+export type FloorplanKind = "generic" | "loudspeaker" | "wifi";
+export const FLOORPLAN_KINDS: FloorplanKind[] = ["generic", "loudspeaker", "wifi"];
 
 export const DEFAULT_FLOORPLAN_SCALE = 50;
 export const DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM = 6;

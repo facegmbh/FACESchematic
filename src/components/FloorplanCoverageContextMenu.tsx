@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
-import { formatCoverageSpec, coverageApertureDeg, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
+import { formatCoverageSpec, coverageApertureDeg, coverageOffersOptics, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
 import { useT } from "../i18n";
-import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, type CoverageShape, type DoriLevel, type FloorplanPage } from "../types";
+import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, type CoverageShape, type DeviceData, type DoriLevel, type FloorplanPage } from "../types";
 
 interface Props {
   page: FloorplanPage;
@@ -28,6 +28,7 @@ const RANGE_PRESETS_M = [3, 8, 10, 12, 15, 20];
 export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, onClose }: Props) {
   const t = useT();
   const { ref: menuRef, pos } = useContextMenuPosition(x, y);
+  const nodes = useSchematicStore((s) => s.nodes);
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
 
@@ -50,6 +51,8 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
   if (!coverage) return null;
 
   const anchoredTo = coverage.symbolId ? page.symbols.find((s) => s.id === coverage.symbolId) : undefined;
+  const anchoredDevice = anchoredTo?.deviceNodeId ? nodes.find((n) => n.id === anchoredTo.deviceNodeId) : undefined;
+  const offersOptics = coverageOffersOptics(coverage, (anchoredDevice?.data as DeviceData | undefined)?.deviceType);
   const turnBy = coverage.rotationDeg ?? 0;
   const fade = Math.round((coverage.opacity ?? DEFAULT_COVERAGE_OPACITY) * 100);
 
@@ -116,11 +119,13 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
       )}
 
       <Divider />
-      <Item
-        label={coverage.optics ? t("Not a camera — set the reach by hand") : t("It is a camera — compute the reach")}
-        onClick={() => patch({ optics: coverage.optics ? undefined : defaultCameraOptics() })}
-        title={t("A camera has no range of its own: it has pixels spread over an angle. Computed from the megapixels, the opening angle and the level you need.")}
-      />
+      {offersOptics && (
+        <Item
+          label={coverage.optics ? t("Not a camera — set the reach by hand") : t("It is a camera — compute the reach")}
+          onClick={() => patch({ optics: coverage.optics ? undefined : defaultCameraOptics() })}
+          title={t("A camera has no range of its own: it has pixels spread over an angle. Computed from the megapixels, the opening angle and the level you need.")}
+        />
+      )}
 
       {coverage.optics ? (
         <>

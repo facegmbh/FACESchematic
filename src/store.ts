@@ -86,6 +86,7 @@ import {
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
 import { CURRENT_SCHEMA_VERSION, STUB_LABEL_Z_INDEX, migrateSchematic } from "./migrations";
+import { DEFAULT_RSSI_SCALE_TITLE } from "./floorplan";
 import { collectUnderlaySources, pruneUnderlaySources, restoreUnderlaySources } from "./underlaySource";
 import { healStaleWaypoints } from "./waypointHealing";
 import { newBundleId, gcBundles, reconcileBundleJunctions, bundleJunctionsFor, splitMemberWaypoints } from "./bundles";
@@ -5418,7 +5419,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...p,
         kind,
         labelTemplate: undefined, // back to the kind's default template
-        legend: { ...p.legend, title: preset.legendTitle, notesTitle: preset.legendNotesTitle, linesTitle: preset.legendLinesTitle },
+        // A coverage plan exists to show the heatmap, so switching to it switches that on;
+        // leaving the type would otherwise be the only visible change.
+        heatmap: kind === "wifi"
+          ? { ...DEFAULT_HEATMAP, ...(p.heatmap ?? {}), visible: true }
+          : p.heatmap,
+        legend: {
+          ...p.legend,
+          title: preset.legendTitle,
+          notesTitle: preset.legendNotesTitle,
+          linesTitle: preset.legendLinesTitle,
+          rssiScaleTitle: kind === "wifi" ? DEFAULT_RSSI_SCALE_TITLE : p.legend.rssiScaleTitle,
+          // Let the colour key follow the type rather than a stale explicit choice.
+          showRssiScale: undefined,
+        },
         drawingBlock: {
           ...p.drawingBlock,
           revisionHeaders: [...preset.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],

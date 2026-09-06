@@ -193,15 +193,18 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           if (kind === (page.kind ?? "generic")) return;
           const message = kind === "loudspeaker"
             ? t("Switch to a loudspeaker plan? Legend title, notes heading, revision headers and drawing block field labels are reset to that type's preset.")
+            : kind === "wifi"
+            ? t("Switch to a Wi-Fi coverage plan? Legend title, notes heading, revision headers and drawing block field labels are reset to that type's preset, symbols are numbered AP1, AP2 … and the heatmap is switched on.")
             : t("Switch to a generic plan? Legend title, notes heading, revision headers and drawing block field labels are reset to that type's preset.");
           if (confirm(message)) {
             setFloorplanKind(page.id, kind);
           }
         }}
-        title={t("Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets")}
+        title={t("Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend.")}
       >
         <option value="generic">{t("Generic plan")}</option>
         <option value="loudspeaker">{t("Loudspeaker plan")}</option>
+        <option value="wifi">{t("Wi-Fi coverage plan")}</option>
       </select>
 
       <div className="border-l border-[var(--color-border)] h-4" />
