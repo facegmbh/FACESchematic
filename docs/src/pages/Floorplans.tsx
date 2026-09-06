@@ -54,8 +54,8 @@ export default function FloorplansPage() {
         The default is 150 dpi, the usual plotting resolution, which keeps room labels and
         dimension text readable when zoomed. <em>Quality</em> in the toolbar switches between 100
         and 300 dpi; line art compresses so well as PNG that a dense A1 sheet is about 0.6 MB at
-        150 dpi and 1.8 MB at 300. Changing it redraws from the PDF, so the source file has to
-        still be open in the session.
+        150 dpi and 1.8 MB at 300. Changing it redraws from the PDF, which the app keeps for you
+        (see below).
       </p>
       <ul>
         <li>
@@ -64,14 +64,29 @@ export default function FloorplansPage() {
           <em>Layers</em> picker opens with the list and you tick what gets drawn. A
           loudspeaker sheet wants a quieter background than a cable sheet, and importing the
           same plan twice with different layers gives two backgrounds to work on. The choice is
-          baked into the raster, so changing it later redraws from the PDF — that needs the
-          source file to still be open in the session, the same condition as switching pages.
-          The placement and the calibration are kept.
+          baked into the raster, so changing it later redraws from the PDF, which the app keeps
+          for you (see below). The placement and the calibration are kept.
         </li>
         <li><strong>Opacity</strong> fades the drawing back so symbols stay readable over dense linework.</li>
         <li><strong>Lock</strong> pins the underlay so it can&apos;t be nudged while placing symbols.</li>
         <li>Unlocked, drag the underlay to reposition it; the corner handle resizes it with the aspect ratio locked.</li>
       </ul>
+
+      <h3>The source file is kept</h3>
+      <p>
+        Switching pages, changing layers and changing the resolution all redraw the plan from
+        the original PDF, so the app keeps that file in the browser&apos;s own storage
+        (IndexedDB) rather than only for the session. Reloading the tab no longer costs you a
+        re-import. The bytes deliberately stay out of the project&apos;s autosave, which has a
+        budget of roughly 5 MB for the whole document — an architect&apos;s PDF can be many
+        times that on its own.
+      </p>
+      <p>
+        Two limits worth knowing. A source over 25 MB is not kept, and the app says so at
+        import: the plan works, but redrawing it later needs the file again. And the bytes do
+        not travel inside an exported project file yet, so a project opened on another machine
+        needs a re-import before its plan can be redrawn.
+      </p>
 
       <h2>Scale and calibration</h2>
       <p>

@@ -1010,6 +1010,11 @@ export interface FloorplanUnderlay {
   /** Resolution the source PDF was rasterized at, in dpi of the real sheet. Shown in the
    *  toolbar and re-used when the page or the layer choice changes. */
   dpi?: number;
+  /** Points at the source file kept in IndexedDB (see src/underlaySource.ts), so the plan
+   *  can be redrawn after a reload — another page of the set, a different layer choice, a
+   *  different resolution. Absent when the file was too large to keep, or when the project
+   *  came from another machine. */
+  sourceKey?: string;
 }
 
 /** One layer of the source PDF, as offered at import. */

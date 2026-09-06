@@ -79,6 +79,7 @@ import {
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
 import { CURRENT_SCHEMA_VERSION, STUB_LABEL_Z_INDEX, migrateSchematic } from "./migrations";
+import { pruneUnderlaySources } from "./underlaySource";
 import { healStaleWaypoints } from "./waypointHealing";
 import { newBundleId, gcBundles, reconcileBundleJunctions, bundleJunctionsFor, splitMemberWaypoints } from "./bundles";
 import { computeBundleTrunk, type BundleEndpoint } from "./routing/bundleRoute";
@@ -925,6 +926,8 @@ interface SchematicState {
 
   // Persistence
   saveToLocalStorage: () => void;
+  /** Reconcile stored underlay source files with what the open project references. */
+  pruneUnderlaySources: () => void;
   loadFromLocalStorage: () => boolean;
   exportToJSON: () => SchematicFile;
   importFromJSON: (data: SchematicFile) => void;
@@ -5928,6 +5931,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  /** Drop stored underlay sources no page references any more. Called after a project is
+   *  loaded, so the plans of projects the user has moved on from do not sit in storage
+   *  forever. Deliberately not called when an underlay is removed: undo can bring it back,
+   *  and a few megabytes held for the session is cheaper than a broken undo. */
+  pruneUnderlaySources: () => {
+    const keys = get().pages.flatMap((p) => (p.type === "floorplan" && p.underlay?.sourceKey ? [p.underlay.sourceKey] : []));
+    void pruneUnderlaySources(keys);
+  },
+
   saveToLocalStorage: () => {
     if (!hydrated) return;
     const state = get();
@@ -6099,6 +6111,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           if (data.pages?.length) syncRackCounters(data.pages);
           hydrated = true;
           get().saveToLocalStorage();
+          get().pruneUnderlaySources();
         });
         return false;
       }
@@ -6377,6 +6390,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       if (data.pages?.length) syncRackCounters(data.pages);
       saveCategoryOrder(data.categoryOrder ?? null);
       get().saveToLocalStorage();
+      get().pruneUnderlaySources();
     } catch (err) {
       console.error("Post-import side-effect failed (schematic still loaded):", err);
     }

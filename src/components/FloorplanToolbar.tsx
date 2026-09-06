@@ -4,13 +4,13 @@ import type { FloorplanKind, FloorplanPage, FloorplanUnderlay } from "../types";
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
 import { UNDERLAY_ACCEPT, UNDERLAY_DPI_CHOICES, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, readPdfLayers } from "../floorplanUnderlay";
+import { MAX_STORED_SOURCE_BYTES, getUnderlaySource, nextUnderlaySourceKey, putUnderlaySource } from "../underlaySource";
 import { runFloorplanExport } from "../floorplanExport";
 import type { FloorplanTool } from "./FloorplanPage";
 
 /** Source files kept per page for the session, so a PDF's page can be switched without
  *  asking the user to pick the file again. Not persisted — a reloaded project keeps the
  *  rasterized underlay but forgets the source file. */
-const sourceFiles = new Map<string, File>();
 
 interface Props {
   page: FloorplanPage;
@@ -95,8 +95,20 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
         // its resolution, so mm-per-pixel still holds.
         ...(keepPlacement && underlay?.mmPerPx !== undefined ? { mmPerPx: underlay.mmPerPx } : {}),
       };
-      setFloorplanUnderlay(page.id, next);
-      sourceFiles.set(page.id, file);
+      // Keep the source so the plan can be redrawn later — another page, other layers, a
+      // different resolution — including after a reload. A re-render of the same source
+      // reuses its key; a different file gets a new one and the old bytes are dropped.
+      const sameSource = keepPlacement && underlay?.sourceKey;
+      const sourceKey = sameSource || nextUnderlaySourceKey();
+      const kept = await putUnderlaySource(sourceKey, file);
+      setFloorplanUnderlay(page.id, { ...next, sourceKey: kept ? sourceKey : undefined });
+      if (!kept) {
+        addToast(
+          `The plan is too large to keep in the browser (over ${Math.round(MAX_STORED_SOURCE_BYTES / 1_000_000)} MB). Changing its page, layers or resolution will need a re-import after a reload.`,
+          "info",
+          7000,
+        );
+      }
       if (imported.approxBytes > UNDERLAY_SIZE_WARN_BYTES) {
         addToast(
           `The plan is ${(imported.approxBytes / 1_000_000).toFixed(1)} MB — autosave to browser storage may fail. Save the project to a file.`,
@@ -132,37 +144,32 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   };
 
   const handleLayerToggle = (id: string, visible: boolean) => {
-    const file = sourceFiles.get(page.id);
     const current = underlay?.pdfLayers;
     if (!current) return;
-    if (!file) {
-      addToast("Re-import the PDF to change layers — the source file isn't in memory any more.", "info", 5000);
-      return;
-    }
     const choice: Record<string, boolean> = {};
     for (const l of current) choice[l.id] = l.id === id ? visible : l.visible;
-    void applyImport(file, underlay?.pageNumber ?? 1, choice, underlay?.dpi);
+    void withSource((file) => { void applyImport(file, underlay?.pageNumber ?? 1, choice, underlay?.dpi); });
   };
 
   const layerChoiceOf = (u: typeof underlay) =>
     u?.pdfLayers ? Object.fromEntries(u.pdfLayers.map((l) => [l.id, l.visible])) : undefined;
 
   const handleDpiChange = (dpi: number) => {
-    const file = sourceFiles.get(page.id);
+    void withSource((file) => { void applyImport(file, underlay?.pageNumber ?? 1, layerChoiceOf(underlay), dpi); });
+  };
+
+  /** The source PDF, or a note saying why the plan cannot be redrawn. */
+  const withSource = async (run: (file: File) => void) => {
+    const file = await getUnderlaySource(underlay?.sourceKey);
     if (!file) {
-      addToast("Re-import the PDF to change the resolution — the source file isn't in memory any more.", "info", 5000);
+      addToast("Re-import the PDF to change this — its source file isn't available any more.", "info", 5000);
       return;
     }
-    void applyImport(file, underlay?.pageNumber ?? 1, layerChoiceOf(underlay), dpi);
+    run(file);
   };
 
   const handlePdfPageChange = (pageNumber: number) => {
-    const file = sourceFiles.get(page.id);
-    if (!file) {
-      addToast("Re-import the PDF to switch pages — the source file isn't in memory any more.", "info", 5000);
-      return;
-    }
-    void applyImport(file, pageNumber, layerChoiceOf(underlay), underlay?.dpi);
+    void withSource((file) => { void applyImport(file, pageNumber, layerChoiceOf(underlay), underlay?.dpi); });
   };
 
   return (
@@ -397,7 +404,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             onClick={() => {
               if (confirm("Remove the underlay? Symbols stay where they are.")) {
                 setFloorplanUnderlay(page.id, undefined);
-                sourceFiles.delete(page.id);
+
               }
             }}
           >
