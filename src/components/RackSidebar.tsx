@@ -6,6 +6,7 @@ import { inferRackHeightU } from "../rackUtils";
 import { aggregateRackStats, computeRackStats, formatStatsLine } from "../rackStats";
 import { getDevicesInRoom } from "../rackLink";
 import { resolveDeviceLabel } from "../displayName";
+import { useT } from "../i18n";
 
 /** Shared drag state — set by sidebar, read by RackRenderer during dragOver.
  *  (dataTransfer.getData is blocked during dragover for security; this fallback
@@ -18,6 +19,7 @@ interface RackSidebarProps {
 }
 
 export default function RackSidebar({ page }: RackSidebarProps) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const removeRack = useSchematicStore((s) => s.removeRack);
   const updateRack = useSchematicStore((s) => s.updateRack);
@@ -78,7 +80,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
           className="w-full px-2 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
           onClick={() => setShowAddRack(true)}
         >
-          + Add Rack
+          {t("+ Add Rack")}
         </button>
       </div>
 
@@ -86,15 +88,15 @@ export default function RackSidebar({ page }: RackSidebarProps) {
       {pageStats && (
         <div className="p-2 border-b border-neutral-200 bg-neutral-50">
           <div className="font-semibold text-neutral-500 mb-1 uppercase tracking-wider" style={{ fontSize: 9 }}>
-            Page Totals
+            {t("Page Totals")}
           </div>
           <div className="text-neutral-700 text-[11px] leading-tight">{formatStatsLine(pageStats)}</div>
           {(pageStats.unknownDepthCount > 0 || pageStats.unknownWeightCount > 0 || pageStats.unknownPowerCount > 0) && (
             <div className="text-neutral-400 text-[10px] mt-0.5">
               {[
-                pageStats.unknownDepthCount > 0 ? `${pageStats.unknownDepthCount} unknown depth` : null,
-                pageStats.unknownWeightCount > 0 ? `${pageStats.unknownWeightCount} unknown weight` : null,
-                pageStats.unknownPowerCount > 0 ? `${pageStats.unknownPowerCount} unknown power` : null,
+                pageStats.unknownDepthCount > 0 ? t("{n} unknown depth", { n: pageStats.unknownDepthCount }) : null,
+                pageStats.unknownWeightCount > 0 ? t("{n} unknown weight", { n: pageStats.unknownWeightCount }) : null,
+                pageStats.unknownPowerCount > 0 ? t("{n} unknown power", { n: pageStats.unknownPowerCount }) : null,
               ].filter(Boolean).join(" · ")}
             </div>
           )}
@@ -105,7 +107,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
       {page.racks.length > 0 && (
         <div className="p-2 border-b border-neutral-200">
           <div className="font-semibold text-neutral-500 mb-1 uppercase tracking-wider" style={{ fontSize: 9 }}>
-            Racks
+            {t("Racks")}
           </div>
           {page.racks.map((rack) => {
             const placementCount = page.placements.filter((p) => p.rackId === rack.id).length;
@@ -132,18 +134,18 @@ export default function RackSidebar({ page }: RackSidebarProps) {
                   <span
                     className="truncate cursor-pointer"
                     onDoubleClick={() => { setEditingRackId(rack.id); setEditingRackLabel(rack.label); }}
-                    title="Double-click to rename"
+                    title={t("Double-click to rename")}
                   >
                     {rack.label} ({rack.heightU}U)
                   </span>
                 )}
                 <span className="text-neutral-400 text-[10px] shrink-0 ml-1 flex items-center gap-1">
-                  {placementCount > 0 && <span>{placementCount} dev</span>}
+                  {placementCount > 0 && <span>{t("{n} dev", { n: placementCount })}</span>}
                   {otherElevationPages.length > 0 && (
                     <div className="relative">
                       <button
                         className="text-neutral-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Move to page"
+                        title={t("Move to page")}
                         onClick={(e) => { e.stopPropagation(); setMoveMenuRackId(moveMenuRackId === rack.id ? null : rack.id); }}
                       >
                         →
@@ -165,16 +167,16 @@ export default function RackSidebar({ page }: RackSidebarProps) {
                   )}
                   <button
                     className="text-neutral-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title={`Edit ${rack.label}`}
+                    title={t("Edit {name}", { name: rack.label })}
                     onClick={() => setEditRack(rack)}
                   >
                     ✎
                   </button>
                   <button
                     className="text-neutral-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title={`Delete ${rack.label}`}
+                    title={t("Delete {name}", { name: rack.label })}
                     onClick={() => {
-                      if (confirm(`Delete "${rack.label}"? This removes all devices placed in it.`)) {
+                      if (confirm(t('Delete "{name}"? This removes all devices placed in it.', { name: rack.label }))) {
                         removeRack(page.id, rack.id);
                       }
                     }}
@@ -193,14 +195,14 @@ export default function RackSidebar({ page }: RackSidebarProps) {
         {unrackedDevices.length > 0 && (
           <input
             className="w-full bg-neutral-50 border border-neutral-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-400"
-            placeholder="Search devices…"
+            placeholder={t("Search devices…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.stopPropagation()}
           />
         )}
         {unrackedDevices.length === 0 ? (
-          <div className="text-neutral-400 py-2">All devices placed</div>
+          <div className="text-neutral-400 py-2">{t("All devices placed")}</div>
         ) : (() => {
           const q = search.trim().toLowerCase();
           const matchesSearch = (node: typeof unrackedDevices[number]) => {
@@ -224,11 +226,11 @@ export default function RackSidebar({ page }: RackSidebarProps) {
                 draggable
                 onDragStart={(e) => handleDragStart(e, node.id, heightU)}
                 onDragEnd={handleDragEnd}
-                title={needsShelf ? `No height set — drop on a shelf accessory · ${data.label}` : data.label}
+                title={needsShelf ? t("No height set — drop on a shelf accessory · {name}", { name: data.label }) : data.label}
               >
                 <span className="truncate">{resolved.text}</span>
                 <span className="text-neutral-400 ml-1 shrink-0">
-                  {needsShelf ? <span className="text-amber-600" title="needs shelf">⬚</span> : `${heightU}U`}
+                  {needsShelf ? <span className="text-amber-600" title={t("needs shelf")}>⬚</span> : `${heightU}U`}
                 </span>
               </div>
             );
@@ -239,7 +241,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
           const claimedByGroup = new Set<string>();
           const groups = linkedRacks.map((rack) => {
             const roomNode = nodes.find((n) => n.id === rack.linkedRoomId);
-            const roomLabel = (roomNode?.data as RoomData | undefined)?.label ?? "Room";
+            const roomLabel = (roomNode?.data as RoomData | undefined)?.label ?? t("Room");
             const roomDevices = getDevicesInRoom(rack.linkedRoomId!, nodes)
               .filter((n) => unrackedIds.has(n.id) && matchesSearch(n));
             roomDevices.forEach((n) => claimedByGroup.add(n.id));
@@ -255,7 +257,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
               {groups.map(({ rack, roomLabel, devices }) => (
                 <div key={rack.id}>
                   <div className="font-semibold text-blue-600 mb-0.5 uppercase tracking-wider" style={{ fontSize: 8 }}>
-                    From {roomLabel} → {rack.label} ({devices.length})
+                    {t("From {room} → {rack} ({n})", { room: roomLabel, rack: rack.label, n: devices.length })}
                   </div>
                   <div className="flex flex-col gap-0.5">
                     {devices.sort((a, b) => ((a.data as DeviceData).label).localeCompare((b.data as DeviceData).label)).map(renderDevice)}
@@ -265,7 +267,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
               {otherUnracked.length > 0 && (
                 <div>
                   <div className="font-semibold text-neutral-500 mb-0.5 uppercase tracking-wider" style={{ fontSize: 8 }}>
-                    {groups.length > 0 ? `Other Unracked (${otherUnracked.length})` : `Unracked Devices (${otherUnracked.length})`}
+                    {groups.length > 0 ? t("Other Unracked ({n})", { n: otherUnracked.length }) : t("Unracked Devices ({n})", { n: otherUnracked.length })}
                   </div>
                   <div className="flex flex-col gap-0.5">
                     {otherUnracked.map(renderDevice)}
@@ -299,6 +301,7 @@ export default function RackSidebar({ page }: RackSidebarProps) {
 }
 
 function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackData; onClose: () => void }) {
+  const t = useT();
   const updateRack = useSchematicStore((s) => s.updateRack);
   const currency = useSchematicStore((s) => s.currency);
   const [label, setLabel] = useState(rack.label);
@@ -324,10 +327,10 @@ function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackD
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
       <form className="bg-white rounded-lg shadow-xl p-4 w-80 text-xs" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h3 className="font-semibold text-sm mb-3">Edit Rack</h3>
+        <h3 className="font-semibold text-sm mb-3">{t("Edit Rack")}</h3>
 
         <label className="block mb-2">
-          <span className="text-neutral-600">Label</span>
+          <span className="text-neutral-600">{t("Label")}</span>
           <input
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
             value={label}
@@ -338,21 +341,21 @@ function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackD
         </label>
 
         <label className="block mb-2">
-          <span className="text-neutral-600">Type</span>
+          <span className="text-neutral-600">{t("Type")}</span>
           <select
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
             value={rackType}
             onChange={(e) => setRackType(e.target.value as RackType)}
           >
             {(Object.entries(RACK_TYPE_LABELS) as [RackType, string][]).map(([value, lbl]) => (
-              <option key={value} value={value}>{lbl}</option>
+              <option key={value} value={value}>{t(lbl)}</option>
             ))}
           </select>
         </label>
 
         <div className="flex gap-2 mb-3">
           <label className="block flex-1">
-            <span className="text-neutral-600">Height (U)</span>
+            <span className="text-neutral-600">{t("Height (U)")}</span>
             <input
               type="number"
               className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -364,7 +367,7 @@ function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackD
             />
           </label>
           <label className="block flex-1">
-            <span className="text-neutral-600">Depth (mm)</span>
+            <span className="text-neutral-600">{t("Depth (mm)")}</span>
             <input
               type="number"
               className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -379,7 +382,7 @@ function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackD
         </div>
 
         <label className="block mb-3">
-          <span className="text-neutral-600">Rack cost ({currency})</span>
+          <span className="text-neutral-600">{t("Rack cost ({currency})", { currency })}</span>
           <input
             type="number"
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -393,13 +396,12 @@ function EditRackDialog({ pageId, rack, onClose }: { pageId: string; rack: RackD
         </label>
 
         <p className="text-neutral-400 text-[10px] mb-3">
-          Reducing the U height does not delete devices already placed at higher U positions —
-          they'll just sit outside the visible frame until you move or remove them.
+          {t("Reducing the U height does not delete devices already placed at higher U positions — they'll just sit outside the visible frame until you move or remove them.")}
         </p>
 
         <div className="flex justify-end gap-2">
-          <button type="button" className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>Cancel</button>
-          <button type="submit" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+          <button type="button" className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>{t("Cancel")}</button>
+          <button type="submit" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">{t("Save")}</button>
         </div>
       </form>
     </div>
@@ -428,6 +430,7 @@ const RACK_PRESETS: RackPreset[] = [
 ];
 
 function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCount: number; onClose: () => void }) {
+  const t = useT();
   const addRack = useSchematicStore((s) => s.addRack);
   const [mode, setMode] = useState<"presets" | "custom">("presets");
   const [label, setLabel] = useState(`Rack ${rackCount + 1}`);
@@ -464,19 +467,19 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl p-4 w-80 text-xs" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Add Rack</h3>
+          <h3 className="font-semibold text-sm">{t("Add Rack")}</h3>
           <div className="flex rounded overflow-hidden border border-neutral-300">
             <button
               className={`px-2 py-0.5 ${mode === "presets" ? "bg-blue-600 text-white" : "bg-white text-neutral-600"}`}
               onClick={() => setMode("presets")}
             >
-              Presets
+              {t("Presets")}
             </button>
             <button
               className={`px-2 py-0.5 ${mode === "custom" ? "bg-blue-600 text-white" : "bg-white text-neutral-600"}`}
               onClick={() => setMode("custom")}
             >
-              Custom
+              {t("Custom")}
             </button>
           </div>
         </div>
@@ -490,8 +493,8 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
                 onClick={() => applyPreset(preset)}
               >
                 <div>
-                  <div className="font-medium text-neutral-800">{preset.label}</div>
-                  <div className="text-neutral-400 text-[10px]">{preset.description}</div>
+                  <div className="font-medium text-neutral-800">{t(preset.label)}</div>
+                  <div className="text-neutral-400 text-[10px]">{t(preset.description)}</div>
                 </div>
                 <span className="text-neutral-400 shrink-0 ml-2">{preset.heightU}U</span>
               </button>
@@ -500,7 +503,7 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
         ) : (
           <form onSubmit={handleCustomSubmit}>
             <label className="block mb-2">
-              <span className="text-neutral-600">Label</span>
+              <span className="text-neutral-600">{t("Label")}</span>
               <input
                 className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
                 value={label}
@@ -510,21 +513,21 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
             </label>
 
             <label className="block mb-2">
-              <span className="text-neutral-600">Type</span>
+              <span className="text-neutral-600">{t("Type")}</span>
               <select
                 className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
                 value={rackType}
                 onChange={(e) => setRackType(e.target.value as RackType)}
               >
                 {(Object.entries(RACK_TYPE_LABELS) as [RackType, string][]).map(([value, lbl]) => (
-                  <option key={value} value={value}>{lbl}</option>
+                  <option key={value} value={value}>{t(lbl)}</option>
                 ))}
               </select>
             </label>
 
             <div className="flex gap-2 mb-3">
               <label className="block flex-1">
-                <span className="text-neutral-600">Height (U)</span>
+                <span className="text-neutral-600">{t("Height (U)")}</span>
                 <input
                   type="number"
                   className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -535,7 +538,7 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
                 />
               </label>
               <label className="block flex-1">
-                <span className="text-neutral-600">Depth (mm)</span>
+                <span className="text-neutral-600">{t("Depth (mm)")}</span>
                 <input
                   type="number"
                   className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -550,10 +553,10 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
 
             <div className="flex justify-end gap-2">
               <button type="button" className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>
-                Cancel
+                {t("Cancel")}
               </button>
               <button type="submit" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">
-                Add
+                {t("Add")}
               </button>
             </div>
           </form>
@@ -562,7 +565,7 @@ function AddRackDialog({ pageId, rackCount, onClose }: { pageId: string; rackCou
         {mode === "presets" && (
           <div className="flex justify-end mt-2">
             <button className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         )}

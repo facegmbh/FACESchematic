@@ -9,6 +9,7 @@
 import { jsPDF } from "jspdf";
 import type { CompanyProfile, ConnectionEdge, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock } from "./types";
 import { buildLegendLineRows, computeLineLoads, legendShowsLines, type LegendLineRow, type LoadSpecLookup } from "./speakerLines";
+import { t } from "./i18n";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
@@ -26,6 +27,7 @@ import {
   LEGEND_COMPANY_LOGO_MM,
   symbolLabelAnchor,
   SYMBOL_INK,
+  isGroupVisible,
   symbolOutlineColor,
   symbolOutlineWidth,
   rotateVec,
@@ -252,7 +254,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     doc.setFont("Inter", "bold");
     doc.setFontSize(3 * MM_TO_PT);
     doc.setTextColor(17, 17, 17);
-    doc.text(page.legend.linesTitle ?? DEFAULT_LEGEND_LINES_TITLE, innerX, y + 3.6, { maxWidth: innerW });
+    doc.text(page.legend.linesTitle ?? t(DEFAULT_LEGEND_LINES_TITLE), innerX, y + 3.6, { maxWidth: innerW });
     y += LEGEND_LINES_TITLE_MM;
     const colX = [0, 1, 2, 3].map((i) => innerX + LEGEND_LINE_COLS.slice(0, i).reduce((a, c) => a + c, 0) * innerW);
     const colW = LEGEND_LINE_COLS.map((c) => c * innerW);
@@ -263,7 +265,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
       const x = align === "right" ? colX[col] + colW[col] - 1 : colX[col];
       doc.text(text, x, rowY + LEGEND_LINE_ROW_MM * 0.72, { maxWidth: colW[col] - 1, align });
     };
-    cell("Line", 0, y, true); cell("Amplifier · channel", 1, y, true); cell("Qty", 2, y, true, "right"); cell("Load", 3, y, true);
+    cell(t("Line"), 0, y, true); cell(t("Amplifier · channel"), 1, y, true); cell(t("Qty"), 2, y, true, "right"); cell(t("Load"), 3, y, true);
     y += LEGEND_LINE_ROW_MM;
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.1);
@@ -515,7 +517,36 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     // Covers: white over whatever part of the architect's plan was taken out.
     doc.setFillColor(255, 255, 255);
     for (const mask of page.masks) {
-      doc.rect(mask.positionMm.x, mask.positionMm.y, mask.sizeMm.w, mask.sizeMm.h, "F");
+      const opacity = Math.min(1, Math.max(0, mask.opacity ?? 1));
+      if (opacity <= 0) continue;
+      // A turned cover is drawn as a polygon: jsPDF has no transform stack for rect().
+      const turn = mask.rotationDeg ?? 0;
+      const half = { x: mask.sizeMm.w / 2, y: mask.sizeMm.h / 2 };
+      const cx = mask.positionMm.x + half.x;
+      const cy = mask.positionMm.y + half.y;
+      const setAlpha = (a: number) => {
+        // jsPDF exposes alpha only through a graphics state; older builds have neither, in
+        // which case a faded cover prints opaque rather than not at all.
+        const gs = (doc as unknown as { setGState?: (s: unknown) => void; GState?: (o: unknown) => unknown });
+        if (gs.setGState && gs.GState) gs.setGState(gs.GState({ opacity: a }));
+      };
+      if (opacity < 1) setAlpha(opacity);
+      if (!turn) {
+        doc.rect(mask.positionMm.x, mask.positionMm.y, mask.sizeMm.w, mask.sizeMm.h, "F");
+      } else {
+        const corners = [
+          { x: -half.x, y: -half.y },
+          { x: half.x, y: -half.y },
+          { x: half.x, y: half.y },
+          { x: -half.x, y: half.y },
+        ].map((c) => rotateVec(c, turn));
+        const deltas: [number, number][] = [];
+        for (let i = 1; i < corners.length; i++) {
+          deltas.push([corners[i].x - corners[i - 1].x, corners[i].y - corners[i - 1].y]);
+        }
+        doc.lines(deltas, cx + corners[0].x, cy + corners[0].y, [1, 1], "F", true);
+      }
+      if (opacity < 1) setAlpha(1);
     }
 
     // Content border
@@ -529,6 +560,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     const turnedSymbolImages = new Map<string, string>();
     for (const symbol of page.symbols) {
       const group = groupById.get(symbol.groupId);
+      if (!isGroupVisible(group)) continue;
       const rot = ((((symbol.rotationDeg ?? 0) % 360) + 360) % 360);
       if (!group?.symbolImageSrc || !rot) continue;
       const key = `${group.id}|${rot}`;
@@ -541,7 +573,8 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     }
     for (const symbol of page.symbols) {
       const group = groupById.get(symbol.groupId);
-      if (!group) continue;
+      // A switched-off layer prints nothing — that is the point of switching it off.
+      if (!group || !isGroupVisible(group)) continue;
       const rot = symbol.rotationDeg ?? 0;
       drawSymbol(
         doc,

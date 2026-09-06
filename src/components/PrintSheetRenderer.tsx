@@ -8,6 +8,7 @@ import { computeRackStats, formatStatsLine } from "../rackStats";
 import { computeDragSnap, computeResizeSnap, type SheetGuide, type Rect } from "../printSheetSnap";
 import RackFaceSVG from "./RackFaceSVG";
 import TitleBlockSVG from "./TitleBlockSVG";
+import { useT } from "../i18n";
 
 const IN_TO_MM = 25.4;
 const SCREEN_PPI = 96;
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function PrintSheetRenderer({ page }: Props) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const allPages = useSchematicStore((s) => s.pages);
   const addViewport = useSchematicStore((s) => s.addViewport);
@@ -500,7 +502,7 @@ export default function PrintSheetRenderer({ page }: Props) {
             const rack = elevPage?.racks.find((r) => r.id === vp.rackRefId);
             const isSelected = selectedVpIds.includes(vp.id);
             const isOnlySelected = isSelected && selectedVpIds.length === 1;
-            const kindLabel = vp.kind === "rack-front" ? "Front" : vp.kind === "rack-rear" ? "Rear" : "Side";
+            const kindLabel = vp.kind === "rack-front" ? t("Front") : vp.kind === "rack-rear" ? t("Rear") : t("Side");
             const face = vp.kind === "rack-rear" ? "rear" : vp.kind === "rack-side" ? "side" : "front";
 
             const rackPlacements = rack && elevPage ? elevPage.placements.filter((p) => p.rackId === rack.id) : [];
@@ -511,9 +513,9 @@ export default function PrintSheetRenderer({ page }: Props) {
             const statsLine = stats ? formatStatsLine(stats) : null;
             const caveatLine = stats && (stats.unknownDepthCount > 0 || stats.unknownWeightCount > 0 || stats.unknownPowerCount > 0)
               ? [
-                  stats.unknownDepthCount > 0 ? `${stats.unknownDepthCount} unknown depth` : null,
-                  stats.unknownWeightCount > 0 ? `${stats.unknownWeightCount} unknown weight` : null,
-                  stats.unknownPowerCount > 0 ? `${stats.unknownPowerCount} unknown power` : null,
+                  stats.unknownDepthCount > 0 ? t("{n} unknown depth", { n: stats.unknownDepthCount }) : null,
+                  stats.unknownWeightCount > 0 ? t("{n} unknown weight", { n: stats.unknownWeightCount }) : null,
+                  stats.unknownPowerCount > 0 ? t("{n} unknown power", { n: stats.unknownPowerCount }) : null,
                 ].filter(Boolean).join(" · ")
               : null;
 
@@ -537,7 +539,7 @@ export default function PrintSheetRenderer({ page }: Props) {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-neutral-100 border border-neutral-300 text-neutral-400 text-xs">
-                      Rack not found
+                      {t("Rack not found")}
                     </div>
                   )}
                   {isSelected && (
@@ -553,7 +555,7 @@ export default function PrintSheetRenderer({ page }: Props) {
                     <button
                       className="absolute bottom-0 left-0 w-5 h-5 bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center rounded-tr text-[11px] leading-none"
                       style={{ zIndex: 11, paddingTop: 1 }}
-                      title="Reset size to natural rack aspect (shortcut: R)"
+                      title={t("Reset size to natural rack aspect (shortcut: R)")}
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => { e.stopPropagation(); resetSelectionSize(); }}
                     >
@@ -676,7 +678,7 @@ export default function PrintSheetRenderer({ page }: Props) {
           {/* Empty state */}
           {page.viewports.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
-              Drag a rack view from the sidebar, or use Auto-Fill in the toolbar
+              {t("Drag a rack view from the sidebar, or use Auto-Fill in the toolbar")}
             </div>
           )}
         </div>
@@ -684,7 +686,7 @@ export default function PrintSheetRenderer({ page }: Props) {
 
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white/90 border border-neutral-300 rounded shadow px-2 py-1 text-xs select-none" data-print-hide>
-        <button className="px-2 py-0.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded cursor-pointer" onClick={fitView}>Fit</button>
+        <button className="px-2 py-0.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded cursor-pointer" onClick={fitView}>{t("Fit")}</button>
         <div className="border-l border-neutral-200 h-3" />
         <button className="w-6 h-6 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded cursor-pointer" onClick={() => { const z = Math.max(0.1, vpRef.current.zoom / 1.25); setViewport(z, vpRef.current.pan); }}>−</button>
         <span className="w-10 text-center text-neutral-600">{Math.round(zoom * 100)}%</span>

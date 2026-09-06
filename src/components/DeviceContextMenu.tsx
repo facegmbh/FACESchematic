@@ -4,8 +4,10 @@ import { useSchematicStore } from "../store";
 import type { DeviceData, RackElevationPage } from "../types";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { inferRackHeightU } from "../rackUtils";
+import { useT } from "../i18n";
 
 export default function DeviceContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.deviceContextMenu);
   const allPages = useSchematicStore((s) => s.pages);
   const pages = useMemo(() => allPages.filter((p): p is RackElevationPage => p.type === "rack-elevation"), [allPages]);
@@ -102,21 +104,21 @@ export default function DeviceContextMenu() {
     >
       {bulkAvailable && (
         <MenuItem
-          label={`Edit Properties of ${selectedDeviceCount} Devices...`}
+          label={t("Edit Properties of {n} Devices...", { n: selectedDeviceCount })}
           onClick={editSelectedProperties}
         />
       )}
       <MenuItem
-        label={bulkAvailable ? "Edit This Device Only..." : "Edit Properties..."}
+        label={bulkAvailable ? t("Edit This Device Only...") : t("Edit Properties...")}
         onClick={editProperties}
       />
-      <MenuItem label="Swap Device..." onClick={swapDevice} />
+      <MenuItem label={t("Swap Device...")} onClick={swapDevice} />
 
       {deviceData && (
         <>
           <div className="border-t border-gray-200 my-1" />
           <MenuItem
-            label="Show Only Connected Ports"
+            label={t("Show Only Connected Ports")}
             onClick={toggleShowOnlyConnected}
             checked={!!deviceData.showOnlyConnectedPorts}
           />
@@ -125,7 +127,7 @@ export default function DeviceContextMenu() {
           )}
           {placement ? (
             <MenuItem
-              label={`Show in Rack (${placement.page.label})`}
+              label={t("Show in Rack ({page})", { page: placement.page.label })}
               onClick={() => {
                 setActivePage(placement.page.id);
                 useSchematicStore.setState({ deviceContextMenu: null });
@@ -134,7 +136,7 @@ export default function DeviceContextMenu() {
           ) : pages.length > 0 ? (
             <>
               <div className="px-3 py-1 text-neutral-400 text-[10px] uppercase tracking-wider">
-                Place in Rack
+                {t("Place in Rack")}
               </div>
               {pages.map((page) =>
                 page.racks.map((rack) => (
@@ -153,12 +155,22 @@ export default function DeviceContextMenu() {
                             uPosition: u,
                             face: "front",
                           });
-                          state.addToast(`Placed ${deviceData.label} in ${rack.label} at U${u}`, "success");
+                          state.addToast(
+                            t("Placed {device} in {rack} at U{u}", {
+                              device: deviceData.label,
+                              rack: rack.label,
+                              u,
+                            }),
+                            "success",
+                          );
                           useSchematicStore.setState({ deviceContextMenu: null });
                           return;
                         }
                       }
-                      state.addToast(`No space in ${rack.label} for ${heightU}U device`, "error");
+                      state.addToast(
+                        t("No space in {rack} for {n}U device", { rack: rack.label, n: heightU }),
+                        "error",
+                      );
                       useSchematicStore.setState({ deviceContextMenu: null });
                     }}
                   />
@@ -170,7 +182,7 @@ export default function DeviceContextMenu() {
       )}
 
       <div className="border-t border-gray-200 my-1" />
-      <MenuItem label="Delete Device" onClick={deleteDevice} danger />
+      <MenuItem label={t("Delete Device")} onClick={deleteDevice} danger />
     </div>
   );
 }

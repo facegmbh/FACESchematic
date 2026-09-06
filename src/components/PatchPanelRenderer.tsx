@@ -11,6 +11,7 @@ import {
   type PortFaceDisplay,
 } from "../patchCircuits";
 import { exportPatchPanelStripsPdf } from "../patchPanelPdf";
+import { useT } from "../i18n";
 
 // Face geometry (px) — tuned to fit two-line port cards under each jack.
 const PITCH = 84;
@@ -26,6 +27,7 @@ const clampStrip = (s: string | undefined) => {
 /** Main area of the Patch Panels page: one block per panel — SVG face + per-port cards —
  *  plus the assign-mode banner and hover circuit tracing. */
 export default function PatchPanelRenderer() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const cableIdMap = useSchematicStore((s) => s.cableIdMap);
@@ -96,16 +98,20 @@ export default function PatchPanelRenderer() {
       devicePoint(nodes, assignEdge.target, assignEdge.targetHandle),
     );
     if (mismatch) {
-      const faceLabel = mismatch.face === "rear" ? "rear" : "front";
+      const faceLabel = mismatch.face === "rear" ? t("rear") : t("front");
       addToast(
-        `Won't fit — this port's ${faceLabel} is ${CONNECTOR_LABELS[mismatch.panelConnector]}, ` +
-          `but ${mismatch.otherLabel} is ${CONNECTOR_LABELS[mismatch.otherConnector]}.`,
+        t("Won't fit — this port's {face} is {panelConnector}, but {other} is {otherConnector}.", {
+          face: faceLabel,
+          panelConnector: CONNECTOR_LABELS[mismatch.panelConnector],
+          other: mismatch.otherLabel,
+          otherConnector: CONNECTOR_LABELS[mismatch.otherConnector],
+        }),
         "error",
       );
       return;
     }
     const ok = addEdgePatchHop(patchAssignEdgeId, hop);
-    if (!ok) addToast("That port is already occupied", "info");
+    if (!ok) addToast(t("That port is already occupied"), "info");
   };
 
   const commitEdit = () => {
@@ -121,7 +127,7 @@ export default function PatchPanelRenderer() {
     if (!face) {
       return (
         <div className="border border-dashed border-neutral-300 rounded px-1 py-0.5 text-neutral-400 text-center text-[10px]">
-          unwired
+          {t("unwired")}
         </div>
       );
     }
@@ -139,7 +145,7 @@ export default function PatchPanelRenderer() {
         onDoubleClick={() => {
           if (editable) setEditing({ edgeId: display.edgeId, segIndex: face.segIndex!, value: face.cableLabel });
         }}
-        title={editable ? "Double-click to override the cable label" : "Wired on the schematic — edit there"}
+        title={editable ? t("Double-click to override the cable label") : t("Wired on the schematic — edit there")}
       >
         {isEditing ? (
           <input
@@ -172,22 +178,22 @@ export default function PatchPanelRenderer() {
       {assigning && (
         <div className="sticky top-0 z-10 flex items-center gap-3 bg-blue-600 text-white px-4 py-2 text-xs shadow">
           <span>
-            Patching <b className="font-mono">{assignEdge ? baseIdFor(assignEdge) : ""}</b> — click an open port.
-            Click a second panel’s port to add another hop.
+            {t("Patching")} <b className="font-mono">{assignEdge ? baseIdFor(assignEdge) : ""}</b>{" "}
+            {t("— click an open port. Click a second panel’s port to add another hop.")}
           </span>
           <button
             className="ml-auto bg-white/20 hover:bg-white/30 rounded px-2 py-0.5"
             onClick={() => setPatchAssignEdge(null)}
           >
-            Done
+            {t("Done")}
           </button>
         </div>
       )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-neutral-200 text-xs" data-print-hide>
-        <span className="font-semibold text-neutral-700">Patch Bay</span>
-        <span className="text-neutral-400 hidden md:inline">Hover a port or cable to trace its circuit</span>
+        <span className="font-semibold text-neutral-700">{t("Patch Bay")}</span>
+        <span className="text-neutral-400 hidden md:inline">{t("Hover a port or cable to trace its circuit")}</span>
         <div className="ml-auto flex gap-2">
           <button
             className="border border-neutral-300 rounded px-2.5 py-1 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40"
@@ -196,15 +202,15 @@ export default function PatchPanelRenderer() {
               const name = useSchematicStore.getState().schematicName || "Schematic";
               exportPatchPanelStripsPdf(nodes, edges, cableIdMap, name);
             }}
-            title="Designation strips at 100% physical scale — cut and slide into the panel's label holder"
+            title={t("Designation strips at 100% physical scale — cut and slide into the panel's label holder")}
           >
-            🖨 Print strips (PDF)
+            🖨 {t("Print strips (PDF)")}
           </button>
           <button
             className="bg-blue-600 text-white rounded px-2.5 py-1 hover:bg-blue-700"
             onClick={() => window.dispatchEvent(new CustomEvent("easyschematic:open-reports", { detail: "patchPanel" }))}
           >
-            Schedule report…
+            {t("Schedule report…")}
           </button>
         </div>
       </div>
@@ -212,9 +218,10 @@ export default function PatchPanelRenderer() {
       <div className="p-5 pb-16">
         {panels.length === 0 && (
           <div className="text-center text-neutral-400 text-sm mt-16">
-            No patch panels in this project yet.
+            {t("No patch panels in this project yet.")}
             <br />
-            Use <b>+ Add panel</b> in the sidebar to create a virtual panel, or place one on the schematic.
+            {t("Use::instruction")} <b>{t("+ Add panel")}</b>{" "}
+            {t("in the sidebar to create a virtual panel, or place one on the schematic.")}
           </div>
         )}
 
@@ -224,14 +231,14 @@ export default function PatchPanelRenderer() {
           const hiddenPorts = new Set((data.hiddenPorts as string[] | undefined) ?? []);
           const visiblePorts = ports.filter((p) => !hiddenPorts.has(p.id));
           const W = EAR * 2 + PITCH * visiblePorts.length;
-          const label = data.label || "Unnamed Panel";
+          const label = data.label || t("Unnamed Panel");
 
           if (visiblePorts.length === 0) {
             return (
               <div key={panel.id} id={`ppblk-${panel.id}`} className="mb-8">
                 <div className="text-sm font-bold text-neutral-800">{label}</div>
                 <div className="text-xs text-neutral-400">
-                  Legacy paired-port panel — shown in the Patch Panel Schedule report only.
+                  {t("Legacy paired-port panel — shown in the Patch Panel Schedule report only.")}
                 </div>
               </div>
             );
@@ -244,14 +251,14 @@ export default function PatchPanelRenderer() {
               <div className="flex items-baseline gap-2 mb-2">
                 <span className="text-sm font-bold text-neutral-800">{label}</span>
                 <span className="text-[11px] text-neutral-400">
-                  {data.offCanvas ? "virtual (not on schematic)" : "on schematic"} ·{" "}
-                  {displays.filter(Boolean).length}/{visiblePorts.length} used
+                  {data.offCanvas ? t("virtual (not on schematic)") : t("on schematic")} ·{" "}
+                  {t("{used}/{total} used", { used: displays.filter(Boolean).length, total: visiblePorts.length })}
                 </span>
               </div>
 
               <div className="overflow-x-auto pb-1">
                 {/* Panel face */}
-                <svg width={W} height={FACE_H} viewBox={`0 0 ${W} ${FACE_H}`} role="img" aria-label={`${label} panel face`}>
+                <svg width={W} height={FACE_H} viewBox={`0 0 ${W} ${FACE_H}`} role="img" aria-label={t("{name} panel face", { name: label })}>
                   <rect x={0} y={0} width={W} height={FACE_H} rx={4} fill="#24262b" />
                   <rect x={1.5} y={1.5} width={W - 3} height={FACE_H - 3} rx={3} fill="none" stroke="rgba(255,255,255,.07)" />
                   {[[14, 16], [14, FACE_H - 16], [W - 14, 16], [W - 14, FACE_H - 16]].map(([x, y], i) => (
@@ -326,11 +333,11 @@ export default function PatchPanelRenderer() {
                             className="border border-dashed border-blue-400 text-blue-600 rounded py-3 text-[10px] hover:bg-blue-50 animate-pulse"
                             onClick={() => tryAssign(panel.id, port.id)}
                           >
-                            ＋ patch here
+                            ＋ {t("patch here")}
                           </button>
                         ) : (
                           <div className="border border-dashed border-neutral-300 rounded py-3 text-center text-neutral-400 text-[10px]">
-                            spare
+                            {t("spare")}
                           </div>
                         )}
                       </div>

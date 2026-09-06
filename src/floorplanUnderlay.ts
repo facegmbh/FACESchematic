@@ -9,6 +9,7 @@
 
 import { PT_TO_MM, rotatedSquareFactor } from "./floorplan";
 import type { PdfLayerChoice } from "./types";
+import { t } from "./i18n";
 
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
 export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg";
@@ -79,7 +80,7 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Could not decode this image file."));
+    img.onerror = () => reject(new Error(t("Could not decode this image file.")));
     img.src = src;
   });
 }
@@ -88,7 +89,7 @@ function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.onerror = () => reject(new Error(t("Could not read the file.")));
     reader.readAsDataURL(file);
   });
 }
@@ -152,7 +153,7 @@ async function renderPdfPage(file: File, pageNumber: number, dpi: number, layers
       canvas = undefined;
       scale = scale / 1.5;
     }
-    if (!canvas || !ctx) throw new Error("This plan is too large to rasterize in the browser. Pick a lower resolution.");
+    if (!canvas || !ctx) throw new Error(t("This plan is too large to rasterize in the browser. Pick a lower resolution."));
     // Plans are drawn on transparent backgrounds; paint paper white so the raster
     // doesn't turn into black-on-black in dark mode.
     ctx.fillStyle = "#ffffff";
@@ -200,7 +201,7 @@ async function rasterizeImage(file: File, maxLongEdgePx: number): Promise<Import
   const img = await loadImageElement(dataUrl);
   const naturalW = img.naturalWidth || img.width;
   const naturalH = img.naturalHeight || img.height;
-  if (!naturalW || !naturalH) throw new Error("This image has no readable dimensions.");
+  if (!naturalW || !naturalH) throw new Error(t("This image has no readable dimensions."));
 
   const scale = Math.min(maxLongEdgePx / Math.max(naturalW, naturalH), 1);
   // Small enough already and not an SVG → keep the original bytes, no re-encode.
@@ -219,7 +220,7 @@ async function rasterizeImage(file: File, maxLongEdgePx: number): Promise<Import
   canvas.width = Math.max(1, Math.round(naturalW * scale));
   canvas.height = Math.max(1, Math.round(naturalH * scale));
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not create a canvas to resize the image.");
+  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -240,7 +241,7 @@ async function rasterizeImage(file: File, maxLongEdgePx: number): Promise<Import
  *  handful of them can't bloat the saved project. */
 export async function importLegendImage(file: File, maxLongEdgePx = 320): Promise<string> {
   if (!file.type.startsWith("image/") && !["png", "jpg", "jpeg", "webp", "svg"].includes(extensionOf(file.name))) {
-    throw new Error("Pick an image file for the legend.");
+    throw new Error(t("Pick an image file for the legend."));
   }
   const dataUrl = await readAsDataUrl(file);
   const img = await loadImageElement(dataUrl);
@@ -253,7 +254,7 @@ export async function importLegendImage(file: File, maxLongEdgePx = 320): Promis
   canvas.width = Math.max(1, Math.round(naturalW * scale));
   canvas.height = Math.max(1, Math.round(naturalH * scale));
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not create a canvas to resize the image.");
+  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/png");
 }
@@ -263,7 +264,7 @@ export async function importLegendImage(file: File, maxLongEdgePx = 320): Promis
  *  same kind of data URL — the one jsPDF can embed and the sheet can rotate. */
 export async function importSymbolImage(file: File, maxEdgePx = 256): Promise<string> {
   if (!file.type.startsWith("image/") && !["png", "jpg", "jpeg", "webp", "svg"].includes(extensionOf(file.name))) {
-    throw new Error("Pick an image file for the symbol.");
+    throw new Error(t("Pick an image file for the symbol."));
   }
   const dataUrl = await readAsDataUrl(file);
   const img = await loadImageElement(dataUrl);
@@ -280,7 +281,7 @@ export async function importSymbolImage(file: File, maxEdgePx = 256): Promise<st
   canvas.width = maxEdgePx;
   canvas.height = maxEdgePx;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not create a canvas to resize the image.");
+  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
   ctx.drawImage(img, (maxEdgePx - w) / 2, (maxEdgePx - h) / 2, w, h);
   return canvas.toDataURL("image/png");
 }
@@ -301,7 +302,7 @@ export async function rotatedImageDataUrl(src: string, deg: number): Promise<str
   canvas.width = side;
   canvas.height = side;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not create a canvas to rotate the image.");
+  if (!ctx) throw new Error(t("Could not create a canvas to rotate the image."));
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate(rad);
   ctx.drawImage(img, -w / 2, -h / 2);
@@ -399,11 +400,11 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
 
   if (ext === "dwg") {
     throw new Error(
-      "DWG can't be read in the browser. Export the drawing as PDF (best) or as an image from AutoCAD/BricsCAD and import that.",
+      t("DWG can't be read in the browser. Export the drawing as PDF (best) or as an image from AutoCAD/BricsCAD and import that."),
     );
   }
   if (ext === "dxf") {
-    throw new Error("DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF.");
+    throw new Error(t("DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF."));
   }
   if (isPdf(file)) {
     return renderPdfPage(file, opts.pageNumber ?? 1, opts.dpi ?? DEFAULT_UNDERLAY_DPI, opts.layers);
@@ -411,7 +412,7 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
   if (file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "svg"].includes(ext)) {
     return rasterizeImage(file, maxLongEdgePx);
   }
-  throw new Error(`Unsupported file type "${ext || file.type || "unknown"}". Use a PDF or an image.`);
+  throw new Error(t('Unsupported file type "{type}". Use a PDF or an image.', { type: ext || file.type || t("unknown") }));
 }
 
 /**

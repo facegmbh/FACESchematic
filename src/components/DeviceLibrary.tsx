@@ -7,6 +7,7 @@ import { scoreTemplate } from "../templateSearch";
 import { inventoryKeyFromDeviceData, inventoryKeyFromTemplate } from "../inventoryKey";
 import DeviceCreatorPicker from "./DeviceCreatorPicker";
 import ImportDevicesDialog from "./ImportDevicesDialog";
+import { useT } from "../i18n";
 
 const APP_VERSION = __APP_VERSION__;
 const BUILD_HASH = __BUILD_HASH__;
@@ -67,6 +68,7 @@ function TemplateItem({
   onToggleFavorite?: () => void;
   onAddToOwned?: () => void;
 }) {
+  const t = useT();
   const signalText = getUniqueSignalTypes(template)
     .map((t) => SIGNAL_LABELS[t as keyof typeof SIGNAL_LABELS])
     .join(" / ");
@@ -87,7 +89,7 @@ function TemplateItem({
                   ? "text-amber-400"
                   : "text-[var(--color-text-muted)]/30 opacity-0 group-hover:opacity-100"
               }`}
-              title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+              title={isFavorite ? t("Remove from favorites") : t("Add to favorites")}
             >
               {isFavorite ? "★" : "☆"}
             </button>
@@ -100,9 +102,9 @@ function TemplateItem({
                   ? "bg-blue-100 text-blue-700 opacity-100"
                   : "uppercase tracking-wide text-[var(--color-text-muted)]/40 opacity-0 group-hover:opacity-100 hover:text-blue-600"
               }`}
-              title={(ownedQuantity ?? 0) > 0 ? `Owned: ${ownedQuantity}` : "Add to owned gear"}
+              title={(ownedQuantity ?? 0) > 0 ? t("Owned: {n}", { n: ownedQuantity ?? 0 }) : t("Add to owned gear")}
             >
-              {(ownedQuantity ?? 0) > 0 ? ownedQuantity : "Inv"}
+              {(ownedQuantity ?? 0) > 0 ? ownedQuantity : t("Inv")}
             </button>
           )}
         </div>
@@ -111,7 +113,7 @@ function TemplateItem({
         <span className="text-xs text-[var(--color-text-heading)] font-medium truncate flex items-center gap-1">
           <HighlightedText text={template.label} query={query} />
           {hasPreset && (
-            <span className="text-[8px] text-blue-500 bg-blue-50 rounded px-1 py-px font-normal shrink-0">preset</span>
+            <span className="text-[8px] text-blue-500 bg-blue-50 rounded px-1 py-px font-normal shrink-0">{t("preset")}</span>
           )}
         </span>
         {template.manufacturer && (
@@ -124,7 +126,9 @@ function TemplateItem({
         </span>
         {template.slots && template.slots.length > 0 && (
           <span className="text-[9px] text-[var(--color-text-muted)] opacity-60">
-            {template.slots.length} slot{template.slots.length !== 1 ? "s" : ""}
+            {template.slots.length === 1
+              ? t("1 slot")
+              : t("{n} slots", { n: template.slots.length })}
           </span>
         )}
       </div>
@@ -135,7 +139,7 @@ function TemplateItem({
             onDelete();
           }}
           className="opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-1 transition-opacity"
-          title="Delete template"
+          title={t("Delete template")}
         >
           &times;
         </button>
@@ -272,6 +276,7 @@ function DraggableTemplateItem({
   index: number;
   onReorder: (deviceType: string, targetIndex: number) => void;
 }) {
+  const t = useT();
   const [dropLine, setDropLine] = useState<"above" | "below" | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -313,7 +318,7 @@ function DraggableTemplateItem({
         }}
       >
         {/* Drag handle */}
-        <span className="text-[10px] text-[var(--color-text-muted)]/40 opacity-0 group-hover:opacity-100 cursor-grab select-none shrink-0 leading-none" title="Drag to reorder">⠿</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]/40 opacity-0 group-hover:opacity-100 cursor-grab select-none shrink-0 leading-none" title={t("Drag to reorder")}>⠿</span>
         {(onToggleFavorite || onAddToOwned) && (
           <div className="shrink-0 flex flex-col items-center gap-1 self-start min-w-[1.25rem]">
             {onToggleFavorite && (
@@ -324,7 +329,7 @@ function DraggableTemplateItem({
                     ? "text-amber-400"
                     : "text-[var(--color-text-muted)]/30 opacity-0 group-hover:opacity-100"
                 }`}
-                title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                title={isFavorite ? t("Remove from favorites") : t("Add to favorites")}
               >
                 {isFavorite ? "★" : "☆"}
               </button>
@@ -337,9 +342,9 @@ function DraggableTemplateItem({
                     ? "bg-blue-100 text-blue-700 opacity-100"
                     : "uppercase tracking-wide text-[var(--color-text-muted)]/40 opacity-0 group-hover:opacity-100 hover:text-blue-600"
                 }`}
-                title={(ownedQuantity ?? 0) > 0 ? `Owned: ${ownedQuantity}` : "Add to owned gear"}
+                title={(ownedQuantity ?? 0) > 0 ? t("Owned: {n}", { n: ownedQuantity ?? 0 }) : t("Add to owned gear")}
               >
-                {(ownedQuantity ?? 0) > 0 ? ownedQuantity : "Inv"}
+                {(ownedQuantity ?? 0) > 0 ? ownedQuantity : t("Inv")}
               </button>
             )}
           </div>
@@ -360,7 +365,7 @@ function DraggableTemplateItem({
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-1 transition-opacity"
-          title="Delete template"
+          title={t("Delete template")}
         >
           &times;
         </button>
@@ -390,6 +395,7 @@ function GroupHeader({
   onTemplateDrop: (deviceType: string) => void;
   onGroupReorder: (groupId: string, targetIndex: number) => void;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(group.label);
   const [dragOver, setDragOver] = useState(false);
@@ -480,14 +486,14 @@ function GroupHeader({
           <button
             onClick={(e) => { e.stopPropagation(); setEditLabel(group.label); setEditing(true); }}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-[10px] cursor-pointer px-0.5"
-            title="Rename group"
+            title={t("Rename group")}
           >
             ✎
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
             className="text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-0.5"
-            title="Delete group"
+            title={t("Delete group")}
           >
             &times;
           </button>
@@ -510,6 +516,7 @@ function UngroupedHeader({
   onToggle: () => void;
   onTemplateDrop: (deviceType: string) => void;
 }) {
+  const t = useT();
   const [dragOver, setDragOver] = useState(false);
 
   return (
@@ -535,7 +542,7 @@ function UngroupedHeader({
     >
       <span className={`text-[9px] text-[var(--color-text-muted)] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
       <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] group-hover/cat:text-[var(--color-text)] transition-colors">
-        Ungrouped
+        {t("Ungrouped")}
       </span>
       <span className="text-[10px] text-[var(--color-text-muted)] ml-auto opacity-60">{count}</span>
     </button>
@@ -556,6 +563,7 @@ function CustomTemplatesSection({
   ownedQuantityMap?: Map<string, number>;
   onAddToOwned?: (template: DeviceTemplate) => void;
 }) {
+  const t = useT();
   const groups = useSchematicStore((s) => s.customTemplateGroups);
   const order = useSchematicStore((s) => s.customTemplateOrder);
   const assignments = useSchematicStore((s) => s.customTemplateGroupAssignments);
@@ -640,14 +648,14 @@ function CustomTemplatesSection({
         <button onClick={() => setSectionOpen(!sectionOpen)} className="flex items-center gap-1 flex-1 min-w-0 cursor-pointer">
           <span className={`text-[9px] text-[var(--color-text-muted)] transition-transform ${isOpen ? "rotate-90" : ""}`}>▶</span>
           <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] group-hover/cat:text-[var(--color-text)] transition-colors">
-            User Templates
+            {t("User Templates")}
           </span>
           <span className="text-[10px] text-[var(--color-text-muted)] ml-auto opacity-60">{customTemplates.length}</span>
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); setCreatingGroup(true); setNewGroupLabel(""); }}
           className="opacity-0 group-hover/cat:opacity-100 text-[var(--color-text-muted)] hover:text-blue-500 text-sm cursor-pointer px-0.5 transition-opacity"
-          title="New group"
+          title={t("New group")}
         >
           +
         </button>
@@ -655,7 +663,7 @@ function CustomTemplatesSection({
           <button
             onClick={(e) => { e.stopPropagation(); setConfirmingClear(true); }}
             className="opacity-0 group-hover/cat:opacity-100 text-[var(--color-text-muted)] hover:text-red-500 text-xs cursor-pointer px-0.5 transition-opacity"
-            title="Delete all user templates"
+            title={t("Delete all user templates")}
           >
             🗑
           </button>
@@ -673,7 +681,7 @@ function CustomTemplatesSection({
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
               <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-                Delete all user templates?
+                {t("Delete all user templates?")}
               </span>
               <button
                 onClick={() => setConfirmingClear(false)}
@@ -684,11 +692,18 @@ function CustomTemplatesSection({
             </div>
             <div className="px-5 py-4 text-xs text-[var(--color-text)] space-y-2">
               <p>
-                This will permanently delete all {customTemplates.length} of your user templates
-                {groups.length > 0 ? ` and all ${groups.length} group${groups.length === 1 ? "" : "s"}` : ""}.
+                {t("This will permanently delete all {n} of your user templates", {
+                  n: customTemplates.length,
+                })}
+                {groups.length > 0
+                  ? groups.length === 1
+                    ? ` ${t("and all 1 group")}`
+                    : ` ${t("and all {n} groups", { n: groups.length })}`
+                  : ""}
+                .
               </p>
               <p className="text-[var(--color-text-muted)]">
-                Devices already placed on the canvas are not affected. This cannot be undone.
+                {t("Devices already placed on the canvas are not affected. This cannot be undone.")}
               </p>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-border)]">
@@ -696,13 +711,13 @@ function CustomTemplatesSection({
                 onClick={() => setConfirmingClear(false)}
                 className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 onClick={() => { clearAllCustomTemplates(); setConfirmingClear(false); }}
                 className="px-3 py-1.5 text-xs rounded bg-red-600 text-white hover:bg-red-700 transition-colors cursor-pointer"
               >
-                Delete All
+                {t("Delete All")}
               </button>
             </div>
           </div>
@@ -732,7 +747,7 @@ function CustomTemplatesSection({
                   setCreatingGroup(false);
                   setNewGroupLabel("");
                 }}
-                placeholder="Group name..."
+                placeholder={t("Group name...")}
                 className="flex-1 min-w-0 bg-white border border-blue-400 rounded px-1 py-0 text-[10px] uppercase tracking-wider text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)] placeholder:normal-case"
                 autoFocus
               />
@@ -858,6 +873,7 @@ function getUsedInventoryCounts(nodes: SchematicNode[]): Map<string, number> {
 }
 
 function OwnedGearTab({ query }: { query: string }) {
+  const t = useT();
   const ownedGear = useSchematicStore((s) => s.ownedGear);
   const setOwnedGear = useSchematicStore((s) => s.setOwnedGear);
   const updateOwnedGearQuantity = useSchematicStore((s) => s.updateOwnedGearQuantity);
@@ -914,9 +930,14 @@ function OwnedGearTab({ query }: { query: string }) {
           quantity: Number.isFinite(item.quantity) ? item.quantity : 1,
         }));
       setOwnedGear(normalized);
-      addToast(`Loaded ${normalized.length} owned gear item${normalized.length === 1 ? "" : "s"}`, "success");
+      addToast(
+        normalized.length === 1
+          ? t("Loaded 1 owned gear item")
+          : t("Loaded {n} owned gear items", { n: normalized.length }),
+        "success",
+      );
     } catch {
-      addToast("Couldn't load owned gear JSON", "error");
+      addToast(t("Couldn't load owned gear JSON"), "error");
     }
   }, [setOwnedGear, addToast]);
 
@@ -936,26 +957,26 @@ function OwnedGearTab({ query }: { query: string }) {
             disabled={ownedGear.length === 0}
             className="flex-1 rounded border border-[var(--color-border)] bg-white px-2 py-1 text-[10px] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
-            Export JSON
+            {t("Export JSON")}
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex-1 rounded border border-[var(--color-border)] bg-white px-2 py-1 text-[10px] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] cursor-pointer transition-colors"
           >
-            Import JSON
+            {t("Import JSON")}
           </button>
         </div>
         <div className="grid grid-cols-3 gap-1 text-center">
           <div className="rounded bg-white px-1 py-1">
-            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">Owned</div>
+            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">{t("Owned")}</div>
             <div className="text-xs font-semibold text-[var(--color-text-heading)]">{totals.owned}</div>
           </div>
           <div className="rounded bg-white px-1 py-1">
-            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">Used</div>
+            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">{t("Used")}</div>
             <div className="text-xs font-semibold text-[var(--color-text-heading)]">{totals.used}</div>
           </div>
           <div className="rounded bg-white px-1 py-1">
-            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">Need</div>
+            <div className="text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">{t("Need")}</div>
             <div className={`text-xs font-semibold ${totals.missing > 0 ? "text-amber-600" : "text-emerald-600"}`}>{totals.missing}</div>
           </div>
         </div>
@@ -964,8 +985,8 @@ function OwnedGearTab({ query }: { query: string }) {
       {filteredOwnedGear.length === 0 ? (
         <div className="text-xs text-[var(--color-text-muted)] text-center py-6 px-3">
           {ownedGear.length === 0
-            ? "No owned gear yet. Add items from the Devices tab, or import a JSON inventory."
-            : `No owned gear matches “${query}”.`}
+            ? t("No owned gear yet. Add items from the Devices tab, or import a JSON inventory.")
+            : t("No owned gear matches “{query}”.", { query })}
         </div>
       ) : (
         filteredOwnedGear.map((item) => {
@@ -994,7 +1015,7 @@ function OwnedGearTab({ query }: { query: string }) {
                 <button
                   onClick={() => removeOwnedGear(key)}
                   className="text-red-400/70 hover:text-red-500 text-sm leading-none cursor-pointer px-1"
-                  title="Remove from owned gear"
+                  title={t("Remove from owned gear")}
                 >
                   &times;
                 </button>
@@ -1003,7 +1024,7 @@ function OwnedGearTab({ query }: { query: string }) {
                 <button
                   onClick={() => updateOwnedGearQuantity(key, item.quantity - 1)}
                   className="w-6 h-6 inline-flex items-center justify-center rounded border border-[var(--color-border)] bg-white text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] cursor-pointer transition-colors"
-                  title="Decrease quantity"
+                  title={t("Decrease quantity")}
                 >
                   -
                 </button>
@@ -1017,20 +1038,20 @@ function OwnedGearTab({ query }: { query: string }) {
                 <button
                   onClick={() => updateOwnedGearQuantity(key, item.quantity + 1)}
                   className="w-6 h-6 inline-flex items-center justify-center rounded border border-[var(--color-border)] bg-white text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] cursor-pointer transition-colors"
-                  title="Increase quantity"
+                  title={t("Increase quantity")}
                 >
                   +
                 </button>
                 <div className="ml-auto text-[10px] text-[var(--color-text-muted)]">
-                  Used {used}
+                  {t("Used {n}", { n: used })}
                 </div>
               </div>
               <div className="flex items-center gap-1 text-[10px]">
-                <span className="rounded bg-white px-1.5 py-0.5 text-[var(--color-text-muted)]">Owned {item.quantity}</span>
+                <span className="rounded bg-white px-1.5 py-0.5 text-[var(--color-text-muted)]">{t("Owned {n}", { n: item.quantity })}</span>
                 {missing > 0 ? (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">Buy {missing}</span>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">{t("Buy {n}", { n: missing })}</span>
                 ) : (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">Spare {spare}</span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">{t("Spare {n}", { n: spare })}</span>
                 )}
               </div>
             </div>
@@ -1042,6 +1063,7 @@ function OwnedGearTab({ query }: { query: string }) {
 }
 
 export default function DeviceLibrary() {
+  const t = useT();
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const ownedGear = useSchematicStore((s) => s.ownedGear);
   const removeCustomTemplate = useSchematicStore((s) => s.removeCustomTemplate);
@@ -1246,7 +1268,7 @@ export default function DeviceLibrary() {
         <button
           onClick={() => setCollapsed(false)}
           className="py-3 cursor-pointer hover:bg-[var(--color-surface-hover)] w-full flex justify-center transition-colors"
-          title="Show device library"
+          title={t("Show device library")}
         >
           <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M6 3l5 5-5 5" />
@@ -1255,7 +1277,7 @@ export default function DeviceLibrary() {
         <div className="writing-mode-vertical text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mt-2 select-none"
           style={{ writingMode: "vertical-rl" }}
         >
-          {showOwnedGearPane ? "Library" : "Devices"}
+          {showOwnedGearPane ? t("Library") : t("Devices")}
         </div>
       </div>
     );
@@ -1266,12 +1288,12 @@ export default function DeviceLibrary() {
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          {showOwnedGearPane ? "Library" : "Devices"}
+          {showOwnedGearPane ? t("Library") : t("Devices")}
         </h2>
         <button
           onClick={() => setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
-          title="Collapse device library"
+          title={t("Collapse device library")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M10 3l-5 5 5 5" />
@@ -1284,14 +1306,14 @@ export default function DeviceLibrary() {
       {libraryDegraded && (
         <div className="px-3 py-2 border-b border-amber-300 bg-amber-50 text-[11px] text-amber-800">
           <div className="leading-snug">
-            Couldn't load the full device library — some community devices may be missing.
+            {t("Couldn't load the full device library — some community devices may be missing.")}
           </div>
           <button
             onClick={loadLibrary}
             disabled={libraryRetrying}
             className="mt-1 px-2 py-0.5 rounded bg-amber-600 text-white text-[10px] font-medium hover:bg-amber-500 disabled:opacity-60 cursor-pointer"
           >
-            {libraryRetrying ? "Retrying…" : "Retry"}
+            {libraryRetrying ? t("Retrying…") : t("Retry")}
           </button>
         </div>
       )}
@@ -1306,7 +1328,7 @@ export default function DeviceLibrary() {
                 : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             }`}
           >
-            Devices
+            {t("Devices")}
           </button>
           <button
             onClick={() => setLibraryActiveTab("owned")}
@@ -1316,7 +1338,7 @@ export default function DeviceLibrary() {
                 : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             }`}
           >
-            Owned Gear
+            {t("Owned Gear")}
           </button>
         </div>
       )}
@@ -1338,7 +1360,7 @@ export default function DeviceLibrary() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={libraryActiveTab === "owned" ? "Search owned gear..." : "Search devices..."}
+            placeholder={libraryActiveTab === "owned" ? t("Search owned gear...") : t("Search devices...")}
             className="w-full bg-white border border-[var(--color-border)] rounded pl-7 pr-2 py-1.5 text-xs text-[var(--color-text)] outline-none focus:border-blue-500 placeholder:text-[var(--color-text-muted)]"
           />
           {search && (
@@ -1352,7 +1374,11 @@ export default function DeviceLibrary() {
         </div>
         {query && (
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1 px-0.5">
-            {(libraryActiveTab === "owned" ? ownedResults : totalResults)} result{(libraryActiveTab === "owned" ? ownedResults : totalResults) !== 1 ? "s" : ""}
+            {(libraryActiveTab === "owned" ? ownedResults : totalResults) === 1
+              ? t("1 result")
+              : t("{n} results", {
+                  n: libraryActiveTab === "owned" ? ownedResults : totalResults,
+                })}
           </div>
         )}
       </div>
@@ -1372,7 +1398,9 @@ export default function DeviceLibrary() {
               onMouseDown={(e) => { e.preventDefault(); setFilterPanel((p) => p === "category" ? null : "category"); }}
               className="flex-1 min-w-0 px-1.5 py-1 text-[10px] text-left truncate"
             >
-              {selectedCategories.size > 0 ? `Categories (${selectedCategories.size})` : "Categories"}
+              {selectedCategories.size > 0
+                ? t("Categories ({n})", { n: selectedCategories.size })
+                : t("Categories")}
             </button>
             {selectedCategories.size > 0 && (
               <button
@@ -1394,7 +1422,9 @@ export default function DeviceLibrary() {
               onMouseDown={(e) => { e.preventDefault(); setFilterPanel((p) => p === "brand" ? null : "brand"); }}
               className="flex-1 min-w-0 px-1.5 py-1 text-[10px] text-left truncate"
             >
-              {selectedBrands.size > 0 ? `Brands (${selectedBrands.size})` : "Brands"}
+              {selectedBrands.size > 0
+                ? t("Brands ({n})", { n: selectedBrands.size })
+                : t("Brands")}
             </button>
             {selectedBrands.size > 0 && (
               <button
@@ -1416,7 +1446,9 @@ export default function DeviceLibrary() {
               onMouseDown={(e) => { e.preventDefault(); setFilterPanel((p) => p === "signal" ? null : "signal"); }}
               className="flex-1 min-w-0 px-1.5 py-1 text-[10px] text-left truncate"
             >
-              {selectedSignalTypes.size > 0 ? `Signals (${selectedSignalTypes.size})` : "Signals"}
+              {selectedSignalTypes.size > 0
+                ? t("Signals ({n})", { n: selectedSignalTypes.size })
+                : t("Signals")}
             </button>
             {selectedSignalTypes.size > 0 && (
               <button
@@ -1510,7 +1542,7 @@ export default function DeviceLibrary() {
               <line x1="5" y1="8" x2="11" y2="8" />
               <line x1="5" y1="11" x2="9" y2="11" />
             </svg>
-            <span className="text-xs text-[var(--color-text)]">Note</span>
+            <span className="text-xs text-[var(--color-text)]">{t("Note")}</span>
           </div>
         )}
 
@@ -1530,7 +1562,7 @@ export default function DeviceLibrary() {
             <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" strokeDasharray="3 2" />
             </svg>
-            <span className="text-xs text-[var(--color-text)]">Room</span>
+            <span className="text-xs text-[var(--color-text)]">{t("Room")}</span>
           </div>
         )}
 
@@ -1545,7 +1577,7 @@ export default function DeviceLibrary() {
               <line x1="8" y1="5" x2="8" y2="11" />
               <line x1="5" y1="8" x2="11" y2="8" />
             </svg>
-            Create New Device
+            {t("Create New Device")}
           </button>
         )}
 
@@ -1572,7 +1604,7 @@ export default function DeviceLibrary() {
               </div>
             ) : (
               <div className="text-xs text-[var(--color-text-muted)] text-center py-4">
-                No devices match &ldquo;{query}&rdquo;
+                {t("No devices match “{query}”", { query })}
               </div>
             )}
           </>
@@ -1580,7 +1612,7 @@ export default function DeviceLibrary() {
           <>
             {favoritesList.length > 0 && (
               <CategorySection
-                label="Favorites"
+                label={t("Favorites")}
                 templates={favoritesList}
                 query={query}
                 defaultOpen={true}

@@ -13,8 +13,10 @@ import { getBundledTemplates, fetchTemplates } from "../templateApi";
 import { scoreTemplate } from "../templateSearch";
 import { SIGNAL_LABELS, CONNECTOR_LABELS } from "../types";
 import type { DeviceTemplate, DeviceNode, Port } from "../types";
+import { t, useT } from "../i18n";
 
 export default function DeviceSwapDialog() {
+  const t = useT();
   const target = useSchematicStore((s) => s.deviceSwapTarget);
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
@@ -52,8 +54,8 @@ export default function DeviceSwapDialog() {
   // Focus search input on phase 1.
   useEffect(() => {
     if (target && !pickedTemplate) {
-      const t = setTimeout(() => searchInputRef.current?.focus(), 10);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => searchInputRef.current?.focus(), 10);
+      return () => clearTimeout(timer);
     }
   }, [target, pickedTemplate]);
 
@@ -100,7 +102,7 @@ export default function DeviceSwapDialog() {
         >
           <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
             <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-              Swap '{oldDevice.label}' for...
+              {t("Swap '{name}' for...", { name: oldDevice.label })}
             </span>
             <button
               onClick={close}
@@ -116,40 +118,43 @@ export default function DeviceSwapDialog() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Escape") close(); }}
-              placeholder="Search the device library..."
+              placeholder={t("Search the device library...")}
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2.5 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 placeholder:text-[var(--color-text-muted)]"
             />
             <div className="max-h-[300px] overflow-y-auto -mx-2 px-2">
               {!search.trim() ? (
                 <div className="text-[11px] text-[var(--color-text-muted)] py-4 text-center">
-                  Type to search {allTemplates.length} library devices
+                  {t("Type to search {n} library devices", { n: allTemplates.length })}
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="text-[11px] text-[var(--color-text-muted)] py-4 text-center">
-                  No matching devices
+                  {t("No matching devices")}
                 </div>
               ) : (
-                filtered.map((t) => {
-                  const key = t.id ?? t.deviceType;
+                filtered.map((tpl) => {
+                  const key = tpl.id ?? tpl.deviceType;
                   return (
                     <button
                       key={key}
-                      onClick={() => pickTemplate(t)}
+                      onClick={() => pickTemplate(tpl)}
                       className="w-full text-left px-2 py-1.5 rounded hover:bg-[var(--color-surface)] transition-colors flex items-center gap-2"
                     >
-                      {t.color && (
+                      {tpl.color && (
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: t.color }}
+                          style={{ backgroundColor: tpl.color }}
                         />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="text-xs text-[var(--color-text-heading)] truncate">
-                          {t.label}
+                          {tpl.label}
                         </div>
                         <div className="text-[10px] text-[var(--color-text-muted)] truncate">
-                          {t.manufacturer ? `${t.manufacturer} · ` : ""}
-                          {t.deviceType} · {t.ports.length} port{t.ports.length !== 1 ? "s" : ""}
+                          {tpl.manufacturer ? `${tpl.manufacturer} · ` : ""}
+                          {tpl.deviceType} ·{" "}
+                          {tpl.ports.length === 1
+                            ? t("1 port")
+                            : t("{n} ports", { n: tpl.ports.length })}
                         </div>
                       </div>
                     </button>
@@ -163,7 +168,7 @@ export default function DeviceSwapDialog() {
               onClick={close}
               className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
             >
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </div>
@@ -201,7 +206,7 @@ export default function DeviceSwapDialog() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Swap '{oldDevice.label}' → '{pickedTemplate.label}'
+            {t("Swap '{from}' → '{to}'", { from: oldDevice.label, to: pickedTemplate.label })}
           </span>
           <button
             onClick={close}
@@ -217,7 +222,7 @@ export default function DeviceSwapDialog() {
           {plan.installedCards.length > 0 && (
             <section>
               <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
-                Installed cards
+                {t("Installed cards")}
               </div>
               <div className="flex flex-col gap-1">
                 {plan.installedCards.map((c) => (
@@ -236,8 +241,10 @@ export default function DeviceSwapDialog() {
                       <span className="text-[var(--color-text-muted)]"> ← {c.cardLabel}</span>
                     </span>
                     <span className="text-[10px] text-[var(--color-text-muted)]">
-                      {c.source === "carried-over" ? "carried over" : "auto-installed"}
-                      {c.satisfiedHandles.length > 0 ? ` · satisfies ${c.satisfiedHandles.length}` : ""}
+                      {c.source === "carried-over" ? t("carried over") : t("auto-installed")}
+                      {c.satisfiedHandles.length > 0
+                        ? ` · ${t("satisfies {n}", { n: c.satisfiedHandles.length })}`
+                        : ""}
                     </span>
                   </label>
                 ))}
@@ -248,11 +255,11 @@ export default function DeviceSwapDialog() {
           {/* Mapping rows */}
           <section>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
-              Connections ({plan.mappings.length})
+              {t("Connections ({n})", { n: plan.mappings.length })}
             </div>
             {plan.mappings.length === 0 ? (
               <div className="text-xs text-[var(--color-text-muted)] italic px-1 py-2">
-                No existing connections — swap will simply replace the device.
+                {t("No existing connections — swap will simply replace the device.")}
               </div>
             ) : (
               <div className="flex flex-col gap-1">
@@ -272,7 +279,10 @@ export default function DeviceSwapDialog() {
           {plan.cardsLost.length > 0 && (
             <section>
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                ⚠ {plan.cardsLost.length} card{plan.cardsLost.length !== 1 ? "s" : ""} could not be carried over:{" "}
+                ⚠{" "}
+                {plan.cardsLost.length === 1
+                  ? t("1 card could not be carried over:")
+                  : t("{n} cards could not be carried over:", { n: plan.cardsLost.length })}{" "}
                 {plan.cardsLost.map((c, i) => (
                   <span key={i}>
                     {i > 0 ? ", " : ""}{c.cardLabel} ({c.slotLabel})
@@ -289,7 +299,8 @@ export default function DeviceSwapDialog() {
                 onClick={() => setShowFactualChanges((v) => !v)}
                 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
               >
-                {showFactualChanges ? "▼" : "▶"} Specification changes ({plan.factualChanges.length})
+                {showFactualChanges ? "▼" : "▶"}{" "}
+                {t("Specification changes ({n})", { n: plan.factualChanges.length })}
               </button>
               {showFactualChanges && (
                 <div className="mt-2 flex flex-col gap-0.5 text-[11px]">
@@ -308,9 +319,9 @@ export default function DeviceSwapDialog() {
         {/* Footer */}
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[var(--color-border)]">
           <div className="text-[11px] text-[var(--color-text-muted)]">
-            <span className="text-green-700 font-medium">{summary.remapped}</span> remapped
+            <span className="text-green-700 font-medium">{summary.remapped}</span> {t("remapped")}
             {summary.dropped > 0 && (
-              <>, <span className="text-red-700 font-medium">{summary.dropped}</span> will be dropped</>
+              <>, <span className="text-red-700 font-medium">{summary.dropped}</span> {t("will be dropped")}</>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -318,19 +329,19 @@ export default function DeviceSwapDialog() {
               onClick={back}
               className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
             >
-              ← Pick different
+              ← {t("Pick different")}
             </button>
             <button
               onClick={close}
               className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
             >
-              Cancel
+              {t("Cancel")}
             </button>
             <button
               onClick={confirm}
               className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
             >
-              Confirm Swap
+              {t("Confirm Swap")}
             </button>
           </div>
         </div>
@@ -352,6 +363,7 @@ function MappingRow({
   pool: Port[];
   onChange: (newPortId: string | null) => void;
 }) {
+  const t = useT();
   const { oldPort, oldHandleSuffix, edges, newPortPreview, conflict, matchSource } = mapping;
 
   // Group new ports by direction for the dropdown.
@@ -380,14 +392,14 @@ function MappingRow({
         <div className="text-[10px] text-[var(--color-text-muted)] truncate">
           {DirChip(oldPort.direction)} · {SIGNAL_LABELS[oldPort.signalType] ?? oldPort.signalType}
           {oldPort.connectorType ? ` · ${CONNECTOR_LABELS[oldPort.connectorType] ?? oldPort.connectorType}` : ""}
-          {edges.length > 1 ? ` · ${edges.length} edges` : ""}
+          {edges.length > 1 ? ` · ${t("{n} edges", { n: edges.length })}` : ""}
         </div>
       </div>
 
       {/* Arrow + match source badge */}
       <div className="flex flex-col items-center text-[var(--color-text-muted)] shrink-0 w-24">
         <div className="text-sm">→</div>
-        <div className="text-[9px] uppercase tracking-wider">{matchSourceLabel(matchSource)}</div>
+        <div className="text-[9px] uppercase tracking-wider">{t(matchSourceLabel(matchSource))}</div>
       </div>
 
       {/* New port dropdown */}
@@ -397,10 +409,10 @@ function MappingRow({
           onChange={(e) => onChange(e.target.value || null)}
           className="w-full bg-white border border-[var(--color-border)] rounded px-1.5 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
         >
-          <option value="">— Drop these connections —</option>
+          <option value="">{t("— Drop these connections —")}</option>
           {(["input", "output", "bidirectional", "passthrough"] as const).map((dir) =>
             grouped[dir] && grouped[dir].length > 0 ? (
-              <optgroup key={dir} label={dir}>
+              <optgroup key={dir} label={t(dir)}>
                 {grouped[dir].map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label} ({SIGNAL_LABELS[p.signalType] ?? p.signalType}
@@ -444,11 +456,19 @@ function matchSourceLabel(s: PortMapping["matchSource"]): string {
 
 function conflictLabel(c: PortConflict): string {
   switch (c.kind) {
-    case "directionMismatch": return `direction: ${c.old} → ${c.nw}`;
+    case "directionMismatch":
+      return t("direction: {from} → {to}", { from: c.old, to: c.nw });
     case "signalMismatch":
-      return `signal: ${SIGNAL_LABELS[c.old] ?? c.old} → ${SIGNAL_LABELS[c.nw] ?? c.nw}`;
+      return t("signal: {from} → {to}", {
+        from: SIGNAL_LABELS[c.old] ?? c.old,
+        to: SIGNAL_LABELS[c.nw] ?? c.nw,
+      });
     case "connectorMismatch":
-      return `connector: ${c.old ? (CONNECTOR_LABELS[c.old] ?? c.old) : "?"} → ${c.nw ? (CONNECTOR_LABELS[c.nw] ?? c.nw) : "?"}`;
-    case "capacityExceeded": return "target port doesn't accept multiple connections";
+      return t("connector: {from} → {to}", {
+        from: c.old ? (CONNECTOR_LABELS[c.old] ?? c.old) : "?",
+        to: c.nw ? (CONNECTOR_LABELS[c.nw] ?? c.nw) : "?",
+      });
+    case "capacityExceeded":
+      return t("target port doesn't accept multiple connections");
   }
 }

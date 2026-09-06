@@ -23,6 +23,7 @@ import ShowInfoPanel from "./ShowInfoPanel";
 import CsvImportWizard from "./CsvImportWizard";
 import SignalColorPanel from "./SignalColorPanel";
 import { useTheme } from "../hooks/useTheme";
+import { useT } from "../i18n";
 
 // ─── Menu data types ─────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export default function MenuBar() {
   const menuBarRef = useRef<HTMLDivElement>(null);
 
   const { isDark, toggle: toggleTheme } = useTheme();
+  const t = useT();
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -222,7 +224,9 @@ export default function MenuBar() {
   const noteLargeSave = (bytes: number) => {
     if (bytes < 20_000_000) return;
     useSchematicStore.getState().addToast(
-      `Saved ${(bytes / 1_000_000).toFixed(0)} MB — the file carries the imported plans so they can be redrawn elsewhere.`,
+      t("Saved {mb} MB — the file carries the imported plans so they can be redrawn elsewhere.", {
+        mb: (bytes / 1_000_000).toFixed(0),
+      }),
       "info",
       6000,
     );
@@ -236,7 +240,7 @@ export default function MenuBar() {
     await writable.write(json);
     await writable.close();
     noteLargeSave(json.length);
-  }, []);
+  }, [t]);
 
   // Legacy download fallback (always triggers browser download)
   const downloadFile = useCallback(async () => {
@@ -249,7 +253,7 @@ export default function MenuBar() {
     a.click();
     URL.revokeObjectURL(url);
     noteLargeSave(blob.size);
-  }, []);
+  }, [t]);
 
   // Show the native file picker and return the chosen handle
   const pickFileHandle = useCallback(async (): Promise<FileSystemFileHandle | null> => {
@@ -257,14 +261,14 @@ export default function MenuBar() {
     try {
       const handle = await window.showSaveFilePicker({
         suggestedName: `${store.schematicName.replace(/[^a-zA-Z0-9-_ ]/g, "")}.json`,
-        types: [{ description: "FACESchematic files", accept: { "application/json": [".json"] } }],
+        types: [{ description: t("FACESchematic files"), accept: { "application/json": [".json"] } }],
       });
       return handle;
     } catch {
       // User cancelled the picker
       return null;
     }
-  }, []);
+  }, [t]);
 
   // Save: reuse existing handle/cloud, or prompt for first save
   const handleSave = useCallback(async () => {
@@ -278,7 +282,7 @@ export default function MenuBar() {
         updateSchematicInCloud(store.cloudSchematicId!, data)
           .then((result) => store.setCloudSavedAt(result.updated_at))
           .catch((e: unknown) => {
-            store.addToast(e instanceof Error ? e.message : "Cloud save failed", "error");
+            store.addToast(e instanceof Error ? e.message : t("Cloud save failed"), "error");
           });
       });
     }
@@ -287,7 +291,7 @@ export default function MenuBar() {
     if (store.fileHandle) {
       try {
         await writeToFileHandle(store.fileHandle);
-        store.addToast("Saved", "success", 1500);
+        store.addToast(t("Saved"), "success", 1500);
         return;
       } catch {
         // Handle went stale (file moved/deleted) — fall through to picker
@@ -306,18 +310,18 @@ export default function MenuBar() {
       store.adoptLocalFile(handle);
       try {
         await writeToFileHandle(handle);
-        store.addToast("Saved", "success", 1500);
+        store.addToast(t("Saved"), "success", 1500);
       } catch (e: unknown) {
-        store.addToast(e instanceof Error ? e.message : "Save failed", "error");
+        store.addToast(e instanceof Error ? e.message : t("Save failed"), "error");
       }
     } else {
       try {
         await downloadFile();
       } catch (e: unknown) {
-        useSchematicStore.getState().addToast(e instanceof Error ? e.message : "Save failed", "error");
+        useSchematicStore.getState().addToast(e instanceof Error ? e.message : t("Save failed"), "error");
       }
     }
-  }, [writeToFileHandle, downloadFile, pickFileHandle]);
+  }, [writeToFileHandle, downloadFile, pickFileHandle, t]);
 
   // Save As: always show picker, optionally switch from cloud to local
   const handleSaveAs = useCallback(async () => {
@@ -331,25 +335,25 @@ export default function MenuBar() {
       store.adoptLocalFile(handle);
       try {
         await writeToFileHandle(handle);
-        store.addToast("Saved", "success", 1500);
+        store.addToast(t("Saved"), "success", 1500);
       } catch (e: unknown) {
-        store.addToast(e instanceof Error ? e.message : "Save failed", "error");
+        store.addToast(e instanceof Error ? e.message : t("Save failed"), "error");
       }
     } else {
       try {
         await downloadFile();
       } catch (e: unknown) {
-        useSchematicStore.getState().addToast(e instanceof Error ? e.message : "Save failed", "error");
+        useSchematicStore.getState().addToast(e instanceof Error ? e.message : t("Save failed"), "error");
       }
     }
-  }, [pickFileHandle, writeToFileHandle, downloadFile]);
+  }, [pickFileHandle, writeToFileHandle, downloadFile, t]);
 
   const handleOpen = useCallback(async () => {
     if ("showOpenFilePicker" in window) {
       let handle: FileSystemFileHandle;
       try {
         [handle] = await window.showOpenFilePicker({
-          types: [{ description: "FACESchematic files", accept: { "application/json": [".json"] } }],
+          types: [{ description: t("FACESchematic files"), accept: { "application/json": [".json"] } }],
           multiple: false,
         });
       } catch {
@@ -357,7 +361,7 @@ export default function MenuBar() {
       }
       const file = await handle.getFile();
       if (file.size > 10 * 1024 * 1024) {
-        alert("File is too large (max 10 MB). Please use a smaller schematic file.");
+        alert(t("File is too large (max 10 MB). Please use a smaller schematic file."));
         return;
       }
       const text = await file.text();
@@ -368,11 +372,11 @@ export default function MenuBar() {
       try {
         data = JSON.parse(text) as SchematicFile;
       } catch {
-        alert("Invalid schematic file.");
+        alert(t("Invalid schematic file."));
         return;
       }
       if (!looksLikeSchematic(data)) {
-        alert("Invalid schematic file.");
+        alert(t("Invalid schematic file."));
         return;
       }
       try {
@@ -386,14 +390,14 @@ export default function MenuBar() {
     } else {
       fileInputRef.current?.click();
     }
-  }, [importFromJSON]);
+  }, [importFromJSON, t]);
 
   const handleImport = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.size > 10 * 1024 * 1024) {
-        alert("File is too large (max 10 MB). Please use a smaller schematic file.");
+        alert(t("File is too large (max 10 MB). Please use a smaller schematic file."));
         e.target.value = "";
         return;
       }
@@ -406,14 +410,14 @@ export default function MenuBar() {
         try {
           data = JSON.parse(reader.result as string) as SchematicFile;
         } catch {
-          alert("Invalid schematic file.");
+          alert(t("Invalid schematic file."));
           return;
         }
         // Shape check: reject non-schematic JSON here so it isn't silently loaded as an
         // empty schematic that wipes the canvas. Distinct from a post-load pipeline error,
         // which still goes to console only and isn't mislabeled "invalid". (#176)
         if (!looksLikeSchematic(data)) {
-          alert("Invalid schematic file.");
+          alert(t("Invalid schematic file."));
           return;
         }
         try {
@@ -431,11 +435,11 @@ export default function MenuBar() {
   const handleSaveArchive = useCallback(() => {
     const templates = useSchematicStore.getState().exportCustomTemplates();
     if (templates.length === 0) {
-      alert("No custom device templates to export.");
+      alert(t("No custom device templates to export."));
       return;
     }
     exportTemplatesToFile(templates);
-  }, []);
+  }, [t]);
 
   const handleOpenArchive = useCallback(() => {
     archiveInputRef.current?.click();
@@ -449,23 +453,27 @@ export default function MenuBar() {
         const templates = await readTemplateFile(file);
         const { added, updated, skipped } = useSchematicStore.getState().importCustomTemplates(templates);
         const parts = [];
-        if (added > 0) parts.push(`${added} added`);
-        if (updated > 0) parts.push(`${updated} updated`);
-        if (skipped > 0) parts.push(`${skipped} already built in`);
-        alert(parts.length > 0 ? `Imported device templates: ${parts.join(", ")}.` : "Nothing to import — the file matched your library exactly.");
+        if (added > 0) parts.push(t("{n} added", { n: added }));
+        if (updated > 0) parts.push(t("{n} updated", { n: updated }));
+        if (skipped > 0) parts.push(t("{n} already built in", { n: skipped }));
+        alert(
+          parts.length > 0
+            ? t("Imported device templates: {parts}.", { parts: parts.join(", ") })
+            : t("Nothing to import — the file matched your library exactly."),
+        );
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Invalid device archive file.");
+        alert(err instanceof Error ? err.message : t("Invalid device archive file."));
       }
       e.target.value = "";
     },
-    [],
+    [t],
   );
 
   const handleCloudSave = useCallback(async () => {
     const store = useSchematicStore.getState();
 
     if (!navigator.onLine) {
-      store.addToast("You're offline. Use File → Save to save a copy to your computer.", "info");
+      store.addToast(t("You're offline. Use File → Save to save a copy to your computer."), "info");
       return;
     }
 
@@ -487,11 +495,11 @@ export default function MenuBar() {
       }
       setIsLoggedIn(true);
     } catch (e) {
-      useSchematicStore.getState().addToast(e instanceof Error ? e.message : "Failed to save to cloud", "error");
+      useSchematicStore.getState().addToast(e instanceof Error ? e.message : t("Failed to save to cloud"), "error");
     } finally {
       setCloudSaving(false);
     }
-  }, [exportToJSON]);
+  }, [exportToJSON, t]);
 
   // Listen for keyboard shortcut events from App.tsx
   useEffect(() => {
@@ -531,7 +539,7 @@ export default function MenuBar() {
     const state = useSchematicStore.getState();
     const rackPages = state.pages.filter((p) => p.type === "rack-elevation");
     if (rackPages.length === 0) {
-      alert("No rack pages to export. Create a rack page first via the page tabs.");
+      alert(t("No rack pages to export. Create a rack page first via the page tabs."));
       return;
     }
     await exportRackPdf({
@@ -600,51 +608,51 @@ export default function MenuBar() {
 
   const menus: Record<string, MenuEntry[]> = {
     File: [
-      { type: "item", label: "New", onClick: handleNew },
+      { type: "item", label: t("New"), onClick: handleNew },
       { type: "separator" },
-      { type: "item", label: "Save", shortcut: "Ctrl+S", onClick: handleSave },
-      { type: "item", label: "Save As...", shortcut: "Ctrl+Shift+S", onClick: handleSaveAs },
-      { type: "item", label: "Open...", shortcut: "Ctrl+O", onClick: handleOpen },
+      { type: "item", label: t("Save"), shortcut: "Ctrl+S", onClick: handleSave },
+      { type: "item", label: t("Save As..."), shortcut: "Ctrl+Shift+S", onClick: handleSaveAs },
+      { type: "item", label: t("Open..."), shortcut: "Ctrl+O", onClick: handleOpen },
       { type: "separator" },
-      { type: "item", label: cloudSaving ? "Saving..." : isOnline ? "Save to Cloud" : "Save to Cloud (Offline)", disabled: cloudSaving || !isOnline, onClick: handleCloudSave },
-      { type: "item", label: "My Schematics...", disabled: !isLoggedIn, title: isLoggedIn ? undefined : "Must be logged in", onClick: () => setShowSchematicBrowser(true) },
+      { type: "item", label: cloudSaving ? t("Saving...") : isOnline ? t("Save to Cloud") : t("Save to Cloud (Offline)"), disabled: cloudSaving || !isOnline, onClick: handleCloudSave },
+      { type: "item", label: t("My Schematics..."), disabled: !isLoggedIn, title: isLoggedIn ? undefined : t("Must be logged in"), onClick: () => setShowSchematicBrowser(true) },
       { type: "separator" },
-      { type: "item", label: "Save Device Archive", onClick: handleSaveArchive },
-      { type: "item", label: "Import Device Archive...", onClick: handleOpenArchive },
-      { type: "item", label: "Import Cable Schedule...", onClick: () => setShowCsvImport(true) },
+      { type: "item", label: t("Save Device Archive"), onClick: handleSaveArchive },
+      { type: "item", label: t("Import Device Archive..."), onClick: handleOpenArchive },
+      { type: "item", label: t("Import Cable Schedule..."), onClick: () => setShowCsvImport(true) },
       { type: "separator" },
-      { type: "item", label: "Preferences...", onClick: () => setShowPreferences(true) },
+      { type: "item", label: t("Preferences..."), onClick: () => setShowPreferences(true) },
     ],
     Edit: [
-      { type: "item", label: "Undo", shortcut: "Ctrl+Z", disabled: undoSize === 0, onClick: undo },
-      { type: "item", label: "Redo", shortcut: "Ctrl+Shift+Z", disabled: redoSize === 0, onClick: redo },
+      { type: "item", label: t("Undo"), shortcut: "Ctrl+Z", disabled: undoSize === 0, onClick: undo },
+      { type: "item", label: t("Redo"), shortcut: "Ctrl+Shift+Z", disabled: redoSize === 0, onClick: redo },
       { type: "separator" },
-      { type: "item", label: "Copy", shortcut: "Ctrl+C", onClick: () => useSchematicStore.getState().copySelected() },
-      { type: "item", label: "Paste", shortcut: "Ctrl+V", onClick: () => useSchematicStore.getState().pasteClipboard() },
-      { type: "item", label: "Delete", shortcut: "Del", onClick: () => useSchematicStore.getState().removeSelected() },
+      { type: "item", label: t("Copy"), shortcut: "Ctrl+C", onClick: () => useSchematicStore.getState().copySelected() },
+      { type: "item", label: t("Paste"), shortcut: "Ctrl+V", onClick: () => useSchematicStore.getState().pasteClipboard() },
+      { type: "item", label: t("Delete"), shortcut: "Del", onClick: () => useSchematicStore.getState().removeSelected() },
       { type: "separator" },
-      { type: "item", label: "Select All", shortcut: "Ctrl+A", onClick: () => useSchematicStore.getState().selectAll() },
+      { type: "item", label: t("Select All"), shortcut: "Ctrl+A", onClick: () => useSchematicStore.getState().selectAll() },
       { type: "separator" },
-      { type: "item", label: "Reset All Routes", title: "Clear every manual route so the whole schematic re-auto-routes (undoable)", onClick: () => useSchematicStore.getState().clearAllManualWaypoints() },
+      { type: "item", label: t("Reset All Routes"), title: t("Clear every manual route so the whole schematic re-auto-routes (undoable)"), onClick: () => useSchematicStore.getState().clearAllManualWaypoints() },
     ],
     Insert: [
-      { type: "item", label: "Add Rectangle", onClick: () => addAnnotation("rectangle") },
-      { type: "item", label: "Add Ellipse", onClick: () => addAnnotation("ellipse") },
-      { type: "item", label: "Add Circle", onClick: () => addAnnotation("circle") },
-      { type: "item", label: "Add Diamond", onClick: () => addAnnotation("diamond") },
-      { type: "item", label: "Add Triangle", onClick: () => addAnnotation("triangle") },
+      { type: "item", label: t("Add Rectangle"), onClick: () => addAnnotation("rectangle") },
+      { type: "item", label: t("Add Ellipse"), onClick: () => addAnnotation("ellipse") },
+      { type: "item", label: t("Add Circle"), onClick: () => addAnnotation("circle") },
+      { type: "item", label: t("Add Diamond"), onClick: () => addAnnotation("diamond") },
+      { type: "item", label: t("Add Triangle"), onClick: () => addAnnotation("triangle") },
     ],
     View: [
       {
         type: "item",
-        label: "Print View",
+        label: t("Print View"),
         shortcut: "F9",
         checked: printView,
         onClick: () => useSchematicStore.getState().setPrintView(!printView),
       },
       {
         type: "item",
-        label: "Show Owned Gear",
+        label: t("Show Owned Gear"),
         checked: showOwnedGearPane,
         onClick: () => {
           const s = useSchematicStore.getState();
@@ -653,7 +661,7 @@ export default function MenuBar() {
       },
       {
         type: "item",
-        label: "Hide Unconnected Ports",
+        label: t("Hide Unconnected Ports"),
         checked: useSchematicStore.getState().hideUnconnectedPorts,
         onClick: () => {
           const s = useSchematicStore.getState();
@@ -662,7 +670,7 @@ export default function MenuBar() {
       },
       {
         type: "item",
-        label: "Minimap",
+        label: t("Minimap"),
         checked: useSchematicStore.getState().showMinimap,
         onClick: () => {
           const s = useSchematicStore.getState();
@@ -671,55 +679,55 @@ export default function MenuBar() {
       },
       {
         type: "item",
-        label: "Auto-Route Edges",
+        label: t("Auto-Route Edges"),
         checked: useSchematicStore.getState().autoRoute,
         onClick: () => useSchematicStore.getState().toggleAutoRoute(),
       },
       { type: "separator" },
       {
         type: "item",
-        label: "Debug Edges",
+        label: t("Debug Edges"),
         shortcut: "Ctrl+B",
         checked: useSchematicStore.getState().debugEdges,
         onClick: () => useSchematicStore.getState().toggleDebugEdges(),
       },
     ],
     Export: [
-      { type: "item", label: "Export as PNG", onClick: doExportPng },
-      { type: "item", label: "Export as SVG", onClick: doExportSvg },
-      { type: "item", label: "Export as DXF", onClick: doExportDxf },
-      { type: "item", label: "Export as PDF", onClick: doExportPdf },
-      { type: "item", label: "Export Rack PDF", onClick: doExportRackPdf },
-      { type: "item", label: "Export Print Sheets", onClick: doExportPrintSheets },
-      { type: "item", label: "Export Floorplans", onClick: doExportFloorplans },
+      { type: "item", label: t("Export as PNG"), onClick: doExportPng },
+      { type: "item", label: t("Export as SVG"), onClick: doExportSvg },
+      { type: "item", label: t("Export as DXF"), onClick: doExportDxf },
+      { type: "item", label: t("Export as PDF"), onClick: doExportPdf },
+      { type: "item", label: t("Export Rack PDF"), onClick: doExportRackPdf },
+      { type: "item", label: t("Export Print Sheets"), onClick: doExportPrintSheets },
+      { type: "item", label: t("Export Floorplans"), onClick: doExportFloorplans },
       { type: "separator" },
-      { type: "item", label: "Title Block...", onClick: () => setShowTitleBlockDialog(true) },
+      { type: "item", label: t("Title Block..."), onClick: () => setShowTitleBlockDialog(true) },
     ],
     Reports: [
-      { type: "item", label: "Device List...", onClick: () => setReportsTab("devices") },
-      { type: "item", label: "Cable Schedule...", onClick: () => setReportsTab("cableSchedule") },
-      { type: "item", label: "Patch Panels...", onClick: () => setReportsTab("patchPanel") },
-      { type: "item", label: "Pack List...", onClick: () => setReportsTab("packList") },
-      { type: "item", label: "Network Report...", onClick: () => setReportsTab("network") },
-      { type: "item", label: "Power Report...", onClick: () => setReportsTab("power") },
+      { type: "item", label: t("Device List..."), onClick: () => setReportsTab("devices") },
+      { type: "item", label: t("Cable Schedule..."), onClick: () => setReportsTab("cableSchedule") },
+      { type: "item", label: t("Patch Panels..."), onClick: () => setReportsTab("patchPanel") },
+      { type: "item", label: t("Pack List..."), onClick: () => setReportsTab("packList") },
+      { type: "item", label: t("Network Report..."), onClick: () => setReportsTab("network") },
+      { type: "item", label: t("Power Report..."), onClick: () => setReportsTab("power") },
       { type: "separator" },
-      { type: "item", label: "Room Distances...", onClick: () => setShowRoomDistances(true) },
+      { type: "item", label: t("Room Distances..."), onClick: () => setShowRoomDistances(true) },
     ],
     Help: [
       {
         type: "item",
-        label: "Documentation \u2197",
+        label: t("Documentation \u2197"),
         onClick: () => window.open("https://docs.easyschematic.live", "_blank", "noopener,noreferrer"),
       },
       {
         type: "item",
-        label: "Device Database \u2197",
+        label: t("Device Database \u2197"),
         onClick: () => window.open("https://devices.easyschematic.live", "_blank", "noopener,noreferrer"),
       },
       { type: "separator" },
       {
         type: "item",
-        label: "Landing Page",
+        label: t("Landing Page"),
         onClick: () => {
           localStorage.removeItem("easyschematic-skip-landing");
           window.location.href = "/";
@@ -727,7 +735,7 @@ export default function MenuBar() {
       },
       {
         type: "item",
-        label: "About FACESchematic",
+        label: t("About FACESchematic"),
         onClick: () => setShowAboutDialog(true),
       },
     ],
@@ -748,7 +756,7 @@ export default function MenuBar() {
           className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-[var(--color-text-heading)] hover:bg-[var(--color-surface-hover)] transition-colors"
           onClick={() => setOpenSection(isOpen ? null : name)}
         >
-          {name}
+          {t(`${name}::menu`)}
           <svg
             className={`w-4 h-4 text-[var(--color-text-muted)] transition-transform ${isOpen ? "rotate-180" : ""}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
@@ -809,7 +817,7 @@ export default function MenuBar() {
                   if (openMenu && openMenu !== name) setOpenMenu(name);
                 }}
               >
-                {name}
+                {t(`${name}::menu`)}
               </button>
               {openMenu === name && (
                 <MenuDropdown items={menus[name]} onClose={closeMenu} />
@@ -840,15 +848,15 @@ export default function MenuBar() {
                   setNameValue(schematicName);
                   setEditingName(true);
                 }}
-                title="Double-click to rename"
+                title={t("Double-click to rename")}
               >
                 {schematicName}
               </span>
               {cloudSchematicId && (
                 <span
                   title={
-                    !isOnline ? "Offline — cloud sync paused" :
-                    cloudSavedAt ? `Cloud saved: ${new Date(cloudSavedAt + "Z").toLocaleString()}` : "Cloud-backed schematic"
+                    !isOnline ? t("Offline — cloud sync paused") :
+                    cloudSavedAt ? t("Cloud saved: {when}", { when: new Date(cloudSavedAt + "Z").toLocaleString() }) : t("Cloud-backed schematic")
                   }
                 >
                   <svg className={`w-3.5 h-3.5 ${isOnline ? "text-blue-500" : "text-amber-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -857,7 +865,7 @@ export default function MenuBar() {
                 </span>
               )}
               {fileHandle && !cloudSchematicId && (
-                <span title={`Saving to: ${fileHandle.name}`}>
+                <span title={t("Saving to: {file}", { file: fileHandle.name })}>
                   <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v18l7-5 7 5V3H5z" />
                   </svg>
@@ -866,9 +874,9 @@ export default function MenuBar() {
               {!isOnline && (
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
-                  title="No internet connection. Editing works normally — save to your computer via File → Save."
+                  title={t("No internet connection. Editing works normally — save to your computer via File → Save.")}
                 >
-                  Offline
+                  {t("Offline")}
                 </span>
               )}
             </span>
@@ -878,7 +886,7 @@ export default function MenuBar() {
         {/* Right: undo/redo + alignment */}
         <div className="flex items-center gap-1">
           <button
-            title="Undo (Ctrl+Z)"
+            title={t("Undo (Ctrl+Z)")}
             disabled={undoSize === 0}
             onClick={undo}
             className="p-1.5 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-[var(--color-text)]"
@@ -889,7 +897,7 @@ export default function MenuBar() {
             </svg>
           </button>
           <button
-            title="Redo (Ctrl+Shift+Z)"
+            title={t("Redo (Ctrl+Shift+Z)")}
             disabled={redoSize === 0}
             onClick={redo}
             className="p-1.5 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-[var(--color-text)]"
@@ -904,7 +912,7 @@ export default function MenuBar() {
           <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
           <button
             onClick={toggleTheme}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDark ? t("Switch to light mode") : t("Switch to dark mode")}
             className="p-1.5 rounded hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
           >
             {isDark ? (
@@ -968,11 +976,11 @@ export default function MenuBar() {
                 </svg>
               </button>
             </div>
-            <span className="text-sm font-semibold text-[var(--color-text-heading)]">Menu</span>
+            <span className="text-sm font-semibold text-[var(--color-text-heading)]">{t("Menu")}</span>
             <div className="flex items-center gap-1">
               <button
                 onClick={toggleTheme}
-                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                title={isDark ? t("Switch to light mode") : t("Switch to dark mode")}
                 className="p-2 rounded hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text)]"
               >
                 {isDark ? (
@@ -1007,7 +1015,7 @@ export default function MenuBar() {
             {/* Panels section */}
             <div className="border-b border-[var(--color-border)]">
               <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                Panels
+                {t("Panels")}
               </div>
               {[
                 { key: "viewOptions", label: "View Options" },
@@ -1022,7 +1030,7 @@ export default function MenuBar() {
                   }}
                   className="flex items-center w-full px-8 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors text-left"
                 >
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </div>

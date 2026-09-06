@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import { ROUTING_DEFAULTS as PATHFINDING_DEFAULTS } from "../pathfinding";
 import { ROUTER_DEFAULTS } from "../edgeRouter";
+import { useT } from "../i18n";
 
 /** Parameter definition for building sliders. */
 interface ParamDef {
@@ -34,11 +35,12 @@ function getOverrides(): Record<string, number> {
 }
 
 function ParamSlider({ def, value, onChange }: { def: ParamDef; value: number; onChange: (key: string, val: number) => void }) {
+  const t = useT();
   const isDefault = value === def.defaultValue;
   return (
     <div className="flex items-center gap-2 py-0.5">
-      <label className="text-[11px] w-[110px] shrink-0 truncate" title={def.description}>
-        {def.label}
+      <label className="text-[11px] w-[110px] shrink-0 truncate" title={t(def.description)}>
+        {t(def.label)}
       </label>
       <input
         type="range"
@@ -57,6 +59,7 @@ function ParamSlider({ def, value, onChange }: { def: ParamDef; value: number; o
 }
 
 export default function RoutingTuningPanel() {
+  const t = useT();
   const debugEdges = useSchematicStore((s) => s.debugEdges);
   const bumpRoutingParams = useSchematicStore((s) => s.bumpRoutingParams);
   const [values, setValues] = useState<Record<string, number>>(() => {
@@ -115,20 +118,20 @@ export default function RoutingTuningPanel() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 cursor-pointer select-none"
         onClick={() => setCollapsed(!collapsed)}
       >
-        <span className="text-xs font-semibold tracking-wide uppercase">Routing Tuning</span>
+        <span className="text-xs font-semibold tracking-wide uppercase">{t("Routing Tuning")}</span>
         <span className="text-[10px] text-gray-400">{collapsed ? "+" : "-"}</span>
       </div>
 
       {!collapsed && (
         <div className="px-3 py-2 max-h-[70vh] overflow-y-auto">
           {/* A* Pathfinding params */}
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 mt-1">A* Pathfinding</div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 mt-1">{t("A* Pathfinding")}</div>
           {PATHFINDING_PARAMS.map((def) => (
             <ParamSlider key={def.key} def={def} value={values[def.key]} onChange={handleChange} />
           ))}
 
           {/* Router orchestration params */}
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 mt-3">Router Orchestration</div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 mt-3">{t("Router Orchestration")}</div>
           {ORCHESTRATION_PARAMS.map((def) => (
             <ParamSlider key={def.key} def={def} value={values[def.key]} onChange={handleChange} />
           ))}
@@ -139,13 +142,13 @@ export default function RoutingTuningPanel() {
               onClick={handleReset}
               className="flex-1 text-[11px] px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
             >
-              Reset All
+              {t("Reset All")}
             </button>
             <button
               onClick={handleCopyParams}
               className="flex-1 text-[11px] px-2 py-1.5 bg-blue-700 hover:bg-blue-600 rounded transition-colors"
             >
-              Copy Overrides
+              {t("Copy Overrides")}
             </button>
           </div>
         </div>

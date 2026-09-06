@@ -42,6 +42,7 @@ import { useSpreadsheetSelection } from "../spreadsheet/useSpreadsheetSelection"
 import type { SpreadsheetColumn } from "../spreadsheet/types";
 import FillSeriesDialog from "../spreadsheet/FillSeriesDialog";
 import { computeBusSegments, BUS_DEVICE_LIMIT } from "../busValidation";
+import { t, useT } from "../i18n";
 
 export type ReportsTab = "network" | "devices" | "packList" | "cableSchedule" | "patchPanel" | "power" | "bus";
 
@@ -57,6 +58,7 @@ const PATCH_PANEL_LAYOUT_KEY = "easyschematic-patch-panel-layout";
 const POWER_LAYOUT_KEY = "easyschematic-power-report-layout";
 
 function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
+  const t = useT();
   const [tab, setTab] = useState<ReportsTab>(initialTab);
   const [maximized, setMaximized] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -71,9 +73,9 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
   const schematicName = useSchematicStore((s) => s.schematicName);
   const titleBlock = useSchematicStore((s) => s.titleBlock);
 
-  const tabClass = (t: ReportsTab) =>
+  const tabClass = (id: ReportsTab) =>
     `px-3 py-1.5 text-xs rounded-t cursor-pointer border border-b-0 transition-colors ${
-      tab === t
+      tab === id
         ? "bg-white text-[var(--color-text-heading)] font-semibold border-[var(--color-border)]"
         : "bg-[var(--color-surface)] text-[var(--color-text-muted)] border-transparent hover:text-[var(--color-text)]"
     }`;
@@ -159,7 +161,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
           {/* Header */}
           <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-3 shrink-0">
             <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
-              Reports
+              {t("Reports")}
             </h2>
             <div className="flex-1" />
             {tab === "patchPanel" && (
@@ -172,7 +174,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
                       : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   }`}
                 >
-                  Table
+                  {t("Table")}
                 </button>
                 <button
                   onClick={() => setPatchPanelView("diagram")}
@@ -182,7 +184,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
                       : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   }`}
                 >
-                  Rack Plan
+                  {t("Rack Plan")}
                 </button>
               </div>
             )}
@@ -226,7 +228,7 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
             <button
               onClick={() => setMaximized(!maximized)}
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] text-sm leading-none cursor-pointer p-1 rounded hover:bg-[var(--color-surface-hover)] transition-colors"
-              title={maximized ? "Restore size" : "Maximize"}
+              title={maximized ? t("Restore size") : t("Maximize")}
             >
               {maximized ? (
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -249,9 +251,9 @@ function ReportsDialog({ initialTab, onClose }: ReportsDialogProps) {
 
           {/* Tabs */}
           <div className="px-4 pt-2 flex items-center gap-1 border-b border-[var(--color-border)]">
-            {(Object.keys(tabLabels) as ReportsTab[]).map((t) => (
-              <button key={t} className={tabClass(t)} onClick={() => setTab(t)}>
-                {tabLabels[t]}
+            {(Object.keys(tabLabels) as ReportsTab[]).map((id) => (
+              <button key={id} className={tabClass(id)} onClick={() => setTab(id)}>
+                {t(tabLabels[id])}
               </button>
             ))}
           </div>
@@ -418,6 +420,7 @@ const COLUMN_LABELS: Record<string, string> = {
 };
 
 function NetworkReportTab() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const patchDeviceData = useSchematicStore((s) => s.patchDeviceData);
@@ -618,7 +621,7 @@ function NetworkReportTab() {
   if (rows.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-        No addressable ports in this schematic.
+        {t("No addressable ports in this schematic.")}
       </div>
     );
   }
@@ -628,10 +631,12 @@ function NetworkReportTab() {
     if (!entries) return undefined;
     const others = entries.filter((e) => !(e.nodeId === nodeId && e.portId === portId));
     if (others.length === 0) return undefined;
-    return `Duplicate IP — also used by: ${others.map((e) => `${e.deviceLabel} (${e.portLabel})`).join(", ")}`;
+    return t("Duplicate IP — also used by: {list}", {
+      list: others.map((e) => `${e.deviceLabel} (${e.portLabel})`).join(", "),
+    });
   };
 
-  const selectedColLabel = spreadsheet.selectedColumn ? (COLUMN_LABELS[spreadsheet.selectedColumn] ?? spreadsheet.selectedColumn) : "";
+  const selectedColLabel = spreadsheet.selectedColumn ? t(COLUMN_LABELS[spreadsheet.selectedColumn] ?? spreadsheet.selectedColumn) : "";
 
   return (
     <>
@@ -639,16 +644,16 @@ function NetworkReportTab() {
       {dhcpServers.length > 0 && (
         <div className="mb-4 border border-[var(--color-border)] rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">DHCP Servers</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">{t("DHCP Servers")}</span>
           </div>
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className={thClass}>Device</th>
-                <th className={thClass}>Pool Start</th>
-                <th className={thClass}>Pool End</th>
-                <th className={thClass}>Subnet</th>
-                <th className={thClass}>Gateway</th>
+                <th className={thClass}>{t("Device")}</th>
+                <th className={thClass}>{t("Pool Start")}</th>
+                <th className={thClass}>{t("Pool End")}</th>
+                <th className={thClass}>{t("Subnet")}</th>
+                <th className={thClass}>{t("Gateway")}</th>
               </tr>
             </thead>
             <tbody>
@@ -670,17 +675,17 @@ function NetworkReportTab() {
       {poeBudgets.length > 0 && (
         <div className="mb-4 border border-[var(--color-border)] rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">PoE Budget</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">{t("PoE Budget")}</span>
           </div>
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className={thClass}>Switch</th>
-                <th className={thClass}>Room</th>
-                <th className={thClass}>Budget (W)</th>
-                <th className={thClass}>Load (W)</th>
-                <th className={thClass}>Remaining (W)</th>
-                <th className={thClass}>Status</th>
+                <th className={thClass}>{t("Switch")}</th>
+                <th className={thClass}>{t("Room")}</th>
+                <th className={thClass}>{t("Budget (W)")}</th>
+                <th className={thClass}>{t("Load (W)")}</th>
+                <th className={thClass}>{t("Remaining (W)")}</th>
+                <th className={thClass}>{t("Status")}</th>
               </tr>
             </thead>
             <tbody>
@@ -692,7 +697,7 @@ function NetworkReportTab() {
                   <td className={tdClass}>{poe.loadW}</td>
                   <td className={tdClass}>{poe.remainingW}</td>
                   <td className={`${tdClass} ${poe.overBudget ? "text-red-600 font-semibold" : "text-green-600"}`}>
-                    {poe.overBudget ? "OVER BUDGET" : "OK"}
+                    {poe.overBudget ? t("OVER BUDGET") : t("OK")}
                   </td>
                 </tr>
               ))}
@@ -705,17 +710,19 @@ function NetworkReportTab() {
       {spreadsheet.selectedCells.size > 0 && (
         <div className="mb-3 flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <span className="text-xs font-medium text-blue-700">
-            {spreadsheet.selectedCells.size} cell{spreadsheet.selectedCells.size > 1 ? "s" : ""} selected in {selectedColLabel}
+            {spreadsheet.selectedCells.size > 1
+              ? t("{n} cells selected in {col}", { n: spreadsheet.selectedCells.size, col: selectedColLabel })
+              : t("1 cell selected in {col}", { col: selectedColLabel })}
           </span>
           <span className="text-[11px] text-blue-500">
-            {spreadsheet.selectedCells.size > 1 ? "Type a value + Enter to fill series" : "Double-click or type to edit"}
+            {spreadsheet.selectedCells.size > 1 ? t("Type a value + Enter to fill series") : t("Double-click or type to edit")}
           </span>
           <div className="flex-1" />
           <button
             onClick={() => spreadsheet.clearSelection()}
             className="px-2 py-1 text-xs rounded text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
           >
-            Clear
+            {t("Clear::selection")}
           </button>
         </div>
       )}
@@ -723,7 +730,7 @@ function NetworkReportTab() {
       <div className="mb-3">
         <input
           className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-          placeholder="Filter by device, port, room, or IP..."
+          placeholder={t("Filter by device, port, room, or IP...")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -734,46 +741,46 @@ function NetworkReportTab() {
           <thead>
             <tr>
               <th className={thClass} onClick={() => toggleSort("deviceLabel")}>
-                Device{sortArrow("deviceLabel")}
+                {t("Device")}{sortArrow("deviceLabel")}
               </th>
               <th className={thClass} onClick={() => toggleSort("portLabel")}>
-                Port{sortArrow("portLabel")}
+                {t("Port")}{sortArrow("portLabel")}
               </th>
               <th className={thClass} onClick={() => toggleSort("room")}>
-                Room{sortArrow("room")}
+                {t("Room")}{sortArrow("room")}
               </th>
               <th className={thClass} onClick={() => toggleSort("signalType")}>
-                Signal{sortArrow("signalType")}
+                {t("Signal")}{sortArrow("signalType")}
               </th>
               <th className={thClass} onClick={() => toggleSort("hostname")}>
-                Hostname{sortArrow("hostname")}
+                {t("Hostname")}{sortArrow("hostname")}
               </th>
               <th className={thClass} onClick={() => toggleSort("ip")}>
-                IP{sortArrow("ip")}
+                {t("IP")}{sortArrow("ip")}
               </th>
               <th className={thClass} onClick={() => toggleSort("subnetMask")}>
-                Subnet{sortArrow("subnetMask")}
+                {t("Subnet")}{sortArrow("subnetMask")}
               </th>
               <th className={thClass} onClick={() => toggleSort("gateway")}>
-                Gateway{sortArrow("gateway")}
+                {t("Gateway")}{sortArrow("gateway")}
               </th>
               <th className={thClass} onClick={() => toggleSort("vlan")}>
-                VLAN{sortArrow("vlan")}
+                {t("VLAN")}{sortArrow("vlan")}
               </th>
               <th className={thClass} onClick={() => toggleSort("linkSpeed")}>
-                Speed{sortArrow("linkSpeed")}
+                {t("Speed")}{sortArrow("linkSpeed")}
               </th>
               <th className={thClass} onClick={() => toggleSort("poeDrawW")}>
-                PoE (W){sortArrow("poeDrawW")}
+                {t("PoE (W)")}{sortArrow("poeDrawW")}
               </th>
               <th className={thClass} onClick={() => toggleSort("dhcp")}>
-                DHCP{sortArrow("dhcp")}
+                {t("DHCP")}{sortArrow("dhcp")}
               </th>
               <th className={thClass} onClick={() => toggleSort("dhcpServerLabel")}>
-                DHCP Server{sortArrow("dhcpServerLabel")}
+                {t("DHCP Server")}{sortArrow("dhcpServerLabel")}
               </th>
               <th className={thClass} onClick={() => toggleSort("notes")}>
-                Notes{sortArrow("notes")}
+                {t("Notes")}{sortArrow("notes")}
               </th>
             </tr>
           </thead>
@@ -824,6 +831,7 @@ const NetworkRow = memo(function NetworkRow({
   onUpdateField: (field: string, value: string | number | boolean | undefined) => void;
   spreadsheet: ReturnType<typeof useSpreadsheetSelection<NetworkReportRow>>;
 }) {
+  const t = useT();
   // Check if any cell in this row is selected for row-level highlight
   const hasSelection = networkColumns.some((col) => {
     const props = spreadsheet.getCellProps(rowIndex, col.id);
@@ -834,7 +842,7 @@ const NetworkRow = memo(function NetworkRow({
     if (dhcpWarning?.type === "no-server") {
       return (
         <td className={`${tdClass} bg-amber-50`} title={dhcpWarning.message}>
-          <span className="text-amber-600 text-[10px]">None found</span>
+          <span className="text-amber-600 text-[10px]">{t("None found")}</span>
         </td>
       );
     }
@@ -848,7 +856,7 @@ const NetworkRow = memo(function NetworkRow({
     if (dhcpWarning?.type === "subnet-conflict") {
       return (
         <td className={`${tdClass} bg-red-50`} title={dhcpWarning.message}>
-          <span className="text-red-600 text-[10px]">Subnet mismatch</span>
+          <span className="text-red-600 text-[10px]">{t("Subnet mismatch")}</span>
         </td>
       );
     }
@@ -1161,6 +1169,7 @@ const deviceColumns: SpreadsheetColumn<DeviceReportRow>[] = [
 ];
 
 function DeviceReportTab() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const ownedGear = useSchematicStore((s) => s.ownedGear);
   const showOwnedGearPane = useSchematicStore((s) => s.showOwnedGearPane);
@@ -1297,7 +1306,7 @@ function DeviceReportTab() {
   if (rows.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-        No devices in this schematic.
+        {t("No devices in this schematic.")}
       </div>
     );
   }
@@ -1308,17 +1317,19 @@ function DeviceReportTab() {
       {spreadsheet.selectedCells.size > 0 && (
         <div className="mb-3 flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <span className="text-xs font-medium text-blue-700">
-            {spreadsheet.selectedCells.size} device name{spreadsheet.selectedCells.size > 1 ? "s" : ""} selected
+            {spreadsheet.selectedCells.size > 1
+              ? t("{n} device names selected", { n: spreadsheet.selectedCells.size })
+              : t("1 device name selected")}
           </span>
           <span className="text-[11px] text-blue-500">
-            {spreadsheet.selectedCells.size > 1 ? "Type a name + Enter to fill series" : "Double-click or type to rename"}
+            {spreadsheet.selectedCells.size > 1 ? t("Type a name + Enter to fill series") : t("Double-click or type to rename")}
           </span>
           <div className="flex-1" />
           <button
             onClick={() => spreadsheet.clearSelection()}
             className="px-2 py-1 text-xs rounded text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
           >
-            Clear
+            {t("Clear::selection")}
           </button>
         </div>
       )}
@@ -1326,7 +1337,7 @@ function DeviceReportTab() {
       <div className="mb-3">
         <input
           className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-          placeholder="Filter by name, type, manufacturer, or room..."
+          placeholder={t("Filter by name, type, manufacturer, or room...")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -1337,43 +1348,43 @@ function DeviceReportTab() {
           <thead>
             <tr>
               <th className={thClass} onClick={() => toggleSort("label")}>
-                Device{sortArrow("label")}
+                {t("Device")}{sortArrow("label")}
               </th>
               <th className={thClass} onClick={() => toggleSort("shortName")}>
-                Short Name{sortArrow("shortName")}
+                {t("Short Name")}{sortArrow("shortName")}
               </th>
               <th className={thClass} onClick={() => toggleSort("deviceType")}>
-                Type{sortArrow("deviceType")}
+                {t("Type")}{sortArrow("deviceType")}
               </th>
               <th className={thClass} onClick={() => toggleSort("manufacturer")}>
-                Manufacturer{sortArrow("manufacturer")}
+                {t("Manufacturer")}{sortArrow("manufacturer")}
               </th>
               <th className={thClass} onClick={() => toggleSort("model")}>
-                Model{sortArrow("model")}
+                {t("Model")}{sortArrow("model")}
               </th>
               <th className={thClass} onClick={() => toggleSort("modelNumber")}>
-                Model #{sortArrow("modelNumber")}
+                {t("Model #")}{sortArrow("modelNumber")}
               </th>
               <th className={thClass} onClick={() => toggleSort("room")}>
-                Room{sortArrow("room")}
+                {t("Room")}{sortArrow("room")}
               </th>
               <th className={thClass} onClick={() => toggleSort("portCount")}>
-                Ports{sortArrow("portCount")}
+                {t("Ports")}{sortArrow("portCount")}
               </th>
               {showInventoryColumns && (
                 <th className={thClass} onClick={() => toggleSort("ownedCount")}>
-                  Owned{sortArrow("ownedCount")}
+                  {t("Owned")}{sortArrow("ownedCount")}
                 </th>
               )}
               {showInventoryColumns && (
                 <th className={thClass} onClick={() => toggleSort("neededCount")}>
-                  Need{sortArrow("neededCount")}
+                  {t("Need")}{sortArrow("neededCount")}
                 </th>
               )}
               <th className={thClass} onClick={() => toggleSort("unitCost")}>
-                Unit Cost{sortArrow("unitCost")}
+                {t("Unit Cost")}{sortArrow("unitCost")}
               </th>
-              <th className={thClass} style={{ width: 40 }}>Color</th>
+              <th className={thClass} style={{ width: 40 }}>{t("Color")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1558,6 +1569,7 @@ const cableScheduleColumns: SpreadsheetColumn<CableScheduleRow>[] = [
 ];
 
 function CableScheduleTabInline() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const patchEdgeData = useSchematicStore((s) => s.patchEdgeData);
@@ -1801,7 +1813,7 @@ function CableScheduleTabInline() {
   if (rows.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-        No connections in this schematic.
+        {t("No connections in this schematic.")}
       </div>
     );
   }
@@ -1816,17 +1828,19 @@ function CableScheduleTabInline() {
       {spreadsheet.selectedCells.size > 0 && (
         <div className="mb-3 flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <span className="text-xs font-medium text-blue-700">
-            {spreadsheet.selectedCells.size} cell{spreadsheet.selectedCells.size > 1 ? "s" : ""} selected
+            {spreadsheet.selectedCells.size > 1
+              ? t("{n} cells selected", { n: spreadsheet.selectedCells.size })
+              : t("1 cell selected")}
           </span>
           <span className="text-[11px] text-blue-500">
-            {spreadsheet.selectedCells.size > 1 ? "Type a value + Enter to fill series" : "Double-click or type to edit"}
+            {spreadsheet.selectedCells.size > 1 ? t("Type a value + Enter to fill series") : t("Double-click or type to edit")}
           </span>
           <div className="flex-1" />
           <button
             onClick={() => spreadsheet.clearSelection()}
             className="px-2 py-1 text-xs rounded text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
           >
-            Clear
+            {t("Clear::selection")}
           </button>
         </div>
       )}
@@ -1834,7 +1848,7 @@ function CableScheduleTabInline() {
       <div className="flex items-center gap-2 mb-3">
         <input
           className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-          placeholder="Filter by device, port, cable type, signal, room..."
+          placeholder={t("Filter by device, port, cable type, signal, room...")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -1844,19 +1858,19 @@ function CableScheduleTabInline() {
           value={groupByKey}
           onChange={(e) => setGroupByKey(e.target.value as CableGroupBy)}
         >
-          <option value="">No Grouping</option>
-          <option value="sourceRoom">Source Room</option>
-          <option value="signalType">Signal Type</option>
-          <option value="cableType">Cable Type</option>
-          <option value="multicableLabel">Snake</option>
-          <option value="cableUse">Patch / Field</option>
+          <option value="">{t("No Grouping")}</option>
+          <option value="sourceRoom">{t("Source Room")}</option>
+          <option value="signalType">{t("Signal Type")}</option>
+          <option value="cableType">{t("Cable Type")}</option>
+          <option value="multicableLabel">{t("Snake")}</option>
+          <option value="cableUse">{t("Patch / Field")}</option>
         </select>
         <button
           className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none cursor-pointer hover:text-[var(--color-text)] whitespace-nowrap"
-          title="Show / hide columns"
+          title={t("Show / hide columns")}
           onClick={(e) => setColMenu({ x: e.clientX, y: e.clientY })}
         >
-          Columns ▾
+          {t("Columns")} ▾
         </button>
       </div>
       <div {...spreadsheet.getContainerProps()}>
@@ -1864,61 +1878,61 @@ function CableScheduleTabInline() {
           <thead>
             <tr onContextMenu={(e) => { e.preventDefault(); setColMenu({ x: e.clientX, y: e.clientY }); }}>
               {!hiddenCols.has("label") && (
-                <th className={thClass} style={{ width: 28, textAlign: "center" }} title="Show label on schematic">Label</th>
+                <th className={thClass} style={{ width: 28, textAlign: "center" }} title={t("Show label on schematic")}>{t("Label")}</th>
               )}
               {!hiddenCols.has("cableId") && (
-                <th className={thClass} onClick={() => toggleSort("cableId")}>Cable ID{sortArrow("cableId")}</th>
+                <th className={thClass} onClick={() => toggleSort("cableId")}>{t("Cable ID")}{sortArrow("cableId")}</th>
               )}
               {!hiddenCols.has("sourceDevice") && (
-                <th className={thClass} onClick={() => toggleSort("sourceDevice")}>Source{sortArrow("sourceDevice")}</th>
+                <th className={thClass} onClick={() => toggleSort("sourceDevice")}>{t("Source")}{sortArrow("sourceDevice")}</th>
               )}
               {!hiddenCols.has("sourcePort") && (
-                <th className={thClass} onClick={() => toggleSort("sourcePort")}>Src Port{sortArrow("sourcePort")}</th>
+                <th className={thClass} onClick={() => toggleSort("sourcePort")}>{t("Src Port")}{sortArrow("sourcePort")}</th>
               )}
               {!hiddenCols.has("sourceConnector") && (
-                <th className={thClass} onClick={() => toggleSort("sourceConnector")}>Src Conn{sortArrow("sourceConnector")}</th>
+                <th className={thClass} onClick={() => toggleSort("sourceConnector")}>{t("Src Conn")}{sortArrow("sourceConnector")}</th>
               )}
               {!hiddenCols.has("targetDevice") && (
-                <th className={thClass} onClick={() => toggleSort("targetDevice")}>Target{sortArrow("targetDevice")}</th>
+                <th className={thClass} onClick={() => toggleSort("targetDevice")}>{t("Target")}{sortArrow("targetDevice")}</th>
               )}
               {!hiddenCols.has("targetPort") && (
-                <th className={thClass} onClick={() => toggleSort("targetPort")}>Tgt Port{sortArrow("targetPort")}</th>
+                <th className={thClass} onClick={() => toggleSort("targetPort")}>{t("Tgt Port")}{sortArrow("targetPort")}</th>
               )}
               {!hiddenCols.has("targetConnector") && (
-                <th className={thClass} onClick={() => toggleSort("targetConnector")}>Tgt Conn{sortArrow("targetConnector")}</th>
+                <th className={thClass} onClick={() => toggleSort("targetConnector")}>{t("Tgt Conn")}{sortArrow("targetConnector")}</th>
               )}
               {!hiddenCols.has("cableType") && (
-                <th className={thClass} onClick={() => toggleSort("cableType")}>Cable Type{sortArrow("cableType")}</th>
+                <th className={thClass} onClick={() => toggleSort("cableType")}>{t("Cable Type")}{sortArrow("cableType")}</th>
               )}
               {!hiddenCols.has("signalType") && (
-                <th className={thClass} onClick={() => toggleSort("signalType")}>Signal{sortArrow("signalType")}</th>
+                <th className={thClass} onClick={() => toggleSort("signalType")}>{t("Signal")}{sortArrow("signalType")}</th>
               )}
               {!hiddenCols.has("cableLength") && (
-                <th className={thClass} onClick={() => toggleSort("cableLength")}>Length{sortArrow("cableLength")}</th>
+                <th className={thClass} onClick={() => toggleSort("cableLength")}>{t("Length")}{sortArrow("cableLength")}</th>
               )}
               {!hiddenCols.has("computedLength") && (
-                <th className={thClass} onClick={() => toggleSort("computedLength")} title="Estimated length from room-to-room distance + slack">Est. Length{sortArrow("computedLength")}</th>
+                <th className={thClass} onClick={() => toggleSort("computedLength")} title={t("Estimated length from room-to-room distance + slack")}>{t("Est. Length")}{sortArrow("computedLength")}</th>
               )}
               {!hiddenCols.has("gaugeAwg") && (
-                <th className={thClass} onClick={() => toggleSort("gaugeAwg")} title="Conductor gauge (AWG)">Gauge{sortArrow("gaugeAwg")}</th>
+                <th className={thClass} onClick={() => toggleSort("gaugeAwg")} title={t("Conductor gauge (AWG)")}>{t("Gauge")}{sortArrow("gaugeAwg")}</th>
               )}
               {!hiddenCols.has("cableAlias") && (
-                <th className={thClass} onClick={() => toggleSort("cableAlias")} title="Alternate / contractor cable name">Alias{sortArrow("cableAlias")}</th>
+                <th className={thClass} onClick={() => toggleSort("cableAlias")} title={t("Alternate / contractor cable name")}>{t("Alias")}{sortArrow("cableAlias")}</th>
               )}
               {!hiddenCols.has("tested") && (
-                <th className={thClass} style={{ textAlign: "center" }} onClick={() => toggleSort("tested")} title="Tested / certified">Tested{sortArrow("tested")}</th>
+                <th className={thClass} style={{ textAlign: "center" }} onClick={() => toggleSort("tested")} title={t("Tested / certified")}>{t("Tested")}{sortArrow("tested")}</th>
               )}
               {!hiddenCols.has("cableUse") && (
-                <th className={thClass} style={{ minWidth: 64 }} onClick={() => toggleSort("cableUse")} title="Patch lead vs fixed field / infrastructure cable">Use{sortArrow("cableUse")}</th>
+                <th className={thClass} style={{ minWidth: 64 }} onClick={() => toggleSort("cableUse")} title={t("Patch lead vs fixed field / infrastructure cable")}>{t("Use")}{sortArrow("cableUse")}</th>
               )}
               {!hiddenCols.has("sourceRoom") && (
-                <th className={thClass} onClick={() => toggleSort("sourceRoom")}>Src Room{sortArrow("sourceRoom")}</th>
+                <th className={thClass} onClick={() => toggleSort("sourceRoom")}>{t("Src Room")}{sortArrow("sourceRoom")}</th>
               )}
               {!hiddenCols.has("targetRoom") && (
-                <th className={thClass} onClick={() => toggleSort("targetRoom")}>Tgt Room{sortArrow("targetRoom")}</th>
+                <th className={thClass} onClick={() => toggleSort("targetRoom")}>{t("Tgt Room")}{sortArrow("targetRoom")}</th>
               )}
               {!hiddenCols.has("multicableLabel") && (
-                <th className={thClass} onClick={() => toggleSort("multicableLabel")}>Snake{sortArrow("multicableLabel")}</th>
+                <th className={thClass} onClick={() => toggleSort("multicableLabel")}>{t("Snake")}{sortArrow("multicableLabel")}</th>
               )}
             </tr>
           </thead>
@@ -1962,14 +1976,14 @@ function CableScheduleTabInline() {
           >
             <div className="flex items-center justify-between gap-3 px-3 py-1">
               <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">
-                Columns
+                {t("Columns")}
               </span>
               <button
                 onClick={showAllCols}
                 disabled={hiddenCols.size === 0}
                 className="text-[10px] text-blue-600 hover:text-blue-500 disabled:text-[var(--color-text-muted)] disabled:opacity-50 disabled:cursor-default cursor-pointer"
               >
-                Show all
+                {t("Show all")}
               </button>
             </div>
             {CABLE_COLUMNS.map((c) => (
@@ -1983,7 +1997,7 @@ function CableScheduleTabInline() {
                   onChange={() => toggleCol(c.id)}
                   className="w-3 h-3 accent-blue-500 cursor-pointer"
                 />
-                {c.label}
+                {t(c.label)}
               </label>
             ))}
           </div>
@@ -2050,6 +2064,7 @@ const CableScheduleRow_ = memo(function CableScheduleRow_({
   onSetCableUse: (rowIndex: number, value: "patch" | "field" | "") => void;
   hiddenCols: Set<string>;
 }) {
+  const t = useT();
   const labelProps = spreadsheet.getCellProps(rowIndex, "label");
   const cableIdProps = spreadsheet.getCellProps(rowIndex, "cableId");
   const lengthProps = spreadsheet.getCellProps(rowIndex, "cableLength");
@@ -2078,7 +2093,7 @@ const CableScheduleRow_ = memo(function CableScheduleRow_({
             onChange={() => onToggleLabel(rowIndex, hideLabel)}
             onMouseDown={(e) => e.stopPropagation()}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
-            title={hideLabel ? "Show label" : "Hide label"}
+            title={hideLabel ? t("Show label") : t("Hide label")}
           />
         </td>
       )}
@@ -2106,7 +2121,7 @@ const CableScheduleRow_ = memo(function CableScheduleRow_({
         <EditableCell spreadsheet={spreadsheet} rowIndex={rowIndex} columnId="cableAlias" value={row.cableAlias} />
       )}
       {!hiddenCols.has("tested") && (
-        <td className={tdClass} style={{ textAlign: "center" }} title={row.tested || "Not tested"}>
+        <td className={tdClass} style={{ textAlign: "center" }} title={row.tested || t("Not tested")}>
           <input
             type="checkbox"
             checked={tested}
@@ -2123,11 +2138,11 @@ const CableScheduleRow_ = memo(function CableScheduleRow_({
             onChange={(e) => onSetCableUse(rowIndex, e.target.value as "patch" | "field" | "")}
             onMouseDown={(e) => e.stopPropagation()}
             className="w-full min-w-[3.5rem] bg-transparent border-none text-[10px] outline-none cursor-pointer"
-            title="Patch lead vs fixed field / infrastructure cable"
+            title={t("Patch lead vs fixed field / infrastructure cable")}
           >
             <option value="">—</option>
-            <option value="patch">Patch</option>
-            <option value="field">Field</option>
+            <option value="patch">{t("Patch")}</option>
+            <option value="field">{t("Field")}</option>
           </select>
         </td>
       )}
@@ -2167,7 +2182,7 @@ function renderGroupedCableSchedule(
           colSpan={visibleColCount}
           className="pt-3 pb-1 px-2 text-xs font-semibold text-[var(--color-text-heading)] border-b border-[var(--color-border)]"
         >
-          {group}
+          {t(group)}
         </td>
       </tr>,
     );
@@ -2205,6 +2220,7 @@ type PatchPanelSortKey =
 type PatchPanelGroupBy = "" | "panel" | "panelRoom" | "signalType" | "face";
 
 function PatchPanelScheduleTabInline() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const cableNamingScheme = useSchematicStore((s) => s.cableNamingScheme);
@@ -2284,7 +2300,7 @@ function PatchPanelScheduleTabInline() {
   if (rows.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-        No patch panels in this schematic.
+        {t("No patch panels in this schematic.")}
       </div>
     );
   }
@@ -2319,7 +2335,7 @@ function PatchPanelScheduleTabInline() {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <input
           className="flex-1 min-w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-          placeholder="Filter by panel, port, device, cable, signal, room..."
+          placeholder={t("Filter by panel, port, device, cable, signal, room...")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -2328,13 +2344,13 @@ function PatchPanelScheduleTabInline() {
           className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none cursor-pointer"
           value={groupByKey}
           onChange={(e) => setGroupByKey(e.target.value as PatchPanelGroupBy)}
-          title="Group by"
+          title={t("Group by")}
         >
-          <option value="">No Grouping</option>
-          <option value="panel">Panel</option>
-          <option value="panelRoom">Panel Room</option>
-          <option value="signalType">Signal Type</option>
-          <option value="face">Face</option>
+          <option value="">{t("No Grouping")}</option>
+          <option value="panel">{t("Panel")}</option>
+          <option value="panelRoom">{t("Panel Room")}</option>
+          <option value="signalType">{t("Signal Type")}</option>
+          <option value="face">{t("Face")}</option>
         </select>
         <label className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] cursor-pointer select-none">
           <input
@@ -2343,7 +2359,7 @@ function PatchPanelScheduleTabInline() {
             onChange={(e) => setHideUnconnected(e.target.checked)}
             className="cursor-pointer"
           />
-          Hide empty
+          {t("Hide empty")}
         </label>
       </div>
 
@@ -2355,7 +2371,7 @@ function PatchPanelScheduleTabInline() {
             <div
               key={p.label}
               className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-[10px]"
-              title={`${p.connected} of ${p.total} ports used`}
+              title={t("{used} of {total} ports used", { used: p.connected, total: p.total })}
             >
               <span className="font-semibold text-[var(--color-text-heading)]">{p.label}</span>
               <span className="text-[var(--color-text-muted)] ml-1.5">
@@ -2369,42 +2385,42 @@ function PatchPanelScheduleTabInline() {
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className={thClass} onClick={() => toggleSort("panel")}>Panel{sortArrow("panel")}</th>
-            <th className={thClass} onClick={() => toggleSort("panelRoom")}>Panel Room{sortArrow("panelRoom")}</th>
-            <th className={thClass} onClick={() => toggleSort("face")}>Face{sortArrow("face")}</th>
-            <th className={thClass} onClick={() => toggleSort("position")}>Position{sortArrow("position")}</th>
-            <th className={thClass} onClick={() => toggleSort("signalType")}>Signal{sortArrow("signalType")}</th>
+            <th className={thClass} onClick={() => toggleSort("panel")}>{t("Panel")}{sortArrow("panel")}</th>
+            <th className={thClass} onClick={() => toggleSort("panelRoom")}>{t("Panel Room")}{sortArrow("panelRoom")}</th>
+            <th className={thClass} onClick={() => toggleSort("face")}>{t("Face")}{sortArrow("face")}</th>
+            <th className={thClass} onClick={() => toggleSort("position")}>{t("Position")}{sortArrow("position")}</th>
+            <th className={thClass} onClick={() => toggleSort("signalType")}>{t("Signal")}{sortArrow("signalType")}</th>
             {/* Legacy (non-passthrough) columns */}
-            <th className={thClass} onClick={() => toggleSort("connector")}>Connector{sortArrow("connector")}</th>
-            <th className={thClass} onClick={() => toggleSort("gender")}>M/F{sortArrow("gender")}</th>
-            <th className={thClass} onClick={() => toggleSort("remoteDevice")}>Remote Device{sortArrow("remoteDevice")}</th>
-            <th className={thClass} onClick={() => toggleSort("remotePort")}>Remote Port{sortArrow("remotePort")}</th>
-            <th className={thClass} onClick={() => toggleSort("remoteRoom")}>Remote Room{sortArrow("remoteRoom")}</th>
-            <th className={thClass} onClick={() => toggleSort("cableId")}>Cable ID{sortArrow("cableId")}</th>
-            <th className={thClass} onClick={() => toggleSort("cableType")}>Cable Type{sortArrow("cableType")}</th>
-            <th className={thClass} onClick={() => toggleSort("cableLength")}>Length{sortArrow("cableLength")}</th>
-            <th className={thClass} onClick={() => toggleSort("computedLength")} title="Estimated length from room-to-room distance + slack">Est. Length{sortArrow("computedLength")}</th>
-            <th className={thClass} onClick={() => toggleSort("multicableLabel")}>Snake{sortArrow("multicableLabel")}</th>
+            <th className={thClass} onClick={() => toggleSort("connector")}>{t("Connector")}{sortArrow("connector")}</th>
+            <th className={thClass} onClick={() => toggleSort("gender")}>{t("M/F")}{sortArrow("gender")}</th>
+            <th className={thClass} onClick={() => toggleSort("remoteDevice")}>{t("Remote Device")}{sortArrow("remoteDevice")}</th>
+            <th className={thClass} onClick={() => toggleSort("remotePort")}>{t("Remote Port")}{sortArrow("remotePort")}</th>
+            <th className={thClass} onClick={() => toggleSort("remoteRoom")}>{t("Remote Room")}{sortArrow("remoteRoom")}</th>
+            <th className={thClass} onClick={() => toggleSort("cableId")}>{t("Cable ID")}{sortArrow("cableId")}</th>
+            <th className={thClass} onClick={() => toggleSort("cableType")}>{t("Cable Type")}{sortArrow("cableType")}</th>
+            <th className={thClass} onClick={() => toggleSort("cableLength")}>{t("Length")}{sortArrow("cableLength")}</th>
+            <th className={thClass} onClick={() => toggleSort("computedLength")} title={t("Estimated length from room-to-room distance + slack")}>{t("Est. Length")}{sortArrow("computedLength")}</th>
+            <th className={thClass} onClick={() => toggleSort("multicableLabel")}>{t("Snake")}{sortArrow("multicableLabel")}</th>
             {/* Passthrough-only columns */}
-            <th className={thClass} onClick={() => toggleSort("rearConnector")}>Rear Connector{sortArrow("rearConnector")}</th>
-            <th className={thClass} onClick={() => toggleSort("rearGender")}>Rear M/F{sortArrow("rearGender")}</th>
-            <th className={thClass} onClick={() => toggleSort("rearRemoteDevice")}>Rear Remote Device{sortArrow("rearRemoteDevice")}</th>
-            <th className={thClass} onClick={() => toggleSort("rearRemotePort")}>Rear Remote Port{sortArrow("rearRemotePort")}</th>
-            <th className={thClass} title="Room of the rear-face remote device">Rear Remote Room</th>
-            <th className={thClass} onClick={() => toggleSort("rearCableId")}>Rear Cable ID{sortArrow("rearCableId")}</th>
-            <th className={thClass} onClick={() => toggleSort("rearCableType")}>Rear Cable Type{sortArrow("rearCableType")}</th>
-            <th className={thClass} onClick={() => toggleSort("rearCableLength")}>Rear Length{sortArrow("rearCableLength")}</th>
-            <th className={thClass} title="Estimated length from room-to-room distance + slack">Rear Est. Length</th>
-            <th className={thClass} onClick={() => toggleSort("frontConnector")}>Front Connector{sortArrow("frontConnector")}</th>
-            <th className={thClass} onClick={() => toggleSort("frontGender")}>Front M/F{sortArrow("frontGender")}</th>
-            <th className={thClass} onClick={() => toggleSort("frontRemoteDevice")}>Front Remote Device{sortArrow("frontRemoteDevice")}</th>
-            <th className={thClass} onClick={() => toggleSort("frontRemotePort")}>Front Remote Port{sortArrow("frontRemotePort")}</th>
-            <th className={thClass} title="Room of the front-face remote device">Front Remote Room</th>
-            <th className={thClass} onClick={() => toggleSort("frontCableId")}>Front Cable ID{sortArrow("frontCableId")}</th>
-            <th className={thClass} onClick={() => toggleSort("frontCableType")}>Front Cable Type{sortArrow("frontCableType")}</th>
-            <th className={thClass} onClick={() => toggleSort("frontCableLength")}>Front Length{sortArrow("frontCableLength")}</th>
-            <th className={thClass} title="Estimated length from room-to-room distance + slack">Front Est. Length</th>
-            <th className={thClass} onClick={() => toggleSort("normalling")}>Normalling{sortArrow("normalling")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearConnector")}>{t("Rear Connector")}{sortArrow("rearConnector")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearGender")}>{t("Rear M/F")}{sortArrow("rearGender")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearRemoteDevice")}>{t("Rear Remote Device")}{sortArrow("rearRemoteDevice")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearRemotePort")}>{t("Rear Remote Port")}{sortArrow("rearRemotePort")}</th>
+            <th className={thClass} title={t("Room of the rear-face remote device")}>{t("Rear Remote Room")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearCableId")}>{t("Rear Cable ID")}{sortArrow("rearCableId")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearCableType")}>{t("Rear Cable Type")}{sortArrow("rearCableType")}</th>
+            <th className={thClass} onClick={() => toggleSort("rearCableLength")}>{t("Rear Length")}{sortArrow("rearCableLength")}</th>
+            <th className={thClass} title={t("Estimated length from room-to-room distance + slack")}>{t("Rear Est. Length")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontConnector")}>{t("Front Connector")}{sortArrow("frontConnector")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontGender")}>{t("Front M/F")}{sortArrow("frontGender")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontRemoteDevice")}>{t("Front Remote Device")}{sortArrow("frontRemoteDevice")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontRemotePort")}>{t("Front Remote Port")}{sortArrow("frontRemotePort")}</th>
+            <th className={thClass} title={t("Room of the front-face remote device")}>{t("Front Remote Room")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontCableId")}>{t("Front Cable ID")}{sortArrow("frontCableId")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontCableType")}>{t("Front Cable Type")}{sortArrow("frontCableType")}</th>
+            <th className={thClass} onClick={() => toggleSort("frontCableLength")}>{t("Front Length")}{sortArrow("frontCableLength")}</th>
+            <th className={thClass} title={t("Estimated length from room-to-room distance + slack")}>{t("Front Est. Length")}</th>
+            <th className={thClass} onClick={() => toggleSort("normalling")}>{t("Normalling")}{sortArrow("normalling")}</th>
           </tr>
         </thead>
         <tbody>
@@ -2416,7 +2432,7 @@ function PatchPanelScheduleTabInline() {
                     colSpan={34}
                     className="bg-[var(--color-surface)] text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] py-1 px-2"
                   >
-                    {g.label}
+                    {t(g.label)}
                   </td>
                 </tr>
               )}
@@ -2495,6 +2511,7 @@ function RackPlanTabInline() {
 // ─── Pack List Tab (inline, reusing packList.ts logic) ─────────
 
 function PackListTabInline() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
 
@@ -2540,24 +2557,24 @@ function PackListTabInline() {
 
   return (
     <>
-      <p className="mb-2 text-[11px] text-[var(--color-text-muted)] italic" title="Auto-generated document summary (#P3-019)">
+      <p className="mb-2 text-[11px] text-[var(--color-text-muted)] italic" title={t("Auto-generated document summary (#P3-019)")}>
         {docSummary}
       </p>
       <div className="flex items-center gap-2 mb-3">
         <button className={subTabClass("devices")} onClick={() => setSubTab("devices")}>
-          Devices
+          {t("Devices")}
         </button>
         <button className={subTabClass("cables")} onClick={() => setSubTab("cables")}>
-          Cables
+          {t("Cables")}
         </button>
         {data.accessories.length > 0 && (
           <button className={subTabClass("accessories")} onClick={() => setSubTab("accessories")}>
-            Accessories
+            {t("Accessories")}
           </button>
         )}
         {data.racks.length > 0 && (
           <button className={subTabClass("racks")} onClick={() => setSubTab("racks")}>
-            Racks
+            {t("Racks")}
           </button>
         )}
         <div className="flex-1" />
@@ -2569,20 +2586,20 @@ function PackListTabInline() {
               onChange={(e) => setGroupDevicesByRoom(e.target.checked)}
               className="accent-blue-600"
             />
-            Group by Room
+            {t("Group by Room")}
           </label>
         )}
         {subTab === "cables" && (
           <label className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-muted)] select-none">
-            Group by
+            {t("Group by")}
             <select
               value={cableGrouping}
               onChange={(e) => setCableGrouping(e.target.value as CableGrouping)}
               className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] text-[var(--color-text)] outline-none cursor-pointer"
             >
-              <option value="">None</option>
-              <option value="path">Path</option>
-              <option value="category">Category</option>
+              <option value="">{t("None")}</option>
+              <option value="path">{t("Path")}</option>
+              <option value="category">{t("Category")}</option>
             </select>
           </label>
         )}
@@ -2590,7 +2607,7 @@ function PackListTabInline() {
 
       {totalCost > 0 && (
         <div className="mb-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-3 py-2 inline-block">
-          <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">Project Total</div>
+          <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">{t("Project Total")}</div>
           <div className="text-sm font-semibold text-[var(--color-text-heading)]">
             ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
@@ -2601,17 +2618,17 @@ function PackListTabInline() {
         <>
           {data.devices.length === 0 ? (
             <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-              No devices in this schematic.
+              {t("No devices in this schematic.")}
             </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={plThClass}>Qty</th>
-                  <th className={plThClass}>Device</th>
-                  <th className={plThClass}>Type</th>
-                  <th className={plThClass}>Unit Cost</th>
-                  <th className={plThClass}>Ext. Cost</th>
+                  <th className={plThClass}>{t("Qty")}</th>
+                  <th className={plThClass}>{t("Device")}</th>
+                  <th className={plThClass}>{t("Type")}</th>
+                  <th className={plThClass}>{t("Unit Cost")}</th>
+                  <th className={plThClass}>{t("Ext. Cost")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2629,7 +2646,7 @@ function PackListTabInline() {
         <>
           {data.summary.length === 0 && data.adapters.length === 0 ? (
             <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-              No connections in this schematic.
+              {t("No connections in this schematic.")}
             </div>
           ) : (
             <>
@@ -2662,13 +2679,13 @@ function PackListTabInline() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
-                        <th className={plThClass}>Qty</th>
-                        <th className={plThClass}>Cable Type</th>
-                        <th className={plThClass}>Signal</th>
-                        <th className={plThClass}>Length</th>
-                        {showPath && <th className={plThClass}>Route</th>}
-                        <th className={plThClass}>Unit Cost</th>
-                        <th className={plThClass}>Ext. Cost</th>
+                        <th className={plThClass}>{t("Qty")}</th>
+                        <th className={plThClass}>{t("Cable Type")}</th>
+                        <th className={plThClass}>{t("Signal")}</th>
+                        <th className={plThClass}>{t("Length")}</th>
+                        {showPath && <th className={plThClass}>{t("Route")}</th>}
+                        <th className={plThClass}>{t("Unit Cost")}</th>
+                        <th className={plThClass}>{t("Ext. Cost")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2682,7 +2699,9 @@ function PackListTabInline() {
                                     colSpan={99}
                                     className="pt-3 pb-1 px-2 text-xs font-semibold text-[var(--color-text-heading)] border-b border-[var(--color-border)]"
                                   >
-                                    {group.category} ({group.total} cable{group.total !== 1 ? "s" : ""})
+                                    {group.total === 1
+                                      ? t("{category} (1 cable)", { category: t(group.category) })
+                                      : t("{category} ({n} cables)", { category: t(group.category), n: group.total })}
                                   </td>
                                 </tr>
                                 {rows}
@@ -2698,7 +2717,7 @@ function PackListTabInline() {
                               colSpan={99}
                               className="pt-3 pb-1 px-2 text-xs font-semibold text-[var(--color-text-heading)] border-b border-[var(--color-border)]"
                             >
-                              Adapters ({data.adapters.reduce((sum, a) => sum + a.count, 0)})
+                              {t("Adapters ({n})", { n: data.adapters.reduce((sum, a) => sum + a.count, 0) })}
                             </td>
                           </tr>
                           {data.adapters.map((a, i) => (
@@ -2725,16 +2744,16 @@ function PackListTabInline() {
         <>
           {data.accessories.length === 0 ? (
             <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-              No cable accessories in this schematic.
+              {t("No cable accessories in this schematic.")}
             </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={plThClass}>Qty</th>
-                  <th className={plThClass}>Accessory</th>
-                  <th className={plThClass}>Type</th>
-                  <th className={plThClass}>Room</th>
+                  <th className={plThClass}>{t("Qty")}</th>
+                  <th className={plThClass}>{t("Accessory")}</th>
+                  <th className={plThClass}>{t("Type")}</th>
+                  <th className={plThClass}>{t("Room")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2756,19 +2775,19 @@ function PackListTabInline() {
         <>
           {data.racks.length === 0 ? (
             <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-              No racks in this project.
+              {t("No racks in this project.")}
             </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={plThClass}>Qty</th>
-                  <th className={plThClass}>Rack</th>
-                  <th className={plThClass}>Type</th>
-                  <th className={plThClass}>Height</th>
-                  <th className={plThClass}>Room</th>
-                  <th className={plThClass}>Unit Cost</th>
-                  <th className={plThClass}>Ext. Cost</th>
+                  <th className={plThClass}>{t("Qty")}</th>
+                  <th className={plThClass}>{t("Rack")}</th>
+                  <th className={plThClass}>{t("Type")}</th>
+                  <th className={plThClass}>{t("Height")}</th>
+                  <th className={plThClass}>{t("Room")}</th>
+                  <th className={plThClass}>{t("Unit Cost")}</th>
+                  <th className={plThClass}>{t("Ext. Cost")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2915,6 +2934,7 @@ function exportDevicesCsv(nodes: SchematicNode[], ownedGear: OwnedGearItem[], sc
 // ─── Power Report Tab ─────────────────────────────────────────
 
 function PowerReportTab() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
 
@@ -2923,7 +2943,7 @@ function PowerReportTab() {
   if (report.devices.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8">
-        No devices with power data in this schematic.
+        {t("No devices with power data in this schematic.")}
       </div>
     );
   }
@@ -2933,7 +2953,7 @@ function PowerReportTab() {
       {/* Summary */}
       <div className="flex gap-4 text-xs">
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-3 py-2">
-          <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">Total Power</div>
+          <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">{t("Total Power")}</div>
           <div className="text-sm font-semibold text-[var(--color-text-heading)]">{report.totalPowerW.toLocaleString()}W</div>
           <div className="text-[10px] text-[var(--color-text-muted)]">
             {(report.totalPowerW / 120).toFixed(1)}A @120V &middot; {(report.totalPowerW / 208).toFixed(1)}A @208V
@@ -2942,20 +2962,20 @@ function PowerReportTab() {
         {report.totalThermalBtuh > 0 && (
           <div
             className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-3 py-2"
-            title="Thermal load for HVAC sizing. Auto-derived from power draw (× 3.412) where not explicitly entered."
+            title={t("Thermal load for HVAC sizing. Auto-derived from power draw (× 3.412) where not explicitly entered.")}
           >
-            <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">Total Thermal</div>
+            <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">{t("Total Thermal")}</div>
             <div className="text-sm font-semibold text-[var(--color-text-heading)]">{report.totalThermalBtuh.toLocaleString()} BTU/h</div>
             <div className="text-[10px] text-[var(--color-text-muted)]">
-              ≈ {(report.totalThermalBtuh / 12000).toFixed(1)} ton AC
+              {t("≈ {tons} ton AC", { tons: (report.totalThermalBtuh / 12000).toFixed(1) })}
             </div>
           </div>
         )}
         {report.unconnectedPowerW > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            <div className="text-[10px] text-amber-600 uppercase tracking-wide">Unconnected</div>
+            <div className="text-[10px] text-amber-600 uppercase tracking-wide">{t("Unconnected")}</div>
             <div className="text-sm font-semibold text-amber-700">{report.unconnectedPowerW.toLocaleString()}W</div>
-            <div className="text-[10px] text-amber-600">Not wired to any distro</div>
+            <div className="text-[10px] text-amber-600">{t("Not wired to any distro")}</div>
           </div>
         )}
       </div>
@@ -2964,17 +2984,17 @@ function PowerReportTab() {
       {report.distros.length > 0 && (
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
-            Distribution Loading
+            {t("Distribution Loading")}
           </div>
           <table className="w-full border-collapse border border-[var(--color-border)] rounded overflow-hidden">
             <thead>
               <tr>
-                <th className={thClass}>Distro</th>
-                <th className={thClass}>Room</th>
-                <th className={thClass}>Capacity (W)</th>
-                <th className={thClass}>Load (W)</th>
-                <th className={thClass}>Load %</th>
-                <th className={thClass}>Status</th>
+                <th className={thClass}>{t("Distro")}</th>
+                <th className={thClass}>{t("Room")}</th>
+                <th className={thClass}>{t("Capacity (W)")}</th>
+                <th className={thClass}>{t("Load (W)")}</th>
+                <th className={thClass}>{t("Load %")}</th>
+                <th className={thClass}>{t("Status")}</th>
               </tr>
             </thead>
             <tbody>
@@ -2991,7 +3011,7 @@ function PowerReportTab() {
                       d.status === "Warning" ? "text-amber-600 font-semibold" :
                       "text-green-600"
                     }>
-                      {d.status}
+                      {t(d.status)}
                     </span>
                   </td>
                 </tr>
@@ -3004,25 +3024,25 @@ function PowerReportTab() {
       {/* Device Power Draw */}
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
-          Device Power Draw
+          {t("Device Power Draw")}
         </div>
         <table className="w-full border-collapse border border-[var(--color-border)] rounded overflow-hidden">
           <thead>
             <tr>
-              <th className={thClass}>Qty</th>
-              <th className={thClass}>Device</th>
-              <th className={thClass}>Type</th>
-              <th className={thClass}>Room</th>
-              <th className={thClass}>Power (W)</th>
-              <th className={thClass}>Total (W)</th>
-              <th className={thClass}>Thermal (BTU/h)</th>
-              <th className={thClass}>Total (BTU/h)</th>
-              <th className={thClass}>Voltage</th>
+              <th className={thClass}>{t("Qty")}</th>
+              <th className={thClass}>{t("Device")}</th>
+              <th className={thClass}>{t("Type")}</th>
+              <th className={thClass}>{t("Room")}</th>
+              <th className={thClass}>{t("Power (W)")}</th>
+              <th className={thClass}>{t("Total (W)")}</th>
+              <th className={thClass}>{t("Thermal (BTU/h)")}</th>
+              <th className={thClass}>{t("Total (BTU/h)")}</th>
+              <th className={thClass}>{t("Voltage")}</th>
             </tr>
           </thead>
           <tbody>
             {report.devices.map((d, i) => {
-              const thermalTitle = d.thermalDerived ? "Auto-derived from power draw (× 3.412)" : undefined;
+              const thermalTitle = d.thermalDerived ? t("Auto-derived from power draw (× 3.412)") : undefined;
               const thermalCls = d.thermalDerived ? `${tdClass} italic text-[var(--color-text-muted)]` : tdClass;
               return (
                 <tr key={`${d.model}-${d.room}-${i}`} className={rowClass(i)}>

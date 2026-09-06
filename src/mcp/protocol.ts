@@ -401,6 +401,8 @@ export interface FloorplanGroupSpec {
   outlineWidthMm?: number;
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
+  /** Switch the group off as a layer: off the sheet, out of the export and the legend. */
+  hidden?: boolean;
 }
 
 export interface AddFloorplanGroupParams extends FloorplanPageRef, FloorplanGroupSpec {}

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { useSchematicStore } from "../store";
 import type { TitleBlock, TitleBlockLayout, TitleBlockCell } from "../types";
 import { getCoveredPositions, nextCellId, createDefaultLayout, createFaceLayout, getFieldValue, getFieldLabel } from "../titleBlockLayout";
+import { useT } from "../i18n";
 
 interface TitleBlockDialogProps {
   onClose: () => void;
@@ -72,6 +73,7 @@ function makeEmptyCell(row: number, col: number): TitleBlockCell {
 }
 
 export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
+  const t = useT();
   const titleBlock = useSchematicStore((s) => s.titleBlock);
   const setTitleBlock = useSchematicStore((s) => s.setTitleBlock);
   const titleBlockLayout = useSchematicStore((s) => s.titleBlockLayout);
@@ -115,7 +117,7 @@ export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert("Logo image is too large (max 5 MB). Please use a smaller image.");
+      alert(t("Logo image is too large (max 5 MB). Please use a smaller image."));
       e.target.value = "";
       return;
     }
@@ -127,7 +129,7 @@ export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }, []);
+  }, [t]);
 
   const handleRemoveLogo = useCallback(() => {
     setTbDraft((prev) => ({ ...prev, logo: "" }));
@@ -187,7 +189,7 @@ export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
         {/* Header */}
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Title Block Editor
+            {t("Title Block Editor")}
           </h2>
           <button
             onClick={handleCancel}
@@ -203,13 +205,13 @@ export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
             className={`px-4 py-2 text-xs font-medium cursor-pointer ${activeTab === "data" ? "text-blue-600 border-b-2 border-blue-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)]"}`}
             onClick={() => setActiveTab("data")}
           >
-            Data & Logo
+            {t("Data & Logo")}
           </button>
           <button
             className={`px-4 py-2 text-xs font-medium cursor-pointer ${activeTab === "layout" ? "text-blue-600 border-b-2 border-blue-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)]"}`}
             onClick={() => setActiveTab("layout")}
           >
-            Layout
+            {t("Layout")}
           </button>
         </div>
 
@@ -244,13 +246,13 @@ export default function TitleBlockDialog({ onClose }: TitleBlockDialogProps) {
             onClick={handleCancel}
             className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={handleSave}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
           >
-            Save
+            {t("Save")}
           </button>
         </div>
         <input
@@ -293,15 +295,16 @@ function DataTab({
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   inputClass: string;
 }) {
+  const t = useT();
   return (
     <div className="p-4 flex gap-4">
       {/* Logo */}
       <div className="w-[140px] shrink-0 flex flex-col items-center gap-2">
         <div className="w-[140px] h-[90px] border border-dashed border-[var(--color-border)] rounded flex items-center justify-center bg-gray-50 overflow-hidden">
           {draft.logo ? (
-            <img src={draft.logo} alt="Logo preview" className="max-w-full max-h-full object-contain" />
+            <img src={draft.logo} alt={t("Logo preview")} className="max-w-full max-h-full object-contain" />
           ) : (
-            <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">No Logo</span>
+            <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">{t("No Logo")}</span>
           )}
         </div>
         <div className="flex gap-1.5">
@@ -309,14 +312,14 @@ function DataTab({
             onClick={handleUpload}
             className="px-2 py-1 text-[10px] rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
           >
-            Upload
+            {t("Upload")}
           </button>
           {draft.logo && (
             <button
               onClick={handleRemoveLogo}
               className="px-2 py-1 text-[10px] rounded bg-[var(--color-surface)] text-red-500 hover:text-red-700 border border-[var(--color-border)] transition-colors cursor-pointer"
             >
-              Remove
+              {t("Remove")}
             </button>
           )}
         </div>
@@ -327,13 +330,13 @@ function DataTab({
         {TB_FIELDS.map(({ key, label, placeholder }) => (
           <div key={key}>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-              {label}
+              {t(label)}
             </label>
             <input
               className={inputClass}
               value={(draft as unknown as Record<string, string>)[key] ?? ""}
               onChange={(e) => updateField(key, e.target.value)}
-              placeholder={placeholder}
+              placeholder={t(placeholder)}
             />
           </div>
         ))}
@@ -346,12 +349,12 @@ function DataTab({
                 className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] bg-transparent border-b border-transparent focus:border-blue-400 outline-none flex-1"
                 value={cf.label}
                 onChange={(e) => updateCustomFieldLabel(cf.id, e.target.value)}
-                placeholder="Field name"
+                placeholder={t("Field name")}
               />
               <button
                 onClick={() => removeCustomField(cf.id)}
                 className="text-[10px] text-red-400 hover:text-red-600 cursor-pointer px-1"
-                title="Remove field"
+                title={t("Remove field")}
               >
                 &times;
               </button>
@@ -360,7 +363,7 @@ function DataTab({
               className={inputClass}
               value={cf.value}
               onChange={(e) => updateCustomField(cf.id, e.target.value)}
-              placeholder="Value"
+              placeholder={t("Value")}
             />
           </div>
         ))}
@@ -369,7 +372,7 @@ function DataTab({
           onClick={addCustomField}
           className="w-full mt-1 px-2 py-1 text-[10px] rounded border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] hover:border-[var(--color-text-muted)] transition-colors cursor-pointer"
         >
-          + Add Custom Field
+          {t("+ Add Custom Field")}
         </button>
       </div>
     </div>
@@ -398,6 +401,7 @@ function LayoutTab({
   setDraft: React.Dispatch<React.SetStateAction<TitleBlockLayout>>;
   tbDraft: TitleBlock;
 }) {
+  const t = useT();
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; cellId: string } | null>(null);
   const [resizing, setResizing] = useState<{
@@ -826,7 +830,7 @@ function LayoutTab({
       {/* Toolbar row: size + actions */}
       <div className="flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-          Width:
+          {t("Width:")}
           <input
             type="number"
             className={smallInput}
@@ -839,7 +843,7 @@ function LayoutTab({
           <span className="text-[10px]">in</span>
         </label>
         <label className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-          Height:
+          {t("Height:")}
           <input
             type="number"
             className={smallInput}
@@ -855,10 +859,10 @@ function LayoutTab({
         <div className="h-4 w-px bg-[var(--color-border)]" />
 
         <button onClick={addRow} className="px-2 py-0.5 text-[10px] rounded border border-[var(--color-border)] text-[var(--color-text)] hover:bg-gray-100 cursor-pointer">
-          + Row
+          {t("+ Row")}
         </button>
         <button onClick={addColumn} className="px-2 py-0.5 text-[10px] rounded border border-[var(--color-border)] text-[var(--color-text)] hover:bg-gray-100 cursor-pointer">
-          + Column
+          {t("+ Column")}
         </button>
 
         <button
@@ -866,14 +870,14 @@ function LayoutTab({
           disabled={!canMerge}
           className={`px-2 py-0.5 text-[10px] rounded border cursor-pointer ${canMerge ? "border-blue-400 text-blue-600 hover:bg-blue-50" : "border-[var(--color-border)] text-[var(--color-text-muted)] opacity-40 cursor-default"}`}
         >
-          Merge
+          {t("Merge")}
         </button>
         <button
           onClick={unmergeCells}
           disabled={!canUnmerge}
           className={`px-2 py-0.5 text-[10px] rounded border cursor-pointer ${canUnmerge ? "border-blue-400 text-blue-600 hover:bg-blue-50" : "border-[var(--color-border)] text-[var(--color-text-muted)] opacity-40 cursor-default"}`}
         >
-          Unmerge
+          {t("Unmerge")}
         </button>
 
         <button
@@ -887,7 +891,7 @@ function LayoutTab({
           onClick={resetLayout}
           className="px-2 py-0.5 text-[10px] rounded border border-[var(--color-border)] text-red-500 hover:bg-red-50 cursor-pointer"
         >
-          Reset Default
+          {t("Reset Default")}
         </button>
       </div>
 
@@ -926,7 +930,7 @@ function LayoutTab({
                 break;
               }
               case "static":
-                displayText = cell.content.text || "(empty)";
+                displayText = cell.content.text || t("(empty)");
                 if (!cell.content.text) { textColor = "#9ca3af"; isPlaceholder = true; }
                 break;
               case "pageNumber":
@@ -1022,7 +1026,7 @@ function LayoutTab({
       </div>
 
       <div className="text-[10px] text-[var(--color-text-muted)]">
-        Click and drag to select cells. Shift+click to toggle. Drag borders to resize. Right-click for more options.
+        {t("Click and drag to select cells. Shift+click to toggle. Drag borders to resize. Right-click for more options.")}
       </div>
 
       {/* Context Menu */}
@@ -1033,31 +1037,31 @@ function LayoutTab({
           onClick={(e) => e.stopPropagation()}
         >
           <ContextMenuItem
-            label="Insert Row Above"
+            label={t("Insert Row Above")}
             onClick={() => { insertRowAt(ctxCell.row); setContextMenu(null); }}
           />
           <ContextMenuItem
-            label="Insert Row Below"
+            label={t("Insert Row Below")}
             onClick={() => { insertRowAt(ctxCell.row + ctxCell.rowSpan); setContextMenu(null); }}
           />
           <ContextMenuItem
-            label="Insert Column Left"
+            label={t("Insert Column Left")}
             onClick={() => { insertColumnAt(ctxCell.col); setContextMenu(null); }}
           />
           <ContextMenuItem
-            label="Insert Column Right"
+            label={t("Insert Column Right")}
             onClick={() => { insertColumnAt(ctxCell.col + ctxCell.colSpan); setContextMenu(null); }}
           />
 
           <div className="h-px bg-gray-200 my-1" />
 
           <ContextMenuItem
-            label="Delete Row"
+            label={t("Delete Row")}
             disabled={draft.rows.length <= 1}
             onClick={() => { deleteRow(ctxCell.row); setContextMenu(null); }}
           />
           <ContextMenuItem
-            label="Delete Column"
+            label={t("Delete Column")}
             disabled={draft.columns.length <= 1}
             onClick={() => { deleteColumn(ctxCell.col); setContextMenu(null); }}
           />
@@ -1066,19 +1070,19 @@ function LayoutTab({
 
           {canMerge && (
             <ContextMenuItem
-              label={`Merge ${selectedCells.size} Cells`}
+              label={t("Merge {n} Cells", { n: selectedCells.size })}
               onClick={() => { mergeCells(); setContextMenu(null); }}
             />
           )}
           {(ctxCell.colSpan > 1 || ctxCell.rowSpan > 1) ? (
             <ContextMenuItem
-              label="Unmerge"
+              label={t("Unmerge")}
               onClick={() => { unmergeCells(); setContextMenu(null); }}
             />
           ) : (
             <>
               <ContextMenuItem
-                label="Merge with Right"
+                label={t("Merge with Right")}
                 disabled={ctxCell.col + ctxCell.colSpan >= draft.columns.length}
                 onClick={() => {
                   // Find the cell to the right and select both, then merge
@@ -1109,7 +1113,7 @@ function LayoutTab({
                 }}
               />
               <ContextMenuItem
-                label="Merge with Below"
+                label={t("Merge with Below")}
                 disabled={ctxCell.row + ctxCell.rowSpan >= draft.rows.length}
                 onClick={() => {
                   const belowCell = draft.cells.find(
@@ -1141,21 +1145,21 @@ function LayoutTab({
 
           <div className="h-px bg-gray-200 my-1" />
 
-          <ContextMenuSub label="Set Content">
+          <ContextMenuSub label={t("Set Content")}>
             <ContextMenuItem
-              label="Field"
+              label={t("Field")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "field", field: "showName" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Static Text"
+              label={t("Static Text")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "static", text: "" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Logo"
+              label={t("Logo")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "logo" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Page Number"
+              label={t("Page Number")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "pageNumber" } }); setContextMenu(null); }}
             />
           </ContextMenuSub>
@@ -1228,13 +1232,15 @@ function CellPropertiesPanel({
   updateCell: (cellId: string, updates: Partial<TitleBlockCell>) => void;
   tbDraft: TitleBlock;
 }) {
+  const t = useT();
   return (
     <div className="border border-[var(--color-border)] rounded p-2 bg-gray-50 space-y-2">
       <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-semibold">
-        Selected Cell
+        {t("Selected Cell")}
         {(cell.colSpan > 1 || cell.rowSpan > 1) && (
           <span className="ml-2 normal-case tracking-normal font-normal">
-            ({cell.colSpan} col{cell.colSpan > 1 ? "s" : ""} &times; {cell.rowSpan} row{cell.rowSpan > 1 ? "s" : ""})
+            ({cell.colSpan} {cell.colSpan > 1 ? t("cols") : t("col")} &times; {cell.rowSpan}{" "}
+            {cell.rowSpan > 1 ? t("rows") : t("row")})
           </span>
         )}
       </div>
@@ -1242,7 +1248,7 @@ function CellPropertiesPanel({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Content type */}
         <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-          Content:
+          {t("Content:")}
           <select
             className={smallSelect}
             value={cell.content.type}
@@ -1254,23 +1260,23 @@ function CellPropertiesPanel({
               else updateCell(cell.id, { content: { type: "pageNumber" } });
             }}
           >
-            <option value="field">Field</option>
-            <option value="static">Static Text</option>
-            <option value="logo">Logo</option>
-            <option value="pageNumber">Page Number</option>
+            <option value="field">{t("Field")}</option>
+            <option value="static">{t("Static Text")}</option>
+            <option value="logo">{t("Logo")}</option>
+            <option value="pageNumber">{t("Page Number")}</option>
           </select>
         </label>
 
         {cell.content.type === "field" && (
           <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-            Field:
+            {t("Field:")}
             <select
               className={smallSelect}
               value={cell.content.field}
               onChange={(e) => updateCell(cell.id, { content: { type: "field", field: e.target.value } })}
             >
               {BUILTIN_FIELD_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
+                <option key={f.value} value={f.value}>{t(f.label)}</option>
               ))}
               {tbDraft.customFields?.map((f) => (
                 <option key={f.id} value={f.id}>{f.label}</option>
@@ -1281,7 +1287,7 @@ function CellPropertiesPanel({
 
         {cell.content.type === "static" && (
           <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-            Text:
+            {t("Text:")}
             <input
               type="text"
               className={smallInput + " !w-28"}
@@ -1295,15 +1301,15 @@ function CellPropertiesPanel({
 
         {/* Font */}
         <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-          Font:
+          {t("Font:")}
           <select
             className={smallSelect}
             value={cell.fontFamily}
             onChange={(e) => updateCell(cell.id, { fontFamily: e.target.value as TitleBlockCell["fontFamily"] })}
           >
-            <option value="sans-serif">Sans</option>
-            <option value="serif">Serif</option>
-            <option value="monospace">Mono</option>
+            <option value="sans-serif">{t("Sans")}</option>
+            <option value="serif">{t("Serif")}</option>
+            <option value="monospace">{t("Mono")}</option>
           </select>
         </label>
 
@@ -1323,7 +1329,7 @@ function CellPropertiesPanel({
           className={`px-1.5 py-0.5 text-[10px] rounded border cursor-pointer ${cell.fontWeight === "bold" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-[var(--color-text-muted)] border-[var(--color-border)]"}`}
           onClick={() => updateCell(cell.id, { fontWeight: cell.fontWeight === "bold" ? "normal" : "bold" })}
         >
-          B
+          {t("B::bold-toggle")}
         </button>
 
         <div className="h-4 w-px bg-[var(--color-border)]" />
@@ -1336,7 +1342,7 @@ function CellPropertiesPanel({
               className={`px-1.5 py-0.5 text-[10px] rounded border cursor-pointer ${cell.align === a ? "bg-blue-600 text-white border-blue-600" : "bg-white text-[var(--color-text-muted)] border-[var(--color-border)]"}`}
               onClick={() => updateCell(cell.id, { align: a })}
             >
-              {a === "left" ? "L" : a === "center" ? "C" : "R"}
+              {a === "left" ? t("L::align-left") : a === "center" ? t("C::align-center") : t("R::align-right")}
             </button>
           ))}
         </div>

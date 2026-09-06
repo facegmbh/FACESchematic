@@ -14,6 +14,7 @@ import {
 import { fetchTemplates, getBundledTemplates } from "../templateApi";
 import { scoreTemplate } from "../templateSearch";
 import type { DeviceTemplate } from "../types";
+import { useT } from "../i18n";
 
 const MAPPING_ROLES = [
   { key: "sourceDevice", label: "Source Device" },
@@ -26,6 +27,7 @@ const MAPPING_ROLES = [
 ] as const;
 
 export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const importCsvData = useSchematicStore((s) => s.importCsvData);
 
   // Step state
@@ -54,7 +56,7 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
     try {
       const result = parseCsv(text);
       if (result.rows.length === 0) {
-        setError("No data rows found. Make sure the first row contains headers.");
+        setError(t("No data rows found. Make sure the first row contains headers."));
         setParseResult(null);
         return;
       }
@@ -62,10 +64,10 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
       setMapping(detectColumns(result.headers));
       setError(null);
     } catch {
-      setError("Failed to parse CSV data.");
+      setError(t("Failed to parse CSV data."));
       setParseResult(null);
     }
-  }, []);
+  }, [t]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,14 +92,14 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
     if (!parseResult || !mapping) return;
     const conns = extractConnections(parseResult.rows, mapping);
     if (conns.length === 0) {
-      setError("No valid connections found. Check your column mapping.");
+      setError(t("No valid connections found. Check your column mapping."));
       return;
     }
     setConnections(conns);
     const matches = matchDevices(conns, templates);
     setDeviceMatches(matches);
     setStep(2);
-  }, [parseResult, mapping, templates]);
+  }, [parseResult, mapping, templates, t]);
 
   // ---------- Step 2: Device Matching ----------
 
@@ -154,7 +156,7 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Import Cable Schedule {step === 2 ? "— Match Devices" : ""}
+            {t("Import Cable Schedule")} {step === 2 ? `— ${t("Match Devices")}` : ""}
           </h2>
           <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-lg leading-none">
             &times;
@@ -192,17 +194,20 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-border)]">
           {step === 2 && (
             <button className={btnSecondary} onClick={() => setStep(1)}>
-              &larr; Back
+              &larr; {t("Back")}
             </button>
           )}
-          <button className={btnSecondary} onClick={onClose}>Cancel</button>
+          <button className={btnSecondary} onClick={onClose}>{t("Cancel")}</button>
           {step === 1 ? (
             <button className={btnPrimary} disabled={!canProceed} onClick={goToStep2}>
-              Next &rarr;
+              {t("Next")} &rarr;
             </button>
           ) : (
             <button className={btnPrimary} onClick={handleImport}>
-              Import {deviceList.length} Devices, {connections.length} Connections
+              {t("Import {devices} devices, {connections} connections", {
+                devices: deviceList.length,
+                connections: connections.length,
+              })}
             </button>
           )}
         </div>
@@ -228,6 +233,7 @@ function Step1({
   onPaste: (text: string) => void;
   onUpdateMapping: (role: keyof ColumnMapping, col: number) => void;
 }) {
+  const t = useT();
   const [pasteText, setPasteText] = useState("");
 
   return (
@@ -236,14 +242,14 @@ function Step1({
       <div className="space-y-2">
         <div className="flex items-center gap-3">
           <label className={`px-3 py-1.5 text-xs font-medium rounded border border-[var(--color-border)] bg-white hover:bg-gray-50 cursor-pointer transition-colors`}>
-            Choose CSV File
+            {t("Choose CSV File")}
             <input type="file" accept=".csv,.tsv,.txt" onChange={onFileUpload} className="hidden" />
           </label>
-          <span className="text-[10px] text-[var(--color-text-muted)]">or paste below</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("or paste below")}</span>
         </div>
         <textarea
           className="w-full h-24 text-xs font-mono border border-[var(--color-border)] rounded p-2 resize-none focus:outline-none focus:border-blue-500"
-          placeholder="Paste CSV data here..."
+          placeholder={t("Paste CSV data here...")}
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           onBlur={() => onPaste(pasteText)}
@@ -258,7 +264,7 @@ function Step1({
       {parseResult && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
-            Preview ({parseResult.rows.length} rows)
+            {t("Preview ({n} rows)", { n: parseResult.rows.length })}
           </div>
           <div className="overflow-x-auto border border-[var(--color-border)] rounded">
             <table className="w-full text-[10px]">
@@ -291,20 +297,20 @@ function Step1({
       {mapping && parseResult && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
-            Column Mapping
+            {t("Column Mapping")}
           </div>
           <div className="grid grid-cols-2 gap-2">
             {MAPPING_ROLES.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
                 <span className={`text-xs w-28 ${key === "sourceDevice" || key === "destDevice" ? "font-medium" : "text-[var(--color-text-muted)]"}`}>
-                  {label}{(key === "sourceDevice" || key === "destDevice") ? " *" : ""}
+                  {t(label)}{(key === "sourceDevice" || key === "destDevice") ? " *" : ""}
                 </span>
                 <select
                   value={mapping[key]}
                   onChange={(e) => onUpdateMapping(key, Number(e.target.value))}
                   className="flex-1 text-xs border border-[var(--color-border)] rounded px-1.5 py-1 focus:outline-none focus:border-blue-500"
                 >
-                  <option value={-1}>(ignore)</option>
+                  <option value={-1}>{t("(ignore)")}</option>
                   {parseResult.headers.map((h, i) => (
                     <option key={i} value={i}>{h}</option>
                   ))}
@@ -343,14 +349,16 @@ function Step2({
   onSetMatch: (csvName: string, template: DeviceTemplate | null) => void;
   onCancelSearch: () => void;
 }) {
+  const t = useT();
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
-          Device Matching
+          {t("Device Matching")}
         </div>
         <div className="text-[10px] text-[var(--color-text-muted)]">
-          {matchedCount}/{deviceList.length} matched &middot; {connectionCount} connections
+          {t("{matched}/{total} matched", { matched: matchedCount, total: deviceList.length })} &middot;{" "}
+          {t("{n} connections", { n: connectionCount })}
         </div>
       </div>
 
@@ -369,13 +377,13 @@ function Step2({
                       className="text-[10px] text-blue-500 hover:underline"
                       onClick={() => onSearch(csvName)}
                     >
-                      Change
+                      {t("Change::button")}
                     </button>
                     <button
                       className="text-[10px] text-[var(--color-text-muted)] hover:underline"
                       onClick={() => onSetMatch(csvName, null)}
                     >
-                      Generic
+                      {t("Generic")}
                     </button>
                   </>
                 ) : (
@@ -383,7 +391,7 @@ function Step2({
                     className="text-[10px] text-blue-500 hover:underline"
                     onClick={() => onSearch(csvName)}
                   >
-                    Search Template
+                    {t("Search Template")}
                   </button>
                 )}
               </div>
@@ -395,14 +403,16 @@ function Step2({
                 <>
                   &rarr; {match.template.label}
                   {match.template.manufacturer && <span className="ml-1">({match.template.manufacturer})</span>}
-                  <span className="ml-1">&middot; {match.template.ports.length} ports</span>
+                  <span className="ml-1">&middot; {t("{n} ports", { n: match.template.ports.length })}</span>
                 </>
               ) : (
                 <>
-                  &rarr; Generic device
+                  &rarr; {t("Generic device")}
                   <span className="ml-1">
-                    ({match.inferredPorts.filter((p) => p.direction === "input").length} in,{" "}
-                    {match.inferredPorts.filter((p) => p.direction === "output").length} out)
+                    {t("({in} in, {out} out)", {
+                      in: match.inferredPorts.filter((p) => p.direction === "input").length,
+                      out: match.inferredPorts.filter((p) => p.direction === "output").length,
+                    })}
                   </span>
                 </>
               )}
@@ -416,7 +426,7 @@ function Step2({
                   value={searchQuery}
                   onChange={(e) => onSearchQueryChange(e.target.value)}
                   className="w-full text-xs border border-[var(--color-border)] rounded px-2 py-1 focus:outline-none focus:border-blue-500"
-                  placeholder="Search templates..."
+                  placeholder={t("Search templates...")}
                   autoFocus
                 />
                 {searchResults.length > 0 && (
@@ -443,13 +453,13 @@ function Step2({
                     className="text-[10px] text-[var(--color-text-muted)] hover:underline"
                     onClick={onCancelSearch}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </button>
                   <button
                     className="text-[10px] text-[var(--color-text-muted)] hover:underline"
                     onClick={() => onSetMatch(csvName, null)}
                   >
-                    Use Generic
+                    {t("Use Generic")}
                   </button>
                 </div>
               </div>

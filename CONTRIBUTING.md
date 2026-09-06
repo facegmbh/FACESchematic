@@ -85,8 +85,41 @@ If possible, export your schematic (File > Save as JSON) and attach it — this 
 - **Edge routing**: Custom A\* pathfinder in `src/edgeRouter.ts` — see `ROUTING_RULES.md` for the algorithm's aesthetic rules and penalty system
 - **Schema**: JSON files use versioned schemas with forward migrations in `src/migrations.ts`. Bumping the schema version requires a migration.
 - **Styling**: Tailwind CSS v4
+- **Translations**: `src/i18n/` — see *Translating the interface* below
 
 For a browsable reference of types, functions, and modules, see the **[Developer Reference](https://docs.easyschematic.live/dev/)** (auto-generated from the TypeScript source via TypeDoc). The curated public surface is defined in `src/devApi.ts` — anything re-exported there shows up in the reference. Regenerate locally with `npm run build:dev-reference` from the repo root.
+
+#### Translating the interface
+
+The editor ships English and German. English is the source language and doubles as
+the key set: `t("Save As...")` looks the string up in the active locale and falls
+back to the key itself, so a half-finished dictionary shows English rather than
+breaking.
+
+- **In a component**: `const t = useT();` then `{t("Add device")}`. The hook
+  subscribes to the language switch, so the text updates without a reload.
+- **Outside React** (store actions, export builders): import the plain `t` — those
+  run at event time, when the module-level locale is already current.
+- **Placeholders** instead of template strings: `t("Removed {n} symbols", { n })`.
+- **Two English strings that need different German**: add a `::context` suffix,
+  e.g. `t("Open::file-menu")`. The suffix is stripped for the fallback and never
+  reaches the screen.
+- **Never reword an existing English string** — it is the key, and the Playwright
+  specs select by it. Wrap it, leave it alone.
+- **Module-level label maps** keep their English values; translate where they are
+  rendered (`{t(LABELS[key])}`), not at import time.
+
+German lives in `src/i18n/de/`, one file per surface plus `common.ts` for words
+that appear everywhere. `common.ts` is merged last on purpose, so a shared button
+reads the same across the app.
+
+`npm run i18n:audit` reports coverage and, with `--list`, every key still missing
+a German translation.
+
+The default language comes from the build: `VITE_DEFAULT_LOCALE=de` in the
+Dockerfile ships the self-hosted image in German, while the public build stays
+English. Whatever the user picks under **File > Preferences > Display > Language**
+overrides it and is kept in their browser.
 
 #### Terminology
 

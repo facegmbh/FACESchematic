@@ -12,6 +12,7 @@ import {
   pointsToSvg,
 } from "../textStub";
 import { STUB_H_EST } from "../stubPlacement";
+import { useT } from "../i18n";
 
 /** Walk parent chain to compute absolute position. */
 function absolutePos(node: SchematicNode | undefined, nodeMap: Map<string, SchematicNode>): { x: number; y: number } {
@@ -48,6 +49,7 @@ function resolvePortAbs(
 }
 
 function TextStubNodeComponent({ id, data, selected }: NodeProps<TextStubNodeType>) {
+  const t = useT();
   const updateTextStubText = useSchematicStore((s) => s.updateTextStubText);
   const pushSnapshot = useSchematicStore((s) => s.pushSnapshot);
   const editingGlobal = useSchematicStore((s) => s.editingNodeId === id);
@@ -224,7 +226,7 @@ function TextStubNodeComponent({ id, data, selected }: NodeProps<TextStubNodeTyp
                 setEditingNodeId(null);
               }
             }}
-            placeholder="text"
+            placeholder={t("text")}
             style={{
               border: "none",
               outline: "none",

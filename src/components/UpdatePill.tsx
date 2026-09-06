@@ -1,8 +1,10 @@
 import { useSWStore } from "../swStore";
 import { triggerUpdate } from "../sw-register";
+import { useT } from "../i18n";
 
 export default function UpdatePill() {
   const updateAvailable = useSWStore((s) => s.updateAvailable);
+  const t = useT();
   if (!updateAvailable) return null;
 
   return (
@@ -16,13 +18,14 @@ export default function UpdatePill() {
       data-print-hide
     >
       <span>
-        <strong>New version available.</strong> Reload to pick up the latest fixes.
+        <strong>{t("New version available.")}</strong>{" "}
+        {t("Reload to pick up the latest fixes.")}
       </span>
       <button
         onClick={() => triggerUpdate()}
         className="text-xs cursor-pointer px-2 py-1 rounded bg-white/15 hover:bg-white/25 transition-colors shrink-0"
       >
-        Reload now
+        {t("Reload now")}
       </button>
     </div>
   );

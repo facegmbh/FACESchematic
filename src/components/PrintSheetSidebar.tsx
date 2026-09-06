@@ -1,7 +1,9 @@
 import { useSchematicStore } from "../store";
+import { useT } from "../i18n";
 import type { RackElevationPage } from "../types";
 
 export default function PrintSheetSidebar() {
+  const t = useT();
   const pages = useSchematicStore((s) => s.pages);
   const activePage = useSchematicStore((s) => s.activePage);
   const addViewport = useSchematicStore((s) => s.addViewport);
@@ -18,7 +20,7 @@ export default function PrintSheetSidebar() {
   return (
     <div className="w-44 bg-white border-r border-neutral-200 overflow-y-auto flex flex-col text-xs" data-print-hide>
       <div className="px-2 pt-2 pb-1 font-semibold text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>
-        Drag to Sheet
+        {t("Drag to Sheet")}
       </div>
       {elevationPages.map((ep) => (
         <div key={ep.id} className="mb-2">
@@ -48,7 +50,7 @@ export default function PrintSheetSidebar() {
                     });
                   }}
                 >
-                  {kind === "rack-front" ? "Front" : kind === "rack-rear" ? "Rear" : "Side"}
+                  {kind === "rack-front" ? t("Front") : kind === "rack-rear" ? t("Rear") : t("Side")}
                 </div>
               ))}
             </div>

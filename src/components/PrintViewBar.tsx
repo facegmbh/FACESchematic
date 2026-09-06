@@ -5,8 +5,17 @@ import { PAPER_SIZES, getPaperSize } from "../printConfig";
 import { computePageGrid } from "../printPageGrid";
 import { exportPdf } from "../pdfExport";
 import { collectColorKeyEntries } from "../colorKeyLayout";
+import { useT } from "../i18n";
+
+const CORNER_LABELS: Record<"top-left" | "top-right" | "bottom-left" | "bottom-right", string> = {
+  "top-left": "Top Left",
+  "top-right": "Top Right",
+  "bottom-left": "Bottom Left",
+  "bottom-right": "Bottom Right",
+};
 
 function PrintViewBar() {
+  const t = useT();
   const rfInstance = useReactFlow();
 
   const printPaperId = useSchematicStore((s) => s.printPaperId);
@@ -87,14 +96,14 @@ function PrintViewBar() {
     <div className="h-10 bg-blue-50 border-b border-blue-200 flex items-center px-3 gap-3 shrink-0" data-print-hide>
       {/* Paper size */}
       <label className="flex items-center gap-1.5 text-xs text-gray-600">
-        Paper
+        {t("Paper")}
         <select
           className="text-xs bg-white border border-gray-300 rounded px-1.5 py-0.5 text-gray-800"
           value={printPaperId}
           onChange={(e) => setPrintPaperId(e.target.value)}
         >
           {[...categories.entries()].map(([category, sizes]) => (
-            <optgroup key={category} label={category}>
+            <optgroup key={category} label={t(category)}>
               {sizes.map((ps) => (
                 <option key={ps.id} value={ps.id}>
                   {ps.label} ({ps.widthIn}&times;{ps.heightIn}&quot;)
@@ -102,8 +111,8 @@ function PrintViewBar() {
               ))}
             </optgroup>
           ))}
-          <optgroup label="Custom">
-            <option value="custom">Custom</option>
+          <optgroup label={t("Custom")}>
+            <option value="custom">{t("Custom")}</option>
           </optgroup>
         </select>
       </label>
@@ -144,7 +153,7 @@ function PrintViewBar() {
           }`}
           onClick={() => setPrintOrientation("landscape")}
         >
-          Landscape
+          {t("Landscape")}
         </button>
         <button
           className={`px-2 py-0.5 rounded border text-xs cursor-pointer ${
@@ -154,13 +163,13 @@ function PrintViewBar() {
           }`}
           onClick={() => setPrintOrientation("portrait")}
         >
-          Portrait
+          {t("Portrait")}
         </button>
       </div>
 
       {/* Scale */}
       <label className="flex items-center gap-1.5 text-xs text-gray-600">
-        Scale
+        {t("Scale")}
         <input
           type="range"
           min={0.25}
@@ -177,7 +186,7 @@ function PrintViewBar() {
 
       {/* Page offset */}
       <label className="flex items-center gap-1 text-xs text-gray-600">
-        Offset
+        {t("Offset")}
         <input
           type="number"
           step={20}
@@ -197,14 +206,14 @@ function PrintViewBar() {
             className="text-xs text-blue-600 hover:underline cursor-pointer"
             onClick={() => setPrintOriginOffset(0, 0)}
           >
-            Reset
+            {t("Reset")}
           </button>
         )}
       </label>
 
       {/* Page count */}
       <span className="text-xs text-gray-500">
-        {pages.length} page{pages.length !== 1 ? "s" : ""}
+        {pages.length === 1 ? t("1 page") : t("{n} pages", { n: pages.length })}
       </span>
 
       {/* Color Key */}
@@ -217,9 +226,9 @@ function PrintViewBar() {
                 : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
             }`}
             onClick={() => setColorKeyEnabled(!colorKeyEnabled)}
-            title="Toggle signal color key"
+            title={t("Toggle signal color key")}
           >
-            Color Key
+            {t("Color Key")}
           </button>
           <button
             className={`px-1 py-0.5 rounded-r border-t border-b border-r text-xs cursor-pointer ${
@@ -228,7 +237,7 @@ function PrintViewBar() {
                 : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
             }`}
             onClick={() => setCkPopoverOpen(!ckPopoverOpen)}
-            title="Color key settings"
+            title={t("Color key settings")}
           >
             <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M0 0l4 5 4-5z" /></svg>
           </button>
@@ -240,7 +249,7 @@ function PrintViewBar() {
             className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50 w-56"
           >
             {/* Corner picker */}
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Corner</div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{t("Corner")}</div>
             <div className="grid grid-cols-2 gap-1 mb-2">
               {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((c) => (
                 <button
@@ -252,13 +261,13 @@ function PrintViewBar() {
                   }`}
                   onClick={() => setColorKeyCorner(c)}
                 >
-                  {c.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join(" ")}
+                  {t(CORNER_LABELS[c])}
                 </button>
               ))}
             </div>
 
             {/* Columns */}
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Columns</div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{t("Columns")}</div>
             <div className="flex gap-1 mb-2">
               {[1, 2, 3, 4].map((n) => (
                 <button
@@ -276,19 +285,19 @@ function PrintViewBar() {
             </div>
 
             {/* Show on page */}
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Show On</div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{t("Show On")}</div>
             <select
               className="text-xs bg-white border border-gray-300 rounded px-1.5 py-0.5 text-gray-800 w-full mb-2"
               value={colorKeyPage}
               onChange={(e) => setColorKeyPage(e.target.value as "first" | "last" | "all")}
             >
-              <option value="first">First page</option>
-              <option value="last">Last page</option>
-              <option value="all">All pages</option>
+              <option value="first">{t("First page")}</option>
+              <option value="last">{t("Last page")}</option>
+              <option value="all">{t("All pages")}</option>
             </select>
 
             {/* Signal type overrides */}
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Signal Types</div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{t("Signal Types")}</div>
             <div className="max-h-40 overflow-y-auto space-y-0.5">
               {autoEntries.map(({ signalType, label, color }) => {
                 const isHidden = colorKeyOverrides?.[signalType] === false;
@@ -317,7 +326,7 @@ function PrintViewBar() {
                 );
               })}
               {autoEntries.length === 0 && (
-                <div className="text-xs text-gray-400 italic px-1">No connected signals</div>
+                <div className="text-xs text-gray-400 italic px-1">{t("No connected signals")}</div>
               )}
             </div>
           </div>
@@ -331,7 +340,7 @@ function PrintViewBar() {
         className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 font-medium cursor-pointer"
         onClick={handleExportPdf}
       >
-        Export PDF
+        {t("Export PDF")}
       </button>
 
     </div>

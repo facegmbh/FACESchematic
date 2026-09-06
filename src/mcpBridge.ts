@@ -409,6 +409,7 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
     if (template?.imageUrl) patch.imageUrl = template.imageUrl;
   }
   if (spec.hiddenInLegend !== undefined) patch.hiddenInLegend = Boolean(spec.hiddenInLegend) || undefined;
+  if (spec.hidden !== undefined) patch.hidden = Boolean(spec.hidden) || undefined;
   return patch;
 }
 
@@ -438,7 +439,7 @@ function floorplanSummary(page: FloorplanPage) {
       groupId: g.id, label: g.label, color: g.color, shape: g.shape, description: g.description,
       labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
       imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption, glyph: g.glyph,
-      hasUploadedSymbol: Boolean(g.symbolImageSrc), rotationDeg: g.rotationDeg,
+      hasUploadedSymbol: Boolean(g.symbolImageSrc), rotationDeg: g.rotationDeg, hidden: g.hidden ?? false,
       outlineColor: g.outlineColor, outlineWidthMm: g.outlineWidthMm,
       symbolCount: counts.get(g.id) ?? 0,
     })),

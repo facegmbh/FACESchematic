@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { DeviceData, DeviceTemplate, ConnectionEdge } from "../types";
 import { syncDeviceWithTemplate } from "../templateSync";
+import { useT, t } from "../i18n";
 
 const FIELD_LABELS: Record<string, string> = {
   manufacturer: "Manufacturer",
@@ -22,7 +23,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 function formatValue(v: unknown): string {
   if (v === undefined || v === null || v === "") return "—";
-  if (typeof v === "boolean") return v ? "yes" : "no";
+  if (typeof v === "boolean") return v ? t("yes") : t("no");
   return String(v);
 }
 
@@ -43,6 +44,7 @@ export default function TemplateSyncDialog({
   onConfirm,
   onCancel,
 }: TemplateSyncDialogProps) {
+  const t = useT();
   const { preview } = useMemo(
     () => syncDeviceWithTemplate(device, template, deviceId, edges),
     [device, template, deviceId, edges],
@@ -64,7 +66,7 @@ export default function TemplateSyncDialog({
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Update from template — v{device.templateVersion} → v{template.version}
+            {t("Update from template")} — v{device.templateVersion} → v{template.version}
           </span>
           <button
             onClick={onCancel}
@@ -77,20 +79,20 @@ export default function TemplateSyncDialog({
         <div className="px-5 py-4 flex flex-col gap-4 overflow-y-auto">
           {preview.factualChanges.length === 0 && !hasPortChanges && (
             <p className="text-xs text-[var(--color-text-muted)] italic">
-              No material changes — version bump only. Applying will update the stored template version.
+              {t("No material changes — version bump only. Applying will update the stored template version.")}
             </p>
           )}
 
           {preview.factualChanges.length > 0 && (
             <section>
               <h3 className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5">
-                Specs that will update
+                {t("Specs that will update")}
               </h3>
               <ul className="text-xs flex flex-col gap-1">
                 {preview.factualChanges.map((c) => (
                   <li key={c.field} className="flex items-center justify-between gap-2">
                     <span className="text-[var(--color-text)]">
-                      {FIELD_LABELS[c.field] ?? c.field}
+                      {t(FIELD_LABELS[c.field] ?? c.field)}
                     </span>
                     <span className="text-[var(--color-text-muted)] font-mono text-[11px]">
                       {formatValue(c.before)} → <span className="text-[var(--color-text-heading)]">{formatValue(c.after)}</span>
@@ -104,24 +106,24 @@ export default function TemplateSyncDialog({
           {hasPortChanges && (
             <section>
               <h3 className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5">
-                Ports
+                {t("Ports")}
               </h3>
               <ul className="text-xs flex flex-col gap-0.5">
                 {preview.portsAdded.length > 0 && (
                   <li>
-                    <span className="text-green-700">+ {preview.portsAdded.length} added:</span>{" "}
+                    <span className="text-green-700">+ {t("{n} added:", { n: preview.portsAdded.length })}</span>{" "}
                     <span className="text-[var(--color-text-muted)]">{preview.portsAdded.map((p) => p.label).join(", ")}</span>
                   </li>
                 )}
                 {preview.portsRemovedSafe.length > 0 && (
                   <li>
-                    <span className="text-red-700">− {preview.portsRemovedSafe.length} removed:</span>{" "}
+                    <span className="text-red-700">− {t("{n} removed:", { n: preview.portsRemovedSafe.length })}</span>{" "}
                     <span className="text-[var(--color-text-muted)]">{preview.portsRemovedSafe.map((p) => p.label).join(", ")}</span>
                   </li>
                 )}
                 {preview.portsOrphanedWithEdges.length > 0 && (
                   <li className="text-amber-700">
-                    ⚠ {preview.portsOrphanedWithEdges.length} orphaned (have connections — kept for manual cleanup):{" "}
+                    ⚠ {t("{n} orphaned (have connections — kept for manual cleanup):", { n: preview.portsOrphanedWithEdges.length })}{" "}
                     <span className="text-[var(--color-text-muted)]">{preview.portsOrphanedWithEdges.map((p) => p.label).join(", ")}</span>
                   </li>
                 )}
@@ -131,10 +133,10 @@ export default function TemplateSyncDialog({
 
           <section>
             <h3 className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5">
-              Preserved
+              {t("Preserved")}
             </h3>
             <p className="text-xs text-[var(--color-text-muted)]">
-              Custom label, color, hostname, port labels, DHCP config, installed cards, and existing connections are all kept.
+              {t("Custom label, color, hostname, port labels, DHCP config, installed cards, and existing connections are all kept.")}
             </p>
           </section>
         </div>
@@ -144,13 +146,13 @@ export default function TemplateSyncDialog({
             onClick={onCancel}
             className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={onConfirm}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
           >
-            Update
+            {t("Update")}
           </button>
         </div>
       </div>

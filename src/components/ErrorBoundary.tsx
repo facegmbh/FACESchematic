@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { t } from "../i18n";
 
 interface Props {
   children: ReactNode;
@@ -26,10 +27,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 text-white px-6">
         <img src="/favicon.svg" alt="FACESchematic" className="w-16 h-16 mb-6" />
-        <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
+        <h1 className="text-2xl font-bold mb-2">{t("Something went wrong")}</h1>
         <p className="text-slate-400 mb-1 text-center max-w-md">
-          FACESchematic hit an unexpected error. Your schematic is saved in your
-          browser and will be restored when you reload.
+          {t(
+            "FACESchematic hit an unexpected error. Your schematic is saved in your browser and will be restored when you reload.",
+          )}
         </p>
         {this.state.error && (
           <pre className="text-xs text-slate-500 mt-2 max-w-lg overflow-auto">
@@ -40,7 +42,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           className="mt-6 px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors"
           onClick={() => window.location.reload()}
         >
-          Reload
+          {t("Reload")}
         </button>
       </div>
     );

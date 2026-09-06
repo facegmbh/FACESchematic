@@ -5,8 +5,10 @@ import { resolvePort } from "../packList";
 import { LINE_STYLE_LABELS, LINE_STYLE_DASHARRAY, type DeviceData, type LineStyle } from "../types";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import MenuSubmenu from "./MenuSubmenu";
+import { useT } from "../i18n";
 
 export default function EdgeContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.edgeContextMenu);
   const { setCenter, getZoom, getInternalNode } = useReactFlow();
 
@@ -414,11 +416,11 @@ export default function EdgeContextMenu() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-xs text-gray-500 mb-1">
-          {editingLabel === "multicable" ? "Cable Label"
-            : editingLabel === "source" ? "Source-end Label"
-            : editingLabel === "target" ? "Target-end Label"
-            : editingLabel === "length" ? "Cable Length"
-            : "Midpoint Label"}
+          {editingLabel === "multicable" ? t("Cable Label")
+            : editingLabel === "source" ? t("Source-end Label")
+            : editingLabel === "target" ? t("Target-end Label")
+            : editingLabel === "length" ? t("Cable Length")
+            : t("Midpoint Label")}
         </div>
         <input
           className="w-full bg-gray-50 border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
@@ -433,9 +435,9 @@ export default function EdgeContextMenu() {
             }
           }}
           placeholder={
-            editingLabel === "multicable" ? "e.g. Audio Snake A"
-            : editingLabel === "length" ? "e.g. 50 ft"
-            : "e.g. Program Feed"
+            editingLabel === "multicable" ? t("e.g. Audio Snake A")
+            : editingLabel === "length" ? t("e.g. 50 ft")
+            : t("e.g. Program Feed")
           }
           autoFocus
         />
@@ -444,13 +446,13 @@ export default function EdgeContextMenu() {
             onClick={() => { setEditingLabel(false); useSchematicStore.setState({ edgeContextMenu: null }); }}
             className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-700 cursor-pointer"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={commitLabel}
             className="px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 cursor-pointer"
           >
-            Set
+            {t("Set")}
           </button>
         </div>
       </div>
@@ -475,43 +477,43 @@ export default function EdgeContextMenu() {
       {isMultiSelection && (
         <>
           <MenuItem
-            label={`Edit Properties of ${selectedEdgeObjs.length} Connections...`}
+            label={t("Edit Properties of {n} Connections...", { n: selectedEdgeObjs.length })}
             onClick={editSelectedProperties}
           />
           <div className="h-px bg-gray-200 my-1" />
         </>
       )}
-      <MenuItem label="Add Handle" onClick={addHandle} />
+      <MenuItem label={t("Add Handle")} onClick={addHandle} />
       {nearWaypoint && (
-        <MenuItem label="Remove Handle" onClick={removeHandle} />
+        <MenuItem label={t("Remove Handle")} onClick={removeHandle} />
       )}
       {hasManual && (
         <>
           <div className="h-px bg-gray-200 my-1" />
-          <MenuItem label="Reset Route" onClick={resetRoute} />
+          <MenuItem label={t("Reset Route")} onClick={resetRoute} />
         </>
       )}
       <div className="h-px bg-gray-200 my-1" />
-      <MenuItem label="Set Source-end Label..." onClick={setSourceEndLabel} />
-      <MenuItem label="Set Midpoint Label..." onClick={setConnectionLabel} />
-      <MenuItem label="Set Target-end Label..." onClick={setTargetEndLabel} />
+      <MenuItem label={t("Set Source-end Label...")} onClick={setSourceEndLabel} />
+      <MenuItem label={t("Set Midpoint Label...")} onClick={setConnectionLabel} />
+      <MenuItem label={t("Set Target-end Label...")} onClick={setTargetEndLabel} />
       {isTrunkEdge && (
-        <MenuItem label="Set Cable Label..." onClick={setCableLabel} />
+        <MenuItem label={t("Set Cable Label...")} onClick={setCableLabel} />
       )}
       {!isDirectAttach && (
-        <MenuItem label="Set Cable Length..." onClick={setCableLength} />
+        <MenuItem label={t("Set Cable Length...")} onClick={setCableLength} />
       )}
       <MenuItem
-        label={isCableIdHidden ? "Show Cable ID" : "Hide Cable ID"}
+        label={isCableIdHidden ? t("Show Cable ID") : t("Hide Cable ID")}
         onClick={toggleHideCableId}
       />
       <MenuItem
-        label={edgeCableIdMode === "endpoint" ? "Cable ID at Midpoint" : "Cable ID at Endpoints"}
+        label={edgeCableIdMode === "endpoint" ? t("Cable ID at Midpoint") : t("Cable ID at Endpoints")}
         onClick={toggleEdgeCableIdMode}
       />
       {hasLabelOffset && (
         <MenuItem
-          label="Reset Label Position"
+          label={t("Reset Label Position")}
           onClick={() => {
             useSchematicStore.getState().patchEdgeData(menu.edgeId, { labelOffset: undefined });
             useSchematicStore.setState({ edgeContextMenu: null });
@@ -519,41 +521,44 @@ export default function EdgeContextMenu() {
         />
       )}
       <MenuItem
-        label={isStubbed ? "Show Full Connection" : "Stub Connection"}
+        label={isStubbed ? t("Show Full Connection") : t("Stub Connection")}
         onClick={toggleStubbed}
       />
       {!isDirectAttach && (
         <>
           <MenuItem
-            label={isPatched ? "Patch via Panel (Add Hop)..." : "Patch via Panel..."}
+            label={isPatched ? t("Patch via Panel (Add Hop)...") : t("Patch via Panel...")}
             onClick={patchViaPanel}
           />
-          {isPatched && <MenuItem label="Remove Patching" onClick={removePatching} />}
+          {isPatched && <MenuItem label={t("Remove Patching")} onClick={removePatching} />}
         </>
       )}
       {canBundleSelection && (
         <>
           <div className="h-px bg-gray-200 my-1" />
-          <MenuItem label={`Bundle ${selectedEdgeObjs.length} Connections`} onClick={bundleSelection} />
+          <MenuItem
+            label={t("Bundle {n} Connections", { n: selectedEdgeObjs.length })}
+            onClick={bundleSelection}
+          />
         </>
       )}
       {inBundle && (
         <>
           <div className="h-px bg-gray-200 my-1" />
-          <MenuItem label="Select Bundle Members" onClick={selectBundleMembers} />
-          <MenuItem label="Remove from Bundle" onClick={removeFromBundleItem} />
-          <MenuItem label="Dissolve Bundle" onClick={dissolveBundleItem} />
+          <MenuItem label={t("Select Bundle Members")} onClick={selectBundleMembers} />
+          <MenuItem label={t("Remove from Bundle")} onClick={removeFromBundleItem} />
+          <MenuItem label={t("Dissolve Bundle")} onClick={dissolveBundleItem} />
         </>
       )}
       {(hasMismatch || allowIncompatible) && (
         <MenuItem
-          label={allowIncompatible ? "Disallow Incompatible" : "Allow Incompatible"}
+          label={allowIncompatible ? t("Disallow Incompatible") : t("Allow Incompatible")}
           onClick={toggleAllowIncompatible}
         />
       )}
       {connectsToAdapter && (
         <MenuItem
-          label={adapterIsHidden ? "Show Adapter" : "Hide Adapter"}
+          label={adapterIsHidden ? t("Show Adapter") : t("Hide Adapter")}
           onClick={toggleAdapterVisibility}
         />
       )}
@@ -561,29 +566,36 @@ export default function EdgeContextMenu() {
         <>
           <div className="h-px bg-gray-200 my-1" />
           <div className="px-3 py-1.5 flex items-center gap-2">
-            <span className="text-xs text-gray-700 flex-1">Cable Color</span>
+            <span className="text-xs text-gray-700 flex-1">{t("Cable Color")}</span>
             <input
               type="color"
               value={customColor || "#9ca3af"}
               onChange={(e) => setEdgeColor(e.target.value)}
               onClick={(e) => e.stopPropagation()}
               className="w-6 h-5 cursor-pointer border border-gray-300 rounded p-0.5 bg-white"
-              title={customColor ? `Override: ${customColor}` : "Pick a custom cable color"}
+              title={
+                customColor
+                  ? t("Override: {color}", { color: customColor })
+                  : t("Pick a custom cable color")
+              }
             />
             {customColor && (
               <button
                 onClick={clearEdgeColor}
                 className="text-[10px] text-gray-500 hover:text-red-600 underline cursor-pointer"
-                title="Reset to signal-type color"
+                title={t("Reset to signal-type color")}
               >
-                reset
+                {t("reset")}
               </button>
             )}
           </div>
         </>
       )}
       <div className="h-px bg-gray-200 my-1" />
-      <MenuSubmenu label={`Line Style: ${LINE_STYLE_LABELS[currentLineStyle]}`} minWidth={180}>
+      <MenuSubmenu
+        label={t("Line Style: {style}", { style: t(LINE_STYLE_LABELS[currentLineStyle]) })}
+        minWidth={180}
+      >
         {(["solid", "dashed", "dotted", "dash-dot"] as LineStyle[]).map((ls) => (
           <button
             key={ls}
@@ -602,13 +614,13 @@ export default function EdgeContextMenu() {
                 strokeDasharray={LINE_STYLE_DASHARRAY[ls] ?? "none"}
               />
             </svg>
-            <span>{LINE_STYLE_LABELS[ls]}</span>
+            <span>{t(LINE_STYLE_LABELS[ls])}</span>
           </button>
         ))}
       </MenuSubmenu>
       <div className="h-px bg-gray-200 my-1" />
-      <MenuItem label="Go to Source" onClick={() => goToNode(edge?.source)} />
-      <MenuItem label="Go to Destination" onClick={() => goToNode(edge?.target)} />
+      <MenuItem label={t("Go to Source")} onClick={() => goToNode(edge?.source)} />
+      <MenuItem label={t("Go to Destination")} onClick={() => goToNode(edge?.target)} />
     </div>
   );
 }

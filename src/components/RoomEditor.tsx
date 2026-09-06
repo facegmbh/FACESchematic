@@ -3,6 +3,7 @@ import { useSchematicStore } from "../store";
 import { DEFAULT_DISTANCE_SETTINGS } from "../types";
 import type { DistanceSettings, RackElevationPage, RoomData, RoomNode, SchematicNode } from "../types";
 import { getTopLevelRoomId, isTopLevelRoom, listTopLevelRooms, pairKey } from "../roomDistance";
+import { useT } from "../i18n";
 
 const BORDER_STYLES: { value: RoomData["borderStyle"]; label: string }[] = [
   { value: "dashed", label: "Dashed" },
@@ -18,6 +19,7 @@ const PRESET_COLORS = [
 ];
 
 export default function RoomEditor() {
+  const t = useT();
   const editingNodeId = useSchematicStore((s) => s.editingNodeId);
   const nodes = useSchematicStore((s) => s.nodes);
   const allPages = useSchematicStore((s) => s.pages);
@@ -89,7 +91,7 @@ export default function RoomEditor() {
       <div className="bg-white border border-[var(--color-border)] rounded-lg shadow-2xl w-[360px] flex flex-col">
         {/* Header */}
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">Room Properties</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">{t("Room Properties")}</h2>
           <button
             onClick={close}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] text-lg leading-none cursor-pointer"
@@ -103,13 +105,13 @@ export default function RoomEditor() {
           {/* Label */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Label
+              {t("Label")}
             </label>
             <input
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Room name"
+              placeholder={t("Room name")}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handleSave(); }}
               autoFocus
             />
@@ -118,7 +120,7 @@ export default function RoomEditor() {
           {/* Lock */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Position Lock
+              {t("Position Lock")}
             </label>
             <button
               onClick={() => {
@@ -132,14 +134,14 @@ export default function RoomEditor() {
                   : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:text-[var(--color-text-heading)]"
               }`}
             >
-              {locked ? "Locked" : "Unlocked"}
+              {locked ? t("Locked") : t("Unlocked")}
             </button>
           </div>
 
           {/* Equipment Rack */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Equipment Rack
+              {t("Equipment Rack")}
             </label>
             <button
               onClick={() => { setIsEquipmentRack(!isEquipmentRack); if (isEquipmentRack) { setLinkedRackPageId(""); setLinkedRackId(""); } }}
@@ -149,7 +151,7 @@ export default function RoomEditor() {
                   : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:text-[var(--color-text-heading)]"
               }`}
             >
-              {isEquipmentRack ? "Yes" : "No"}
+              {isEquipmentRack ? t("Yes") : t("No")}
             </button>
           </div>
 
@@ -157,14 +159,14 @@ export default function RoomEditor() {
           {isEquipmentRack && pages.length > 0 && (
             <div className="flex flex-col gap-1">
               <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                Linked Rack
+                {t("Linked Rack")}
               </label>
               <select
                 className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
                 value={linkedRackPageId}
                 onChange={(e) => { setLinkedRackPageId(e.target.value); setLinkedRackId(""); }}
               >
-                <option value="">— Page —</option>
+                <option value="">{t("— Page —")}</option>
                 {pages.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select>
               {selectedPage && (
@@ -173,7 +175,7 @@ export default function RoomEditor() {
                   value={linkedRackId}
                   onChange={(e) => setLinkedRackId(e.target.value)}
                 >
-                  <option value="">— Rack —</option>
+                  <option value="">{t("— Rack —")}</option>
                   {selectedPage.racks.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                 </select>
               )}
@@ -192,7 +194,7 @@ export default function RoomEditor() {
           {/* Label Size */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Label Size
+              {t("Label Size")}
             </label>
             <select
               className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
@@ -208,7 +210,7 @@ export default function RoomEditor() {
           {/* Background Color */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Background Color
+              {t("Background Color")}
             </label>
             <div className="flex items-center gap-1.5">
               {PRESET_COLORS.map((c) => (
@@ -219,7 +221,7 @@ export default function RoomEditor() {
                     color === c ? "ring-2 ring-blue-500 ring-offset-1" : "hover:scale-110"
                   }`}
                   style={{ background: c || "white", borderColor: c ? "transparent" : "var(--color-border)" }}
-                  title={c || "None"}
+                  title={c || t("None")}
                 />
               ))}
               <input
@@ -235,7 +237,7 @@ export default function RoomEditor() {
           {/* Border Style */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Border Style
+              {t("Border Style")}
             </label>
             <div className="flex items-center gap-2">
               {BORDER_STYLES.map((bs) => (
@@ -248,7 +250,7 @@ export default function RoomEditor() {
                       : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:text-[var(--color-text-heading)]"
                   }`}
                 >
-                  {bs.label}
+                  {t(bs.label)}
                 </button>
               ))}
             </div>
@@ -257,7 +259,7 @@ export default function RoomEditor() {
           {/* Border Color */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Border Color
+              {t("Border Color")}
             </label>
             <div className="flex items-center gap-1.5">
               {PRESET_COLORS.map((c) => (
@@ -268,7 +270,7 @@ export default function RoomEditor() {
                     borderColor === c ? "ring-2 ring-blue-500 ring-offset-1" : "hover:scale-110"
                   }`}
                   style={{ background: c || "#d4d4d4", borderColor: c ? "transparent" : "var(--color-border)" }}
-                  title={c || "Default"}
+                  title={c || t("Default")}
                 />
               ))}
               <input
@@ -288,13 +290,13 @@ export default function RoomEditor() {
             onClick={close}
             className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={handleSave}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
           >
-            Apply
+            {t("Apply")}
           </button>
         </div>
       </div>
@@ -315,6 +317,7 @@ function RoomDistancesSection({
   unit: DistanceSettings["unit"];
   setRoomDistance: (a: string, b: string, distance: number | undefined) => void;
 }) {
+  const t = useT();
   const topLevel = isTopLevelRoom(roomId, nodes);
   const ancestorId = useMemo(() => getTopLevelRoomId(roomId, nodes), [roomId, nodes]);
   const others = useMemo(
@@ -325,15 +328,18 @@ function RoomDistancesSection({
   if (!topLevel) {
     const ancestorLabel =
       ancestorId
-        ? (nodes.find((n) => n.id === ancestorId)?.data as RoomData | undefined)?.label ?? "parent room"
-        : "parent room";
+        ? (nodes.find((n) => n.id === ancestorId)?.data as RoomData | undefined)?.label ?? t("parent room")
+        : t("parent room");
     return (
       <div>
         <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Distances
+          {t("Distances")}
         </label>
         <p className="text-[11px] text-[var(--color-text-muted)]">
-          Inherited from the top-level room ({ancestorLabel}). Edit distances on that room or in Reports &rsaquo; Room Distances.
+          {t(
+            "Inherited from the top-level room ({room}). Edit distances on that room or in Reports \u203a Room Distances.",
+            { room: ancestorLabel },
+          )}
         </p>
       </div>
     );
@@ -343,10 +349,10 @@ function RoomDistancesSection({
     return (
       <div>
         <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Distances
+          {t("Distances")}
         </label>
         <p className="text-[11px] text-[var(--color-text-muted)]">
-          Add another top-level room to set a distance.
+          {t("Add another top-level room to set a distance.")}
         </p>
       </div>
     );
@@ -358,7 +364,7 @@ function RoomDistancesSection({
   return (
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-        Distances ({unit})
+        {t("Distances ({unit})", { unit })}
       </label>
       <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1">
         {others.map((r) => {

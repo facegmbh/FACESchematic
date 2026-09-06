@@ -280,6 +280,11 @@ export interface LegendRow {
   count: number;
 }
 
+/** Symbols of a switched-off group are not drawn, exported or listed. */
+export function isGroupVisible(group: Pick<FloorplanSymbolGroup, "hidden"> | undefined): boolean {
+  return Boolean(group) && !group!.hidden;
+}
+
 /** What to show for a legend row's product shot: the uploaded copy first, else the
  *  remote reference (template image now, Odoo product image later). */
 export function legendRowImage(row: Pick<LegendRow, "imageSrc" | "imageUrl">): string | undefined {
@@ -293,6 +298,8 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
   for (const s of page.symbols) counts.set(s.groupId, (counts.get(s.groupId) ?? 0) + 1);
 
   return page.groups
+    // A switched-off layer is not on the plan, so it has nothing to explain in the legend.
+    .filter((g) => !g.hidden)
     .filter((g) => !g.hiddenInLegend)
     .filter((g) => !page.legend.onlyUsedGroups || (counts.get(g.id) ?? 0) > 0)
     .map((g) => ({

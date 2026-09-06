@@ -61,6 +61,7 @@ import {
   DEFAULT_FLOORPLAN_NOTE_WIDTH_MM,
 } from "./types";
 import { pairKey } from "./roomDistance";
+import { t } from "./i18n";
 import {
   FLOORPLAN_GROUP_COLORS,
   FLOORPLAN_KIND_PRESETS,
@@ -1219,7 +1220,7 @@ function applyRoutingResult(r: RoutingResult): void {
   }
 
   if (r.overBudget) {
-    state.addToast("Auto-routing disabled — schematic is too large for real-time routing", "info");
+    state.addToast(t("Auto-routing disabled — schematic is too large for real-time routing"), "info");
   }
 
   // Normalize edge zIndex: boost line-jump-hop edges to 1, everyone else 0.
@@ -2105,13 +2106,25 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       const removedCount = elevPages(state.pages).reduce((sum, p) => sum + p.placements.length, 0) -
         elevPages(pages).reduce((sum, p) => sum + p.placements.length, 0);
       if (removedCount > 0) {
-        get().addToast(`Removed ${removedCount} rack placement${removedCount > 1 ? "s" : ""} for deleted device${selectedNodeIds.size > 1 ? "s" : ""}`, "info");
+        const forDevices = selectedNodeIds.size > 1 ? t("deleted devices") : t("a deleted device");
+        get().addToast(
+          removedCount === 1
+            ? t("Removed 1 rack placement for {devices}", { devices: forDevices })
+            : t("Removed {n} rack placements for {devices}", { n: removedCount, devices: forDevices }),
+          "info",
+        );
       }
       const planPages = (ps: SchematicPage[]) => ps.filter((p): p is FloorplanPage => p.type === "floorplan");
       const removedSymbols = planPages(state.pages).reduce((sum, p) => sum + p.symbols.length, 0) -
         planPages(pages).reduce((sum, p) => sum + p.symbols.length, 0);
       if (removedSymbols > 0) {
-        get().addToast(`Removed ${removedSymbols} floorplan symbol${removedSymbols > 1 ? "s" : ""} for deleted device${selectedNodeIds.size > 1 ? "s" : ""}`, "info");
+        const forDevices = selectedNodeIds.size > 1 ? t("deleted devices") : t("a deleted device");
+        get().addToast(
+          removedSymbols === 1
+            ? t("Removed 1 floorplan symbol for {devices}", { devices: forDevices })
+            : t("Removed {n} floorplan symbols for {devices}", { n: removedSymbols, devices: forDevices }),
+          "info",
+        );
       }
     }
 
@@ -3134,9 +3147,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     const droppedCount = [...droppedEdgeIds].filter((id) => state.edges.some((e) => e.id === id)).length;
     const installedCount = plan.installedCards.filter((c) => c.enabled).length;
-    let toast = `Swapped to ${newTemplate.label}: ${remappedCount} connection${remappedCount !== 1 ? "s" : ""} remapped`;
-    if (droppedCount > 0) toast += `, ${droppedCount} dropped`;
-    if (installedCount > 0) toast += `; ${installedCount} card${installedCount !== 1 ? "s" : ""} installed`;
+    let toast = remappedCount === 1
+      ? t("Swapped to {label}: 1 connection remapped", { label: newTemplate.label })
+      : t("Swapped to {label}: {n} connections remapped", { label: newTemplate.label, n: remappedCount });
+    if (droppedCount > 0) toast += t(", {n} dropped", { n: droppedCount });
+    if (installedCount > 0) {
+      toast += installedCount === 1
+        ? t("; 1 card installed")
+        : t("; {n} cards installed", { n: installedCount });
+    }
     get().addToast(toast, "success");
     get().saveToLocalStorage();
   },
@@ -6786,7 +6805,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       edges: gc.edges,
       bundles: gc.bundles,
     });
-    if (wasBundled) get().addToast("Removed from bundle (stubbed)", "info");
+    if (wasBundled) get().addToast(t("Removed from bundle (stubbed)"), "info");
     get().saveToLocalStorage();
   },
 
@@ -6987,7 +7006,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     const ids = edgeIds.filter((id) => state.edges.some((e) => e.id === id && e.data?.signalType));
     if (ids.length < 2) {
-      get().addToast("Select at least 2 connections to bundle", "info");
+      get().addToast(t("Select at least 2 connections to bundle"), "info");
       return;
     }
     pushUndo({ nodes: state.nodes, edges: state.edges });

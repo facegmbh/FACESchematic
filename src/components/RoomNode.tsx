@@ -3,6 +3,7 @@ import { NodeResizer, type NodeProps } from "@xyflow/react";
 import type { RoomNode as RoomNodeType, SchematicNode } from "../types";
 import { useSchematicStore } from "../store";
 import { computeResizeSnap } from "../snapUtils";
+import { useT } from "../i18n";
 
 function RackIcon() {
   return (
@@ -36,6 +37,7 @@ function UnlockIcon() {
 }
 
 function RoomNodeComponent({ id, data, selected }: NodeProps<RoomNodeType>) {
+  const t = useT();
   const updateRoomLabel = useSchematicStore((s) => s.updateRoomLabel);
   const toggleRoomLock = useSchematicStore((s) => s.toggleRoomLock);
   const setResizeGuides = useSchematicStore((s) => s.setResizeGuides);
@@ -173,7 +175,7 @@ function RoomNodeComponent({ id, data, selected }: NodeProps<RoomNodeType>) {
               e.stopPropagation();
               toggleRoomLock(id);
             }}
-            title={locked ? "Unlock room" : "Lock room"}
+            title={locked ? t("Unlock room") : t("Lock room")}
           >
             {locked ? <LockIcon /> : <UnlockIcon />}
           </button>

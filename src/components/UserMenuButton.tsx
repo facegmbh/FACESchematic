@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { checkSession, logout } from "../templateApi";
 import { clearCache } from "../cloudCache";
 import LoginDialog from "./LoginDialog";
+import { useT } from "../i18n";
 
 interface User {
   id: string;
@@ -15,6 +16,7 @@ export default function UserMenuButton() {
   const [showLogin, setShowLogin] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   useEffect(() => {
     checkSession().then((u) => {
@@ -56,7 +58,7 @@ export default function UserMenuButton() {
           onClick={() => setShowLogin(true)}
           className="px-3 py-1.5 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-heading)] rounded transition-colors cursor-pointer"
         >
-          Log in
+          {t("Log in")}
         </button>
         <LoginDialog open={showLogin} onClose={() => setShowLogin(false)} />
       </>
@@ -95,13 +97,13 @@ export default function UserMenuButton() {
             className="block px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)] transition-colors"
             style={{ color: "var(--color-text)" }}
           >
-            Device Library ↗
+            {t("Device Library ↗")}
           </a>
           <button
             onClick={handleLogout}
             className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
           >
-            Log out
+            {t("Log out")}
           </button>
         </div>
       )}

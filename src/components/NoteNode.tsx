@@ -3,6 +3,7 @@ import { NodeResizer, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { NoteNode as NoteNodeType } from "../types";
 import { useSchematicStore } from "../store";
 import { sanitizeNoteHtml } from "../sanitizeHtml";
+import { useT } from "../i18n";
 
 const FORMATS = [
   { cmd: "bold", label: "B", style: "font-bold" },
@@ -31,6 +32,7 @@ const COLOR_PRESETS: Array<{ value: string; label: string }> = [
 ];
 
 function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
+  const t = useT();
   const updateNoteHtml = useSchematicStore((s) => s.updateNoteHtml);
   const pushSnapshot = useSchematicStore((s) => s.pushSnapshot);
   const { updateNodeData } = useReactFlow();
@@ -162,7 +164,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                     ? "bg-amber-300/80 text-amber-950"
                     : "text-amber-800 hover:bg-amber-200/60"
                 }`}
-                title={cmd}
+                title={t(cmd)}
               >
                 {label}
               </button>
@@ -176,7 +178,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                   execCmd("fontSize", size);
                 }}
                 className="w-5 h-5 flex items-center justify-center rounded text-[10px] text-amber-800 hover:bg-amber-200/60 transition-colors"
-                title={`Size ${label}`}
+                title={t("Size {label}", { label })}
               >
                 {label}
               </button>
@@ -188,7 +190,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                 execCmd("insertUnorderedList");
               }}
               className="w-5 h-5 flex items-center justify-center rounded text-[10px] text-amber-800 hover:bg-amber-200/60 transition-colors"
-              title="Bullet list"
+              title={t("Bullet list")}
             >
               &bull;
             </button>
@@ -206,7 +208,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                 setShowColors((v) => !v);
               }}
               className="w-5 h-5 flex items-center justify-center rounded-full border border-amber-400 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100"
-              title="Note color"
+              title={t("Note color")}
             >
               <span
                 className="w-3 h-3 rounded-full border border-amber-300"
@@ -236,7 +238,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                         "repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 0 0 / 8px 8px",
                       borderColor: p.value ? "transparent" : "var(--color-border)",
                     }}
-                    title={p.label}
+                    title={t(p.label)}
                   />
                 ))}
                 <input
@@ -245,7 +247,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteNodeType>) {
                   onMouseDown={(e) => e.stopPropagation()}
                   onChange={(e) => setColor(e.target.value)}
                   className="w-5 h-5 cursor-pointer border-0 p-0"
-                  title="Custom note color"
+                  title={t("Custom note color")}
                 />
               </div>
             )}

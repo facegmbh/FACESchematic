@@ -5,6 +5,7 @@ import type { DeviceTemplate } from "../types";
 import { useSchematicStore, GRID_SIZE } from "../store";
 import { DEVICE_NODE_WIDTH } from "../gridConstants";
 import { scoreTemplate } from "../templateSearch";
+import { useT } from "../i18n";
 
 const MAX_RESULTS = 12;
 
@@ -36,6 +37,7 @@ export default function QuickAddDevice({
   onClose: () => void;
   onOpenDeviceCreator?: () => void;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
@@ -246,7 +248,7 @@ export default function QuickAddDevice({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Add device, note, room..."
+            placeholder={t("Add device, note, room...")}
             className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2.5 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 placeholder:text-[var(--color-text-muted)]"
           />
         </div>
@@ -263,7 +265,9 @@ export default function QuickAddDevice({
                 onMouseDown={(e) => { e.preventDefault(); setOpenPanel((p) => p === "category" ? null : "category"); }}
                 className="flex-1 min-w-0 px-1.5 py-1 text-[10px] text-left truncate"
               >
-                {selectedCategories.size > 0 ? `Categories (${selectedCategories.size})` : "Categories"}
+                {selectedCategories.size > 0
+                  ? t("Categories ({n})", { n: selectedCategories.size })
+                  : t("Categories")}
               </button>
               {selectedCategories.size > 0 && (
                 <button
@@ -285,7 +289,9 @@ export default function QuickAddDevice({
                 onMouseDown={(e) => { e.preventDefault(); setOpenPanel((p) => p === "brand" ? null : "brand"); }}
                 className="flex-1 min-w-0 px-1.5 py-1 text-[10px] text-left truncate"
               >
-                {selectedBrands.size > 0 ? `Brands (${selectedBrands.size})` : "Brands"}
+                {selectedBrands.size > 0
+                  ? t("Brands ({n})", { n: selectedBrands.size })
+                  : t("Brands")}
               </button>
               {selectedBrands.size > 0 && (
                 <button
@@ -335,7 +341,7 @@ export default function QuickAddDevice({
         <div ref={listRef} className="max-h-64 overflow-y-auto">
           {results.length === 0 && (query || hasFilter) && (
             <div className="text-xs text-[var(--color-text-muted)] text-center py-4">
-              No matching devices
+              {t("No matching devices")}
             </div>
           )}
           {results.map((result, i) => {
@@ -355,8 +361,8 @@ export default function QuickAddDevice({
                     {result.item.kind === "note" ? "📝" : result.item.kind === "room" ? "▢" : "⊞"}
                   </span>
                   <div className="flex flex-col gap-0 flex-1 min-w-0">
-                    <span className="text-xs font-medium truncate">{result.label}</span>
-                    <span className="text-[10px] text-[var(--color-text-muted)] truncate">{result.subtitle}</span>
+                    <span className="text-xs font-medium truncate">{t(result.label)}</span>
+                    <span className="text-[10px] text-[var(--color-text-muted)] truncate">{t(result.subtitle)}</span>
                   </div>
                 </div>
               );
@@ -387,9 +393,9 @@ export default function QuickAddDevice({
           })}
         </div>
         <div className="px-3 py-1.5 border-t border-[var(--color-border)] text-[9px] text-[var(--color-text-muted)] flex gap-3">
-          <span><kbd className="font-mono">↑↓</kbd> navigate</span>
-          <span><kbd className="font-mono">Enter</kbd> place</span>
-          <span><kbd className="font-mono">Esc</kbd> cancel</span>
+          <span><kbd className="font-mono">↑↓</kbd> {t("navigate")}</span>
+          <span><kbd className="font-mono">Enter</kbd> {t("place")}</span>
+          <span><kbd className="font-mono">Esc</kbd> {t("cancel")}</span>
         </div>
       </div>
     </div>

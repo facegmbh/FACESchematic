@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import type { BundleJunctionNode as BundleJunctionNodeType } from "../types";
 import { useSchematicStore } from "../store";
+import { useT } from "../i18n";
 
 /**
  * A bundle's draggable break-in / break-out point — the gather (role "in") and fan
@@ -14,6 +15,7 @@ import { useSchematicStore } from "../store";
  * Select a member to reveal the handles, then drag to reshape the trunk.
  */
 function BundleJunctionNodeComponent({ data, selected }: NodeProps<BundleJunctionNodeType>) {
+  const t = useT();
   const memberSelected = useSchematicStore((s) =>
     s.edges.some((e) => e.data?.bundleId === data.bundleId && e.selected),
   );
@@ -23,7 +25,7 @@ function BundleJunctionNodeComponent({ data, selected }: NodeProps<BundleJunctio
   return (
     <div
       data-bundle-junction={data.role}
-      title={`Bundle break-${data.role}`}
+      title={data.role === "in" ? t("Bundle break-in") : t("Bundle break-out")}
       style={{
         // Center the handle on the anchor point (the router's gather/fan point) so the
         // trunk meets the handle's center, not a corner.

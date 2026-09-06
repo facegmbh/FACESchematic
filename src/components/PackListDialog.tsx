@@ -11,6 +11,7 @@ import {
   type PackListAdapter,
 } from "../packList";
 import { createDefaultPackListLayout } from "../reportLayout";
+import { useT } from "../i18n";
 import ReportPreviewDialog from "./ReportPreviewDialog";
 
 type Tab = "devices" | "cables";
@@ -22,6 +23,7 @@ interface PackListDialogProps {
 const REPORT_LAYOUT_KEY = "easyschematic-packlist-layout";
 
 function PackListDialog({ onClose }: PackListDialogProps) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const schematicName = useSchematicStore((s) => s.schematicName);
@@ -60,7 +62,7 @@ function PackListDialog({ onClose }: PackListDialogProps) {
           {/* Header */}
           <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-3">
             <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
-              Pack List
+              {t("Pack List")}
             </h2>
             <div className="flex-1" />
             <button
@@ -86,10 +88,10 @@ function PackListDialog({ onClose }: PackListDialogProps) {
           {/* Tabs */}
           <div className="px-4 pt-2 flex items-center gap-1 border-b border-[var(--color-border)]">
             <button className={tabClass("devices")} onClick={() => setTab("devices")}>
-              Devices
+              {t("Devices")}
             </button>
             <button className={tabClass("cables")} onClick={() => setTab("cables")}>
-              Cables
+              {t("Cables")}
             </button>
           </div>
 
@@ -105,7 +107,7 @@ function PackListDialog({ onClose }: PackListDialogProps) {
                       onChange={(e) => setGroupDevicesByRoom(e.target.checked)}
                       className="accent-blue-600"
                     />
-                    Group by Room
+                    {t("Group by Room")}
                   </label>
                 </div>
                 <DevicesTab devices={data.devices} groupByRoom={groupDevicesByRoom} />
@@ -121,7 +123,7 @@ function PackListDialog({ onClose }: PackListDialogProps) {
                       onChange={(e) => setGroupCablesByPath(e.target.checked)}
                       className="accent-blue-600"
                     />
-                    Group by Path
+                    {t("Group by Path")}
                   </label>
                 </div>
                 <CablesTab summary={data.summary} adapters={data.adapters} groupByPath={groupCablesByPath} />
@@ -209,8 +211,9 @@ function DevicesTab({
   devices: PackListDevice[];
   groupByRoom: boolean;
 }) {
+  const t = useT();
   if (devices.length === 0) {
-    return <Empty>No devices in this schematic.</Empty>;
+    return <Empty>{t("No devices in this schematic.")}</Empty>;
   }
 
   if (groupByRoom) {
@@ -219,9 +222,9 @@ function DevicesTab({
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className={thClass}>Qty</th>
-            <th className={thClass}>Device</th>
-            <th className={thClass}>Type</th>
+            <th className={thClass}>{t("Qty")}</th>
+            <th className={thClass}>{t("Device")}</th>
+            <th className={thClass}>{t("Type")}</th>
           </tr>
         </thead>
         <tbody>
@@ -241,9 +244,9 @@ function DevicesTab({
     <table className="w-full border-collapse">
       <thead>
         <tr>
-          <th className={thClass}>Qty</th>
-          <th className={thClass}>Device</th>
-          <th className={thClass}>Type</th>
+          <th className={thClass}>{t("Qty")}</th>
+          <th className={thClass}>{t("Device")}</th>
+          <th className={thClass}>{t("Type")}</th>
         </tr>
       </thead>
       <tbody>
@@ -262,8 +265,9 @@ function CablesTab({
   adapters: PackListAdapter[];
   groupByPath: boolean;
 }) {
+  const t = useT();
   if (summary.length === 0 && adapters.length === 0) {
-    return <Empty>No connections in this schematic.</Empty>;
+    return <Empty>{t("No connections in this schematic.")}</Empty>;
   }
 
   const adapterRows = adapters.length > 0 && (
@@ -273,7 +277,7 @@ function CablesTab({
           colSpan={99}
           className="pt-3 pb-1 px-2 text-xs font-semibold text-[var(--color-text-heading)] border-b border-[var(--color-border)]"
         >
-          Adapters ({adapters.reduce((sum, a) => sum + a.count, 0)})
+          {t("Adapters ({n})", { n: adapters.reduce((sum, a) => sum + a.count, 0) })}
         </td>
       </tr>
       {adapters.map((a, i) => (
@@ -296,16 +300,16 @@ function CablesTab({
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className={thClass}>Qty</th>
-            <th className={thClass}>Cable Type</th>
-            <th className={thClass}>Signal</th>
-            <th className={thClass}>Route</th>
+            <th className={thClass}>{t("Qty")}</th>
+            <th className={thClass}>{t("Cable Type")}</th>
+            <th className={thClass}>{t("Signal")}</th>
+            <th className={thClass}>{t("Route")}</th>
           </tr>
         </thead>
         <tbody>
           {[...groups.entries()].map(([room, rows]) => (
             <>
-              <RoomHeader key={`h-${room}`} room={room} />
+              <RoomHeader key={`h-${room}`} room={room === "Unassigned" ? t("Unassigned") : room} />
               {rows.map((s, i) => (
                 <tr key={`${room}-${i}`} className={rowClass(i)}>
                   <td className={tdClass}>{s.count}×</td>
@@ -328,9 +332,9 @@ function CablesTab({
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className={thClass}>Qty</th>
-            <th className={thClass}>Cable Type</th>
-            <th className={thClass}>Signal</th>
+            <th className={thClass}>{t("Qty")}</th>
+            <th className={thClass}>{t("Cable Type")}</th>
+            <th className={thClass}>{t("Signal")}</th>
           </tr>
         </thead>
         <tbody>

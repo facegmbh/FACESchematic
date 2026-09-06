@@ -1,6 +1,7 @@
 import type { DeviceTemplate } from "./types";
 import fallbackData from "./deviceLibrary.fallback.json";
 import { loadCachedTemplates, saveCachedTemplates } from "./templateCache";
+import { t } from "./i18n";
 
 const API_URL =
   import.meta.env?.VITE_TEMPLATE_API_URL ?? "https://api.easyschematic.live";
@@ -64,7 +65,7 @@ export async function requestLogin(email: string, returnTo?: string): Promise<vo
   });
   if (!res.ok) {
     const data = (await res.json()) as { error: string };
-    throw new Error(data.error || "Failed to send login link");
+    throw new Error(data.error || t("Failed to send login link"));
   }
 }
 
@@ -77,7 +78,7 @@ export async function createDraft(data: unknown): Promise<string> {
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to create draft");
+    throw new Error(err.error || t("Failed to create draft"));
   }
   const result = (await res.json()) as { id: string };
   return result.id;
@@ -90,7 +91,7 @@ export async function createHandoff(): Promise<string> {
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to create handoff token");
+    throw new Error(err.error || t("Failed to create handoff token"));
   }
   const result = (await res.json()) as { token: string };
   return result.token;
@@ -125,7 +126,7 @@ export async function saveSchematicToCloud(data: unknown): Promise<CloudSchemati
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to save schematic");
+    throw new Error(err.error || t("Failed to save schematic"));
   }
   return res.json();
 }
@@ -139,7 +140,7 @@ export async function updateSchematicInCloud(id: string, data: unknown): Promise
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to update schematic");
+    throw new Error(err.error || t("Failed to update schematic"));
   }
   return res.json();
 }
@@ -148,7 +149,7 @@ export async function listCloudSchematics(): Promise<CloudSchematic[]> {
   const res = await fetch(`${API_URL}/schematics`, { credentials: "include" });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to list schematics");
+    throw new Error(err.error || t("Failed to list schematics"));
   }
   return res.json();
 }
@@ -157,7 +158,7 @@ export async function loadCloudSchematic(id: string): Promise<unknown> {
   const res = await fetch(`${API_URL}/schematics/${id}`, { credentials: "include" });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to load schematic");
+    throw new Error(err.error || t("Failed to load schematic"));
   }
   return res.json();
 }
@@ -169,7 +170,7 @@ export async function deleteCloudSchematic(id: string): Promise<void> {
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to delete schematic");
+    throw new Error(err.error || t("Failed to delete schematic"));
   }
 }
 
@@ -182,7 +183,7 @@ export async function toggleSchematicSharing(id: string, shared: boolean): Promi
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to toggle sharing");
+    throw new Error(err.error || t("Failed to toggle sharing"));
   }
   return res.json();
 }
@@ -191,7 +192,7 @@ export async function loadSharedSchematic(token: string): Promise<unknown> {
   const res = await fetch(`${API_URL}/shared/${token}`, { credentials: "include" });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Shared schematic not found");
+    throw new Error(err.error || t("Shared schematic not found"));
   }
   return res.json();
 }
@@ -205,7 +206,7 @@ export async function renameCloudSchematic(id: string, name: string): Promise<Cl
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to rename schematic");
+    throw new Error(err.error || t("Failed to rename schematic"));
   }
   return res.json();
 }
@@ -217,7 +218,7 @@ export async function setSchematicAsTemplate(id: string): Promise<void> {
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to set template");
+    throw new Error(err.error || t("Failed to set template"));
   }
 }
 
@@ -228,7 +229,7 @@ export async function clearSchematicTemplate(): Promise<void> {
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to clear template");
+    throw new Error(err.error || t("Failed to clear template"));
   }
 }
 
@@ -237,7 +238,7 @@ export async function loadSchematicTemplate(): Promise<unknown | null> {
   if (res.status === 404) return null;
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error || "Failed to load template");
+    throw new Error(err.error || t("Failed to load template"));
   }
   return res.json();
 }
@@ -264,19 +265,19 @@ export async function createSubmission(
       ...(source && { source }),
     }),
   });
-  if (res.status === 401) throw new Error("Sign in to submit to the community library");
-  if (res.status === 403) throw new Error("Account suspended");
+  if (res.status === 401) throw new Error(t("Sign in to submit to the community library"));
+  if (res.status === 403) throw new Error(t("Account suspended"));
   if (res.status === 429) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error || "Too many submissions — try again later");
+    throw new Error(err.error || t("Too many submissions — try again later"));
   }
   if (res.status === 409) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error || "Duplicate submission");
+    throw new Error(err.error || t("Duplicate submission"));
   }
   if (!res.ok) {
     const err = (await res.json()) as { error?: string };
-    throw new Error(err.error || `Submission failed: ${res.status}`);
+    throw new Error(err.error || t("Submission failed: {status}", { status: res.status }));
   }
   return res.json();
 }
@@ -332,5 +333,5 @@ export async function fetchTemplates(): Promise<DeviceTemplate[]> {
 
   // Nothing cached either — caller keeps the bundled subset and surfaces a notice.
   degraded = true;
-  throw lastErr instanceof Error ? lastErr : new Error("Failed to load device library");
+  throw lastErr instanceof Error ? lastErr : new Error(t("Failed to load device library"));
 }

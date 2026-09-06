@@ -3,6 +3,7 @@ import { SIGNAL_LABELS } from "../types";
 import { ConnectorIcon, getConnectorSpec } from "./connectorIcons";
 import type { RackPlanDevice, RackPlanRack } from "../rackPlan";
 import { collectRackPlanSignals } from "../rackPlan";
+import { useT } from "../i18n";
 
 /**
  * On-screen cabinet / network rack plan. Each rack is drawn as a stack of
@@ -147,6 +148,7 @@ function DeviceRow({ dev, y, faceW }: { dev: RackPlanDevice; y: number; faceW: n
 }
 
 function RackSvg({ rack }: { rack: RackPlanRack }) {
+  const t = useT();
   const maxPorts = Math.max(8, ...rack.devices.map((d) => d.ports.length));
   const faceW = EAR_W * 2 + FACE_PAD * 2 + maxPorts * JACK_W;
   const width = GUTTER + faceW + 16;
@@ -177,7 +179,7 @@ function RackSvg({ rack }: { rack: RackPlanRack }) {
         {rack.label}
       </text>
       <text x={GUTTER} y={28} fontSize={9} fill="#64748b" fontFamily="sans-serif">
-        {[rack.room, `${rack.heightU} HE`, `${usedU} HE belegt`].filter(Boolean).join("   ·   ")}
+        {[rack.room, t("{n} U", { n: rack.heightU }), t("{n} U used", { n: usedU })].filter(Boolean).join("   ·   ")}
       </text>
       {rows.map(({ dev, y }) => (
         <DeviceRow key={dev.nodeId} dev={dev} y={y} faceW={faceW} />
@@ -187,12 +189,13 @@ function RackSvg({ rack }: { rack: RackPlanRack }) {
 }
 
 function RackPlanComponent({ racks }: { racks: RackPlanRack[] }) {
+  const t = useT();
   if (racks.length === 0) {
     return (
       <div className="text-sm text-[var(--color-text-muted)] text-center py-8 leading-relaxed">
-        Keine Rack-Elevation in diesem Schaltplan.
+        {t("No rack elevation in this schematic.")}
         <br />
-        Lege im Rack-Editor einen Schrank an und platziere die Geräte darin, um den Rack-Plan zu sehen.
+        {t("Add a rack in the rack editor and place devices in it to see the rack plan.")}
       </div>
     );
   }

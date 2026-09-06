@@ -3,6 +3,7 @@ import { useSchematicStore } from "../store";
 import type { SchematicNode, ConnectionEdge } from "../types";
 import BulkConnectionEditPanel from "./BulkConnectionEditPanel";
 import BulkDeviceEditPanel from "./BulkDeviceEditPanel";
+import { useT } from "../i18n";
 
 type EntityKind = "device" | "room" | "stub-label" | "note" | "annotation" | "waypoint" | "edge";
 
@@ -31,6 +32,7 @@ function classifyNode(n: SchematicNode): EntityKind | null {
 }
 
 export default function SelectionFilterBar() {
+  const t = useT();
   // Serialize selection into a stable string so the selector minimizes re-renders
   const selectionKey = useSchematicStore((s) => {
     let nodeBits = "";
@@ -119,7 +121,7 @@ export default function SelectionFilterBar() {
         onMouseDown={(e) => e.stopPropagation()}
       >
         <span className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] px-1">
-          {totalSelected} selected
+          {t("{n} selected", { n: totalSelected })}
         </span>
         {presentKinds.map((kind) => {
             const count = counts[kind] ?? 0;
@@ -128,20 +130,23 @@ export default function SelectionFilterBar() {
             return (
               <button
                 key={kind}
-                title={`Click to keep only ${labels.plural}. ${navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl"}+click to deselect ${labels.plural}.`}
+                title={t("Click to keep only {kind}. {mod}+click to deselect {kind}.", {
+                  kind: t(labels.plural),
+                  mod: navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl",
+                })}
                 className="px-2 py-0.5 text-[11px] rounded bg-[var(--color-surface-hover)] hover:bg-blue-50 hover:text-blue-700 border border-[var(--color-border)] transition-colors cursor-pointer"
                 onClick={(e) => {
                   const deselect = e.metaKey || e.ctrlKey;
                   apply(kind, deselect ? "deselect" : "solo");
                 }}
               >
-                {count} {label}
+                {count} {t(label)}
               </button>
             );
           })}
         {(deviceCount >= 2 || devicePanelOpen) && (
           <button
-            title="Edit properties of all selected devices"
+            title={t("Edit properties of all selected devices")}
             className={`px-2 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
               devicePanelOpen
                 ? "bg-blue-600 text-white border-blue-600"
@@ -149,12 +154,12 @@ export default function SelectionFilterBar() {
             }`}
             onClick={() => openDevicePanel(!devicePanelOpen)}
           >
-            {deviceCount >= 2 ? `Edit ${deviceCount} devices…` : "Edit devices…"}
+            {deviceCount >= 2 ? t("Edit {n} devices…", { n: deviceCount }) : t("Edit devices…")}
           </button>
         )}
         {(edgeCount >= 2 || panelOpen) && (
           <button
-            title="Edit properties of selected connections"
+            title={t("Edit properties of selected connections")}
             className={`px-2 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
               panelOpen
                 ? "bg-blue-600 text-white border-blue-600"
@@ -162,16 +167,16 @@ export default function SelectionFilterBar() {
             }`}
             onClick={() => openConnectionPanel(!panelOpen)}
           >
-            {edgeCount >= 2 ? `Edit ${edgeCount} connections…` : "Edit connections…"}
+            {edgeCount >= 2 ? t("Edit {n} connections…", { n: edgeCount }) : t("Edit connections…")}
           </button>
         )}
         {totalSelected > 0 && (
           <button
-            title="Clear selection (Esc)"
+            title={t("Clear selection (Esc)")}
             className="px-2 py-0.5 text-[11px] rounded text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
             onClick={clearAll}
           >
-            ✕ Clear
+            ✕ {t("Clear::selection")}
           </button>
         )}
       </div>

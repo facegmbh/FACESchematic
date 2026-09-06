@@ -8,6 +8,11 @@ COPY . .
 # device library and blocks every account/upload path (docker/nginx.conf).
 ARG VITE_TEMPLATE_API_URL=/api
 ENV VITE_TEMPLATE_API_URL=${VITE_TEMPLATE_API_URL}
+# The FACE image ships German out of the box; the public build stays English.
+# Users can still switch under File > Preferences > Display > Language — their
+# choice is kept in localStorage and overrides this default.
+ARG VITE_DEFAULT_LOCALE=de
+ENV VITE_DEFAULT_LOCALE=${VITE_DEFAULT_LOCALE}
 RUN npm run build
 
 # Production stage

@@ -11,6 +11,7 @@ import {
 } from "../types";
 import { DEFAULT_CONNECTOR } from "../connectorTypes";
 import { duplicatePortLabel } from "../portNaming";
+import { useT } from "../i18n";
 
 const ALL_SIGNALS = (Object.keys(SIGNAL_LABELS) as SignalType[]).sort(
   (a, b) => SIGNAL_LABELS[a].localeCompare(SIGNAL_LABELS[b]),
@@ -52,6 +53,7 @@ export default function CardCreatorDialog({
   onClose,
   onCreated,
 }: Props) {
+  const t = useT();
   const addCustomTemplate = useSchematicStore((s) => s.addCustomTemplate);
 
   const [label, setLabel] = useState("");
@@ -141,7 +143,7 @@ export default function CardCreatorDialog({
       <input
         value={p.label}
         onChange={(e) => updatePort(p.id, { label: e.target.value })}
-        placeholder="Label"
+        placeholder={t("Label")}
         className="flex-1 min-w-0 px-1.5 py-0.5 text-xs rounded border outline-none focus:border-blue-500"
         style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
       />
@@ -173,15 +175,15 @@ export default function CardCreatorDialog({
         type="button"
         onClick={() => duplicatePort(p.id)}
         className="text-[10px] text-blue-500 hover:text-blue-600 cursor-pointer px-1 leading-none"
-        title="Duplicate port"
+        title={t("Duplicate port")}
       >
-        Dup
+        {t("Dup")}
       </button>
       <button
         type="button"
         onClick={() => removePort(p.id)}
         className="text-red-400 hover:text-red-500 text-xs cursor-pointer px-1 leading-none"
-        title="Remove port"
+        title={t("Remove port")}
       >
         &times;
       </button>
@@ -199,11 +201,11 @@ export default function CardCreatorDialog({
           onClick={() => addPort(direction)}
           className="text-[10px] text-blue-500 hover:text-blue-600 cursor-pointer"
         >
-          + Add
+          + {t("Add")}
         </button>
       </div>
       {list.length === 0 && (
-        <div className="text-[10px] italic mb-1" style={{ color: "var(--color-text-muted)" }}>none</div>
+        <div className="text-[10px] italic mb-1" style={{ color: "var(--color-text-muted)" }}>{t("none")}</div>
       )}
       {list.map(renderPortRow)}
     </div>
@@ -226,21 +228,21 @@ export default function CardCreatorDialog({
         onKeyDown={(e) => e.stopPropagation()}
       >
         <div className="px-4 pt-3 pb-2 border-b" style={{ borderColor: "var(--color-border)" }}>
-          <div className="text-sm font-semibold">Create Custom Card</div>
+          <div className="text-sm font-semibold">{t("Create Custom Card")}</div>
           <div className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-            This card will be saved to your custom templates and installed in the slot.
+            {t("This card will be saved to your custom templates and installed in the slot.")}
           </div>
         </div>
 
         <div className="px-4 py-3 space-y-2">
           <div>
             <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-              Label <span className="text-red-500">*</span>
+              {t("Label")} <span className="text-red-500">*</span>
             </label>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Fiber SFP+ Module"
+              placeholder={t("e.g. Fiber SFP+ Module")}
               className="w-full px-2 py-1 text-xs rounded border outline-none focus:border-blue-500"
               style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
               autoFocus
@@ -249,12 +251,12 @@ export default function CardCreatorDialog({
 
           <div>
             <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-              Slot Family <span className="text-red-500">*</span>
+              {t("Slot Family")} <span className="text-red-500">*</span>
             </label>
             <input
               value={slotFamily}
               onChange={(e) => setSlotFamily(e.target.value)}
-              placeholder="e.g. disguise-vfc, my-custom-family"
+              placeholder={t("e.g. disguise-vfc, my-custom-family")}
               list="card-creator-families"
               className="w-full px-2 py-1 text-xs rounded border outline-none focus:border-blue-500"
               style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
@@ -267,7 +269,7 @@ export default function CardCreatorDialog({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-                Manufacturer
+                {t("Manufacturer")}
               </label>
               <input
                 value={manufacturer}
@@ -278,7 +280,7 @@ export default function CardCreatorDialog({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-                Model Number
+                {t("Model Number")}
               </label>
               <input
                 value={modelNumber}
@@ -291,7 +293,7 @@ export default function CardCreatorDialog({
 
           <div>
             <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-              Unit Cost (USD)
+              {t("Unit Cost (USD)")}
             </label>
             <input
               type="number"
@@ -305,10 +307,10 @@ export default function CardCreatorDialog({
           </div>
 
           <div className="pt-2 mt-2 border-t" style={{ borderColor: "var(--color-border)" }}>
-            <div className="text-xs font-semibold mb-2">Ports</div>
-            {portSection("Inputs", "input", inputs)}
-            {portSection("Outputs", "output", outputs)}
-            {portSection("Bidirectional", "bidirectional", bidir)}
+            <div className="text-xs font-semibold mb-2">{t("Ports")}</div>
+            {portSection(t("Inputs"), "input", inputs)}
+            {portSection(t("Outputs"), "output", outputs)}
+            {portSection(t("Bidirectional"), "bidirectional", bidir)}
           </div>
         </div>
 
@@ -322,7 +324,7 @@ export default function CardCreatorDialog({
             className="px-3 py-1 text-xs rounded border cursor-pointer"
             style={{ borderColor: "var(--color-border)", color: "var(--color-text)" }}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="button"
@@ -330,7 +332,7 @@ export default function CardCreatorDialog({
             disabled={!canSave}
             className="px-3 py-1 text-xs rounded bg-blue-500 text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-600"
           >
-            Create &amp; Install
+            {t("Create & Install")}
           </button>
         </div>
       </div>

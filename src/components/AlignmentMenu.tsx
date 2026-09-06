@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useSchematicStore } from "../store";
 import type { AlignOperation } from "../alignUtils";
+import { useT } from "../i18n";
 
 interface OpDef {
   op: AlignOperation;
+  /** English source string — translated at render time via `t()`. */
   label: string;
   icon: React.ReactNode;
 }
@@ -111,15 +113,16 @@ function OpButton({
   disabled,
   onClick,
 }: OpDef & { disabled: boolean; onClick: (op: AlignOperation) => void }) {
+  const t = useT();
   return (
     <button
-      title={label}
+      title={t(label)}
       disabled={disabled}
       onClick={() => onClick(op)}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer w-full text-left"
     >
       {icon}
-      <span className="text-xs text-[var(--color-text)]">{label}</span>
+      <span className="text-xs text-[var(--color-text)]">{t(label)}</span>
     </button>
   );
 }
@@ -131,6 +134,7 @@ export default function AlignmentMenu() {
   const selectedCount = useSchematicStore(
     (s) => s.nodes.filter((n) => n.selected).length,
   );
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -156,15 +160,15 @@ export default function AlignmentMenu() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        title="Align & Distribute"
+        title={t("Align & Distribute")}
         className="px-2.5 py-1 text-xs rounded bg-white text-[var(--color-text)] hover:text-[var(--color-text-heading)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] transition-colors cursor-pointer"
       >
-        Align
+        {t("Align")}
       </button>
       {open && (
         <div className="absolute top-full right-0 mt-1 bg-white border border-[var(--color-border)] rounded-lg shadow-lg p-1.5 z-50 w-44">
           <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide px-2 py-1">
-            Align
+            {t("Align")}
           </div>
           <div className="grid grid-cols-2">
             {alignOps.map((o) => (
@@ -178,7 +182,7 @@ export default function AlignmentMenu() {
           </div>
           <div className="h-px bg-[var(--color-border)] my-1" />
           <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide px-2 py-1">
-            Distribute
+            {t("Distribute")}
           </div>
           <div className="grid grid-cols-2">
             {distributeOps.map((o) => (

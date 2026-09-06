@@ -5,6 +5,7 @@ import { parseJsonImport } from "../import/parseJson";
 import { parseCsvImport } from "../import/parseCsv";
 import type { ParsedTemplate } from "../import/types";
 import { createSubmission } from "../templateApi";
+import { useT } from "../i18n";
 
 type Tab = "json" | "csv";
 
@@ -41,6 +42,7 @@ const SAMPLE_CSV = `model_number,manufacturer,label,device_type,height_mm,width_
 60-1271-01,Extron,Extron DTP2 T 212,hdbaset-extender,25,216,114,0.68,12,https://www.extron.com/product/dtp2t212,12V DC,input,power,barrel,Rear`;
 
 export default function ImportDevicesDialog({ open, onClose }: Props) {
+  const t = useT();
   const importCustomTemplates = useSchematicStore((s) => s.importCustomTemplates);
   const addToast = useSchematicStore((s) => s.addToast);
 
@@ -89,9 +91,14 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
     if (selectedTemplates.length === 0) return;
     const { added, updated } = importCustomTemplates(selectedTemplates.map((pt) => pt.template));
     const parts = [];
-    if (added > 0) parts.push(`${added} added`);
-    if (updated > 0) parts.push(`${updated} updated`);
-    addToast(parts.length > 0 ? `Your library: ${parts.join(", ")}` : "Nothing changed — already in your library", "success");
+    if (added > 0) parts.push(t("{n} added", { n: added }));
+    if (updated > 0) parts.push(t("{n} updated", { n: updated }));
+    addToast(
+      parts.length > 0
+        ? t("Your library: {summary}", { summary: parts.join(", ") })
+        : t("Nothing changed — already in your library"),
+      "success",
+    );
     close();
   };
 
@@ -112,7 +119,7 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
         submitted++;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
-        failures.push({ label: pt.template.label || "(no label)", reason });
+        failures.push({ label: pt.template.label || t("(no label)"), reason });
         console.error("Submission failed:", pt.template.label, reason);
       }
     }
@@ -127,11 +134,19 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
         .map(([reason, n]) => `${n}× ${reason}`)
         .join(" · ");
       addToast(
-        `Added ${selectedTemplates.length} to library. Submitted ${submitted}, ${failures.length} failed: ${summary}`,
+        t("Added {n} to library. Submitted {ok}, {failed} failed: {summary}", {
+          n: selectedTemplates.length,
+          ok: submitted,
+          failed: failures.length,
+          summary,
+        }),
         "error",
       );
     } else {
-      addToast(`Added ${selectedTemplates.length} to library and submitted to community`, "success");
+      addToast(
+        t("Added {n} to library and submitted to community", { n: selectedTemplates.length }),
+        "success",
+      );
     }
     close();
   };
@@ -155,20 +170,20 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
         <div className="px-4 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold" style={{ color: "var(--color-text-heading)" }}>
-              Import Devices
+              {t("Import Devices")}
             </h2>
             <button onClick={close} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer">✕</button>
           </div>
           <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
-            Bulk-add device templates to your library. See the{" "}
+            {t("Bulk-add device templates to your library. See the")}{" "}
             <a href="https://docs.easyschematic.live/import-devices" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-              import guide
+              {t("import guide")}
             </a>{" "}
-            for sample files and walkthroughs, or the{" "}
+            {t("for sample files and walkthroughs, or the")}{" "}
             <a href="https://docs.easyschematic.live/device-template-schema" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-              schema reference
+              {t("schema reference")}
             </a>{" "}
-            for the full field list.
+            {t("for the full field list.")}
           </p>
         </div>
 
@@ -196,13 +211,13 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
               onClick={() => fileInputRef.current?.click()}
               className="px-3 py-1 rounded border border-[var(--color-border)] bg-white text-xs hover:bg-[var(--color-surface-hover)] cursor-pointer"
             >
-              Upload {tab === "json" ? "JSON file" : "CSV file"}
+              {tab === "json" ? t("Upload JSON file") : t("Upload CSV file")}
             </button>
             <button
               onClick={loadSample}
               className="px-3 py-1 rounded border border-[var(--color-border)] bg-white text-xs hover:bg-[var(--color-surface-hover)] cursor-pointer"
             >
-              Load sample
+              {t("Load sample")}
             </button>
             <input
               ref={fileInputRef}
@@ -212,14 +227,14 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
               onChange={handleFileUpload}
             />
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
-              Or paste below ↓
+              {t("Or paste below")} ↓
             </span>
           </div>
 
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={tab === "json" ? "Paste device JSON here…" : "Paste CSV here…"}
+            placeholder={tab === "json" ? t("Paste device JSON here…") : t("Paste CSV here…")}
             className="w-full h-32 px-2 py-1 text-[11px] font-mono rounded border outline-none focus:border-blue-500 resize-y"
             style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
           />
@@ -228,7 +243,7 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
             <div>
               {result.fatalErrors.length > 0 && (
                 <div className="mb-2 px-3 py-2 rounded bg-red-50 border border-red-200">
-                  <div className="text-xs font-semibold text-red-800 mb-1">Could not parse:</div>
+                  <div className="text-xs font-semibold text-red-800 mb-1">{t("Could not parse:")}</div>
                   <ul className="text-[11px] text-red-700 list-disc ml-5 space-y-0.5">
                     {result.fatalErrors.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
@@ -240,10 +255,16 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
                   <div className="px-3 py-2 border-b text-[11px] text-[var(--color-text-muted)] flex items-center gap-2"
                        style={{ borderColor: "var(--color-border)" }}>
                     <span>
-                      {result.templates.length} template{result.templates.length === 1 ? "" : "s"} parsed •{" "}
-                      <span className="text-emerald-700">{result.templates.filter((t) => t.validation.ok).length} valid</span>
-                      {result.templates.some((t) => !t.validation.ok) && (
-                        <> • <span className="text-red-700">{result.templates.filter((t) => !t.validation.ok).length} with errors</span></>
+                      {result.templates.length === 1
+                        ? t("1 template parsed")
+                        : t("{n} templates parsed", { n: result.templates.length })} •{" "}
+                      <span className="text-emerald-700">
+                        {t("{n} valid", { n: result.templates.filter((pt) => pt.validation.ok).length })}
+                      </span>
+                      {result.templates.some((pt) => !pt.validation.ok) && (
+                        <> • <span className="text-red-700">
+                          {t("{n} with errors", { n: result.templates.filter((pt) => !pt.validation.ok).length })}
+                        </span></>
                       )}
                     </span>
                   </div>
@@ -265,12 +286,12 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
           {selectedTemplates.length > 0 && (
             <div>
               <label className="block text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1">
-                Submitter note (optional, used if you submit to community)
+                {t("Submitter note (optional, used if you submit to community)")}
               </label>
               <input
                 value={submitterNote}
                 onChange={(e) => setSubmitterNote(e.target.value)}
-                placeholder="e.g. Imported from Extron stencil 2024.1"
+                placeholder={t("e.g. Imported from Extron stencil 2024.1")}
                 className="w-full px-2 py-1 text-xs rounded border outline-none focus:border-blue-500"
                 style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
               />
@@ -284,22 +305,22 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
             onClick={close}
             className="px-3 py-1.5 rounded border border-[var(--color-border)] bg-white text-xs hover:bg-[var(--color-surface-hover)] cursor-pointer"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={handleAddAndSubmit}
             disabled={selectedTemplates.length === 0 || submitting}
             className="px-3 py-1.5 rounded border border-blue-300 bg-white text-xs text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            title="Adds to your library AND submits to the community library for review"
+            title={t("Adds to your library AND submits to the community library for review")}
           >
-            {submitting ? "Submitting…" : `Add & Submit (${selectedTemplates.length})`}
+            {submitting ? t("Submitting…") : t("Add & Submit ({n})", { n: selectedTemplates.length })}
           </button>
           <button
             onClick={handleAddToLibrary}
             disabled={selectedTemplates.length === 0 || submitting}
             className="px-4 py-1.5 rounded bg-blue-500 text-white text-xs hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Add {selectedTemplates.length} to Library
+            {t("Add {n} to Library", { n: selectedTemplates.length })}
           </button>
         </div>
       </div>
@@ -308,7 +329,8 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
 }
 
 function PreviewRow({ pt, skipped, onToggle }: { pt: ParsedTemplate; skipped: boolean; onToggle: () => void }) {
-  const t = pt.template;
+  const t = useT();
+  const tpl = pt.template;
   const errCount = pt.validation.errors.length;
   const warnCount = pt.validation.warnings.length;
   const badRow = errCount > 0;
@@ -330,20 +352,20 @@ function PreviewRow({ pt, skipped, onToggle }: { pt: ParsedTemplate; skipped: bo
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-[var(--color-text-heading)] truncate">
-            {t.label || <em className="text-[var(--color-text-muted)]">(no label)</em>}
+            {tpl.label || <em className="text-[var(--color-text-muted)]">{t("(no label)")}</em>}
           </span>
           <span className="text-[10px] text-[var(--color-text-muted)]">
-            {t.manufacturer} {t.modelNumber && `· ${t.modelNumber}`}
+            {tpl.manufacturer} {tpl.modelNumber && `· ${tpl.modelNumber}`}
           </span>
         </div>
         <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-          {t.deviceType || "?"} → {t.category || "?"} · {t.ports?.length ?? 0} ports
+          {tpl.deviceType || "?"} → {tpl.category || "?"} · {t("{n} ports", { n: tpl.ports?.length ?? 0 })}
           {pt.source && <> · {pt.source}</>}
         </div>
         {errCount > 0 && (
           <ul className="text-[10px] text-red-700 mt-1 list-disc ml-4 space-y-0.5">
             {pt.validation.errors.slice(0, 3).map((e, i) => <li key={i}>{e}</li>)}
-            {errCount > 3 && <li>+ {errCount - 3} more</li>}
+            {errCount > 3 && <li>{t("+ {n} more", { n: errCount - 3 })}</li>}
           </ul>
         )}
         {warnCount > 0 && errCount === 0 && (

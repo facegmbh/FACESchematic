@@ -27,6 +27,7 @@ import { draggedDeviceHeightU, draggedDeviceNodeId } from "./RackSidebar";
 import FacePlateEditor from "./FacePlateEditor";
 import type { FacePlateLayout } from "../types";
 import { getDevicesInRoom, proposeRackPlacements } from "../rackLink";
+import { useT } from "../i18n";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -437,6 +438,7 @@ function AccessoryBlock({
   snapGuides: ShelfSnapGuides | null;
   schematicDefaults: SchematicDisplayDefaults;
 }) {
+  const t = useT();
   const y = uToY(accessory.uPosition + accessory.heightU - 1, rack.heightU);
   const h = accessory.heightU * PX_PER_U - 1;
   const fills: Record<string, string> = {
@@ -463,7 +465,7 @@ function AccessoryBlock({
       ))}
       {!isShelf && (
         <text x={DEVICE_INSET + FULL_WIDTH / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central" fontSize={8} fill="rgba(255,255,255,0.8)" style={{ pointerEvents: "none" }}>
-          {accessory.label ?? RACK_ACCESSORY_LABELS[accessory.type]}
+          {accessory.label ?? t(RACK_ACCESSORY_LABELS[accessory.type])}
         </text>
       )}
       {/* Shelf occupants — real-mm proportions, free-form positioning via shelfOffsetMm */}
@@ -663,6 +665,7 @@ function SideViewRack({
   onContextMenu: (e: React.MouseEvent, placement: RackDevicePlacement) => void;
   schematicDefaults: SchematicDisplayDefaults;
 }) {
+  const t = useT();
   const totalH = rack.heightU * PX_PER_U;
   const is2Post = rack.rackType === "open-2post";
   const isOpen = is2Post || rack.rackType === "open-4post";
@@ -689,13 +692,13 @@ function SideViewRack({
 
       {/* Front rail — always present */}
       <line x1={4} y1={0} x2={4} y2={totalH} stroke="#aaa" strokeWidth={1} strokeDasharray="2 2" />
-      <text x={4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">F</text>
+      <text x={4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">{t("F::rack-side-front")}</text>
 
       {/* Rear rail — 4-post only */}
       {!is2Post && (
         <>
           <line x1={SIDE_VIEW_WIDTH - 4} y1={0} x2={SIDE_VIEW_WIDTH - 4} y2={totalH} stroke="#aaa" strokeWidth={1} strokeDasharray="2 2" />
-          <text x={SIDE_VIEW_WIDTH - 4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">R</text>
+          <text x={SIDE_VIEW_WIDTH - 4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">{t("R::rack-side-rear")}</text>
         </>
       )}
 
@@ -859,7 +862,7 @@ function SideViewRack({
         );
       })}
 
-      <text x={SIDE_VIEW_WIDTH / 2} y={totalH + 14} textAnchor="middle" fontSize={9} fill="#999" fontWeight={500} fontStyle="italic">Side</text>
+      <text x={SIDE_VIEW_WIDTH / 2} y={totalH + 14} textAnchor="middle" fontSize={9} fill="#999" fontWeight={500} fontStyle="italic">{t("Side")}</text>
     </g>
   );
 }
@@ -867,6 +870,7 @@ function SideViewRack({
 // ── View toggle ────────────────────────────────────────────────────
 
 function ViewToggle({ viewMode, onChangeView }: { viewMode: ViewMode; onChangeView: (mode: ViewMode) => void }) {
+  const t = useT();
   const btn = (mode: ViewMode, label: string) => (
     <button
       className={`px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === mode ? "bg-blue-600 text-white" : "bg-white text-neutral-600 hover:bg-neutral-50"}`}
@@ -875,9 +879,9 @@ function ViewToggle({ viewMode, onChangeView }: { viewMode: ViewMode; onChangeVi
   );
   return (
     <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex rounded-md overflow-hidden border border-neutral-300 shadow-sm" data-print-hide>
-      {btn("front", "Front")}
-      {btn("rear", "Rear")}
-      {btn("side", "Side")}
+      {btn("front", t("Front"))}
+      {btn("rear", t("Rear"))}
+      {btn("side", t("Side"))}
     </div>
   );
 }
@@ -968,6 +972,7 @@ function AccessoryMenu({
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [heightU, setHeightU] = useState(menu.accessory.heightU);
   const [label, setLabel] = useState(menu.accessory.label ?? "");
   const isShelf = menu.accessory.type === "shelf";
@@ -980,15 +985,15 @@ function AccessoryMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="px-3 py-1 text-neutral-400 text-[10px] uppercase tracking-wider">
-        {RACK_ACCESSORY_LABELS[menu.accessory.type]}
-        {menu.occupantCount > 0 && ` (${menu.occupantCount} on shelf)`}
+        {t(RACK_ACCESSORY_LABELS[menu.accessory.type])}
+        {menu.occupantCount > 0 && t(" ({n} on shelf)", { n: menu.occupantCount })}
       </div>
       <label className="flex items-center gap-2 px-3 py-1.5 border-t border-neutral-100">
-        <span className="text-neutral-600 w-12">Label</span>
+        <span className="text-neutral-600 w-12">{t("Label")}</span>
         <input
           className="flex-1 border border-neutral-300 rounded px-2 py-0.5 outline-none focus:border-blue-400"
           value={label}
-          placeholder={RACK_ACCESSORY_LABELS[menu.accessory.type]}
+          placeholder={t(RACK_ACCESSORY_LABELS[menu.accessory.type])}
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -1000,7 +1005,7 @@ function AccessoryMenu({
       </label>
       {isShelf && (
         <label className="flex items-center gap-2 px-3 py-1.5">
-          <span className="text-neutral-600 w-12">Depth</span>
+          <span className="text-neutral-600 w-12">{t("Depth")}</span>
           <input
             type="number"
             className="flex-1 border border-neutral-300 rounded px-2 py-0.5 outline-none focus:border-blue-400 text-right"
@@ -1016,7 +1021,7 @@ function AccessoryMenu({
         </label>
       )}
       <label className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-neutral-600 w-12">Height</span>
+        <span className="text-neutral-600 w-12">{t("Height")}</span>
         <input
           type="number"
           className="flex-1 border border-neutral-300 rounded px-2 py-0.5 outline-none focus:border-blue-400 text-right"
@@ -1041,13 +1046,13 @@ function AccessoryMenu({
             else if (!labelChanged && !depthChanged) onClose();
           }}
         >
-          Save
+          {t("Save")}
         </button>
         <button
           className="px-2 py-1 rounded text-red-600 hover:bg-red-50 border border-red-200"
           onClick={onRemove}
         >
-          Remove
+          {t("Remove")}
         </button>
       </div>
     </div>
@@ -1065,6 +1070,7 @@ function EditRackInlineDialog({
   onSave: (patch: Partial<RackData>) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const currency = useSchematicStore((s) => s.currency);
   const [label, setLabel] = useState(rack.label);
   const [rackType, setRackType] = useState(rack.rackType);
@@ -1086,9 +1092,9 @@ function EditRackInlineDialog({
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
       <form className="bg-white rounded-lg shadow-xl p-4 w-80 text-xs" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h3 className="font-semibold text-sm mb-3">Edit Rack</h3>
+        <h3 className="font-semibold text-sm mb-3">{t("Edit Rack")}</h3>
         <label className="block mb-2">
-          <span className="text-neutral-600">Label</span>
+          <span className="text-neutral-600">{t("Label")}</span>
           <input
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
             value={label}
@@ -1098,20 +1104,20 @@ function EditRackInlineDialog({
           />
         </label>
         <label className="block mb-2">
-          <span className="text-neutral-600">Type</span>
+          <span className="text-neutral-600">{t("Type")}</span>
           <select
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
             value={rackType}
             onChange={(e) => setRackType(e.target.value as typeof rackType)}
           >
             {(Object.entries(RACK_TYPE_LABELS) as [typeof rackType, string][]).map(([value, lbl]) => (
-              <option key={value} value={value}>{lbl}</option>
+              <option key={value} value={value}>{t(lbl)}</option>
             ))}
           </select>
         </label>
         <div className="flex gap-2 mb-3">
           <label className="block flex-1">
-            <span className="text-neutral-600">Height (U)</span>
+            <span className="text-neutral-600">{t("Height (U)")}</span>
             <input
               type="number"
               className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -1123,7 +1129,7 @@ function EditRackInlineDialog({
             />
           </label>
           <label className="block flex-1">
-            <span className="text-neutral-600">Depth (mm)</span>
+            <span className="text-neutral-600">{t("Depth (mm)")}</span>
             <input
               type="number"
               className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -1137,7 +1143,7 @@ function EditRackInlineDialog({
           </label>
         </div>
         <label className="block mb-3">
-          <span className="text-neutral-600">Rack cost ({currency})</span>
+          <span className="text-neutral-600">{t("Rack cost ({currency})", { currency })}</span>
           <input
             type="number"
             className="mt-0.5 w-full border border-neutral-300 rounded px-2 py-1 outline-none focus:border-blue-400"
@@ -1150,8 +1156,8 @@ function EditRackInlineDialog({
           />
         </label>
         <div className="flex justify-end gap-2">
-          <button type="button" className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>Cancel</button>
-          <button type="submit" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+          <button type="button" className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={onClose}>{t("Cancel")}</button>
+          <button type="submit" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">{t("Save")}</button>
         </div>
       </form>
     </div>
@@ -1179,6 +1185,7 @@ function SlotMenu({
   onDeleteRack: (rackId: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   // Two-level expansion path: which top-level item is expanded, and which type beneath it.
   const [expandedTop, setExpandedTop] = useState<"add" | null>("add");
   const [expandedType, setExpandedType] = useState<import("../types").RackAccessoryType | null>(null);
@@ -1202,14 +1209,14 @@ function SlotMenu({
         style={{ width: MENU_W }}
         onMouseLeave={() => { setExpandedType(null); }}
       >
-        <div className="px-3 py-1 text-neutral-400 text-[10px] uppercase tracking-wider">Rack at U{menu.uPosition}</div>
+        <div className="px-3 py-1 text-neutral-400 text-[10px] uppercase tracking-wider">{t("Rack at U{u}", { u: menu.uPosition })}</div>
         <button
           className={`w-full text-left px-3 flex items-center justify-between hover:bg-neutral-100 ${expandedTop === "add" ? "bg-neutral-100" : ""}`}
           style={{ height: ITEM_H }}
           onMouseEnter={() => setExpandedTop("add")}
           onClick={() => setExpandedTop("add")}
         >
-          <span>Add Accessory</span><span className="text-neutral-400">▸</span>
+          <span>{t("Add Accessory")}</span><span className="text-neutral-400">▸</span>
         </button>
         <div className="border-t border-neutral-100 my-0.5" />
         <button
@@ -1218,7 +1225,7 @@ function SlotMenu({
           onMouseEnter={() => { setExpandedTop(null); setExpandedType(null); }}
           onClick={() => { onEditRack(menu.rackId); onClose(); }}
         >
-          Edit Rack…
+          {t("Edit Rack…")}
         </button>
         <button
           className="w-full text-left px-3 hover:bg-neutral-100 text-red-600"
@@ -1226,7 +1233,7 @@ function SlotMenu({
           onMouseEnter={() => { setExpandedTop(null); setExpandedType(null); }}
           onClick={() => { onDeleteRack(menu.rackId); onClose(); }}
         >
-          Delete Rack
+          {t("Delete Rack")}
         </button>
       </div>
 
@@ -1245,7 +1252,7 @@ function SlotMenu({
               onMouseEnter={() => { cancelCloseType(); setExpandedType(type); }}
               onClick={() => setExpandedType(type)}
             >
-              <span>{RACK_ACCESSORY_LABELS[type]}</span><span className="text-neutral-400">▸</span>
+              <span>{t(RACK_ACCESSORY_LABELS[type])}</span><span className="text-neutral-400">▸</span>
             </button>
           ))}
         </div>
@@ -1281,6 +1288,7 @@ function SlotMenu({
 // ── Main RackRenderer ──────────────────────────────────────────────
 
 export default function RackRenderer({ page }: { page: RackElevationPage }) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const addRackPlacement = useSchematicStore((s) => s.addRackPlacement);
   const addPlacementSmart = useSchematicStore((s) => s.addPlacementSmart);
@@ -1551,7 +1559,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               id,
               accessoryType: ac.type,
               heightU: ac.heightU,
-              label: ac.label ?? RACK_ACCESSORY_LABELS[ac.type],
+              label: ac.label ?? t(RACK_ACCESSORY_LABELS[ac.type]),
               color: fills[ac.type] ?? "#888",
               face: ac.face,
               cx: c.x,
@@ -1686,7 +1694,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
         if (inRackDrag.kind === "device") {
           const dd = inRackDrag.deviceNodeId ? deviceDataMap.get(inRackDrag.deviceNodeId) : undefined;
           removeRackPlacement(page.id, inRackDrag.id);
-          addToast(`Removed ${dd?.label ?? "device"} from rack`, "info");
+          addToast(t("Removed {name} from rack", { name: dd?.label ?? t("device") }), "info");
         }
         // Accessories don't unrack — dropping outside is a no-op (snap back)
       }
@@ -1812,7 +1820,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
     const deviceNodeId = e.dataTransfer.getData("application/x-rack-device-id");
     if (!deviceNodeId || !dropTarget) { setDropTarget(null); return; }
     if (dropTarget.mode === "oversize") {
-      addToast("Device is too wide to fit in this rack — can't be racked.", "error");
+      addToast(t("Device is too wide to fit in this rack — can't be racked."), "error");
       setDropTarget(null);
       return;
     }
@@ -1825,7 +1833,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
       // intent so half-rack drops land where the user aimed (or flip if that side is taken).
       const result = addPlacementSmart(page.id, dropTarget.rackId, deviceNodeId, dropTarget.uPosition, activeFace, dropTarget.halfRackSide);
       if (!result.ok && result.reason === "oversize") {
-        addToast("Device is too wide to fit in this rack — can't be racked.", "error");
+        addToast(t("Device is too wide to fit in this rack — can't be racked."), "error");
       }
     }
     setDropTarget(null);
@@ -1884,7 +1892,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
     const cleanH = Math.max(1, Math.min(20, Math.round(heightU || 1)));
     const valid = isRackSlotAvailable(page.id, rackId, uPosition, cleanH, activeFace, undefined);
     if (!valid) {
-      addToast(`Can't add ${type} — ${cleanH}U slot at U${uPosition} is occupied`, "error");
+      addToast(t("Can't add {type} — {h}U slot at U{u} is occupied", { type, h: cleanH, u: uPosition }), "error");
       return;
     }
     addRackAccessory(page.id, { rackId, type, uPosition, heightU: cleanH, face: activeFace });
@@ -1893,7 +1901,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
 
   const handleRemoveAccessory = useCallback((accessory: RackAccessory, occupantCount: number) => {
     if (occupantCount > 0) {
-      setShelfDeleteConfirm({ accessoryId: accessory.id, label: accessory.label ?? RACK_ACCESSORY_LABELS[accessory.type], occupantCount });
+      setShelfDeleteConfirm({ accessoryId: accessory.id, label: accessory.label ?? t(RACK_ACCESSORY_LABELS[accessory.type]), occupantCount });
     } else {
       removeRackAccessory(page.id, accessory.id);
     }
@@ -1981,10 +1989,14 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                   >
                     <rect x={RACK_WIDTH - 90} y={-22} width={88} height={16} rx={3} fill="#fef2f2" stroke="#dc2626" strokeWidth={0.75} />
                     <text x={RACK_WIDTH - 90 + 44} y={-14} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={600} fill="#b91c1c">
-                      ⚠ {conflicts.length} depth conflict{conflicts.length === 1 ? "" : "s"}
+                      ⚠ {conflicts.length === 1 ? t("1 depth conflict") : t("{n} depth conflicts", { n: conflicts.length })}
                     </text>
                     {unknownDepth > 0 && (
-                      <title>{`${conflicts.length} front/rear pair(s) overlap deeper than the rack. ${unknownDepth} device${unknownDepth === 1 ? " has" : "s have"} unknown depth (not counted).`}</title>
+                      <title>{t("{n} front/rear pair(s) overlap deeper than the rack.", { n: conflicts.length })
+                        + " "
+                        + (unknownDepth === 1
+                          ? t("1 device has unknown depth (not counted).")
+                          : t("{n} devices have unknown depth (not counted).", { n: unknownDepth }))}</title>
                     )}
                   </g>
                 )}
@@ -1996,14 +2008,16 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                     {/* Left side of header — opposite the depth-conflict badge so they don't both crowd the rack name */}
                     <rect x={2} y={-22} width={92} height={16} rx={3} fill="#fff7ed" stroke="#ea580c" strokeWidth={0.75} />
                     <text x={2 + 46} y={-14} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={600} fill="#9a3412">
-                      ⚠ {oversized.length} too deep
+                      ⚠ {t("{n} too deep", { n: oversized.length })}
                     </text>
-                    <title>{`${oversized.length} device${oversized.length === 1 ? "" : "s"} ${oversized.length === 1 ? "is" : "are"} deeper than the rack (max +${Math.round(maxOversize)}mm). Consider a deeper rack.`}</title>
+                    <title>{oversized.length === 1
+                      ? t("1 device is deeper than the rack (max +{mm}mm). Consider a deeper rack.", { mm: Math.round(maxOversize) })
+                      : t("{n} devices are deeper than the rack (max +{mm}mm). Consider a deeper rack.", { n: oversized.length, mm: Math.round(maxOversize) })}</title>
                   </g>
                 )}
                 {rack.linkedRoomId && (() => {
                   const linkedRoom = nodes.find((n) => n.id === rack.linkedRoomId);
-                  const roomLabel = (linkedRoom?.data as { label?: string })?.label ?? "Room";
+                  const roomLabel = (linkedRoom?.data as { label?: string })?.label ?? t("Room");
                   return (
                     <>
                       <g
@@ -2029,18 +2043,18 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                             const state = useSchematicStore.getState();
                             const roomDevices = getDevicesInRoom(rack.linkedRoomId!, state.nodes);
                             const { placements, skipped } = proposeRackPlacements(rack, roomDevices, page.placements);
-                            if (placements.length === 0 && skipped.length === 0) { state.addToast("No devices to place", "info"); return; }
+                            if (placements.length === 0 && skipped.length === 0) { state.addToast(t("No devices to place"), "info"); return; }
                             for (const p of placements) state.addRackPlacement(page.id, p);
-                            state.addToast(`Placed ${placements.length}${skipped.length ? ` · ${skipped.length} skipped (missing height)` : ""}`, "info");
+                            state.addToast(t("Placed {n}", { n: placements.length }) + (skipped.length ? " · " + t("{n} skipped (missing height)", { n: skipped.length }) : ""), "info");
                           }}
                         >
-                          Auto-Populate
+                          {t("Auto-Populate")}
                         </button>
                       </foreignObject>
                     </>
                   );
                 })()}
-                <RackFrame rack={rack} faceLabel={viewMode === "front" ? "Front" : "Rear"} viewFace={activeFace} />
+                <RackFrame rack={rack} faceLabel={viewMode === "front" ? t("Front") : t("Rear")} viewFace={activeFace} />
                 {oppositePlacements.map((pl) => {
                   const dd = deviceDataMap.get(pl.deviceNodeId);
                   if (!dd) return null;
@@ -2115,9 +2129,9 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                 {(stats.unknownDepthCount > 0 || stats.unknownWeightCount > 0 || stats.unknownPowerCount > 0) && (
                   <text x={RACK_WIDTH / 2} y={totalH + 40} textAnchor="middle" fontSize={7} fill="#999">
                     {[
-                      stats.unknownDepthCount > 0 ? `${stats.unknownDepthCount} unknown depth` : null,
-                      stats.unknownWeightCount > 0 ? `${stats.unknownWeightCount} unknown weight` : null,
-                      stats.unknownPowerCount > 0 ? `${stats.unknownPowerCount} unknown power` : null,
+                      stats.unknownDepthCount > 0 ? t("{n} unknown depth", { n: stats.unknownDepthCount }) : null,
+                      stats.unknownWeightCount > 0 ? t("{n} unknown weight", { n: stats.unknownWeightCount }) : null,
+                      stats.unknownPowerCount > 0 ? t("{n} unknown power", { n: stats.unknownPowerCount }) : null,
                     ].filter(Boolean).join(" · ")}
                   </text>
                 )}
@@ -2126,7 +2140,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
           })}
 
           {page.racks.length === 0 && (
-            <text x={200} y={200} fontSize={14} fill="#999" textAnchor="middle">No racks yet. Use the sidebar to add a rack.</text>
+            <text x={200} y={200} fontSize={14} fill="#999" textAnchor="middle">{t("No racks yet. Use the sidebar to add a rack.")}</text>
           )}
 
           {/* Floating drag ghost that follows cursor */}
@@ -2146,12 +2160,12 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
       {/* Status indicator while dragging */}
       {inRackDrag && !dropTarget && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-700 text-white text-xs px-3 py-1.5 rounded-full shadow-lg pointer-events-none">
-          Drop here to remove from rack
+          {t("Drop here to remove from rack")}
         </div>
       )}
       {inRackDrag && dropTarget && !dropTarget.valid && dropTarget.rackId && isRackRearBlocked(dropTarget.rackId) && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1.5 rounded-full shadow-lg pointer-events-none">
-          2-post racks have no rear mounting
+          {t("2-post racks have no rear mounting")}
         </div>
       )}
 
@@ -2170,7 +2184,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                 setRackContextMenu(null);
               }}
             >
-              Edit Face-Plate Layout
+              {t("Edit Face-Plate Layout")}
             </button>
           )}
           <button
@@ -2180,7 +2194,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               setRackContextMenu(null);
             }}
           >
-            Edit Device
+            {t("Edit Device")}
           </button>
           <div className="border-t border-neutral-100 my-0.5" />
           <button
@@ -2190,7 +2204,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               setRackContextMenu(null);
             }}
           >
-            Remove from Rack
+            {t("Remove from Rack")}
           </button>
         </div>
       )}
@@ -2207,7 +2221,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
           onDeleteRack={(rackId) => {
             const r = page.racks.find((x) => x.id === rackId);
             if (!r) return;
-            if (confirm(`Delete "${r.label}"? This removes all devices placed in it.`)) {
+            if (confirm(t('Delete "{name}"? This removes all devices placed in it.', { name: r.label }))) {
               removeRack(page.id, rackId);
             }
           }}
@@ -2243,7 +2257,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
             const rack = page.racks.find((r) => r.id === a.rackId);
             if (!rack) { setAccessoryContextMenu(null); return; }
             if (a.uPosition + cleanH - 1 > rack.heightU) {
-              addToast(`Can't resize: extends past top of rack`, "error");
+              addToast(t("Can't resize: extends past top of rack"), "error");
               return;
             }
             // Treat current accessory as exempt by computing collisions manually
@@ -2261,7 +2275,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               return p.uPosition <= newTop && a.uPosition <= pTop;
             });
             if (collidesWithAcc || collidesWithDev) {
-              addToast(`Can't resize: would overlap an existing item`, "error");
+              addToast(t("Can't resize: would overlap an existing item"), "error");
               return;
             }
             updateRackAccessory(page.id, a.id, { heightU: cleanH });
@@ -2304,7 +2318,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               setShelfOccupantMenu(null);
             }}
           >
-            {shelfOccupantMenu.placement.rotated ? "Lay flat" : "Rotate (lay on side)"}
+            {shelfOccupantMenu.placement.rotated ? t("Lay flat") : t("Rotate (lay on side)")}
           </button>
           <button
             className="w-full text-left px-3 py-1.5 hover:bg-neutral-100"
@@ -2313,7 +2327,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               setShelfOccupantMenu(null);
             }}
           >
-            Edit Device
+            {t("Edit Device")}
           </button>
           <div className="border-t border-neutral-100 my-0.5" />
           <button
@@ -2323,7 +2337,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
               setShelfOccupantMenu(null);
             }}
           >
-            Remove from shelf (unrack)
+            {t("Remove from shelf (unrack)")}
           </button>
         </div>
       )}
@@ -2332,13 +2346,14 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
       {shelfDeleteConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]" onClick={() => setShelfDeleteConfirm(null)}>
           <div className="bg-white rounded-lg shadow-xl p-4 w-80 text-xs" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-sm mb-2">Remove shelf?</h3>
+            <h3 className="font-semibold text-sm mb-2">{t("Remove shelf?")}</h3>
             <p className="text-neutral-600 mb-3">
-              "{shelfDeleteConfirm.label}" has {shelfDeleteConfirm.occupantCount} mounted device{shelfDeleteConfirm.occupantCount === 1 ? "" : "s"}.
-              Removing the shelf will return {shelfDeleteConfirm.occupantCount === 1 ? "it" : "them"} to the unracked sidebar pool.
+              {shelfDeleteConfirm.occupantCount === 1
+                ? t('"{name}" has 1 mounted device. Removing the shelf will return it to the unracked sidebar pool.', { name: shelfDeleteConfirm.label })
+                : t('"{name}" has {n} mounted devices. Removing the shelf will return them to the unracked sidebar pool.', { name: shelfDeleteConfirm.label, n: shelfDeleteConfirm.occupantCount })}
             </p>
             <div className="flex justify-end gap-2">
-              <button className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => setShelfDeleteConfirm(null)}>Cancel</button>
+              <button className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => setShelfDeleteConfirm(null)}>{t("Cancel")}</button>
               <button
                 className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
                 onClick={() => {
@@ -2346,7 +2361,7 @@ export default function RackRenderer({ page }: { page: RackElevationPage }) {
                   setShelfDeleteConfirm(null);
                 }}
               >
-                Remove shelf & unrack devices
+                {t("Remove shelf & unrack devices")}
               </button>
             </div>
           </div>

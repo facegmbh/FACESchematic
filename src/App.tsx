@@ -67,6 +67,7 @@ import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "
 import { loadSharedSchematic, checkSession } from "./templateApi";
 import { refreshCloudCache } from "./cloudSync";
 import { useTheme } from "./hooks/useTheme";
+import { getLocale, t, useT } from "./i18n";
 
 /** Darkens the canvas area left of x=0 and above y=0, marking the printable origin. */
 function CanvasOriginOverlay() {
@@ -124,6 +125,7 @@ function ResizeSnapGuides({ dragGuides }: { dragGuides: GuideLine[] }) {
 }
 
 function AutoRouteChip() {
+  const t = useT();
   const autoRoute = useSchematicStore((s) => s.autoRoute);
   const isRouting = useSchematicStore((s) => s.isRouting);
   const toggleAutoRoute = useSchematicStore((s) => s.toggleAutoRoute);
@@ -133,15 +135,17 @@ function AutoRouteChip() {
     return (
       <div className="absolute top-3 right-3 z-50 flex items-center gap-1.5">
         <div className="bg-black/70 text-white text-xs px-3 py-1.5 rounded-full animate-pulse pointer-events-none">
-          ⚡ Routing…
+          ⚡ {t("Routing…")}
         </div>
         <button
           type="button"
           className="bg-black/70 text-white/90 hover:bg-red-600/80 text-xs px-3 py-1.5 rounded-full cursor-pointer select-none transition-colors"
           onClick={cancelRouting}
-          title={"Stop the current auto-routing pass.\nRoutes computed so far are kept; a later edit routes again."}
+          title={t(
+            "Stop the current auto-routing pass.\nRoutes computed so far are kept; a later edit routes again.",
+          )}
         >
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     );
@@ -156,15 +160,16 @@ function AutoRouteChip() {
       }`}
       onClick={toggleAutoRoute}
       title={autoRoute
-        ? "Auto-route is on \u2014 connections route around devices automatically.\nClick to disable for faster editing on large schematics."
-        : "Auto-route is off \u2014 connections use simple L-shapes.\nClick to enable automatic routing."}
+        ? t("Auto-route is on \u2014 connections route around devices automatically.\nClick to disable for faster editing on large schematics.")
+        : t("Auto-route is off \u2014 connections use simple L-shapes.\nClick to enable automatic routing.")}
     >
-      {autoRoute ? "\u26a1 Auto-Route" : "Auto-Route Off"}
+      {autoRoute ? `\u26a1 ${t("Auto-Route")}` : t("Auto-Route Off")}
     </div>
   );
 }
 
 function AutoRouteConfirmDialog() {
+  const t = useT();
   const pending = useSchematicStore((s) => s.autoRouteConfirmPending);
   const confirm = useSchematicStore((s) => s.confirmAutoRouteOff);
   const cancel = useSchematicStore((s) => s.cancelAutoRouteOff);
@@ -190,7 +195,7 @@ function AutoRouteConfirmDialog() {
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Keep current routing?
+            {t("Keep current routing?")}
           </span>
           <button
             onClick={() => cancel()}
@@ -200,19 +205,19 @@ function AutoRouteConfirmDialog() {
           </button>
         </div>
         <div className="px-5 py-4 text-xs text-[var(--color-text)] space-y-3">
-          <p>Auto-routing is being turned off. What should happen to the current routes?</p>
+          <p>{t("Auto-routing is being turned off. What should happen to the current routes?")}</p>
           <div className="flex gap-2">
             <button
               className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer text-xs"
               onClick={() => handleChoice(true)}
             >
-              Keep Routes
+              {t("Keep Routes")}
             </button>
             <button
               className="flex-1 px-3 py-1.5 bg-[var(--color-surface)] text-[var(--color-text)] rounded hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] transition-colors cursor-pointer text-xs"
               onClick={() => handleChoice(false)}
             >
-              Restore Previous
+              {t("Restore Previous")}
             </button>
           </div>
           <label className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)] cursor-pointer">
@@ -222,7 +227,7 @@ function AutoRouteConfirmDialog() {
               onChange={(e) => setRemember(e.target.checked)}
               className="accent-blue-600 cursor-pointer"
             />
-            Remember my choice
+            {t("Remember my choice")}
           </label>
         </div>
       </div>
@@ -231,6 +236,7 @@ function AutoRouteConfirmDialog() {
 }
 
 function SchematicCanvas() {
+  const t = useT();
   const {
     nodes,
     edges,
@@ -1629,16 +1635,16 @@ function SchematicCanvas() {
               const report = (window as unknown as Record<string, unknown>).__routingReport;
               if (report) {
                 navigator.clipboard.writeText(JSON.stringify(report, null, 2)).then(() => {
-                  btn.textContent = "✓ Copied!";
-                  setTimeout(() => { btn.textContent = "📋 Copy Routing Report"; }, 1500);
+                  btn.textContent = `✓ ${t("Copied!")}`;
+                  setTimeout(() => { btn.textContent = `📋 ${t("Copy Routing Report")}`; }, 1500);
                 });
               } else {
-                btn.textContent = "⚠ No report yet";
-                setTimeout(() => { btn.textContent = "📋 Copy Routing Report"; }, 1500);
+                btn.textContent = `⚠ ${t("No report yet")}`;
+                setTimeout(() => { btn.textContent = `📋 ${t("Copy Routing Report")}`; }, 1500);
               }
             }}
           >
-            📋 Copy Routing Report
+            📋 {t("Copy Routing Report")}
           </button>
         </div>
       )}
@@ -1662,8 +1668,8 @@ function SchematicCanvas() {
           <Panel position="bottom-left">
             <button
               onClick={() => setShowMinimap(false)}
-              title="Hide minimap (restore via View ▸ Minimap)"
-              aria-label="Hide minimap"
+              title={t("Hide minimap (restore via View ▸ Minimap)")}
+              aria-label={t("Hide minimap")}
               style={{
                 transform: "translate(182px, -132px)",
                 width: 18,
@@ -1703,8 +1709,10 @@ function SchematicCanvas() {
 }
 
 function PrintTitleBlock() {
+  const t = useT();
   const titleBlock = useSchematicStore((s) => s.titleBlock);
-  const today = new Date().toLocaleDateString("en-US", {
+  // Date format follows the chosen interface language, not a fixed US format.
+  const today = new Date().toLocaleDateString(getLocale(), {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -1715,11 +1723,11 @@ function PrintTitleBlock() {
   return (
     <div className="print-title-block hidden justify-between items-end px-4 py-2 border-b-[3px] border-double border-gray-800">
       <div>
-        <div className="text-lg font-bold text-gray-900">{titleBlock.drawingTitle || titleBlock.showName || "Untitled"}</div>
+        <div className="text-lg font-bold text-gray-900">{titleBlock.drawingTitle || titleBlock.showName || t("Untitled")}</div>
         {showLine && <div className="text-xs text-gray-500">{showLine}</div>}
       </div>
       <div className="text-[10px] text-gray-400 text-right leading-relaxed">
-        <div>{titleBlock.designer && `Designer: ${titleBlock.designer}`}</div>
+        <div>{titleBlock.designer && t("Designer: {name}", { name: titleBlock.designer })}</div>
         <div>{titleBlock.date || today}</div>
         <div>FACESchematic</div>
       </div>
@@ -1728,6 +1736,7 @@ function PrintTitleBlock() {
 }
 
 function DemoBanner() {
+  const t = useT();
   const isDemo = useSchematicStore((s) => s.isDemo);
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem("easyschematic-demo-dismissed") === "1",
@@ -1738,8 +1747,9 @@ function DemoBanner() {
   return (
     <div className="bg-slate-700 text-slate-200 text-sm px-4 py-2 flex items-center justify-between gap-4" data-print-hide>
       <span>
-        You&apos;re viewing a demo schematic. Start fresh with{" "}
-        <strong>File &gt; New</strong>, or explore to see what FACESchematic can do.
+        {t("You’re viewing a demo schematic. Start fresh with")}{" "}
+        <strong>{t("File > New")}</strong>
+        {t(", or explore to see what FACESchematic can do.")}
       </span>
       <button
         className="text-slate-400 hover:text-white shrink-0"
@@ -1784,7 +1794,7 @@ export default function App() {
   useEffect(() => {
     document.title = schematicName
       ? `${schematicName} — EasySchematic`
-      : "EasySchematic — AV Signal Flow Diagram Tool";
+      : t("EasySchematic — AV Signal Flow Diagram Tool");
   }, [schematicName]);
 
   // Handle /s/{token} URLs for shared schematics

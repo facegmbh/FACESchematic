@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { useSchematicStore } from "../store";
 import type { DeviceData, DeviceNode } from "../types";
+import { useT } from "../i18n";
 
 /** Free-text fields that are meaningful to set across many devices at once.
  *  Deliberately excludes per-instance identity (shortName, hostname, serialNumber,
@@ -57,6 +58,7 @@ interface Props {
 }
 
 export default function BulkDeviceEditPanel({ onClose }: Props) {
+  const t = useT();
   // Serialize to a stable string — avoids the "new array ref every tick" infinite-loop
   // trap, and makes the panel reflect patches it just applied.
   const selectionKey = useSchematicStore((s) =>
@@ -125,7 +127,7 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-[var(--color-text)]">
-          {hasDevices ? `Edit ${devices.length} devices` : "Edit devices"}
+          {hasDevices ? t("Edit {n} devices", { n: devices.length }) : t("Edit devices")}
         </span>
         <button
           onClick={onClose}
@@ -137,20 +139,22 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 
       {!hasDevices && (
         <p className="text-xs text-[var(--color-text-muted)] text-center py-3">
-          Select 2 or more devices to edit them.
+          {t("Select 2 or more devices to edit them.")}
         </p>
       )}
 
       {hasDevices && (
         <>
           <p className="text-[10px] text-[var(--color-text-muted)] leading-tight mb-3">
-            Changes apply to all {devices.length} selected devices as one undo step. Ports, short
-            name, hostname, serial number and asset ID stay per-device — edit those individually.
+            {t(
+              "Changes apply to all {n} selected devices as one undo step. Ports, short name, hostname, serial number and asset ID stay per-device — edit those individually.",
+              { n: devices.length },
+            )}
           </p>
 
           {/* Name */}
           <section className="mb-3">
-            <Heading>Name</Heading>
+            <Heading>{t("Name")}</Heading>
             <input
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-blue-500"
               value={nameInput}
@@ -159,7 +163,7 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
                 e.stopPropagation();
                 if (e.key === "Enter") applyName();
               }}
-              placeholder="e.g. Lautsprecher"
+              placeholder={t("e.g. Lautsprecher")}
             />
             <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
               <input
@@ -168,27 +172,32 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
                 onChange={(e) => setNumberNames(e.target.checked)}
                 className="cursor-pointer"
               />
-              <span className="text-[11px] text-[var(--color-text)]">Number them</span>
+              <span className="text-[11px] text-[var(--color-text)]">{t("Number them")}</span>
             </label>
             <p className="text-[10px] text-[var(--color-text-muted)] leading-tight mt-0.5">
               {numberNames
-                ? `Names become "${nameInput.trim() || "Name"} 1"…"${nameInput.trim() || "Name"} ${devices.length}", ordered top-left first, and keep renumbering as you add or remove devices.`
-                : "Every selected device gets exactly this name."}
+                ? t(
+                    "Names become \"{name} 1\"…\"{name} {n}\", ordered top-left first, and keep renumbering as you add or remove devices.",
+                    { name: nameInput.trim() || t("Name"), n: devices.length },
+                  )
+                : t("Every selected device gets exactly this name.")}
             </p>
             <button
               onClick={applyName}
               disabled={!nameInput.trim()}
               className="w-full mt-1.5 px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
-              Apply name
+              {t("Apply name")}
             </button>
           </section>
 
           {/* Appearance */}
           <section className="mb-3">
-            <Heading mixed={sharedColor === null || sharedHeaderColor === null}>Appearance</Heading>
+            <Heading mixed={sharedColor === null || sharedHeaderColor === null}>
+              {t("Appearance")}
+            </Heading>
             <ColorRow
-              label="Body"
+              label={t("Body")}
               shared={sharedColor}
               fallback="#ffffff"
               onPick={(hex) => patchAll({ color: hex })}
@@ -196,7 +205,7 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
               canReset={devices.some((d) => d.data.color)}
             />
             <ColorRow
-              label="Header"
+              label={t("Header")}
               shared={sharedHeaderColor}
               fallback="#1f2937"
               onPick={(hex) => patchAll({ headerColor: hex })}
@@ -207,13 +216,13 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 
           {/* Classification */}
           <section className="mb-3">
-            <Heading>Classification</Heading>
+            <Heading>{t("Classification")}</Heading>
             <div className="space-y-1.5">
               {TEXT_FIELDS.map((f) => (
                 <BulkField
                   key={f.key}
-                  label={f.label}
-                  placeholder={f.placeholder}
+                  label={t(f.label)}
+                  placeholder={t(f.placeholder)}
                   shared={sharedValue(devices, f.key)}
                   onCommit={(v) => patchAll({ [f.key]: v })}
                 />
@@ -223,13 +232,13 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 
           {/* Power & cost */}
           <section className="mb-3">
-            <Heading>Power &amp; Cost</Heading>
+            <Heading>{t("Power & Cost")}</Heading>
             <div className="space-y-1.5">
               {NUMBER_FIELDS.map((f) => (
                 <BulkField
                   key={f.key}
-                  label={f.label}
-                  placeholder={f.placeholder}
+                  label={t(f.label)}
+                  placeholder={t(f.placeholder)}
                   numeric
                   shared={sharedValue(devices, f.key)}
                   onCommit={(v) => {
@@ -244,24 +253,24 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 
           {/* Logistics */}
           <section className="mb-3">
-            <Heading>Logistics</Heading>
+            <Heading>{t("Logistics")}</Heading>
             <div className="space-y-1.5">
               <BulkSelect
-                label="Source"
+                label={t("Source::procurement")}
                 shared={sharedValue(devices, "procurementSource")}
                 options={[
                   { value: "", label: "—" },
-                  { value: "stock", label: "Own stock" },
-                  { value: "procuring", label: "Being procured" },
-                  { value: "contractor", label: "Other contractor" },
+                  { value: "stock", label: t("Own stock") },
+                  { value: "procuring", label: t("Being procured") },
+                  { value: "contractor", label: t("Other contractor") },
                 ]}
                 onCommit={(v) =>
                   patchAll({ procurementSource: (v || undefined) as DeviceData["procurementSource"] })
                 }
               />
               <BulkField
-                label="Note"
-                placeholder="Applies to every selected device"
+                label={t("Note")}
+                placeholder={t("Applies to every selected device")}
                 multiline
                 shared={sharedValue(devices, "note")}
                 onCommit={(v) => patchAll({ note: v })}
@@ -271,17 +280,17 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 
           {/* Options */}
           <section>
-            <Heading>Options</Heading>
+            <Heading>{t("Options")}</Heading>
             <div className="space-y-1">
               <Toggle
-                label="Cold spare"
+                label={t("Cold spare")}
                 state={isSpare}
                 onToggle={() =>
                   patchAll({ isSpare: isSpare.allOn && !isSpare.mixed ? undefined : true })
                 }
               />
               <Toggle
-                label="Venue provided"
+                label={t("Venue provided")}
                 state={isVenueProvided}
                 onToggle={() =>
                   patchAll({
@@ -293,25 +302,25 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
             </div>
             <div className="space-y-1.5 mt-1.5">
               <BulkSelect
-                label="Wrap label"
+                label={t("Wrap label")}
                 shared={wrapLabelShared}
                 options={[
-                  { value: "inherit", label: "Inherit document setting" },
-                  { value: "on", label: "Wrap" },
-                  { value: "off", label: "Single line" },
+                  { value: "inherit", label: t("Inherit document setting") },
+                  { value: "on", label: t("Wrap") },
+                  { value: "off", label: t("Single line") },
                 ]}
                 onCommit={(v) =>
                   patchAll({ wrapLabel: v === "inherit" ? undefined : v === "on" })
                 }
               />
               <BulkSelect
-                label="Adapter visibility"
-                hint="Only affects devices of type “adapter”."
+                label={t("Adapter visibility")}
+                hint={t("Only affects devices of type “adapter”.")}
                 shared={adapterVisShared}
                 options={[
-                  { value: "default", label: "Default" },
-                  { value: "force-show", label: "Always show" },
-                  { value: "force-hide", label: "Always hide" },
+                  { value: "default", label: t("Default") },
+                  { value: "force-show", label: t("Always show") },
+                  { value: "force-hide", label: t("Always hide") },
                 ]}
                 onCommit={(v) =>
                   patchAll({
@@ -329,10 +338,11 @@ export default function BulkDeviceEditPanel({ onClose }: Props) {
 }
 
 function Heading({ children, mixed }: { children: React.ReactNode; mixed?: boolean }) {
+  const t = useT();
   return (
     <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
       {children}
-      {mixed && <span className="ml-1 normal-case">(mixed)</span>}
+      {mixed && <span className="ml-1 normal-case">{t("(mixed)")}</span>}
     </div>
   );
 }
@@ -356,6 +366,7 @@ function BulkField({
   numeric?: boolean;
   multiline?: boolean;
 }) {
+  const t = useT();
   const [value, setValue] = useState(shared ?? "");
   const [dirty, setDirty] = useState(false);
 
@@ -371,8 +382,8 @@ function BulkField({
 
   const commit = () => {
     if (!dirty) return;
-    const t = value.trim();
-    onCommit(t || undefined);
+    const trimmed = value.trim();
+    onCommit(trimmed || undefined);
     setDirty(false);
   };
 
@@ -385,7 +396,7 @@ function BulkField({
       setDirty(true);
     },
     onBlur: commit,
-    placeholder: shared === null ? "(mixed — type to overwrite)" : placeholder,
+    placeholder: shared === null ? t("(mixed — type to overwrite)") : placeholder,
     className: cls,
   };
 
@@ -393,7 +404,7 @@ function BulkField({
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
         {label}
-        {shared === null && <span className="ml-1 normal-case">(mixed)</span>}
+        {shared === null && <span className="ml-1 normal-case">{t("(mixed)")}</span>}
       </label>
       {multiline ? (
         <textarea
@@ -430,11 +441,12 @@ function BulkSelect({
   onCommit: (value: string) => void;
   hint?: string;
 }) {
+  const t = useT();
   return (
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
         {label}
-        {shared === null && <span className="ml-1 normal-case">(mixed)</span>}
+        {shared === null && <span className="ml-1 normal-case">{t("(mixed)")}</span>}
       </label>
       <select
         className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
@@ -444,7 +456,7 @@ function BulkSelect({
           onCommit(e.target.value);
         }}
       >
-        {shared === null && <option value="__mixed__">— mixed —</option>}
+        {shared === null && <option value="__mixed__">{t("— mixed —")}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -473,6 +485,7 @@ function ColorRow({
   onReset: () => void;
   canReset: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-2 mb-1">
       <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] w-12">
@@ -483,18 +496,18 @@ function ColorRow({
         value={shared || fallback}
         onChange={(e) => onPick(e.target.value)}
         className="w-8 h-7 cursor-pointer border border-[var(--color-border)] rounded p-0.5 bg-white"
-        title={shared ? shared : "Mixed or unset — pick to apply to all"}
+        title={shared ? shared : t("Mixed or unset — pick to apply to all")}
       />
       <span className="flex-1 text-[11px] text-[var(--color-text-muted)] truncate">
-        {shared === null ? "mixed" : shared || "default"}
+        {shared === null ? t("mixed") : shared || t("default")}
       </span>
       <button
         onClick={onReset}
         disabled={!canReset}
         className="px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-red-600 border border-[var(--color-border)] rounded hover:border-red-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-        title="Reset to template/default color"
+        title={t("Reset to template/default color")}
       >
-        Reset
+        {t("Reset")}
       </button>
     </div>
   );
@@ -509,6 +522,7 @@ function Toggle({
   state: { allOn: boolean; mixed: boolean };
   onToggle: () => void;
 }) {
+  const t = useT();
   return (
     <label className="flex items-center gap-2 cursor-pointer">
       <input
@@ -523,7 +537,7 @@ function Toggle({
       <span className="text-xs text-[var(--color-text)]">
         {label}
         {state.mixed && (
-          <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">(mixed)</span>
+          <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">{t("(mixed)")}</span>
         )}
       </span>
     </label>

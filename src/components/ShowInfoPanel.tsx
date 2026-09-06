@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useT } from "../i18n";
 import { useSchematicStore } from "../store";
 import TitleBlockDialog from "./TitleBlockDialog";
 
@@ -12,6 +13,7 @@ const FIELDS: { key: string; label: string; placeholder: string }[] = [
 ];
 
 export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; onClose?: () => void } = {}) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const titleBlock = useSchematicStore((s) => s.titleBlock);
@@ -46,10 +48,10 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
       ...titleBlock,
       customFields: [
         ...titleBlock.customFields,
-        { id: `custom-${Date.now()}`, label: "New Field", value: "" },
+        { id: `custom-${Date.now()}`, label: t("New Field"), value: "" },
       ],
     });
-  }, [titleBlock, setTitleBlock]);
+  }, [titleBlock, setTitleBlock, t]);
 
   const removeCustomField = useCallback(
     (id: string) => {
@@ -79,7 +81,7 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
         <button
           onClick={() => setCollapsed(false)}
           className="py-3 cursor-pointer hover:bg-[var(--color-surface-hover)] w-full flex justify-center transition-colors"
-          title="Show info"
+          title={t("Show info")}
         >
           <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M10 3l-5 5 5 5" />
@@ -89,7 +91,7 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
           className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mt-2 select-none"
           style={{ writingMode: "vertical-rl" }}
         >
-          Show Info
+          {t("Show Info")}
         </div>
       </div>
     );
@@ -100,12 +102,12 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          Show Info
+          {t("Show Info")}
         </h2>
         <button
           onClick={() => mobile ? onClose?.() : setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
-          title={mobile ? "Close" : "Collapse"}
+          title={mobile ? t("Close") : t("Collapse")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d={mobile ? "M4 4l8 8M12 4l-8 8" : "M6 3l5 5-5 5"} />
@@ -118,8 +120,8 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
         {FIELDS.map(({ key, label, placeholder }) => (
           <FieldInput
             key={key}
-            label={label}
-            placeholder={placeholder}
+            label={t(label)}
+            placeholder={t(placeholder)}
             value={(titleBlock as unknown as Record<string, string>)[key] ?? ""}
             onBlur={(v) => handleBlur(key, v)}
           />
@@ -137,14 +139,14 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
               <button
                 onClick={() => removeCustomField(cf.id)}
                 className="text-[10px] text-red-400 hover:text-red-600 cursor-pointer px-0.5 shrink-0"
-                title="Remove field"
+                title={t("Remove field")}
               >
                 &times;
               </button>
             </div>
             <FieldInput
               label=""
-              placeholder="Value"
+              placeholder={t("Value")}
               value={cf.value}
               onBlur={(v) => handleCustomFieldBlur(cf.id, v)}
               hideLabel
@@ -156,7 +158,7 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
           onClick={addCustomField}
           className="w-full mt-1 px-2 py-1 text-[10px] rounded border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] hover:border-[var(--color-text-muted)] transition-colors cursor-pointer"
         >
-          + Add Field
+          {t("+ Add Field")}
         </button>
 
         {/* Customize button */}
@@ -164,7 +166,7 @@ export default function ShowInfoPanel({ mobile, onClose }: { mobile?: boolean; o
           onClick={() => setShowEditor(true)}
           className="w-full mt-1 px-2 py-1.5 text-[10px] uppercase tracking-wider rounded bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
         >
-          Customize Title Block...
+          {t("Customize Title Block...")}
         </button>
       </div>
 

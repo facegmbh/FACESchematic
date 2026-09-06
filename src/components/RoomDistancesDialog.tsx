@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useT } from "../i18n";
 import { useSchematicStore } from "../store";
 import { DEFAULT_DISTANCE_SETTINGS } from "../types";
 import { listTopLevelRooms, pairKey } from "../roomDistance";
@@ -8,6 +9,7 @@ interface RoomDistancesDialogProps {
 }
 
 export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProps) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const roomDistances = useSchematicStore((s) => s.roomDistances);
   const distanceSettings = useSchematicStore((s) => s.distanceSettings);
@@ -38,7 +40,7 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
     >
       <div className="bg-white border border-[var(--color-border)] rounded-lg shadow-2xl w-[520px] max-h-[80vh] flex flex-col">
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">Room Distances</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">{t("Room Distances")}</h2>
           <button
             onClick={onClose}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] text-lg leading-none cursor-pointer"
@@ -49,15 +51,14 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
 
         <div className="p-4 space-y-4 overflow-y-auto">
           <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
-            Set the physical distance between top-level rooms. Estimated cable length
-            for each connection is shown in the Cable Schedule alongside any manual
-            length you&rsquo;ve entered. Devices in nested subrooms inherit the distance
-            of their top-level room.
+            {t(
+              "Set the physical distance between top-level rooms. Estimated cable length for each connection is shown in the Cable Schedule alongside any manual length you’ve entered. Devices in nested subrooms inherit the distance of their top-level room.",
+            )}
           </p>
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className={labelClass}>Unit</label>
+              <label className={labelClass}>{t("Unit")}</label>
               <div className="flex items-center gap-1">
                 {(["m", "ft"] as const).map((u) => (
                   <button
@@ -75,7 +76,7 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
               </div>
             </div>
             <div>
-              <label className={labelClass}>Slack %</label>
+              <label className={labelClass}>{t("Slack %")}</label>
               <input
                 type="number"
                 min={0}
@@ -87,7 +88,7 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
               />
             </div>
             <div>
-              <label className={labelClass}>Slack +{settings.unit}</label>
+              <label className={labelClass}>{t("Slack +{unit}", { unit: settings.unit })}</label>
               <input
                 type="number"
                 min={0}
@@ -101,10 +102,10 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
           </div>
 
           <div className="pt-2 border-t border-[var(--color-border)]">
-            <div className={labelClass}>Room pairs ({settings.unit})</div>
+            <div className={labelClass}>{t("Room pairs ({unit})", { unit: settings.unit })}</div>
             {rooms.length < 2 ? (
               <p className="text-xs text-[var(--color-text-muted)] mt-2">
-                Create at least two top-level rooms to define distances.
+                {t("Create at least two top-level rooms to define distances.")}
               </p>
             ) : (
               <div className="space-y-1 mt-1 max-h-[50vh] overflow-y-auto pr-1">
@@ -142,7 +143,7 @@ export default function RoomDistancesDialog({ onClose }: RoomDistancesDialogProp
             onClick={onClose}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
           >
-            Done
+            {t("Done")}
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { autoLayoutPorts, inferRackHeightU, PX_PER_U, DEVICE_WIDTH_PX, PX_PER_MM
 import { normalizeShortcutKey } from "../keyUtils";
 import { ConnectorIcon, getConnectorSpec } from "./connectorIcons";
 import { SIGNAL_COLORS } from "../types";
+import { useT } from "../i18n";
 
 interface FacePlateEditorProps {
   deviceData: DeviceData;
@@ -23,6 +24,7 @@ function computeDeviceLabelFont(fontSize: number, h: number) {
 }
 
 export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePlateEditorProps) {
+  const t = useT();
   const heightU = inferRackHeightU(deviceData);
 
   // Canonical dimensions — exactly match the rack view
@@ -550,16 +552,16 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
           <div>
-            <h3 className="font-semibold text-sm">Face-Plate Layout</h3>
+            <h3 className="font-semibold text-sm">{t("Face-Plate Layout")}</h3>
             <span className="text-neutral-400">{deviceData.label} — {heightU}U</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               className="px-2 py-1 rounded border border-neutral-300 hover:bg-neutral-50 text-xs"
               onClick={handleResetLayout}
-              title="Reset all positions to auto-layout"
+              title={t("Reset all positions to auto-layout")}
             >
-              Reset
+              {t("Reset")}
             </button>
             <button
               className="text-neutral-400 hover:text-neutral-600 text-lg leading-none"
@@ -772,7 +774,7 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                 onChange={(e) => setSnapEnabled(e.target.checked)}
                 className="rounded accent-blue-600"
               />
-              <span>Snap</span>
+              <span>{t("Snap")}</span>
             </label>
             {snapEnabled && (
               <select
@@ -780,16 +782,16 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                 value={gridSize}
                 onChange={(e) => setGridSize(Number(e.target.value))}
               >
-                <option value={1}>Fine</option>
-                <option value={2}>Medium</option>
-                <option value={5}>Coarse</option>
+                <option value={1}>{t("Fine")}</option>
+                <option value={2}>{t("Medium")}</option>
+                <option value={5}>{t("Coarse")}</option>
               </select>
             )}
             <button
               className="px-2 py-1 rounded border border-neutral-300 hover:bg-neutral-50"
               onClick={handleAddLabel}
             >
-              + Label
+              + {t("Label")}
             </button>
             <span className="text-neutral-400">|</span>
             <span className="text-neutral-500">{Math.round(zoom * 100)}%</span>
@@ -798,7 +800,7 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                 className="px-2 py-1 rounded border border-neutral-300 hover:bg-neutral-50"
                 onClick={handleResetView}
               >
-                Reset View
+                {t("Reset View")}
               </button>
             )}
 
@@ -806,19 +808,19 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
             {selectedIds.size >= 2 && (
               <>
                 <span className="text-neutral-400">|</span>
-                <span className="text-neutral-500">Align:</span>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "min")} title="Align left">L</button>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "mid")} title="Align center horizontally">CX</button>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "max")} title="Align right">R</button>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "min")} title="Align top">T</button>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "mid")} title="Align center vertically">CY</button>
-                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "max")} title="Align bottom">B</button>
+                <span className="text-neutral-500">{t("Align:")}</span>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "min")} title={t("Align left")}>{t("L::align-left")}</button>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "mid")} title={t("Align center horizontally")}>{t("CX::align-center-h")}</button>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("x", "max")} title={t("Align right")}>{t("R::align-right")}</button>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "min")} title={t("Align top")}>{t("T::align-top")}</button>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "mid")} title={t("Align center vertically")}>{t("CY::align-center-v")}</button>
+                <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleAlign("y", "max")} title={t("Align bottom")}>{t("B::align-bottom")}</button>
                 {selectedIds.size >= 3 && (
                   <>
                     <span className="text-neutral-400">|</span>
-                    <span className="text-neutral-500">Distribute:</span>
-                    <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleDistribute("x")} title="Distribute horizontally">H</button>
-                    <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleDistribute("y")} title="Distribute vertically">V</button>
+                    <span className="text-neutral-500">{t("Distribute:")}</span>
+                    <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleDistribute("x")} title={t("Distribute horizontally")}>{t("H::distribute-h")}</button>
+                    <button className="px-1.5 py-0.5 rounded border border-neutral-300 hover:bg-neutral-50" onClick={() => handleDistribute("y")} title={t("Distribute vertically")}>{t("V::distribute-v")}</button>
                   </>
                 )}
               </>
@@ -827,21 +829,23 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
             {/* Status bar */}
             <span className="text-neutral-400 ml-2">
               {selectedIds.size > 1
-                ? `${selectedIds.size} items selected`
+                ? t("{n} items selected", { n: selectedIds.size })
                 : isDeviceLabelSelected
-                  ? `Device label — (${deviceLabelPos.x.toFixed(0)}%, ${deviceLabelPos.y.toFixed(0)}%)`
+                  ? `${t("Device label")} — (${deviceLabelPos.x.toFixed(0)}%, ${deviceLabelPos.y.toFixed(0)}%)`
                   : selectedPort && selectedPos
                     ? `${selectedPort.label} — (${selectedPos.x.toFixed(0)}%, ${selectedPos.y.toFixed(0)}%)`
                     : selectedLabel
                       ? `"${selectedLabel.text}" — (${selectedLabel.x.toFixed(0)}%, ${selectedLabel.y.toFixed(0)}%)`
-                      : `${portIds.length} ports`}
+                      : portIds.length === 1
+                        ? t("1 port")
+                        : t("{n} ports", { n: portIds.length })}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {/* Device label font size control */}
             {isDeviceLabelSelected && (
               <div className="flex items-center gap-1 mr-2">
-                <span className="text-neutral-500">Size</span>
+                <span className="text-neutral-500">{t("Size")}</span>
                 <input
                   type="range"
                   min={6}
@@ -870,20 +874,20 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                   e.stopPropagation();
                   if (e.key === "Enter") setSelectedIds(new Set());
                 }}
-                placeholder="Label text"
+                placeholder={t("Label text")}
               />
             )}
             <button
               className="px-3 py-1 rounded border border-neutral-300 hover:bg-neutral-50"
               onClick={onClose}
             >
-              Cancel
+              {t("Cancel")}
             </button>
             <button
               className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
               onClick={handleSave}
             >
-              Save
+              {t("Save")}
             </button>
           </div>
         </div>

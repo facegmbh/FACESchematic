@@ -2,11 +2,16 @@ import { useEffect, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import type { StubLabelData, StubLabelPageMode } from "../types";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { useT } from "../i18n";
+
+/** The `t` a component got from `useT()`, passed down to the label builders. */
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
 /** Right-click menu for stub-label nodes — per-stub overrides for the three label
  *  fields plus a "show full connection" collapse action. Each cycle item rotates
  *  through "Default (follows global)" → explicit-on → explicit-off → undefined. */
 export default function StubLabelContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.stubLabelContextMenu);
   const { ref: menuRef, pos: menuPos } = useContextMenuPosition(
     menu?.screenX ?? 0,
@@ -82,9 +87,9 @@ export default function StubLabelContextMenu() {
   const node = store.nodes.find((n) => n.id === menu.nodeId);
   const data = node?.data as StubLabelData | undefined;
 
-  const showPortLabel = boolItemLabel("Show port", data?.showPort, store.stubLabelShowPort);
-  const showRoomLabel = boolItemLabel("Show room", data?.showRoom, store.stubLabelShowRoom);
-  const pageModeLabel = pageModeItemLabel(data?.pageMode, store.stubLabelPageMode);
+  const showPortLabel = boolItemLabel(t, "Show port", data?.showPort, store.stubLabelShowPort);
+  const showRoomLabel = boolItemLabel(t, "Show room", data?.showRoom, store.stubLabelShowRoom);
+  const pageModeLabel = pageModeItemLabel(t, data?.pageMode, store.stubLabelPageMode);
 
   return (
     <div
@@ -103,20 +108,34 @@ export default function StubLabelContextMenu() {
       <MenuItem label={showRoomLabel} onClick={() => cycleBool("showRoom")} />
       <MenuItem label={pageModeLabel} onClick={cyclePageMode} />
       <div className="border-t border-gray-200 my-1" />
-      <MenuItem label="Show Full Connection" onClick={collapseStubs} />
+      <MenuItem label={t("Show Full Connection")} onClick={collapseStubs} />
     </div>
   );
 }
 
-function boolItemLabel(prefix: string, override: boolean | undefined, globalVal: boolean): string {
-  if (override === undefined) return `${prefix}: Default (${globalVal ? "on" : "off"})`;
-  return `${prefix}: ${override ? "On" : "Off"}`;
+function boolItemLabel(
+  t: Translate,
+  prefix: string,
+  override: boolean | undefined,
+  globalVal: boolean,
+): string {
+  if (override === undefined)
+    return t("{label}: Default ({state})", {
+      label: t(prefix),
+      state: globalVal ? t("on") : t("off"),
+    });
+  return t("{label}: {state}", { label: t(prefix), state: override ? t("On") : t("Off") });
 }
 
-function pageModeItemLabel(override: StubLabelPageMode | undefined, globalVal: StubLabelPageMode): string {
-  const fmt = (m: StubLabelPageMode) => m === "cross-page" ? "Cross-page" : m === "always" ? "Always" : "Never";
-  if (override === undefined) return `Page mode: Default (${fmt(globalVal)})`;
-  return `Page mode: ${fmt(override)}`;
+function pageModeItemLabel(
+  t: Translate,
+  override: StubLabelPageMode | undefined,
+  globalVal: StubLabelPageMode,
+): string {
+  const fmt = (m: StubLabelPageMode) =>
+    m === "cross-page" ? t("Cross-page") : m === "always" ? t("Always") : t("Never");
+  if (override === undefined) return t("Page mode: Default ({state})", { state: fmt(globalVal) });
+  return t("Page mode: {state}", { state: fmt(override) });
 }
 
 function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {

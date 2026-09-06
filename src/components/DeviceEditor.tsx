@@ -42,6 +42,7 @@ import type { AmplifierLoadSpec, SpeakerLoadSpec, FloorplanSymbolShape, PlanSymb
 import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
+import { useT } from "../i18n";
 
 const ALL_SIGNAL_TYPES = (Object.keys(SIGNAL_LABELS) as SignalType[]).sort(
   (a, b) => SIGNAL_LABELS[a].localeCompare(SIGNAL_LABELS[b]),
@@ -127,6 +128,7 @@ function newPortDraft(direction: PortDirection): PortDraft {
 const MIME = "application/easyschematic-port";
 
 export default function DeviceEditor() {
+  const t = useT();
   const editingNodeId = useSchematicStore((s) => s.editingNodeId);
   const wrapDeviceLabels = useSchematicStore((s) => s.wrapDeviceLabels);
   const nodes = useSchematicStore((s) => s.nodes);
@@ -203,7 +205,7 @@ export default function DeviceEditor() {
     try {
       setPlanImage(await importSymbolImage(file));
     } catch (e) {
-      addToast(e instanceof Error ? e.message : "Could not load that symbol image.", "error");
+      addToast(e instanceof Error ? e.message : t("Could not load that symbol image."), "error");
     }
   };
   const [category, setCategory] = useState("");
@@ -642,7 +644,14 @@ export default function DeviceEditor() {
     const others = nodes.filter(
       (n) => n.type === "device" && (n.data as DeviceData).templateId === templateId && n.id !== editingNodeId,
     ).length;
-    if (others > 0 && !confirm(`Update ${others} other instance${others === 1 ? "" : "s"} of this device on the current schematic?`)) {
+    if (
+      others > 0 &&
+      !confirm(
+        others === 1
+          ? t("Update 1 other instance of this device on the current schematic?")
+          : t("Update {n} other instances of this device on the current schematic?", { n: others }),
+      )
+    ) {
       return;
     }
 
@@ -653,7 +662,13 @@ export default function DeviceEditor() {
     setCreatingNodeId(null);
     if (others > 0) {
       const { updated } = propagateTemplateToInstances(templateId, template, editingNodeId);
-      if (updated > 0) addToast(`Updated ${updated} other instance${updated === 1 ? "" : "s"} on this schematic`, "success");
+      if (updated > 0)
+        addToast(
+          updated === 1
+            ? t("Updated 1 other instance on this schematic")
+            : t("Updated {n} other instances on this schematic", { n: updated }),
+          "success",
+        );
     }
     close();
   }, [node, editingNodeId, customTemplates, buildTemplateFromForm, nodes, updateCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
@@ -669,7 +684,14 @@ export default function DeviceEditor() {
     const others = nodes.filter(
       (n) => n.type === "device" && (n.data as DeviceData).templateId === builtInId && n.id !== editingNodeId,
     ).length;
-    if (others > 0 && !confirm(`Create a "(Custom)" user template and update ${others} other instance${others === 1 ? "" : "s"} on the current schematic?`)) {
+    if (
+      others > 0 &&
+      !confirm(
+        others === 1
+          ? t('Create a "(Custom)" user template and update 1 other instance on the current schematic?')
+          : t('Create a "(Custom)" user template and update {n} other instances on the current schematic?', { n: others }),
+      )
+    ) {
       return;
     }
 
@@ -681,9 +703,16 @@ export default function DeviceEditor() {
     setCreatingNodeId(null);
     if (others > 0) {
       const { updated } = propagateTemplateToInstances(builtInId, template, editingNodeId);
-      addToast(`Created "${forkLabel}"${updated > 0 ? ` and updated ${updated} other instance${updated === 1 ? "" : "s"}` : ""}`, "success");
+      addToast(
+        updated === 0
+          ? t('Created "{name}"', { name: forkLabel })
+          : updated === 1
+            ? t('Created "{name}" and updated 1 other instance', { name: forkLabel })
+            : t('Created "{name}" and updated {n} other instances', { name: forkLabel, n: updated }),
+        "success",
+      );
     } else {
-      addToast(`Created "${forkLabel}"`, "success");
+      addToast(t('Created "{name}"', { name: forkLabel }), "success");
     }
     close();
   }, [node, editingNodeId, label, nodes, buildTemplateFromForm, addCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
@@ -1085,7 +1114,7 @@ export default function DeviceEditor() {
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">Device Properties</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">{t("Device Properties")}</h2>
           <button
             onClick={close}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] text-lg leading-none cursor-pointer"
@@ -1098,13 +1127,16 @@ export default function DeviceEditor() {
         {drift && (
           <div className="px-4 py-2 border-b border-[var(--color-border)] bg-blue-50 dark:bg-blue-900/20 flex items-center justify-between gap-2">
             <span className="text-xs text-blue-900 dark:text-blue-200">
-              Template updated — v{drift.deviceVersion} → v{drift.currentVersion} available
+              {t("Template updated — v{from} → v{to} available", {
+                from: drift.deviceVersion,
+                to: drift.currentVersion,
+              })}
             </span>
             <button
               onClick={() => setShowSyncDialog(true)}
               className="px-2.5 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
             >
-              Update
+              {t("Update")}
             </button>
           </div>
         )}
@@ -1112,37 +1144,39 @@ export default function DeviceEditor() {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Device Name">
+            <Field label={t("Device Name")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. Camera 1"
+                placeholder={t("e.g. Camera 1")}
               />
               {node.data.model && label.trim() !== node.data.model && (
                 <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                  Template: {node.data.model}
+                  {t("Template: {name}", { name: node.data.model })}
                 </div>
               )}
             </Field>
-            <Field label="Short Name">
+            <Field label={t("Short Name")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={shortName}
                 onChange={(e) => setShortName(e.target.value)}
-                placeholder="e.g. HDC-5500"
+                placeholder={t("e.g. HDC-5500")}
               />
             </Field>
             <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 -mt-1">
               {(() => {
                 const hasCompact = !!(shortName.trim() || modelNumber.trim());
-                const fallbackLabel = !shortName.trim() && modelNumber.trim() ? ` — falls back to model number "${modelNumber.trim()}"` : "";
+                const fallbackLabel = !shortName.trim() && modelNumber.trim()
+                  ? t(' — falls back to model number "{model}"', { model: modelNumber.trim() })
+                  : "";
                 return (
                   <label
                     className={`flex items-center gap-1.5 text-[11px] ${hasCompact ? "text-[var(--color-text)] cursor-pointer" : "text-[var(--color-text-muted)] opacity-60 cursor-not-allowed"}`}
                     title={hasCompact
-                      ? `Use the short name on this device${fallbackLabel}. Leave unchecked to inherit the schematic-wide default.`
-                      : "Set a Short Name (or Model Number) above to enable this toggle."}
+                      ? t("Use the short name on this device{fallback}. Leave unchecked to inherit the schematic-wide default.", { fallback: fallbackLabel })
+                      : t("Set a Short Name (or Model Number) above to enable this toggle.")}
                   >
                     <input
                       type="checkbox"
@@ -1151,15 +1185,15 @@ export default function DeviceEditor() {
                       ref={(el) => { if (el) el.indeterminate = useShortName === undefined; }}
                       onChange={(e) => setUseShortName(e.target.checked ? true : (useShortName === undefined ? false : undefined))}
                     />
-                    Use short name {useShortName === undefined && hasCompact && <span className="text-[var(--color-text-muted)]">(inherit)</span>}
+                    {t("Use short name")} {useShortName === undefined && hasCompact && <span className="text-[var(--color-text-muted)]">{t("(inherit)")}</span>}
                   </label>
                 );
               })()}
               <label
                 className="flex items-center gap-1.5 text-[11px] text-[var(--color-text)] cursor-pointer"
                 title={wrapLabel === undefined
-                  ? `Inheriting the schematic-wide default (currently ${wrapDeviceLabels ? "on" : "off"}). Click to set this device explicitly.`
-                  : "Wrap the device label across two lines on this device. Uncheck twice to go back to inheriting the schematic-wide default."}
+                  ? t("Inheriting the schematic-wide default (currently {state}). Click to set this device explicitly.", { state: wrapDeviceLabels ? t("on") : t("off") })
+                  : t("Wrap the device label across two lines on this device. Uncheck twice to go back to inheriting the schematic-wide default.")}
               >
                 {/* Shows the *effective* state, so an inherited "on" reads as ticked rather than as an
                     indeterminate dash that looks switched off. The "(inherit)" hint carries the distinction. */}
@@ -1168,42 +1202,42 @@ export default function DeviceEditor() {
                   checked={wrapLabel ?? wrapDeviceLabels}
                   onChange={(e) => setWrapLabelState(e.target.checked ? true : (wrapLabel === undefined ? false : undefined))}
                 />
-                Wrap label {wrapLabel === undefined && <span className="text-[var(--color-text-muted)]">(inherit)</span>}
+                {t("Wrap label")} {wrapLabel === undefined && <span className="text-[var(--color-text-muted)]">{t("(inherit)")}</span>}
               </label>
             </div>
-            <Field label="Device Type">
+            <Field label={t("Device Type")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={deviceType}
                 onChange={(e) => setDeviceType(e.target.value)}
-                placeholder="e.g. camera"
+                placeholder={t("e.g. camera")}
               />
             </Field>
-            <Field label="Manufacturer">
+            <Field label={t("Manufacturer")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={manufacturer}
                 onChange={(e) => setManufacturer(e.target.value)}
-                placeholder="e.g. Sony"
+                placeholder={t("e.g. Sony")}
               />
             </Field>
-            <Field label="Model Number">
+            <Field label={t("Model Number")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={modelNumber}
                 onChange={(e) => setModelNumber(e.target.value)}
-                placeholder="e.g. FX9"
+                placeholder={t("e.g. FX9")}
               />
             </Field>
-            <Field label="Category">
+            <Field label={t("Category")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. video"
+                placeholder={t("e.g. video")}
               />
             </Field>
-            <Field label="Reference URL">
+            <Field label={t("Reference URL")}>
               <input
                 type="url"
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
@@ -1212,25 +1246,25 @@ export default function DeviceEditor() {
                 placeholder="https://…"
               />
             </Field>
-            <Field label="Install cable">
+            <Field label={t("Install cable")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={installCable}
                 onChange={(e) => setInstallCable(e.target.value)}
-                placeholder="e.g. Kabel aus Decke: 2x2,5 mm²"
-                title="Fixed installation cable for this model — appears in the floorplan legend row (saved with the template)"
+                placeholder={t("e.g. Kabel aus Decke: 2x2,5 mm²")}
+                title={t("Fixed installation cable for this model — appears in the floorplan legend row (saved with the template)")}
               />
             </Field>
-            <Field label="Plan symbol">
+            <Field label={t("Plan symbol")}>
               <div className="flex items-center gap-1.5">
                 <select
                   className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                   value={planShape}
                   onChange={(e) => setPlanShape(e.target.value as "" | FloorplanSymbolShape)}
-                  title="Symbol on floorplans — abstract shape or a top-view pictogram; empty follows the device type"
+                  title={t("Symbol on floorplans — abstract shape or a top-view pictogram; empty follows the device type")}
                 >
-                  <option value="">Auto (by type)</option>
-                  {FLOORPLAN_SYMBOL_SHAPES.map((sh) => <option key={sh} value={sh}>{FLOORPLAN_SYMBOL_SHAPE_LABELS[sh]}</option>)}
+                  <option value="">{t("Auto (by type)")}</option>
+                  {FLOORPLAN_SYMBOL_SHAPES.map((sh) => <option key={sh} value={sh}>{t(FLOORPLAN_SYMBOL_SHAPE_LABELS[sh])}</option>)}
                 </select>
                 <input
                   type="color"
@@ -1238,7 +1272,7 @@ export default function DeviceEditor() {
                   value={planColor || "#e11d1d"}
                   disabled={!planShape}
                   onChange={(e) => setPlanColor(e.target.value)}
-                  title="Symbol color on floorplans"
+                  title={t("Symbol color on floorplans")}
                 />
                 <input
                   className="w-12 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 disabled:opacity-40"
@@ -1247,18 +1281,18 @@ export default function DeviceEditor() {
                   disabled={!planShape}
                   onChange={(e) => setPlanGlyph(e.target.value)}
                   placeholder="S"
-                  title="Up to two characters drawn inside the symbol"
+                  title={t("Up to two characters drawn inside the symbol")}
                 />
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 text-[var(--color-text-muted)]">
-                <span className="shrink-0 text-[10px]">Outline</span>
+                <span className="shrink-0 text-[10px]">{t("Outline")}</span>
                 <input
                   type="color"
                   className="w-8 h-7 border border-[var(--color-border)] rounded cursor-pointer disabled:opacity-40"
                   value={planOutline || DEFAULT_SYMBOL_OUTLINE}
                   disabled={!planShape && !planImage}
                   onChange={(e) => setPlanOutline(e.target.value)}
-                  title="Outline color around the symbol body on floorplans"
+                  title={t("Outline color around the symbol body on floorplans")}
                 />
                 <input
                   type="number"
@@ -1269,8 +1303,8 @@ export default function DeviceEditor() {
                   value={planOutlineWidth}
                   disabled={!planShape && !planImage}
                   onChange={(e) => setPlanOutlineWidth(e.target.value)}
-                  placeholder="auto"
-                  title="Outline thickness on paper in mm. 0 draws no outline; empty scales with the symbol size."
+                  placeholder={t("auto")}
+                  title={t("Outline thickness on paper in mm. 0 draws no outline; empty scales with the symbol size.")}
                 />
                 <span className="text-[10px]">mm</span>
               </div>
@@ -1282,16 +1316,16 @@ export default function DeviceEditor() {
                   type="button"
                   className="px-2 py-1 rounded border border-[var(--color-border)] text-xs text-[var(--color-text)] hover:border-blue-500"
                   onClick={() => planSymbolInputRef.current?.click()}
-                  title="Upload your own symbol for this model (PNG, JPG, WebP or SVG). Every plan that uses the model draws the picture instead of the shape."
+                  title={t("Upload your own symbol for this model (PNG, JPG, WebP or SVG). Every plan that uses the model draws the picture instead of the shape.")}
                 >
-                  {planImage ? "Replace symbol…" : "Upload symbol…"}
+                  {planImage ? t("Replace symbol…") : t("Upload symbol…")}
                 </button>
                 {planImage && (
                   <button
                     type="button"
                     className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
                     onClick={() => setPlanImage("")}
-                    title="Back to the drawn shape"
+                    title={t("Back to the drawn shape")}
                   >
                     ✕
                   </button>
@@ -1305,13 +1339,13 @@ export default function DeviceEditor() {
                 />
               </div>
             </Field>
-            <Field label="Install notes">
+            <Field label={t("Install notes")}>
               <input
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                 value={installNotes}
                 onChange={(e) => setInstallNotes(e.target.value)}
-                placeholder="e.g. Montage an der Decke; Kabel 5 cm von der Wand"
-                title="Standing installation note for this model — listed under the floorplan legend's installation notes"
+                placeholder={t("e.g. Montage an der Decke; Kabel 5 cm von der Wand")}
+                title={t("Standing installation note for this model — listed under the floorplan legend's installation notes")}
               />
             </Field>
             <LoadSpecFields deviceType={deviceType} speakerLoad={speakerLoad} ampLoad={ampLoad} onSpeakerLoad={setSpeakerLoad} onAmpLoad={setAmpLoad} />
@@ -1353,7 +1387,7 @@ export default function DeviceEditor() {
 
           {/* Header color picker */}
           <div className="flex items-center gap-2 -mt-1">
-            <span className="text-[10px] text-[var(--color-text-muted)]">Header Color</span>
+            <span className="text-[10px] text-[var(--color-text-muted)]">{t("Header Color")}</span>
             <input
               type="color"
               className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
@@ -1365,14 +1399,14 @@ export default function DeviceEditor() {
                 className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
                 onClick={() => setHeaderColor(undefined)}
               >
-                Reset
+                {t("Reset")}
               </button>
             )}
           </div>
 
           {/* Background (body) color picker */}
           <div className="flex items-center gap-2 -mt-1">
-            <span className="text-[10px] text-[var(--color-text-muted)]">Background Color</span>
+            <span className="text-[10px] text-[var(--color-text-muted)]">{t("Background Color")}</span>
             <input
               type="color"
               className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
@@ -1384,7 +1418,7 @@ export default function DeviceEditor() {
                 className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
                 onClick={() => setColor(undefined)}
               >
-                Reset
+                {t("Reset")}
               </button>
             )}
           </div>
@@ -1401,7 +1435,7 @@ export default function DeviceEditor() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-500 hover:text-blue-600 transition-colors flex items-center gap-1"
-                  title="View manufacturer spec page"
+                  title={t("View manufacturer spec page")}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -1409,7 +1443,7 @@ export default function DeviceEditor() {
                     <path d="M9 2h5v5" />
                     <path d="M14 2L7 9" />
                   </svg>
-                  <span>Spec sheet</span>
+                  <span>{t("Spec sheet")}</span>
                 </a>
               </div>
             ) : null;
@@ -1418,12 +1452,12 @@ export default function DeviceEditor() {
           {/* Preset indicator */}
           {hasPreset && templateId && (
             <div className="text-[10px] text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/60 dark:border-blue-800/60 rounded px-2 py-1 flex items-center justify-between -mt-1">
-              <span>Preset active for all &ldquo;{node.data.model || "this template"}&rdquo; devices</span>
+              <span>{t("Preset active for all “{name}” devices", { name: node.data.model || t("this template") })}</span>
               <button
                 onClick={() => setTemplatePreset(templateId, null)}
                 className="text-blue-500 hover:text-blue-600 cursor-pointer ml-2"
               >
-                Clear
+                {t("Clear")}
               </button>
             </div>
           )}
@@ -1444,7 +1478,7 @@ export default function DeviceEditor() {
           />
 
           <PortSection
-            title={deviceType === "patch-panel" ? "Rear" : "Inputs"}
+            title={deviceType === "patch-panel" ? t("Rear") : t("Inputs")}
             direction="input"
             deviceType={deviceType}
             ports={inputs}
@@ -1463,7 +1497,7 @@ export default function DeviceEditor() {
           />
 
           <PortSection
-            title={deviceType === "patch-panel" ? "Front" : "Outputs"}
+            title={deviceType === "patch-panel" ? t("Front") : t("Outputs")}
             direction="output"
             deviceType={deviceType}
             ports={outputs}
@@ -1483,7 +1517,7 @@ export default function DeviceEditor() {
 
           {(deviceType !== "patch-panel" || bidir.length > 0) && (
             <PortSection
-              title="Bidirectional"
+              title={t("Bidirectional")}
               direction="bidirectional"
               deviceType={deviceType}
               ports={bidir}
@@ -1504,7 +1538,7 @@ export default function DeviceEditor() {
 
           {(deviceType === "patch-panel" || deviceType === "wall-plate" || passthroughPorts.length > 0) && (
             <PortSection
-              title="Passthrough Circuits"
+              title={t("Passthrough Circuits")}
               direction="passthrough"
               deviceType={deviceType}
               ports={passthroughPorts}
@@ -1525,12 +1559,12 @@ export default function DeviceEditor() {
 
           {/* Hostname */}
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-[10px] text-[var(--color-text-muted)] shrink-0">Hostname:</span>
+            <span className="text-[10px] text-[var(--color-text-muted)] shrink-0">{t("Hostname:")}</span>
             <input
               className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-xs outline-none focus:border-blue-500"
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
-              placeholder="e.g. nvx-room101"
+              placeholder={t("e.g. nvx-room101")}
               onKeyDown={(e) => e.stopPropagation()}
             />
           </div>
@@ -1538,19 +1572,19 @@ export default function DeviceEditor() {
           {/* Physical Dimensions */}
           <details className="text-xs">
             <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-              Physical Dimensions
+              {t("Physical Dimensions")}
             </summary>
             <div className="pt-1 pl-2 grid grid-cols-4 gap-3">
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Height (mm)
+                  {t("Height (mm)")}
                 </label>
                 <input
                   type="number"
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
                   value={heightMm ?? ""}
                   onChange={(e) => setHeightMm(e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g. 44"
+                  placeholder={t("e.g. 44")}
                   min={1}
                   step={1}
                   onKeyDown={(e) => e.stopPropagation()}
@@ -1558,14 +1592,14 @@ export default function DeviceEditor() {
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Width (mm)
+                  {t("Width (mm)")}
                 </label>
                 <input
                   type="number"
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
                   value={widthMm ?? ""}
                   onChange={(e) => setWidthMm(e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g. 482"
+                  placeholder={t("e.g. 482")}
                   min={1}
                   step={1}
                   onKeyDown={(e) => e.stopPropagation()}
@@ -1573,14 +1607,14 @@ export default function DeviceEditor() {
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Depth (mm)
+                  {t("Depth (mm)")}
                 </label>
                 <input
                   type="number"
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
                   value={depthMm ?? ""}
                   onChange={(e) => setDepthMm(e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g. 350"
+                  placeholder={t("e.g. 350")}
                   min={1}
                   step={1}
                   onKeyDown={(e) => e.stopPropagation()}
@@ -1588,14 +1622,14 @@ export default function DeviceEditor() {
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Weight (kg)
+                  {t("Weight (kg)")}
                 </label>
                 <input
                   type="number"
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
                   value={weightKg ?? ""}
                   onChange={(e) => setWeightKg(e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g. 2.5"
+                  placeholder={t("e.g. 2.5")}
                   min={0}
                   step={0.1}
                   onKeyDown={(e) => e.stopPropagation()}
@@ -1607,15 +1641,15 @@ export default function DeviceEditor() {
               if (!rackU) return null;
               return (
                 <div className="pt-1.5 pl-2 text-[10px] text-[var(--color-text-muted)]">
-                  Rack height:{" "}
+                  {t("Rack height:")}{" "}
                   <span className="text-[var(--color-text-secondary)] font-medium">{rackU}</span>
-                  <span className="ml-1 opacity-70">(1U = 44.45 mm)</span>
+                  <span className="ml-1 opacity-70">{t("(1U = 44.45 mm)")}</span>
                 </div>
               );
             })()}
             <div className="pt-2 pl-2">
               <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                Rack Form
+                {t("Rack Form")}
               </label>
               <select
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
@@ -1624,13 +1658,13 @@ export default function DeviceEditor() {
                   setRackForm(e.target.value ? (e.target.value as DeviceData["rackForm"]) : undefined)
                 }
               >
-                <option value="">Auto (from size)</option>
-                <option value="full">Full width (19&quot;)</option>
-                <option value="half">Half width (9.5&quot;)</option>
-                <option value="shelf-only">Shelf only</option>
+                <option value="">{t("Auto (from size)")}</option>
+                <option value="full">{t('Full width (19")')}</option>
+                <option value="half">{t('Half width (9.5")')}</option>
+                <option value="shelf-only">{t("Shelf only")}</option>
               </select>
               <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5 leading-tight">
-                Overrides how this device mounts in a rack. Auto infers from width &amp; height.
+                {t("Overrides how this device mounts in a rack. Auto infers from width & height.")}
               </p>
             </div>
           </details>
@@ -1646,7 +1680,7 @@ export default function DeviceEditor() {
                     onChange={(e) => setPoeBudgetW(e.target.checked ? 0 : undefined)}
                     className="cursor-pointer"
                   />
-                  PoE Source
+                  {t("PoE Source")}
                 </label>
                 {poeBudgetW != null && (
                   <input
@@ -1654,7 +1688,7 @@ export default function DeviceEditor() {
                     type="number"
                     value={poeBudgetW || ""}
                     onChange={(e) => setPoeBudgetW(e.target.value ? Number(e.target.value) : 0)}
-                    placeholder="Budget (W)"
+                    placeholder={t("Budget (W)")}
                     min={0}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
@@ -1668,7 +1702,7 @@ export default function DeviceEditor() {
                     onChange={(e) => setPoeDrawW(e.target.checked ? 0 : undefined)}
                     className="cursor-pointer"
                   />
-                  Powered by PoE
+                  {t("Powered by PoE")}
                 </label>
                 {poeDrawW != null && (
                   <input
@@ -1676,7 +1710,7 @@ export default function DeviceEditor() {
                     type="number"
                     value={poeDrawW || ""}
                     onChange={(e) => setPoeDrawW(e.target.value ? Number(e.target.value) : 0)}
-                    placeholder="Draw (W)"
+                    placeholder={t("Draw (W)")}
                     min={0}
                     step={0.1}
                     onKeyDown={(e) => e.stopPropagation()}
@@ -1705,12 +1739,12 @@ export default function DeviceEditor() {
           {(ports.some((p) => p.signalType === "power") || deviceType.includes("power")) && (
             <details className="text-xs">
               <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-                Power
+                {t("Power")}
               </summary>
               <div className="grid grid-cols-2 gap-2 pt-1 pl-2">
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                    Power Draw (W)
+                    {t("Power Draw (W)")}
                   </label>
                   <input
                     type="number"
@@ -1723,7 +1757,7 @@ export default function DeviceEditor() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                    Voltage
+                    {t("Voltage")}
                   </label>
                   <input
                     type="text"
@@ -1737,9 +1771,9 @@ export default function DeviceEditor() {
                 <div className="col-span-2">
                   <label
                     className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5"
-                    title="Electrical protection class (IEC 61140). Carried into the Geräteprüfung in Odoo. Leave blank where it does not apply — passive speakers, patch panels, adapters."
+                    title={t("Electrical protection class (IEC 61140). Carried into the Geräteprüfung in Odoo. Leave blank where it does not apply — passive speakers, patch panels, adapters.")}
                   >
-                    Protection Class
+                    {t("Protection Class")}
                   </label>
                   <select
                     className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
@@ -1750,18 +1784,18 @@ export default function DeviceEditor() {
                       )
                     }
                   >
-                    <option value="">— not applicable / unknown</option>
-                    <option value="1">I — earthed (PE)</option>
-                    <option value="2">II — double insulated</option>
-                    <option value="3">III — SELV</option>
+                    <option value="">{t("— not applicable / unknown")}</option>
+                    <option value="1">{t("I — earthed (PE)")}</option>
+                    <option value="2">{t("II — double insulated")}</option>
+                    <option value="3">{t("III — SELV")}</option>
                   </select>
                 </div>
                 <div className="col-span-2">
                   <label
                     className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5"
-                    title="Thermal load for HVAC sizing. Auto-derived from Power Draw × 3.412 if left blank."
+                    title={t("Thermal load for HVAC sizing. Auto-derived from Power Draw × 3.412 if left blank.")}
                   >
-                    Thermal (BTU/h)
+                    {t("Thermal (BTU/h)")}
                   </label>
                   <input
                     type="number"
@@ -1770,7 +1804,7 @@ export default function DeviceEditor() {
                     onChange={(e) => setThermalBtuh(e.target.value ? Number(e.target.value) : undefined)}
                     placeholder={(() => {
                       const auto = deriveThermalBtuh(powerDrawW);
-                      return auto != null ? `auto: ${auto}` : "0";
+                      return auto != null ? t("auto: {n}", { n: auto }) : "0";
                     })()}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
@@ -1778,7 +1812,7 @@ export default function DeviceEditor() {
                 {deviceType.includes("power-distribution") && (
                   <div className="col-span-2">
                     <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                      Power Capacity (W)
+                      {t("Power Capacity (W)")}
                     </label>
                     <input
                       type="number"
@@ -1797,18 +1831,18 @@ export default function DeviceEditor() {
           {/* Search Terms */}
           <details className="text-xs">
             <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-              {(() => { const n = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).length; return `Search Terms${n > 0 ? ` (${n})` : ""}`; })()}
+              {(() => { const n = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).length; return n > 0 ? t("Search Terms ({n})", { n }) : t("Search Terms"); })()}
             </summary>
             <div className="pt-1 pl-2">
               <p className="text-[10px] text-[var(--color-text-muted)] mb-1">
-                Comma-separated keywords used to find this device in the library. Edit here and "Submit to Community" to contribute improvements back.
+                {t('Comma-separated keywords used to find this device in the library. Edit here and "Submit to Community" to contribute improvements back.')}
               </p>
               <input
                 type="text"
                 className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
                 value={searchTermsRaw}
                 onChange={(e) => setSearchTermsRaw(e.target.value)}
-                placeholder="e.g. matrix, router, video switcher"
+                placeholder={t("e.g. matrix, router, video switcher")}
                 onKeyDown={(e) => e.stopPropagation()}
               />
             </div>
@@ -1817,13 +1851,13 @@ export default function DeviceEditor() {
           {/* Cost & Procurement */}
           <details className="text-xs">
             <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-              Cost & Procurement
+              {t("Cost & Procurement")}
             </summary>
             <div className="pt-1 pl-2 flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                    Unit Cost ({currency})
+                    {t("Unit Cost ({currency})", { currency })}
                   </label>
                   <input
                     type="number"
@@ -1838,21 +1872,21 @@ export default function DeviceEditor() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                    Serial Number
+                    {t("Serial Number")}
                   </label>
                   <input
                     type="text"
                     className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
                     value={serialNumber}
                     onChange={(e) => setSerialNumber(e.target.value)}
-                    placeholder="e.g. SN-00123"
+                    placeholder={t("e.g. SN-00123")}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </div>
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Source
+                  {t("Source::procurement")}
                 </label>
                 <select
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
@@ -1860,9 +1894,9 @@ export default function DeviceEditor() {
                   onChange={(e) => setProcurementSource((e.target.value || undefined) as DeviceData["procurementSource"])}
                 >
                   <option value="">—</option>
-                  <option value="stock">Own stock</option>
-                  <option value="procuring">Being procured</option>
-                  <option value="contractor">Other contractor</option>
+                  <option value="stock">{t("Own stock")}</option>
+                  <option value="procuring">{t("Being procured")}</option>
+                  <option value="contractor">{t("Other contractor")}</option>
                 </select>
               </div>
               <label className="flex items-center gap-1.5 text-[11px] text-[var(--color-text)] cursor-pointer">
@@ -1871,22 +1905,22 @@ export default function DeviceEditor() {
                   checked={isSpare}
                   onChange={(e) => setIsSpare(e.target.checked)}
                 />
-                Cold spare
+                {t("Cold spare")}
               </label>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
-                  Note
+                  {t("Note")}
                 </label>
                 <textarea
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 resize-y"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Free-text note"
+                  placeholder={t("Free-text note")}
                   rows={2}
                   onKeyDown={(e) => e.stopPropagation()}
                 />
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                  Shows in the pack list / device report.
+                  {t("Shows in the pack list / device report.")}
                 </p>
               </div>
             </div>
@@ -1895,11 +1929,11 @@ export default function DeviceEditor() {
           {/* Auxiliary Data */}
           <details className="text-xs">
             <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-              Auxiliary Data
+              {t("Auxiliary Data")}
             </summary>
             <div className="flex flex-col gap-1.5 pt-1 pl-2">
               <p className="text-[10px] text-[var(--color-text-muted)] -mb-0.5">
-                Up to 5 custom lines. Use the <span className="font-mono">+</span> button to insert a device field. Leave a line blank to add a separator. Toggle <span className="font-mono">H</span>/<span className="font-mono">F</span> to pin a row to the header or footer of the device.
+                {t("Up to 5 custom lines. Use the")} <span className="font-mono">+</span> {t("button to insert a device field. Leave a line blank to add a separator. Toggle")} <span className="font-mono">H</span>/<span className="font-mono">F</span> {t("to pin a row to the header or footer of the device.")}
               </p>
               {(() => {
                 const previewDevice = {
@@ -1942,12 +1976,12 @@ export default function DeviceEditor() {
                           className="flex-1 min-w-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
                           value={text}
                           onChange={(e) => setRow({ text: e.target.value })}
-                          placeholder="Auxiliary Data"
+                          placeholder={t("Auxiliary Data")}
                           onKeyDown={(e) => e.stopPropagation()}
                         />
                         <button
                           type="button"
-                          title="Insert device field"
+                          title={t("Insert device field")}
                           className="px-2 py-1 text-xs rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer shrink-0"
                           onClick={() => setAuxFieldMenuIdx(auxFieldMenuIdx === i ? null : i)}
                         >
@@ -1955,7 +1989,7 @@ export default function DeviceEditor() {
                         </button>
                         <button
                           type="button"
-                          title={position === "header" ? "Pinned to header — click to move to footer" : "Pinned to footer — click to move to header"}
+                          title={position === "header" ? t("Pinned to header — click to move to footer") : t("Pinned to footer — click to move to header")}
                           className={`px-2 py-1 text-[10px] font-semibold rounded border cursor-pointer shrink-0 w-7 ${position === "header" ? "bg-blue-500 border-blue-500 text-white" : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
                           onClick={() => setRow({ position: position === "header" ? "footer" : "header" })}
                         >
@@ -1964,7 +1998,7 @@ export default function DeviceEditor() {
                       </div>
                       {hasToken && (
                         <div className="text-[10px] text-[var(--color-text-muted)] pl-1 truncate" title={preview}>
-                          → {preview || <span className="italic">(empty)</span>}
+                          → {preview || <span className="italic">{t("(empty)")}</span>}
                         </div>
                       )}
                       {auxFieldMenuIdx === i && (
@@ -1975,7 +2009,7 @@ export default function DeviceEditor() {
                           {AUX_FIELD_GROUPS.map(({ group, fields }) => (
                             <div key={group} className="py-1">
                               <div className="px-2 text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                                {group}
+                                {t(group)}
                               </div>
                               {fields.map((f) => (
                                 <button
@@ -2001,7 +2035,7 @@ export default function DeviceEditor() {
                                     });
                                   }}
                                 >
-                                  {f.label}
+                                  {t(f.label)}
                                 </button>
                               ))}
                             </div>
@@ -2018,7 +2052,7 @@ export default function DeviceEditor() {
           {/* Flags */}
           <details className="text-xs">
             <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
-              Flags
+              {t("Flags")}
             </summary>
             <div className="flex flex-col gap-2 pt-1 pl-2">
               <label className="flex items-center gap-1.5 text-[var(--color-text)] cursor-pointer select-none">
@@ -2031,7 +2065,7 @@ export default function DeviceEditor() {
                   }}
                   className="cursor-pointer"
                 />
-                Cable accessory
+                {t("Cable accessory")}
               </label>
               {isCableAccessory && (
                 <label className="flex items-center gap-1.5 text-[var(--color-text)] cursor-pointer select-none ml-4">
@@ -2041,20 +2075,20 @@ export default function DeviceEditor() {
                     onChange={(e) => setIntegratedWithCable(e.target.checked)}
                     className="cursor-pointer"
                   />
-                  Integrated with cable
+                  {t("Integrated with cable")}
                 </label>
               )}
               {deviceType === "adapter" && (
                 <label className="flex items-center gap-1.5 text-[var(--color-text)] select-none">
-                  <span className="text-[var(--color-text-muted)]">Visibility:</span>
+                  <span className="text-[var(--color-text-muted)]">{t("Visibility:")}</span>
                   <select
                     value={adapterVisibility}
                     onChange={(e) => setAdapterVisibility(e.target.value as "default" | "force-show" | "force-hide")}
                     className="text-xs border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)] text-[var(--color-text)] cursor-pointer"
                   >
-                    <option value="default">Default</option>
-                    <option value="force-show">Always Show</option>
-                    <option value="force-hide">Always Hide</option>
+                    <option value="default">{t("Default")}</option>
+                    <option value="force-show">{t("Always Show")}</option>
+                    <option value="force-hide">{t("Always Hide")}</option>
                   </select>
                 </label>
               )}
@@ -2065,7 +2099,7 @@ export default function DeviceEditor() {
                   onChange={(e) => setIsVenueProvided(e.target.checked)}
                   className="cursor-pointer"
                 />
-                Venue provided (exclude from pack list)
+                {t("Venue provided (exclude from pack list)")}
               </label>
             </div>
           </details>
@@ -2076,42 +2110,42 @@ export default function DeviceEditor() {
           <button
             onClick={handleSaveAsTemplate}
             className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-            title="Save this device configuration as a reusable user template"
+            title={t("Save this device configuration as a reusable user template")}
           >
-            Save as User Template
+            {t("Save as User Template")}
           </button>
           {(!templateId || dirtyVsTemplate || customTemplates.some((t) => t.id === templateId)) && ports.some((p) => p.label.trim()) && (
             <button
               onClick={handleSubmitToCommunity}
               className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Submit this device to the community device library"
+              title={t("Submit this device to the community device library")}
             >
-              Submit to Community
+              {t("Submit to Community")}
             </button>
           )}
           {templateId && customTemplates.some((t) => t.id === templateId) ? (
             <button
               onClick={handleUpdateUserTemplate}
               className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Overwrite the saved user template with this configuration and apply it to every instance on the schematic"
+              title={t("Overwrite the saved user template with this configuration and apply it to every instance on the schematic")}
             >
-              Update User Template
+              {t("Update User Template")}
             </button>
           ) : templateId ? (
             <>
               <button
                 onClick={handleForkBuiltInToCustom}
                 className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-                title="Save these changes as a new '(Custom)' user template and apply them to every instance of this device on the schematic"
+                title={t("Save these changes as a new '(Custom)' user template and apply them to every instance of this device on the schematic")}
               >
-                Update as Custom
+                {t("Update as Custom")}
               </button>
               <button
                 onClick={handleSaveAsPreset}
                 className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-                title="Set this configuration as the project default for this template"
+                title={t("Set this configuration as the project default for this template")}
               >
-                Save as Preset
+                {t("Save as Preset")}
               </button>
             </>
           ) : null}
@@ -2119,18 +2153,18 @@ export default function DeviceEditor() {
             <button
               onClick={handleRevertToPreset}
               className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Reset ports and visibility to the project preset"
+              title={t("Reset ports and visibility to the project preset")}
             >
-              Revert to Preset
+              {t("Revert to Preset")}
             </button>
           )}
           {dirtyVsTemplate && (
             <button
               onClick={handleRevertToTemplate}
               className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title="Reset ports and visibility to the original template defaults"
+              title={t("Reset ports and visibility to the original template defaults")}
             >
-              Revert to Template
+              {t("Revert to Template")}
             </button>
           )}
           <div className="flex-1" />
@@ -2138,13 +2172,13 @@ export default function DeviceEditor() {
             onClick={close}
             className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={handleSave}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
           >
-            Apply
+            {t("Apply")}
           </button>
         </div>
       </div>
@@ -2199,6 +2233,7 @@ function BulkAddForm({
   onBulkAdd: (direction: PortDirection, prefix: string, start: number, count: number, signalType: SignalType, section: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [prefix, setPrefix] = useState("Input");
   const [start, setStart] = useState(1);
   const [end, setEnd] = useState(8);
@@ -2219,11 +2254,11 @@ function BulkAddForm({
           className="w-20 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
           value={prefix}
           onChange={(e) => setPrefix(e.target.value)}
-          placeholder="Prefix"
+          placeholder={t("Prefix")}
           onKeyDown={(e) => e.stopPropagation()}
         />
         <div className="flex items-center gap-0.5">
-          <span className="text-[10px] text-[var(--color-text-muted)]">from</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("from")}</span>
           <input
             type="number"
             className="w-12 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
@@ -2234,7 +2269,7 @@ function BulkAddForm({
           />
         </div>
         <div className="flex items-center gap-0.5">
-          <span className="text-[10px] text-[var(--color-text-muted)]">to</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("to")}</span>
           <input
             type="number"
             className="w-12 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
@@ -2256,29 +2291,29 @@ function BulkAddForm({
         </select>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-[var(--color-text-muted)]">Section:</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]">{t("Section:")}</span>
         <input
           className="flex-1 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
           value={section}
           onChange={(e) => setSection(e.target.value)}
-          placeholder="(optional)"
+          placeholder={t("(optional)")}
           onKeyDown={(e) => e.stopPropagation()}
         />
         <button
           onClick={handleSubmit}
           className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
         >
-          Add
+          {t("Add")}
         </button>
         <button
           onClick={onClose}
           className="px-2 py-1 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] border border-[var(--color-border)] transition-colors cursor-pointer"
         >
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
       <div className="text-[10px] text-[var(--color-text-muted)]">
-        Preview: {prefix} {start}, {prefix} {start + 1}, ... {prefix} {end}
+        {t("Preview:")} {prefix} {start}, {prefix} {start + 1}, ... {prefix} {end}
       </div>
     </div>
   );
@@ -2295,6 +2330,7 @@ function BulkAddSlotsForm({
   onBulkAdd: (prefix: string, start: number, count: number, slotFamily: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [prefix, setPrefix] = useState("Slot");
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultStart + 3);
@@ -2314,11 +2350,11 @@ function BulkAddSlotsForm({
           className="w-20 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
           value={prefix}
           onChange={(e) => setPrefix(e.target.value)}
-          placeholder="Prefix"
+          placeholder={t("Prefix")}
           onKeyDown={(e) => e.stopPropagation()}
         />
         <div className="flex items-center gap-0.5">
-          <span className="text-[10px] text-[var(--color-text-muted)]">from</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("from")}</span>
           <input
             type="number"
             className="w-12 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
@@ -2329,7 +2365,7 @@ function BulkAddSlotsForm({
           />
         </div>
         <div className="flex items-center gap-0.5">
-          <span className="text-[10px] text-[var(--color-text-muted)]">to</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("to")}</span>
           <input
             type="number"
             className="w-12 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
@@ -2342,12 +2378,12 @@ function BulkAddSlotsForm({
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-[var(--color-text-muted)]">Family:</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]">{t("Family:")}</span>
         <input
           className="flex-1 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
           value={slotFamily}
           onChange={(e) => setSlotFamily(e.target.value)}
-          placeholder="(optional, e.g. yamaha-my)"
+          placeholder={t("(optional, e.g. yamaha-my)")}
           list={`slot-families-${nodeId}`}
           onKeyDown={(e) => e.stopPropagation()}
         />
@@ -2357,13 +2393,13 @@ function BulkAddSlotsForm({
           onClick={handleSubmit}
           className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
         >
-          Add {Math.max(0, end - start + 1)}
+          {t("Add {n}", { n: Math.max(0, end - start + 1) })}
         </button>
         <button
           onClick={onClose}
           className="px-2 py-1 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] border border-[var(--color-border)] transition-colors cursor-pointer"
         >
-          Cancel
+          {t("Cancel")}
         </button>
         <span className="text-[10px] text-[var(--color-text-muted)]">
           {prefix} {start} … {prefix} {end}
@@ -2398,6 +2434,7 @@ function PortVisibilitySection({
   open: boolean;
   setOpen: (v: boolean) => void;
 }) {
+  const t = useT();
   const templateId = node?.data.templateId;
   const modelLabel = node?.data.model;
 
@@ -2424,7 +2461,7 @@ function PortVisibilitySection({
         className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer transition-colors"
       >
         <span>{open ? "▾" : "▸"}</span>
-        <span>Port Visibility</span>
+        <span>{t("Port Visibility")}</span>
       </button>
       {open && (
         <div className="mt-2 space-y-3 pl-3">
@@ -2435,25 +2472,25 @@ function PortVisibilitySection({
               onChange={(e) => setShowAllPorts(e.target.checked)}
               className="w-3 h-3 accent-blue-500 cursor-pointer"
             />
-            <span className="text-xs text-[var(--color-text)]">Show all ports (override filters)</span>
+            <span className="text-xs text-[var(--color-text)]">{t("Show all ports (override filters)")}</span>
           </label>
 
           {namedPorts.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] text-[var(--color-text-muted)]">Quick:</span>
+                <span className="text-[9px] text-[var(--color-text-muted)]">{t("Quick:")}</span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setHiddenPorts([])}
                     className="text-[9px] text-blue-600 hover:text-blue-500 cursor-pointer"
                   >
-                    Show All
+                    {t("Show All")}
                   </button>
                   <button
                     onClick={() => setHiddenPorts(namedPorts.map((p) => p.id))}
                     className="text-[9px] text-blue-600 hover:text-blue-500 cursor-pointer"
                   >
-                    Hide All
+                    {t("Hide All")}
                   </button>
                 </div>
               </div>
@@ -2463,7 +2500,7 @@ function PortVisibilitySection({
           {templateId && templateSignalTypes.length > 0 && (
             <div>
               <div className="text-[9px] text-[var(--color-text-muted)] mb-1">
-                Hide on all &ldquo;{modelLabel || "this template"}&rdquo; devices:
+                {t("Hide on all “{name}” devices:", { name: modelLabel || t("this template") })}
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {templateSignalTypes.map((st) => (
@@ -2530,6 +2567,7 @@ function PortSection({
   hiddenPorts: string[];
   setHiddenPorts: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
+  const t = useT();
   const sectionRef = useRef<HTMLDivElement>(null);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
 
@@ -2586,13 +2624,13 @@ function PortSection({
             onClick={() => setShowBulkAdd(!showBulkAdd)}
             className="text-[10px] text-blue-600 hover:text-blue-500 cursor-pointer"
           >
-            + Bulk Add
+            + {t("Bulk Add")}
           </button>
           <button
             onClick={onAdd}
             className="text-[10px] text-blue-600 hover:text-blue-500 cursor-pointer"
           >
-            + Add
+            + {t("Add")}
           </button>
         </div>
       </div>
@@ -2607,7 +2645,7 @@ function PortSection({
 
       {ports.length === 0 && !showDropIndicator && (
         <div className="text-[10px] text-[var(--color-text-muted)] italic px-1 py-2">
-          No {title.toLowerCase()} — click &quot;+ Add&quot; or drag a port here
+          {t('No {kind} — click "+ Add" or drag a port here', { kind: title.toLowerCase() })}
         </div>
       )}
       {ports.length === 0 && showDropIndicator && (
@@ -2702,6 +2740,7 @@ function PortRow({
   isHidden: boolean;
   onToggleVisibility: () => void;
 }) {
+  const t = useT();
   const rowRef = useRef<HTMLDivElement>(null);
   const [showSection, setShowSection] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -2757,7 +2796,7 @@ function PortRow({
             setDropTarget(null);
           }}
           className="text-[var(--color-text-muted)] cursor-grab active:cursor-grabbing text-[10px] select-none shrink-0"
-          title="Drag to reorder"
+          title={t("Drag to reorder")}
         >
           ⠿
         </span>
@@ -2766,7 +2805,7 @@ function PortRow({
         <button
           onClick={onToggleVisibility}
           className="shrink-0 cursor-pointer transition-colors"
-          title={isHidden ? "Show port on schematic" : "Hide port on schematic"}
+          title={isHidden ? t("Show port on schematic") : t("Hide port on schematic")}
         >
           {isHidden ? (
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -2791,7 +2830,7 @@ function PortRow({
           className="flex-1 min-w-[140px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
           value={port.label}
           onChange={(e) => onUpdate({ label: e.target.value })}
-          placeholder="Port label"
+          placeholder={t("Port label")}
           onKeyDown={(e) => e.stopPropagation()}
         />
 
@@ -2808,7 +2847,7 @@ function PortRow({
               }
             }}
           >
-            <option value="">(inherits from connection)</option>
+            <option value="">{t("(inherits from connection)")}</option>
             {ALL_SIGNAL_TYPES.map((t) => (
               <option key={t} value={t}>{SIGNAL_LABELS[t]}</option>
             ))}
@@ -2838,10 +2877,10 @@ function PortRow({
             className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-1 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer max-w-[80px]"
             value={port.connectorType ?? DEFAULT_CONNECTOR[port.signalType]}
             onChange={(e) => onUpdate({ connectorType: e.target.value as ConnectorType })}
-            title="Connector type"
+            title={t("Connector type")}
           >
             {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
-              <optgroup key={groupName} label={groupName}>
+              <optgroup key={groupName} label={t(groupName)}>
                 {types.map((c) => (
                   <option key={c} value={c}>
                     {CONNECTOR_LABELS[c]}
@@ -2877,11 +2916,13 @@ function PortRow({
                 const v = e.target.value;
                 onUpdate({ gender: v === "" ? undefined : (v as Gender) });
               }}
-              title={`Connector gender${isOverride ? " (overridden)" : ` (auto: ${resolved ?? "—"})`}`}
+              title={isOverride
+                ? t("Connector gender (overridden)")
+                : t("Connector gender (auto: {value})", { value: resolved ?? "—" })}
             >
-              <option value="">{resolved ? `${resolved === "male" ? "M" : "F"} (auto)` : "—"}</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
+              <option value="">{resolved ? t("{value} (auto)", { value: resolved === "male" ? t("M") : t("F") }) : "—"}</option>
+              <option value="male">{t("Male")}</option>
+              <option value="female">{t("Female")}</option>
             </select>
           );
         })()}
@@ -2893,7 +2934,7 @@ function PortRow({
               ? "bg-purple-100 text-purple-600"
               : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
           }`}
-          title="Multicable trunk port"
+          title={t("Multicable trunk port")}
         >
           <input
             type="checkbox"
@@ -2911,7 +2952,7 @@ function PortRow({
             className="w-8 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-0.5 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 shrink-0"
             value={port.channelCount ?? 0}
             onChange={(e) => onUpdate({ channelCount: parseInt(e.target.value) || 0 })}
-            title="Channel count"
+            title={t("Channel count")}
             onKeyDown={(e) => e.stopPropagation()}
           />
         )}
@@ -2923,7 +2964,7 @@ function PortRow({
               ? "bg-amber-100 text-amber-700"
               : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
           }`}
-          title="Multi-connect — port accepts multiple connections (SRT, wireless, custom signals)"
+          title={t("Multi-connect — port accepts multiple connections (SRT, wireless, custom signals)")}
         >
           <input
             type="checkbox"
@@ -2942,7 +2983,7 @@ function PortRow({
                 ? "bg-green-100 text-green-700"
                 : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
             }`}
-            title="Direct attach — plugs directly into device, no separate cable"
+            title={t("Direct attach — plugs directly into device, no separate cable")}
           >
             <input
               type="checkbox"
@@ -2962,7 +3003,7 @@ function PortRow({
               ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
               : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
           }`}
-          title="Set section group"
+          title={t("Set section group")}
         >
           {port.section || "§"}
         </button>
@@ -2975,7 +3016,7 @@ function PortRow({
               ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
               : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
           }`}
-          title={port.notes || "Add note"}
+          title={port.notes || t("Add note")}
         >
           {port.notes ? "N" : "N"}
         </button>
@@ -2988,7 +3029,7 @@ function PortRow({
                 ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
                 : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
             }`}
-            title="Flip port to opposite side"
+            title={t("Flip port to opposite side")}
           >
             ⇄
         </button>
@@ -2997,7 +3038,7 @@ function PortRow({
         <button
           onClick={onDuplicate}
           className="text-[var(--color-text-muted)] hover:text-blue-500 cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-          title="Duplicate port"
+          title={t("Duplicate port")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
@@ -3008,7 +3049,7 @@ function PortRow({
         <button
           onClick={onRemove}
           className="text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          title="Remove port"
+          title={t("Remove port")}
         >
           &times;
         </button>
@@ -3016,12 +3057,12 @@ function PortRow({
 
       {showSection && (
         <div className="flex items-center gap-1.5 pl-6 pb-1">
-          <span className="text-[9px] text-[var(--color-text-muted)]">Section:</span>
+          <span className="text-[9px] text-[var(--color-text-muted)]">{t("Section:")}</span>
           <input
             className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-blue-500"
             value={port.section || ""}
             onChange={(e) => onUpdate({ section: e.target.value || undefined })}
-            placeholder="e.g. Cameras"
+            placeholder={t("e.g. Cameras")}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === "Enter") setShowSection(false);
@@ -3032,19 +3073,19 @@ function PortRow({
             onClick={() => setShowSection(false)}
             className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
           >
-            Done
+            {t("Done")}
           </button>
         </div>
       )}
 
       {showNotes && (
         <div className="flex items-center gap-1.5 pl-6 pb-1">
-          <span className="text-[9px] text-[var(--color-text-muted)]">Note:</span>
+          <span className="text-[9px] text-[var(--color-text-muted)]">{t("Note:")}</span>
           <input
             className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-blue-500"
             value={port.notes || ""}
             onChange={(e) => onUpdate({ notes: e.target.value || undefined })}
-            placeholder="e.g. East wall plate, Drop 3"
+            placeholder={t("e.g. East wall plate, Drop 3")}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === "Enter") setShowNotes(false);
@@ -3055,7 +3096,7 @@ function PortRow({
             onClick={() => setShowNotes(false)}
             className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
           >
-            Done
+            {t("Done")}
           </button>
         </div>
       )}
@@ -3064,17 +3105,17 @@ function PortRow({
       {direction === "passthrough" && (
         <div className="pl-6 pb-1 grid grid-cols-2 gap-x-4 gap-y-1">
           <div>
-            <span className="block text-[9px] text-[var(--color-text-muted)] mb-0.5">Rear Connector</span>
+            <span className="block text-[9px] text-[var(--color-text-muted)] mb-0.5">{t("Rear Connector")}</span>
             <div className="flex items-center gap-1">
               <select
                 className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-1 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
                 value={port.rearConnectorType ?? ""}
                 onChange={(e) => onUpdate({ rearConnectorType: e.target.value ? (e.target.value as ConnectorType) : undefined })}
-                title="Rear connector type"
+                title={t("Rear connector type")}
               >
-                <option value="">(unset)</option>
+                <option value="">{t("(unset)")}</option>
                 {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
-                  <optgroup key={groupName} label={groupName}>
+                  <optgroup key={groupName} label={t(groupName)}>
                     {types.map((c) => (
                       <option key={c} value={c}>{CONNECTOR_LABELS[c]}</option>
                     ))}
@@ -3089,7 +3130,7 @@ function PortRow({
                     const v = e.target.value;
                     onUpdate({ rearGender: v === "" ? undefined : (v as Gender) });
                   }}
-                  title="Rear gender"
+                  title={t("Rear gender")}
                 >
                   <option value="">—</option>
                   <option value="male">M</option>
@@ -3099,17 +3140,17 @@ function PortRow({
             </div>
           </div>
           <div>
-            <span className="block text-[9px] text-[var(--color-text-muted)] mb-0.5">Front Connector</span>
+            <span className="block text-[9px] text-[var(--color-text-muted)] mb-0.5">{t("Front Connector")}</span>
             <div className="flex items-center gap-1">
               <select
                 className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-1 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
                 value={port.frontConnectorType ?? ""}
                 onChange={(e) => onUpdate({ frontConnectorType: e.target.value ? (e.target.value as ConnectorType) : undefined })}
-                title="Front connector type"
+                title={t("Front connector type")}
               >
-                <option value="">(unset)</option>
+                <option value="">{t("(unset)")}</option>
                 {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
-                  <optgroup key={groupName} label={groupName}>
+                  <optgroup key={groupName} label={t(groupName)}>
                     {types.map((c) => (
                       <option key={c} value={c}>{CONNECTOR_LABELS[c]}</option>
                     ))}
@@ -3124,7 +3165,7 @@ function PortRow({
                     const v = e.target.value;
                     onUpdate({ frontGender: v === "" ? undefined : (v as Gender) });
                   }}
-                  title="Front gender"
+                  title={t("Front gender")}
                 >
                   <option value="">—</option>
                   <option value="male">M</option>
@@ -3146,7 +3187,7 @@ function PortRow({
               onChange={(e) => onUpdate({ addressable: e.target.checked ? undefined : false })}
               className="cursor-pointer"
             />
-            Addressable (has IP)
+            {t("Addressable (has IP)")}
           </label>
           {port.addressable !== false && (
             <PortNetworkSection
@@ -3165,26 +3206,26 @@ function PortRow({
       {/* USB-C Power Delivery (per-port — USB-C doesn't pool a shared budget like PoE) */}
       {port.connectorType === "usb-c" && (
         <div className="pl-6 mb-0.5 flex items-center gap-1.5">
-          <span className="text-[9px] text-[var(--color-text-muted)] shrink-0">USB-C PD (W):</span>
+          <span className="text-[9px] text-[var(--color-text-muted)] shrink-0">{t("USB-C PD (W):")}</span>
           <input
             className="w-20 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-blue-500"
             type="number"
             value={port.usbcPowerSourceW ?? ""}
             onChange={(e) => onUpdate({ usbcPowerSourceW: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="Delivers"
+            placeholder={t("Delivers")}
             min={0}
             onKeyDown={(e) => e.stopPropagation()}
-            title="Watts this port can deliver (source — charger, dock, laptop)"
+            title={t("Watts this port can deliver (source — charger, dock, laptop)")}
           />
           <input
             className="w-20 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-blue-500"
             type="number"
             value={port.usbcPowerDrawW ?? ""}
             onChange={(e) => onUpdate({ usbcPowerDrawW: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="Draws"
+            placeholder={t("Draws")}
             min={0}
             onKeyDown={(e) => e.stopPropagation()}
-            title="Watts this port consumes (sink — bus-powered device)"
+            title={t("Watts this port consumes (sink — bus-powered device)")}
           />
         </div>
       )}
@@ -3223,6 +3264,7 @@ function PortNetworkSection({
   linkSpeed?: string;
   onLinkSpeedChange: (v: string | undefined) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const c = config ?? {};
   const hasData = c.ip || c.subnetMask || c.gateway || c.vlan || c.dhcp;
@@ -3238,7 +3280,9 @@ function PortNetworkSection({
     if (!entries) return undefined;
     const others = entries.filter((e) => !(e.nodeId === editingNodeId && e.portId === portId));
     if (others.length === 0) return undefined;
-    return `Duplicate IP — also used by: ${others.map((e) => `${e.deviceLabel} (${e.portLabel})`).join(", ")}`;
+    return t("Duplicate IP — also used by: {devices}", {
+      devices: others.map((e) => `${e.deviceLabel} (${e.portLabel})`).join(", "),
+    });
   }, [nodes, c.ip, editingNodeId, portId]);
 
   const vlanInvalid = c.vlan != null && !isValidVlan(c.vlan);
@@ -3251,7 +3295,7 @@ function PortNetworkSection({
           hasData ? "text-blue-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         }`}
       >
-        {open ? "▾" : "▸"} Network{hasData ? " (configured)" : ""}
+        {open ? "▾" : "▸"} {hasData ? t("Network (configured)") : t("Network")}
       </button>
       {open && (
         <div className="grid grid-cols-2 gap-1 mt-1">
@@ -3262,7 +3306,7 @@ function PortNetworkSection({
               onChange={(e) => onChange({ ...c, dhcp: e.target.checked })}
               className="cursor-pointer"
             />
-            DHCP
+            {t("DHCP")}
           </label>
           <IpInput
             value={c.ip ?? ""}
@@ -3271,21 +3315,21 @@ function PortNetworkSection({
               if (v && isValidIpv4(v) && !c.subnetMask) update.subnetMask = "255.255.255.0";
               onChange(update);
             }}
-            placeholder="IP Address"
+            placeholder={t("IP Address")}
             disabled={c.dhcp}
             duplicateWarning={duplicateWarning}
           />
           <IpInput
             value={c.subnetMask ?? ""}
             onChange={(v) => onChange({ ...c, subnetMask: v || undefined })}
-            placeholder="Subnet Mask"
+            placeholder={t("Subnet Mask")}
             disabled={c.dhcp}
             validate={isValidSubnetMask}
           />
           <IpInput
             value={c.gateway ?? ""}
             onChange={(v) => onChange({ ...c, gateway: v || undefined })}
-            placeholder="Gateway"
+            placeholder={t("Gateway")}
             disabled={c.dhcp}
           />
           <input
@@ -3295,8 +3339,8 @@ function PortNetworkSection({
             type="number"
             value={c.vlan ?? ""}
             onChange={(e) => onChange({ ...c, vlan: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="VLAN"
-            title={vlanInvalid ? "VLAN must be 1-4094" : undefined}
+            placeholder={t("VLAN")}
+            title={vlanInvalid ? t("VLAN must be 1-4094") : undefined}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <select
@@ -3305,7 +3349,7 @@ function PortNetworkSection({
             onChange={(e) => onLinkSpeedChange(e.target.value || undefined)}
           >
             {LINK_SPEED_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s || "Speed"}</option>
+              <option key={s} value={s}>{s || t("Speed")}</option>
             ))}
           </select>
           <input
@@ -3313,7 +3357,7 @@ function PortNetworkSection({
             type="number"
             value={poeDrawW ?? ""}
             onChange={(e) => onPoeDrawChange(e.target.value ? Number(e.target.value) : undefined)}
-            placeholder="PoE (W)"
+            placeholder={t("PoE (W)")}
             min={0}
             onKeyDown={(e) => e.stopPropagation()}
           />
@@ -3330,6 +3374,7 @@ function DhcpServerSection({
   dhcpServer: DhcpServerConfig | undefined;
   onChange: (cfg: DhcpServerConfig | undefined) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const cfg = dhcpServer ?? { enabled: false };
   const enabled = cfg.enabled;
@@ -3358,7 +3403,7 @@ function DhcpServerSection({
         }`}
       >
         <span>{open ? "▾" : "▸"}</span>
-        <span>DHCP Server{enabled ? " (active)" : ""}</span>
+        <span>{enabled ? t("DHCP Server (active)") : t("DHCP Server")}</span>
       </button>
       {open && (
         <div className="mt-2 space-y-2 pl-3">
@@ -3369,7 +3414,7 @@ function DhcpServerSection({
               onChange={(e) => handleToggle(e.target.checked)}
               className="w-3 h-3 accent-blue-500 cursor-pointer"
             />
-            <span className="text-xs text-[var(--color-text)]">This device serves DHCP on its network</span>
+            <span className="text-xs text-[var(--color-text)]">{t("This device serves DHCP on its network")}</span>
           </label>
           {enabled && (
             <div className="grid grid-cols-2 gap-1">
@@ -3377,41 +3422,41 @@ function DhcpServerSection({
                 <IpInput
                   value={cfg.rangeStart ?? ""}
                   onChange={(v) => onChange({ ...cfg, rangeStart: v || undefined })}
-                  placeholder="Pool Start"
+                  placeholder={t("Pool Start")}
                 />
                 {startInvalid && (
-                  <div className="text-[9px] text-red-500 mt-0.5">Invalid IP</div>
+                  <div className="text-[9px] text-red-500 mt-0.5">{t("Invalid IP")}</div>
                 )}
               </div>
               <div>
                 <IpInput
                   value={cfg.rangeEnd ?? ""}
                   onChange={(v) => onChange({ ...cfg, rangeEnd: v || undefined })}
-                  placeholder="Pool End"
+                  placeholder={t("Pool End")}
                 />
                 {endInvalid && (
-                  <div className="text-[9px] text-red-500 mt-0.5">Invalid IP</div>
+                  <div className="text-[9px] text-red-500 mt-0.5">{t("Invalid IP")}</div>
                 )}
               </div>
               <div>
                 <IpInput
                   value={cfg.subnetMask ?? ""}
                   onChange={(v) => onChange({ ...cfg, subnetMask: v || undefined })}
-                  placeholder="Subnet Mask"
+                  placeholder={t("Subnet Mask")}
                   validate={isValidSubnetMask}
                 />
                 {maskInvalid && (
-                  <div className="text-[9px] text-red-500 mt-0.5">Invalid mask</div>
+                  <div className="text-[9px] text-red-500 mt-0.5">{t("Invalid mask")}</div>
                 )}
               </div>
               <div>
                 <IpInput
                   value={cfg.gateway ?? ""}
                   onChange={(v) => onChange({ ...cfg, gateway: v || undefined })}
-                  placeholder="Gateway"
+                  placeholder={t("Gateway")}
                 />
                 {gatewayInvalid && (
-                  <div className="text-[9px] text-red-500 mt-0.5">Invalid IP</div>
+                  <div className="text-[9px] text-red-500 mt-0.5">{t("Invalid IP")}</div>
                 )}
               </div>
             </div>
@@ -3431,6 +3476,7 @@ function SlotEditSection({
   installedSlots: NonNullable<DeviceData["slots"]>;
   slotDefs: SlotDefinition[];
 }) {
+  const t = useT();
   const swapCard = useSchematicStore((s) => s.swapCard);
   const addSlot = useSchematicStore((s) => s.addSlot);
   const addSlots = useSchematicStore((s) => s.addSlots);
@@ -3459,7 +3505,9 @@ function SlotEditSection({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
-          Expansion Slots{installedSlots.length > 0 ? ` (${topLevelCount})` : ""}
+          {installedSlots.length > 0
+            ? t("Expansion Slots ({n})", { n: topLevelCount })
+            : t("Expansion Slots")}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -3467,14 +3515,14 @@ function SlotEditSection({
             onClick={() => addSlot(nodeId, { label: `Slot ${topLevelCount + 1}`, slotFamily: "" })}
             className="text-[10px] text-blue-600 hover:text-blue-700 cursor-pointer"
           >
-            + Add Slot
+            + {t("Add Slot")}
           </button>
           <button
             type="button"
             onClick={() => setShowBulkAdd((v) => !v)}
             className="text-[10px] text-blue-600 hover:text-blue-700 cursor-pointer"
           >
-            + Bulk Add
+            + {t("Bulk Add")}
           </button>
         </div>
       </div>
@@ -3490,7 +3538,7 @@ function SlotEditSection({
       )}
       {installedSlots.length === 0 && (
         <div className="text-[10px] text-[var(--color-text-muted)] italic">
-          No expansion slots. Add a slot for devices with modular card bays.
+          {t("No expansion slots. Add a slot for devices with modular card bays.")}
         </div>
       )}
       <datalist id={`slot-families-${nodeId}`}>
@@ -3531,7 +3579,7 @@ function SlotEditSection({
                   value={slot.label}
                   onChange={(e) => updateSlot(nodeId, slot.slotId, { label: e.target.value })}
                   onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="Slot label"
+                  placeholder={t("Slot label")}
                   className="flex-1 min-w-0 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[11px] outline-none focus:border-blue-500"
                 />
                 <input
@@ -3539,7 +3587,7 @@ function SlotEditSection({
                   onChange={(e) => updateSlot(nodeId, slot.slotId, { slotFamily: e.target.value })}
                   onKeyDown={(e) => e.stopPropagation()}
                   list={`slot-families-${nodeId}`}
-                  placeholder="family"
+                  placeholder={t("family")}
                   className="w-24 bg-[var(--color-surface)] text-[var(--color-text-heading)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-blue-500"
                 />
                 {/* Hide toggle — only meaningful for an empty slot (its "(empty)" bay row
@@ -3549,7 +3597,7 @@ function SlotEditSection({
                     type="button"
                     onClick={() => updateSlot(nodeId, slot.slotId, { hidden: !slot.hidden })}
                     className="shrink-0 cursor-pointer px-0.5"
-                    title={slot.hidden ? "Show empty slot on the device" : "Hide empty slot on the device"}
+                    title={slot.hidden ? t("Show empty slot on the device") : t("Hide empty slot on the device")}
                   >
                     {slot.hidden ? (
                       <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -3568,13 +3616,13 @@ function SlotEditSection({
                 <button
                   type="button"
                   onClick={() => {
-                    const warnConn = connCount > 0 ? `This slot has ${connCount} connection(s) that will be disconnected. ` : "";
-                    const warnCard = slot.cardTemplateId ? "The installed card and its ports will be removed. " : "";
-                    if ((warnConn || warnCard) && !confirm(`${warnConn}${warnCard}Remove slot "${slot.label}"?`)) return;
+                    const warnConn = connCount > 0 ? t("This slot has {n} connection(s) that will be disconnected.", { n: connCount }) + " " : "";
+                    const warnCard = slot.cardTemplateId ? t("The installed card and its ports will be removed.") + " " : "";
+                    if ((warnConn || warnCard) && !confirm(`${warnConn}${warnCard}${t('Remove slot "{name}"?', { name: slot.label })}`)) return;
                     removeSlot(nodeId, slot.slotId);
                   }}
                   className="text-red-400 hover:text-red-500 text-xs cursor-pointer px-1 leading-none"
-                  title="Remove slot"
+                  title={t("Remove slot")}
                 >
                   &times;
                 </button>
@@ -3586,14 +3634,14 @@ function SlotEditSection({
                 const newCardId = e.target.value || null;
                 if (newCardId === slot.cardTemplateId) return;
                 if (connCount > 0) {
-                  if (!confirm(`Swapping this card will disconnect ${connCount} connection(s). Continue?`)) return;
+                  if (!confirm(t("Swapping this card will disconnect {n} connection(s). Continue?", { n: connCount }))) return;
                 }
                 swapCard(nodeId, slot.slotId, newCardId);
               }}
               disabled={!isNested && !slot.slotFamily}
               className="w-full bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500 disabled:opacity-50"
             >
-              <option value="">{!isNested && !slot.slotFamily ? "(set slot family to enable)" : "(empty)"}</option>
+              <option value="">{!isNested && !slot.slotFamily ? t("(set slot family to enable)") : t("(empty)")}</option>
               {familyCards.map((card) => (
                 <option key={card.id} value={card.id!}>
                   {card.label}
@@ -3611,7 +3659,7 @@ function SlotEditSection({
                 onClick={() => setCreatingCardForSlot(slot.slotId)}
                 className="text-[10px] text-blue-500 hover:text-blue-600 cursor-pointer mt-1"
               >
-                + Create custom card...
+                + {t("Create custom card...")}
               </button>
             )}
           </div>
@@ -3644,6 +3692,7 @@ function PortCapabilitiesSection({
   capabilities?: PortCapabilities;
   onChange: (caps: PortCapabilities) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const c = capabilities ?? {};
   const hasData = c.maxResolution || c.maxFrameRate || c.maxBitDepth;
@@ -3656,7 +3705,7 @@ function PortCapabilitiesSection({
           hasData ? "text-blue-600" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         }`}
       >
-        {open ? "▾" : "▸"} Capabilities{hasData ? " (set)" : ""}
+        {open ? "▾" : "▸"} {hasData ? t("Capabilities (set)") : t("Capabilities")}
       </button>
       {open && (
         <div className="grid grid-cols-2 gap-1 mt-1">
@@ -3664,7 +3713,7 @@ function PortCapabilitiesSection({
             className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-0.5 text-[10px] outline-none focus:border-blue-500"
             value={c.maxResolution ?? ""}
             onChange={(e) => onChange({ ...c, maxResolution: e.target.value || undefined })}
-            placeholder="Max Resolution (e.g. 3840x2160)"
+            placeholder={t("Max Resolution (e.g. 3840x2160)")}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <input
@@ -3672,7 +3721,7 @@ function PortCapabilitiesSection({
             type="number"
             value={c.maxFrameRate ?? ""}
             onChange={(e) => onChange({ ...c, maxFrameRate: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="Max FPS"
+            placeholder={t("Max FPS")}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <input
@@ -3680,14 +3729,14 @@ function PortCapabilitiesSection({
             type="number"
             value={c.maxBitDepth ?? ""}
             onChange={(e) => onChange({ ...c, maxBitDepth: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="Bit Depth"
+            placeholder={t("Bit Depth")}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <input
             className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-0.5 text-[10px] outline-none focus:border-blue-500"
             value={c.colorSpaces?.join(", ") ?? ""}
             onChange={(e) => onChange({ ...c, colorSpaces: e.target.value ? e.target.value.split(",").map((s) => s.trim()) : undefined })}
-            placeholder="Color Spaces (comma sep)"
+            placeholder={t("Color Spaces (comma sep)")}
             onKeyDown={(e) => e.stopPropagation()}
           />
         </div>
@@ -3730,9 +3779,10 @@ function LoadSpecFields({ deviceType, speakerLoad, ampLoad, onSpeakerLoad, onAmp
   onSpeakerLoad: (v: SpeakerLoadSpec | undefined) => void;
   onAmpLoad: (v: AmplifierLoadSpec | undefined) => void;
 }) {
-  const t = deviceType.toLowerCase();
-  const showSpeaker = t === "speaker" || t !== "amplifier";
-  const showAmp = t === "amplifier" || t !== "speaker";
+  const t = useT();
+  const dt = deviceType.toLowerCase();
+  const showSpeaker = dt === "speaker" || dt !== "amplifier";
+  const showAmp = dt === "amplifier" || dt !== "speaker";
   const [tapsDraft, setTapsDraft] = useState<string | null>(null);
   const patchSpeaker = (patch: Partial<SpeakerLoadSpec>) => onSpeakerLoad(pruneSpec({ ...(speakerLoad ?? {}), ...patch }));
   const patchAmp = (patch: Partial<AmplifierLoadSpec>) => onAmpLoad(pruneSpec({ ...(ampLoad ?? {}), ...patch }));
@@ -3743,18 +3793,18 @@ function LoadSpecFields({ deviceType, speakerLoad, ampLoad, onSpeakerLoad, onAmp
   const hasAny = Boolean(speakerLoad || ampLoad);
   return (
     <details className="text-xs" open={hasAny}>
-      <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1" title="Feeds the line load check on loudspeaker plans (modeled on the Bose PowerShareX Design Tool)">
-        Load{hasAny ? "" : " (loudspeaker line calculation)"}
+      <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1" title={t("Feeds the line load check on loudspeaker plans (modeled on the Bose PowerShareX Design Tool)")}>
+        {hasAny ? t("Load") : t("Load (loudspeaker line calculation)")}
       </summary>
       <div className="flex flex-col gap-2 pt-1 pl-2">
         {showSpeaker && (
           <div>
-            {showAmp && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">As a loudspeaker</div>}
+            {showAmp && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">{t("As a loudspeaker")}</div>}
             <div className="grid grid-cols-2 gap-2">
-              <NumField label="Impedance (Ω)" value={speakerLoad?.impedanceOhm} onChange={(v) => patchSpeaker({ impedanceOhm: v })} placeholder="8" title="Nominal impedance for low-impedance operation" />
-              <NumField label="Continuous power (W)" value={speakerLoad?.rmsPowerW} onChange={(v) => patchSpeaker({ rmsPowerW: v })} placeholder="100" title="RMS / pink-noise power handling from the datasheet" />
-              <div title="Transformer tap settings in watts, highest first — empty when the model has no 70 V / 100 V transformer">
-                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">Taps 70/100 V (W)</label>
+              <NumField label={t("Impedance (Ω)")} value={speakerLoad?.impedanceOhm} onChange={(v) => patchSpeaker({ impedanceOhm: v })} placeholder="8" title={t("Nominal impedance for low-impedance operation")} />
+              <NumField label={t("Continuous power (W)")} value={speakerLoad?.rmsPowerW} onChange={(v) => patchSpeaker({ rmsPowerW: v })} placeholder="100" title={t("RMS / pink-noise power handling from the datasheet")} />
+              <div title={t("Transformer tap settings in watts, highest first — empty when the model has no 70 V / 100 V transformer")}>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">{t("Taps 70/100 V (W)")}</label>
                 <input
                   className={LOAD_INPUT}
                   value={tapsDraft ?? (speakerLoad?.tapsW ?? []).join(", ")}
@@ -3769,11 +3819,11 @@ function LoadSpecFields({ deviceType, speakerLoad, ampLoad, onSpeakerLoad, onAmp
                   onKeyDown={(e) => e.stopPropagation()}
                 />
               </div>
-              <div title="Spectral profile — sets the crest factor that turns burst into average power">
-                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">Profile</label>
+              <div title={t("Spectral profile — sets the crest factor that turns burst into average power")}>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">{t("Profile")}</label>
                 <select className={LOAD_INPUT} value={speakerLoad?.profile ?? ""} onChange={(e) => patchSpeaker({ profile: (e.target.value || undefined) as SpeakerLoadSpec["profile"] })}>
-                  <option value="">Full range (default)</option>
-                  {SPEAKER_LOAD_PROFILES.map((p) => <option key={p} value={p}>{PROFILE_LABELS[p]} ({p})</option>)}
+                  <option value="">{t("Full range (default)")}</option>
+                  {SPEAKER_LOAD_PROFILES.map((p) => <option key={p} value={p}>{t(PROFILE_LABELS[p])} ({p})</option>)}
                 </select>
               </div>
             </div>
@@ -3781,21 +3831,21 @@ function LoadSpecFields({ deviceType, speakerLoad, ampLoad, onSpeakerLoad, onAmp
         )}
         {showAmp && (
           <div>
-            {showSpeaker && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">As an amplifier</div>}
+            {showSpeaker && <div className="text-[10px] text-[var(--color-text-muted)] mb-1">{t("As an amplifier")}</div>}
             <div className="grid grid-cols-3 gap-2">
-              <NumField label="Channels" value={ampLoad?.channels} onChange={(v) => patchAmp({ channels: v })} placeholder="ports" title="Empty = number of speaker-level output ports" />
-              <NumField label="Total rated (W)" value={ampLoad?.totalRatedW} onChange={(v) => patchAmp({ totalRatedW: v })} placeholder="sum" title="Rated power across all channels (the shared pool)" />
-              <NumField label="Min load (Ω)" value={ampLoad?.minImpedanceOhm} onChange={(v) => patchAmp({ minImpedanceOhm: v })} placeholder="auto" />
-              <NumField label="W @ 8 Ω" value={ampLoad?.ratedW?.ohm8} onChange={(v) => patchRated({ ohm8: v })} />
-              <NumField label="W @ 4 Ω" value={ampLoad?.ratedW?.ohm4} onChange={(v) => patchRated({ ohm4: v })} />
-              <NumField label="W @ 2 Ω" value={ampLoad?.ratedW?.ohm2} onChange={(v) => patchRated({ ohm2: v })} />
-              <NumField label="W @ 70 V" value={ampLoad?.ratedW?.v70} onChange={(v) => patchRated({ v70: v })} title="Empty = no 70 V mode" />
-              <NumField label="W @ 100 V" value={ampLoad?.ratedW?.v100} onChange={(v) => patchRated({ v100: v })} title="Empty = no 100 V mode" />
-              <NumField label="Burst / ch (W)" value={ampLoad?.maxBurstPerChannelW} onChange={(v) => patchAmp({ maxBurstPerChannelW: v })} placeholder="auto" title="Most one channel may take with the others idle" />
-              <NumField label="Burst total (W)" value={ampLoad?.maxBurstTotalW} onChange={(v) => patchAmp({ maxBurstTotalW: v })} placeholder="auto" />
-              <NumField label="Average total (W)" value={ampLoad?.maxAvgTotalW} onChange={(v) => patchAmp({ maxAvgTotalW: v })} placeholder="auto" title="Long-term output the amplifier sustains; empty = 17.5 % of the rated total" />
-              <NumField label="Peak V / A" value={ampLoad?.peakVoltageV} onChange={(v) => patchAmp({ peakVoltageV: v })} placeholder="V, auto" title="Peak output voltage per channel" />
-              <NumField label="Peak current (A)" value={ampLoad?.peakCurrentA} onChange={(v) => patchAmp({ peakCurrentA: v })} placeholder="auto" />
+              <NumField label={t("Channels")} value={ampLoad?.channels} onChange={(v) => patchAmp({ channels: v })} placeholder={t("ports")} title={t("Empty = number of speaker-level output ports")} />
+              <NumField label={t("Total rated (W)")} value={ampLoad?.totalRatedW} onChange={(v) => patchAmp({ totalRatedW: v })} placeholder={t("sum")} title={t("Rated power across all channels (the shared pool)")} />
+              <NumField label={t("Min load (Ω)")} value={ampLoad?.minImpedanceOhm} onChange={(v) => patchAmp({ minImpedanceOhm: v })} placeholder={t("auto")} />
+              <NumField label={t("W @ 8 Ω")} value={ampLoad?.ratedW?.ohm8} onChange={(v) => patchRated({ ohm8: v })} />
+              <NumField label={t("W @ 4 Ω")} value={ampLoad?.ratedW?.ohm4} onChange={(v) => patchRated({ ohm4: v })} />
+              <NumField label={t("W @ 2 Ω")} value={ampLoad?.ratedW?.ohm2} onChange={(v) => patchRated({ ohm2: v })} />
+              <NumField label={t("W @ 70 V")} value={ampLoad?.ratedW?.v70} onChange={(v) => patchRated({ v70: v })} title={t("Empty = no 70 V mode")} />
+              <NumField label={t("W @ 100 V")} value={ampLoad?.ratedW?.v100} onChange={(v) => patchRated({ v100: v })} title={t("Empty = no 100 V mode")} />
+              <NumField label={t("Burst / ch (W)")} value={ampLoad?.maxBurstPerChannelW} onChange={(v) => patchAmp({ maxBurstPerChannelW: v })} placeholder={t("auto")} title={t("Most one channel may take with the others idle")} />
+              <NumField label={t("Burst total (W)")} value={ampLoad?.maxBurstTotalW} onChange={(v) => patchAmp({ maxBurstTotalW: v })} placeholder={t("auto")} />
+              <NumField label={t("Average total (W)")} value={ampLoad?.maxAvgTotalW} onChange={(v) => patchAmp({ maxAvgTotalW: v })} placeholder={t("auto")} title={t("Long-term output the amplifier sustains; empty = 17.5 % of the rated total")} />
+              <NumField label={t("Peak V / A")} value={ampLoad?.peakVoltageV} onChange={(v) => patchAmp({ peakVoltageV: v })} placeholder={t("V, auto")} title={t("Peak output voltage per channel")} />
+              <NumField label={t("Peak current (A)")} value={ampLoad?.peakCurrentA} onChange={(v) => patchAmp({ peakCurrentA: v })} placeholder={t("auto")} />
             </div>
           </div>
         )}

@@ -10,6 +10,7 @@ import {
   inferRackHeightU,
 } from "./rackUtils";
 import { effectiveThermalBtuh } from "./thermal";
+import { t } from "./i18n";
 
 export interface RackStats {
   /** Total U capacity of the rack. */
@@ -107,13 +108,19 @@ export function aggregateRackStats(perRack: RackStats[]): RackStats {
 
 /** Format a rack stats line into a compact display string. */
 export function formatStatsLine(stats: RackStats): string {
-  const parts: string[] = [`${stats.uTotal}U`, `${stats.uUsed}U used`];
+  const parts: string[] = [`${stats.uTotal}U`, t("{n}U used", { n: stats.uUsed })];
   if (stats.weightKg > 0) {
     const lb = stats.weightKg * 2.20462;
     parts.push(`${stats.weightKg.toFixed(1)}kg / ${lb.toFixed(0)}lb`);
   }
   if (stats.powerW > 0) parts.push(`${Math.round(stats.powerW)}W`);
   if (stats.thermalBtuh > 0) parts.push(`${Math.round(stats.thermalBtuh)} BTU/h`);
-  if (stats.conflictCount > 0) parts.push(`${stats.conflictCount} conflict${stats.conflictCount === 1 ? "" : "s"} ⚠`);
+  if (stats.conflictCount > 0) {
+    parts.push(
+      stats.conflictCount === 1
+        ? t("1 conflict ⚠")
+        : t("{n} conflicts ⚠", { n: stats.conflictCount }),
+    );
+  }
   return parts.join(" · ");
 }

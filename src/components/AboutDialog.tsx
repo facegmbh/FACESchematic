@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEVICE_TEMPLATES } from "../deviceLibrary";
 import { forceFullReset } from "../sw-register";
+import { useT } from "../i18n";
 
 declare const __APP_VERSION__: string;
 declare const __BUILD_HASH__: string;
@@ -17,6 +18,7 @@ function detectEnv(): Env {
 export default function AboutDialog({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const t = useT();
 
   const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
   const hash = typeof __BUILD_HASH__ !== "undefined" ? __BUILD_HASH__ : "local";
@@ -38,8 +40,9 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
   const handleForceUpdate = async () => {
     if (resetting) return;
     const ok = window.confirm(
-      "Force update: this unregisters the service worker and clears the app cache, then reloads. " +
-        "Your saved schematics (in browser storage) are NOT affected. Continue?",
+      t(
+        "Force update: this unregisters the service worker and clears the app cache, then reloads. Your saved schematics (in browser storage) are NOT affected. Continue?",
+      ),
     );
     if (!ok) return;
     setResetting(true);
@@ -58,7 +61,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            About FACESchematic
+            {t("About FACESchematic")}
           </span>
           <button
             onClick={onClose}
@@ -76,7 +79,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
               FACESchematic
             </div>
             <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              Version {version} ({shortHash}) ·{" "}
+              {t("Version")} {version} ({shortHash}) ·{" "}
               <span
                 className="inline-block px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-semibold"
                 style={{
@@ -90,14 +93,17 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <p className="text-xs text-[var(--color-text)] leading-relaxed max-w-[320px]">
-            AV signal flow diagram tool for broadcast, live production, and AV
-            integration
+            {t("AV signal flow diagram tool for broadcast, live production, and AV integration")}
           </p>
 
           <div className="flex flex-col gap-1 text-xs text-[var(--color-text)]">
-            <span>{Math.floor(DEVICE_TEMPLATES.length / 10) * 10}+ bundled device templates</span>
-            <span>2,000+ in the community library</span>
-            <span>68 signal types</span>
+            <span>
+              {t("{n}+ bundled device templates", {
+                n: Math.floor(DEVICE_TEMPLATES.length / 10) * 10,
+              })}
+            </span>
+            <span>{t("2,000+ in the community library")}</span>
+            <span>{t("68 signal types")}</span>
           </div>
 
           <div className="w-full h-px bg-[var(--color-border)]" />
@@ -119,7 +125,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"
               >
-                {link.label}
+                {t(link.label)}
               </a>
             ))}
           </div>
@@ -128,7 +134,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
 
           <div className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
             <div>AGPL-3.0 &middot; &copy; 2025–2026 FACESchematic</div>
-            <div className="mt-0.5">Built with React, React Flow, and Zustand</div>
+            <div className="mt-0.5">{t("Built with React, React Flow, and Zustand")}</div>
           </div>
         </div>
 
@@ -137,23 +143,25 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           <button
             onClick={handleForceUpdate}
             disabled={resetting}
-            title="Unregister the service worker, clear app cache, and reload. Schematic data is preserved."
+            title={t(
+              "Unregister the service worker, clear app cache, and reload. Schematic data is preserved.",
+            )}
             className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text-muted)] disabled:opacity-50 disabled:cursor-wait"
           >
-            {resetting ? "Reloading…" : "Force Update"}
+            {resetting ? t("Reloading…") : t("Force Update")}
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={copyDebugInfo}
               className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
             >
-              {copied ? "Copied!" : "Copy Debug Info"}
+              {copied ? t("Copied!") : t("Copy Debug Info")}
             </button>
             <button
               onClick={onClose}
               className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
             >
-              Close
+              {t("Close")}
             </button>
           </div>
         </div>

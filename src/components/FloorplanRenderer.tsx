@@ -25,6 +25,7 @@ import {
   rectFromDrag,
   MASK_MIN_SIZE_MM,
   sheetSizeMm,
+  isGroupVisible,
   symbolLabelAnchor,
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
@@ -43,11 +44,13 @@ import { TITLE_BLOCK_HEIGHT_IN } from "../printConfig";
 import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "../wheelViewport";
 import TitleBlockSVG from "./TitleBlockSVG";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
+import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
+import { useT } from "../i18n";
 
 const IN_TO_MM = 25.4;
 const SCREEN_PPI = 96;
@@ -100,6 +103,7 @@ function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick
 }
 
 export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine, selection, onSelectionChange }: Props) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const allPages = useSchematicStore((s) => s.pages);
@@ -235,6 +239,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
 
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [hoverMaskId, setHoverMaskId] = useState<string | null>(null);
+  const [symbolMenu, setSymbolMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [panning, setPanning] = useState<{ startClient: Vec2; startPan: Vec2 } | null>(null);
   const didMoveRef = useRef(false);
   // State mirror of didMoveRef, used only for cursor styling during render — the ref
@@ -383,7 +388,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     }
     if (tool === "place") {
       if (!activeGroupId) {
-        addToast("Add a symbol group first — it defines the color and legend row.", "info");
+        addToast(t("Add a symbol group first — it defines the color and legend row."), "info");
         return;
       }
       const id = addFloorplanSymbol(page.id, {
@@ -395,10 +400,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       return;
     }
     if (tool === "note") {
-      const id = addFloorplanNote(page.id, { positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) }, text: "Note" });
+      const id = addFloorplanNote(page.id, { positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) }, text: t("Note") });
       setSelection({ kind: "note", id });
       setEditingNoteId(id);
-      setNoteDraft("Note");
+      setNoteDraft(t("Note"));
       onToolChange("select");
     }
   }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addToast, onToolChange]);
@@ -560,15 +565,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const applyCalibration = () => {
     const metres = Number(calibInput.replace(",", "."));
     if (!(metres > 0)) {
-      addToast("Enter the real distance in metres.", "error");
+      addToast(t("Enter the real distance in metres."), "error");
       return;
     }
     const ok = calibrateFloorplan(page.id, calibPicks[0], calibPicks[1], metres * 1000);
     if (ok) {
-      addToast(`Plan calibrated at ${formatScale(page.scaleDenominator)}.`, "success", 4000);
+      addToast(t("Plan calibrated at {scale}.", { scale: formatScale(page.scaleDenominator) }), "success", 4000);
       onToolChange("select");
     } else {
-      addToast("Could not calibrate from those two points.", "error");
+      addToast(t("Could not calibrate from those two points."), "error");
     }
     setCalibPicks([]);
   };
@@ -641,7 +646,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             >
               <img
                 src={underlay.src}
-                alt={underlay.sourceName ?? "Floorplan underlay"}
+                alt={underlay.sourceName ?? t("Floorplan underlay")}
                 draggable={false}
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -656,7 +661,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       didMoveRef.current = false;
                       setDragging({ kind: "underlay-resize", startClient: { x: e.clientX, y: e.clientY }, startSize: { ...underlay.sizeMm } });
                     }}
-                    title="Resize the underlay (aspect locked)"
+                    title={t("Resize the underlay (aspect locked)")}
                   />
                 </>
               )}
@@ -684,6 +689,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   top: mmToPx(mask.positionMm.y),
                   width: mmToPx(mask.sizeMm.w),
                   height: mmToPx(mask.sizeMm.h),
+                  opacity: mask.opacity ?? 1,
+                  transform: mask.rotationDeg ? `rotate(${mask.rotationDeg}deg)` : undefined,
                   // A cover is a white patch over the architect's drawing — it has to look
                   // like nothing at all, or the plan cannot be judged as it will print. The
                   // dashed hint appears only under the pointer, or when it is selected.
@@ -699,7 +706,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   setSelection({ kind: "mask", id: mask.id });
                   setDragging({ kind: "mask", maskId: mask.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...mask.positionMm } });
                 }}
-                title="Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove."
+                title={t("Cover — hides the underlay beneath it. Drag to move, corner to resize, Delete to remove.")}
               >
                 {isSel && (
                   <div
@@ -730,7 +737,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           {/* Symbols */}
           {page.symbols.map((symbol) => {
             const group = groupById.get(symbol.groupId);
-            if (!group) return null;
+            // A switched-off layer draws nothing; its symbols stay in the project.
+            if (!group || !isGroupVisible(group)) return null;
             const sizePx = mmToPx(page.symbolSizeMm);
             const cx = mmToPx(symbol.positionMm.x);
             const cy = mmToPx(symbol.positionMm.y);
@@ -751,6 +759,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     zIndex: isSelected ? 20 : 10,
                   }}
                   onMouseDown={(e) => handleSymbolMouseDown(e, symbol)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Right-clicking outside the current selection makes this the selection,
+                    // so the menu always acts on what the user pointed at.
+                    const ids = selectedSymbolIds.includes(symbol.id) ? selectedSymbolIds : [symbol.id];
+                    if (!selectedSymbolIds.includes(symbol.id)) setSelection({ kind: "symbols", ids });
+                    setSymbolMenu({ x: e.clientX, y: e.clientY, ids });
+                  }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     setEditingLabelId(symbol.id);
@@ -918,13 +935,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 {legendLineRows.length > 0 && (
                   <div style={{ marginTop: mmToPx(LEGEND_LINES_GAP_MM) }}>
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_LINES_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>
-                      {page.legend.linesTitle ?? DEFAULT_LEGEND_LINES_TITLE}
+                      {page.legend.linesTitle ?? t(DEFAULT_LEGEND_LINES_TITLE)}
                     </div>
                     <div className="flex" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_LINE_ROW_MM), fontWeight: 700, color: "#222", borderBottom: "0.3px solid #ccc" }}>
-                      <span style={{ width: `${LEGEND_LINE_COLS[0] * 100}%` }}>Line</span>
-                      <span style={{ width: `${LEGEND_LINE_COLS[1] * 100}%` }}>Amplifier · channel</span>
-                      <span style={{ width: `${LEGEND_LINE_COLS[2] * 100}%`, textAlign: "right", paddingRight: mmToPx(1) }}>Qty</span>
-                      <span style={{ width: `${LEGEND_LINE_COLS[3] * 100}%` }}>Load</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[0] * 100}%` }}>{t("Line")}</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[1] * 100}%` }}>{t("Amplifier · channel")}</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[2] * 100}%`, textAlign: "right", paddingRight: mmToPx(1) }}>{t("Qty")}</span>
+                      <span style={{ width: `${LEGEND_LINE_COLS[3] * 100}%` }}>{t("Load")}</span>
                     </div>
                     {legendLineRows.map((r) => (
                       <div key={r.lineNo} className="flex" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_LINE_ROW_MM), color: "#222" }}>
@@ -974,7 +991,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       didMoveRef.current = false;
                       setDragging({ kind: "legend-resize", startClient: { x: e.clientX, y: e.clientY }, startWidth: page.legend.widthMm });
                     }}
-                    title="Resize the legend box"
+                    title={t("Resize the legend box")}
                   />
                   <div
                     className="absolute bg-blue-500"
@@ -984,7 +1001,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       didMoveRef.current = false;
                       setDragging({ kind: "legend-height", startClient: { x: e.clientX, y: e.clientY }, startHeight: legendH });
                     }}
-                    title="Stretch the legend box downwards (to cover what lies beneath)"
+                    title={t("Stretch the legend box downwards (to cover what lies beneath)")}
                   />
                 </>
               )}
@@ -1065,7 +1082,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                         didMoveRef.current = false;
                         setDragging({ kind: "note-resize", noteId: note.id, startClient: { x: e.clientX, y: e.clientY }, startWidth: note.widthMm });
                       }}
-                      title="Change the note's wrap width"
+                      title={t("Change the note's wrap width")}
                     />
                   </>
                 )}
@@ -1104,7 +1121,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       didMoveRef.current = false;
                       setDragging({ kind: "drawing-resize", startClient: { x: e.clientX, y: e.clientY }, startWidth: page.drawingBlock.widthMm });
                     }}
-                    title="Resize the drawing block"
+                    title={t("Resize the drawing block")}
                   />
                   <div
                     className="absolute bg-blue-500"
@@ -1114,7 +1131,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                       didMoveRef.current = false;
                       setDragging({ kind: "drawing-height", startClient: { x: e.clientX, y: e.clientY }, startHeight: drawingLayout.heightMm });
                     }}
-                    title="Stretch the drawing block downwards (the title band grows)"
+                    title={t("Stretch the drawing block downwards (the title band grows)")}
                   />
                 </>
               )}
@@ -1138,25 +1155,36 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           {/* Empty state */}
           {!underlay && page.symbols.length === 0 && page.notes.length === 0 && page.masks.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm pointer-events-none">
-              Import the architect's drawing from the toolbar, then drag devices onto it.
+              {t("Import the architect's drawing from the toolbar, then drag devices onto it.")}
             </div>
           )}
         </div>
       </div>
 
       {/* Label placement for the selected symbols */}
+      {/* Right-click on a symbol */}
+      {symbolMenu && (
+        <FloorplanSymbolContextMenu
+          page={page}
+          x={symbolMenu.x}
+          y={symbolMenu.y}
+          ids={symbolMenu.ids}
+          onClose={() => setSymbolMenu(null)}
+        />
+      )}
+
       {/* Calibration prompt */}
       {tool === "calibrate" && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-white border border-amber-300 rounded shadow-lg px-3 py-2 text-xs flex items-center gap-2" data-print-hide>
           {calibPicks.length < 2 ? (
             <span className="text-amber-800">
               {calibPicks.length === 0
-                ? "Click the first end of a known dimension on the plan."
-                : "Click the other end."}
+                ? t("Click the first end of a known dimension on the plan.")
+                : t("Click the other end.")}
             </span>
           ) : (
             <>
-              <span className="text-neutral-700">That distance is</span>
+              <span className="text-neutral-700">{t("That distance is")}</span>
               <input
                 autoFocus
                 className="w-20 border border-neutral-300 rounded px-1.5 py-0.5 outline-none focus:border-amber-400"
@@ -1169,7 +1197,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 className="px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700"
                 onClick={applyCalibration}
               >
-                Apply
+                {t("Apply")}
               </button>
             </>
           )}
@@ -1177,7 +1205,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             className="px-2 py-0.5 text-neutral-500 hover:text-neutral-800"
             onClick={() => { setCalibPicks([]); onToolChange("select"); }}
           >
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       )}
@@ -1187,35 +1215,35 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "select" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
           onClick={() => onToolChange("select")}
-          title="Select and move (Esc)"
+          title={t("Select and move (Esc)")}
         >
-          ⬉ Select
+          ⬉ {t("Select")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "place" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
           onClick={() => onToolChange(tool === "place" ? "select" : "place")}
-          title="Click the plan to drop symbols of the active group"
+          title={t("Click the plan to drop symbols of the active group")}
         >
-          ✚ Place
+          ✚ {t("Place")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "note" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
           onClick={() => onToolChange(tool === "note" ? "select" : "note")}
-          title="Click the plan to add a text note (installation hint, remark)"
+          title={t("Click the plan to add a text note (installation hint, remark)")}
         >
-          ✎ Note
+          ✎ {t("Note")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "erase" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
           onClick={() => onToolChange(tool === "erase" ? "select" : "erase")}
-          title="Drag a white cover over part of the architect's plan to take it out (legend, notes, title block)"
+          title={t("Drag a white cover over part of the architect's plan to take it out (legend, notes, title block)")}
         >
-          ▭ Erase
+          ▭ {t("Erase")}
         </button>
         <div className="border-l border-neutral-200 h-3" />
-        <span className="text-neutral-500 px-1" title="Drawing scale">{formatScale(page.scaleDenominator)}</span>
+        <span className="text-neutral-500 px-1" title={t("Drawing scale")}>{formatScale(page.scaleDenominator)}</span>
         <div className="border-l border-neutral-200 h-3" />
-        <button className="px-2 py-0.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded cursor-pointer" onClick={fitView}>Fit</button>
+        <button className="px-2 py-0.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded cursor-pointer" onClick={fitView}>{t("Fit")}</button>
         <button
           className="w-6 h-6 flex items-center justify-center text-neutral-600 hover:bg-neutral-100 rounded cursor-pointer"
           onClick={() => setViewport(Math.max(0.05, vpRef.current.zoom / 1.25), vpRef.current.pan)}

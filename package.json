@@ -35,6 +35,8 @@
     "preview": "vite preview",
     "postinstall": "patch-package",
     "test": "vitest run",
+    "i18n:audit": "npx tsx src/i18n/audit.ts",
+    "i18n:check": "npx tsx src/i18n/audit.ts --check",
     "test:watch": "vitest",
     "routing:report": "npx tsx src/routingHarness/run.ts",
     "routing:check": "npx tsx src/routingHarness/run.ts --check",

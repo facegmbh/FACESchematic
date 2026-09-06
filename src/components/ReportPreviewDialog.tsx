@@ -16,6 +16,7 @@ import {
   getFieldValue,
   getFieldLabel,
 } from "../titleBlockLayout";
+import { useT } from "../i18n";
 
 /**
  * Resolve a layout by combining hardcoded defaults with saved user preferences.
@@ -197,6 +198,7 @@ function ReportPreviewDialog({
   onClose,
   filename,
 }: ReportPreviewDialogProps) {
+  const t = useT();
   const storedLayout = useSchematicStore((s) => s.reportLayouts[reportKey]) as ReportLayout | undefined;
   const setReportLayout = useSchematicStore((s) => s.setReportLayout);
   const globalHeaderLayout = useSchematicStore((s) => s.globalReportHeaderLayout);
@@ -340,7 +342,7 @@ function ReportPreviewDialog({
         {/* Dialog header */}
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-3 shrink-0">
           <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Print Preview
+            {t("Print Preview")}
           </h2>
           <div className="flex-1" />
           <button
@@ -355,7 +357,7 @@ function ReportPreviewDialog({
           {/* Sidebar */}
           <div className="w-[280px] border-r border-[var(--color-border)] overflow-y-auto p-3 shrink-0 flex flex-col gap-4">
             {/* Page section */}
-            <SidebarSection title="Page">
+            <SidebarSection title={t("Page")}>
               <div className="flex gap-1 mb-2">
                 {(["portrait", "landscape"] as const).map((o) => (
                   <button
@@ -367,7 +369,7 @@ function ReportPreviewDialog({
                     }`}
                     onClick={() => setLayout((prev) => ({ ...prev, orientation: o }))}
                   >
-                    {o === "landscape" ? "Landscape" : "Portrait"}
+                    {o === "landscape" ? t("Landscape") : t("Portrait")}
                   </button>
                 ))}
               </div>
@@ -383,7 +385,7 @@ function ReportPreviewDialog({
             </SidebarSection>
 
             {/* Header global/custom toggle */}
-            <SidebarSection title="Header">
+            <SidebarSection title={t("Header")}>
               <div className="flex gap-1">
                 {(["global", "custom"] as const).map((mode) => {
                   const isActive = mode === "global" ? (layout.useGlobalHeader ?? false) : !(layout.useGlobalHeader ?? false);
@@ -404,20 +406,20 @@ function ReportPreviewDialog({
                         }
                       }}
                     >
-                      {mode === "global" ? "Global" : "Custom"}
+                      {mode === "global" ? t("Global") : t("Custom")}
                     </button>
                   );
                 })}
               </div>
               {(layout.useGlobalHeader ?? false) && globalHeaderLayout && (
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                  Click header cells in the preview to edit the shared template.
+                  {t("Click header cells in the preview to edit the shared template.")}
                 </p>
               )}
             </SidebarSection>
 
             {/* Footer global/custom toggle */}
-            <SidebarSection title="Footer">
+            <SidebarSection title={t("Footer")}>
               <div className="flex gap-1">
                 {(["global", "custom"] as const).map((mode) => {
                   const isActive = mode === "global" ? (layout.useGlobalFooter ?? false) : !(layout.useGlobalFooter ?? false);
@@ -438,21 +440,27 @@ function ReportPreviewDialog({
                         }
                       }}
                     >
-                      {mode === "global" ? "Global" : "Custom"}
+                      {mode === "global" ? t("Global") : t("Custom")}
                     </button>
                   );
                 })}
               </div>
               {(layout.useGlobalFooter ?? false) && globalFooterLayout && (
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                  Click footer cells in the preview to edit the shared template.
+                  {t("Click footer cells in the preview to edit the shared template.")}
                 </p>
               )}
             </SidebarSection>
 
             {/* Selected cell properties — shows when a header or footer cell is clicked */}
             {selectedCellData && (
-              <SidebarSection title={`Selected Cell (${selectedCellData.block})`}>
+              <SidebarSection
+                title={
+                  selectedCellData.block === "header"
+                    ? t("Selected Cell (header)")
+                    : t("Selected Cell (footer)")
+                }
+              >
                 <CellPropertiesPanel
                   cell={selectedCellData.cell}
                   updateCell={(cellId, updates) => {
@@ -503,7 +511,7 @@ function ReportPreviewDialog({
                 {tableDef.groupByOptions.length > 1 && (
                   <div className="mt-2">
                     <label className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">
-                      Group by
+                      {t("Group by")}
                     </label>
                     <select
                       value={tableDef.groupBy ?? ""}
@@ -524,7 +532,7 @@ function ReportPreviewDialog({
                 )}
                 <div className="mt-2">
                   <label className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">
-                    Sort by
+                    {t("Sort by")}
                   </label>
                   <div className="flex gap-1 mt-0.5">
                     <select
@@ -534,7 +542,7 @@ function ReportPreviewDialog({
                       }
                       className="flex-1 px-2 py-1 text-xs border border-[var(--color-border)] rounded bg-white text-[var(--color-text)] cursor-pointer"
                     >
-                      <option value="">None</option>
+                      <option value="">{t("None")}</option>
                       {tableDef.columns.filter((c) => c.visible).map((col) => (
                         <option key={col.key} value={col.key}>{col.header}</option>
                       ))}
@@ -547,7 +555,7 @@ function ReportPreviewDialog({
                           })
                         }
                         className="px-2 py-1 text-xs border border-[var(--color-border)] rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] cursor-pointer"
-                        title={tableDef.sortDir === "asc" ? "Ascending" : "Descending"}
+                        title={tableDef.sortDir === "asc" ? t("Ascending") : t("Descending")}
                       >
                         {tableDef.sortDir === "asc" ? "\u2191" : "\u2193"}
                       </button>
@@ -556,7 +564,7 @@ function ReportPreviewDialog({
                 </div>
                 <div className="mt-2">
                   <label className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide">
-                    Borders
+                    {t("Borders")}
                   </label>
                   <select
                     value={tableDef.borderStyle ?? "none"}
@@ -565,10 +573,10 @@ function ReportPreviewDialog({
                     }
                     className="w-full mt-0.5 px-2 py-1 text-xs border border-[var(--color-border)] rounded bg-white text-[var(--color-text)] cursor-pointer"
                   >
-                    <option value="none">None</option>
-                    <option value="horizontal">Horizontal</option>
-                    <option value="grid">Grid</option>
-                    <option value="outer">Outer</option>
+                    <option value="none">{t("None")}</option>
+                    <option value="horizontal">{t("Horizontal")}</option>
+                    <option value="grid">{t("Grid::table-borders")}</option>
+                    <option value="outer">{t("Outer")}</option>
                   </select>
                 </div>
               </SidebarSection>
@@ -578,7 +586,7 @@ function ReportPreviewDialog({
               onClick={handleExportPdf}
               className="mt-auto px-4 py-2 text-sm font-medium rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer transition-colors"
             >
-              Export PDF
+              {t("Export PDF")}
             </button>
           </div>
 
@@ -630,7 +638,7 @@ function ReportPreviewDialog({
                   onClick={() => setZoom(1)}
                   className="px-2 py-0.5 text-xs rounded border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] hover:bg-gray-100 cursor-pointer"
                 >
-                  Reset
+                  {t("Reset")}
                 </button>
               </div>
             </div>
@@ -723,10 +731,11 @@ function CellPropertiesPanel({
   updateCell: (cellId: string, updates: Partial<TitleBlockCell>) => void;
   titleBlock: TitleBlock;
 }) {
+  const t = useT();
   return (
     <div className="border border-[var(--color-border)] rounded p-2 bg-gray-50 space-y-2">
       <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-semibold">
-        Selected Cell
+        {t("Selected Cell")}
         {(cell.colSpan > 1 || cell.rowSpan > 1) && (
           <span className="ml-2 normal-case tracking-normal font-normal">
             ({cell.colSpan}×{cell.rowSpan})
@@ -736,7 +745,7 @@ function CellPropertiesPanel({
 
       <div className="flex items-center gap-2 flex-wrap">
         <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-          Content:
+          {t("Content:")}
           <select
             className={smallSelect}
             value={cell.content.type}
@@ -748,23 +757,23 @@ function CellPropertiesPanel({
               else updateCell(cell.id, { content: { type: "pageNumber" } });
             }}
           >
-            <option value="field">Field</option>
-            <option value="static">Static Text</option>
-            <option value="logo">Logo</option>
-            <option value="pageNumber">Page Number</option>
+            <option value="field">{t("Field")}</option>
+            <option value="static">{t("Static Text")}</option>
+            <option value="logo">{t("Logo")}</option>
+            <option value="pageNumber">{t("Page Number")}</option>
           </select>
         </label>
 
         {cell.content.type === "field" && (
           <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-            Field:
+            {t("Field:")}
             <select
               className={smallSelect}
               value={cell.content.field}
               onChange={(e) => updateCell(cell.id, { content: { type: "field", field: e.target.value } })}
             >
               {BUILTIN_FIELD_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
+                <option key={f.value} value={f.value}>{t(f.label)}</option>
               ))}
               {titleBlock.customFields?.map((f) => (
                 <option key={f.id} value={f.id}>{f.label}</option>
@@ -775,7 +784,7 @@ function CellPropertiesPanel({
 
         {cell.content.type === "static" && (
           <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-            Text:
+            {t("Text:")}
             <input
               type="text"
               className={smallInput + " !w-24"}
@@ -803,7 +812,7 @@ function CellPropertiesPanel({
           className={`px-1.5 py-0.5 text-[10px] rounded border cursor-pointer ${cell.fontWeight === "bold" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-[var(--color-text-muted)] border-[var(--color-border)]"}`}
           onClick={() => updateCell(cell.id, { fontWeight: cell.fontWeight === "bold" ? "normal" : "bold" })}
         >
-          B
+          {t("B::bold-toggle")}
         </button>
 
         <div className="flex gap-0.5">
@@ -813,7 +822,7 @@ function CellPropertiesPanel({
               className={`px-1.5 py-0.5 text-[10px] rounded border cursor-pointer ${cell.align === a ? "bg-blue-600 text-white border-blue-600" : "bg-white text-[var(--color-text-muted)] border-[var(--color-border)]"}`}
               onClick={() => updateCell(cell.id, { align: a })}
             >
-              {a === "left" ? "L" : a === "center" ? "C" : "R"}
+              {a === "left" ? t("L::align-left") : a === "center" ? t("C::align-center") : t("R::align-right")}
             </button>
           ))}
         </div>
@@ -1066,6 +1075,7 @@ function HeaderPreviewGrid({
   pageNum?: number;
   totalPages?: number;
 }) {
+  const t = useT();
   const gridRef = useRef<HTMLDivElement>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; cellId: string } | null>(null);
@@ -1493,20 +1503,20 @@ function HeaderPreviewGrid({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <ContextMenuItem label="Insert Row Above" onClick={() => { insertRowAt(ctxCell.row); setContextMenu(null); }} />
-          <ContextMenuItem label="Insert Row Below" onClick={() => { insertRowAt(ctxCell.row + ctxCell.rowSpan); setContextMenu(null); }} />
-          <ContextMenuItem label="Insert Column Left" onClick={() => { insertColumnAt(ctxCell.col); setContextMenu(null); }} />
-          <ContextMenuItem label="Insert Column Right" onClick={() => { insertColumnAt(ctxCell.col + ctxCell.colSpan); setContextMenu(null); }} />
+          <ContextMenuItem label={t("Insert Row Above")} onClick={() => { insertRowAt(ctxCell.row); setContextMenu(null); }} />
+          <ContextMenuItem label={t("Insert Row Below")} onClick={() => { insertRowAt(ctxCell.row + ctxCell.rowSpan); setContextMenu(null); }} />
+          <ContextMenuItem label={t("Insert Column Left")} onClick={() => { insertColumnAt(ctxCell.col); setContextMenu(null); }} />
+          <ContextMenuItem label={t("Insert Column Right")} onClick={() => { insertColumnAt(ctxCell.col + ctxCell.colSpan); setContextMenu(null); }} />
 
           <div className="h-px bg-gray-200 my-1" />
 
           <ContextMenuItem
-            label="Delete Row"
+            label={t("Delete Row")}
             disabled={headerLayout.rows.length <= 1}
             onClick={() => { deleteRow(ctxCell.row); setContextMenu(null); }}
           />
           <ContextMenuItem
-            label="Delete Column"
+            label={t("Delete Column")}
             disabled={headerLayout.columns.length <= 1}
             onClick={() => { deleteColumn(ctxCell.col); setContextMenu(null); }}
           />
@@ -1515,16 +1525,16 @@ function HeaderPreviewGrid({
 
           {canMerge && (
             <ContextMenuItem
-              label={`Merge ${selectedCells.size} Cells`}
+              label={t("Merge {n} Cells", { n: selectedCells.size })}
               onClick={() => { mergeCells(); setContextMenu(null); }}
             />
           )}
           {(ctxCell.colSpan > 1 || ctxCell.rowSpan > 1) ? (
-            <ContextMenuItem label="Unmerge" onClick={() => { unmergeCells(); setContextMenu(null); }} />
+            <ContextMenuItem label={t("Unmerge")} onClick={() => { unmergeCells(); setContextMenu(null); }} />
           ) : (
             <>
               <ContextMenuItem
-                label="Merge with Right"
+                label={t("Merge with Right")}
                 disabled={ctxCell.col + ctxCell.colSpan >= headerLayout.columns.length}
                 onClick={() => {
                   const rightCell = headerLayout.cells.find(
@@ -1549,7 +1559,7 @@ function HeaderPreviewGrid({
                 }}
               />
               <ContextMenuItem
-                label="Merge with Below"
+                label={t("Merge with Below")}
                 disabled={ctxCell.row + ctxCell.rowSpan >= headerLayout.rows.length}
                 onClick={() => {
                   const belowCell = headerLayout.cells.find(
@@ -1578,21 +1588,21 @@ function HeaderPreviewGrid({
 
           <div className="h-px bg-gray-200 my-1" />
 
-          <ContextMenuSub label="Set Content">
+          <ContextMenuSub label={t("Set Content")}>
             <ContextMenuItem
-              label="Field"
+              label={t("Field")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "field", field: "showName" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Static Text"
+              label={t("Static Text")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "static", text: "" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Logo"
+              label={t("Logo")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "logo" } }); setContextMenu(null); }}
             />
             <ContextMenuItem
-              label="Page Number"
+              label={t("Page Number")}
               onClick={() => { updateCell(ctxCell.id, { content: { type: "pageNumber" } }); setContextMenu(null); }}
             />
           </ContextMenuSub>

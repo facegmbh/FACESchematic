@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useT } from "../i18n";
 
 function openEditor() {
   localStorage.setItem("easyschematic-skip-landing", "1");
@@ -10,6 +11,7 @@ function openEditor() {
  * Dark-first (FACE #1A1A1A), red accent (#CC0000) — no marketing copy.
  */
 export default function LandingPage() {
+  const t = useT();
   // The app shell sets overflow:hidden; let this standalone page size itself.
   useEffect(() => {
     const root = document.getElementById("root");
@@ -43,7 +45,7 @@ export default function LandingPage() {
         onClick={openEditor}
         className="font-semibold px-9 py-3 rounded-md text-base text-white bg-[#CC0000] hover:bg-[#a30000] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CC0000] focus-visible:ring-offset-2 focus-visible:ring-offset-[#1A1A1A]"
       >
-        Editor öffnen
+        {t("Open editor")}
       </button>
     </div>
   );

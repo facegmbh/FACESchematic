@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import type { AnnotationData, AnnotationNode } from "../types";
+import { useT } from "../i18n";
 
 const SHAPES: Array<{ value: AnnotationData["shape"]; label: string }> = [
   { value: "rectangle", label: "Rectangle" },
@@ -52,6 +53,7 @@ function buildRgba(hex: string, opacity: number): string {
 }
 
 export default function AnnotationEditor() {
+  const t = useT();
   const editingNodeId = useSchematicStore((s) => s.editingNodeId);
   const nodes = useSchematicStore((s) => s.nodes);
   const updateAnnotation = useSchematicStore((s) => s.updateAnnotation);
@@ -106,7 +108,9 @@ export default function AnnotationEditor() {
     >
       <div className="bg-white border border-[var(--color-border)] rounded-lg shadow-2xl w-[340px] flex flex-col">
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">Annotation Properties</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            {t("Annotation Properties")}
+          </h2>
           <button
             onClick={close}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] text-lg leading-none cursor-pointer"
@@ -119,13 +123,13 @@ export default function AnnotationEditor() {
           {/* Label */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Label
+              {t("Label")}
             </label>
             <input
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Optional label"
+              placeholder={t("Optional label")}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handleSave(); }}
               autoFocus
             />
@@ -134,7 +138,7 @@ export default function AnnotationEditor() {
           {/* Font Size */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Font Size
+              {t("Font Size")}
             </label>
             <select
               value={fontSize}
@@ -150,7 +154,7 @@ export default function AnnotationEditor() {
           {/* Shape */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Shape
+              {t("Shape")}
             </label>
             <div className="flex flex-wrap gap-1.5">
               {SHAPES.map((s) => (
@@ -163,7 +167,7 @@ export default function AnnotationEditor() {
                       : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:text-[var(--color-text-heading)]"
                   }`}
                 >
-                  {s.label}
+                  {t(s.label)}
                 </button>
               ))}
             </div>
@@ -172,7 +176,7 @@ export default function AnnotationEditor() {
           {/* Fill Color */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Fill Color
+              {t("Fill Color")}
             </label>
             <div className="flex items-center gap-1.5 flex-wrap">
               {FILL_PRESETS.map((p, i) => (
@@ -195,7 +199,7 @@ export default function AnnotationEditor() {
                     background: p.rgba || "repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 0 0 / 8px 8px",
                     borderColor: p.hex ? "transparent" : "var(--color-border)",
                   }}
-                  title={p.hex || "None"}
+                  title={p.hex || t("None")}
                 />
               ))}
               <input
@@ -203,11 +207,11 @@ export default function AnnotationEditor() {
                 value={fillHex}
                 onChange={(e) => { setFillHex(e.target.value); if (fillOpacity === 0) setFillOpacity(15); }}
                 className="w-5 h-5 cursor-pointer border-0 p-0"
-                title="Custom fill color"
+                title={t("Custom fill color")}
               />
             </div>
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[10px] text-[var(--color-text-muted)]">Opacity</span>
+              <span className="text-[10px] text-[var(--color-text-muted)]">{t("Opacity")}</span>
               <input
                 type="range"
                 min={0} max={100} step={5}
@@ -222,7 +226,7 @@ export default function AnnotationEditor() {
           {/* Border Color */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-              Border Color
+              {t("Border Color")}
             </label>
             <div className="flex items-center gap-1.5">
               {BORDER_PRESETS.map((c) => (
@@ -241,7 +245,7 @@ export default function AnnotationEditor() {
                 value={borderColor}
                 onChange={(e) => setBorderColor(e.target.value)}
                 className="w-5 h-5 cursor-pointer border-0 p-0"
-                title="Custom border color"
+                title={t("Custom border color")}
               />
             </div>
           </div>
@@ -252,13 +256,13 @@ export default function AnnotationEditor() {
             onClick={close}
             className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] cursor-pointer transition-colors"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={handleSave}
             className="px-3 py-1.5 text-xs rounded border border-blue-400 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer transition-colors"
           >
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>

@@ -133,6 +133,22 @@ export default function FloorplansPage() {
         drawing block, the erased areas and the notes. Both panels fold away to a narrow rail.
       </p>
 
+      <h2>Layers</h2>
+      <p>
+        A symbol group doubles as a layer. The eye next to a group in the right panel switches
+        it off: its symbols leave the sheet, the export and the legend, while staying in the
+        project. That is how one architect&apos;s drawing yields several sheets — a loudspeaker
+        plan and a video plan from the same underlay, each exported with the other trade
+        switched off.
+      </p>
+      <p>
+        <strong>Right-click a symbol</strong> for the short path: turn it by 90°, move it to
+        another group, hide its layer, hide every other layer (leaving just this one), bring
+        hidden ones back, or remove it. A hidden symbol has nothing left to right-click, so
+        switching a layer back on always works from the panel too. Symbols of a switched-off
+        group stay listed on the left, marked <em>hidden</em>.
+      </p>
+
       <h2>Symbol groups</h2>
       <p>
         A symbol group is one legend row: a color, a shape and the model it stands for. Add groups

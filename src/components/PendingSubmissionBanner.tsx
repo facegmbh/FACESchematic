@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { checkSession, createDraft, createHandoff } from "../templateApi";
+import { useT } from "../i18n";
 
 const STORAGE_KEY = "easyschematic-pending-submission";
 const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
@@ -8,6 +9,7 @@ const DEVICES_URL =
   import.meta.env.VITE_DEVICES_URL ?? "https://devices.easyschematic.live";
 
 export default function PendingSubmissionBanner() {
+  const t = useT();
   const [visible, setVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
@@ -90,8 +92,8 @@ export default function PendingSubmissionBanner() {
     >
       <span>
         {error
-          ? "Auto-submit failed. Click to try again."
-          : "Your device is ready to submit to the community library."}
+          ? t("Auto-submit failed. Click to try again.")
+          : t("Your device is ready to submit to the community library.")}
       </span>
       <div className="flex items-center gap-2 shrink-0">
         <button
@@ -99,14 +101,14 @@ export default function PendingSubmissionBanner() {
           disabled={submitting}
           className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer disabled:opacity-50"
         >
-          {submitting ? "Submitting..." : "Submit now"}
+          {submitting ? t("Submitting...") : t("Submit now")}
         </button>
         <button
           onClick={handleDismiss}
           className="text-xs cursor-pointer hover:underline"
           style={{ color: "var(--color-text-muted)" }}
         >
-          Dismiss
+          {t("Dismiss")}
         </button>
       </div>
     </div>

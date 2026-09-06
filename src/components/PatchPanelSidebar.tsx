@@ -4,12 +4,14 @@ import { useSchematicStore } from "../store";
 import { getBundledTemplates, fetchTemplates } from "../templateApi";
 import { getPanelOccupancy, segmentsForEdge } from "../patchCircuits";
 import { scoreTemplate } from "../templateSearch";
+import { useT } from "../i18n";
 
 type CableFilter = "all" | "patched" | "direct";
 
 /** Left sidebar of the Patch Panels page: panel inventory + logical cable list with
  *  the patch/unpatch assignment flow. */
 export default function PatchPanelSidebar() {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const cableIdMap = useSchematicStore((s) => s.cableIdMap);
@@ -87,9 +89,9 @@ export default function PatchPanelSidebar() {
 
   const panelLabelById = useMemo(() => {
     const m = new Map<string, string>();
-    for (const p of panels) m.set(p.id, (p.data as DeviceData).label || "Panel");
+    for (const p of panels) m.set(p.id, (p.data as DeviceData).label || t("Panel"));
     return m;
-  }, [panels]);
+  }, [panels, t]);
 
   const filteredCables = cables.filter((e) => {
     const patched = (e.data?.patchHops?.length ?? 0) > 0;
@@ -107,12 +109,12 @@ export default function PatchPanelSidebar() {
     <div className="w-72 shrink-0 bg-white border-r border-neutral-200 overflow-y-auto text-xs" data-print-hide>
       {/* ── Panels ── */}
       <div className="px-3 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Panels in project</span>
+        <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{t("Panels in project")}</span>
         <button
           className="text-blue-600 hover:text-blue-800"
           onClick={() => setPickerOpen((v) => !v)}
         >
-          + Add panel
+          {t("+ Add panel")}
         </button>
       </div>
 
@@ -121,39 +123,39 @@ export default function PatchPanelSidebar() {
           <input
             autoFocus
             className="w-full border border-neutral-300 rounded px-2 py-1 mb-1 outline-none focus:border-blue-400"
-            placeholder="Search patch panels…"
+            placeholder={t("Search patch panels…")}
             value={pickerQuery}
             onChange={(e) => setPickerQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setPickerOpen(false); }}
           />
           <div className="max-h-48 overflow-y-auto">
-            {apiTemplates === null && <div className="text-neutral-400 px-1 py-2">Loading library…</div>}
+            {apiTemplates === null && <div className="text-neutral-400 px-1 py-2">{t("Loading library…")}</div>}
             {apiTemplates !== null && pickerResults.length === 0 && (
-              <div className="text-neutral-400 px-1 py-2">No patch panel templates match.</div>
+              <div className="text-neutral-400 px-1 py-2">{t("No patch panel templates match.")}</div>
             )}
-            {pickerResults.map((t) => (
+            {pickerResults.map((tpl) => (
               <button
-                key={t.id ?? t.label}
+                key={tpl.id ?? tpl.label}
                 className="w-full text-left px-1.5 py-1 rounded hover:bg-blue-50 hover:text-blue-700"
                 onClick={() => {
-                  addOffCanvasPanel(t);
+                  addOffCanvasPanel(tpl);
                   setPickerOpen(false);
                   setPickerQuery("");
                 }}
               >
-                {t.label}
-                <span className="text-neutral-400"> · {t.ports.filter((p) => p.direction === "passthrough").length} ports</span>
+                {tpl.label}
+                <span className="text-neutral-400"> · {t("{n} ports", { n: tpl.ports.filter((p) => p.direction === "passthrough").length })}</span>
               </button>
             ))}
           </div>
           <div className="text-[10px] text-neutral-400 mt-1">
-            Panels added here are “virtual” — in reports and racks, but never on the schematic.
+            {t("Panels added here are “virtual” — in reports and racks, but never on the schematic.")}
           </div>
         </div>
       )}
 
       {panels.length === 0 && !pickerOpen && (
-        <div className="px-3 py-2 text-neutral-400">No patch panels yet.</div>
+        <div className="px-3 py-2 text-neutral-400">{t("No patch panels yet.")}</div>
       )}
       {panels.map((p) => {
         const data = p.data as DeviceData;
@@ -179,35 +181,35 @@ export default function PatchPanelSidebar() {
               ) : (
                 <button
                   className="font-semibold text-neutral-800 truncate text-left"
-                  title="Click to scroll to panel · double-click to rename"
+                  title={t("Click to scroll to panel · double-click to rename")}
                   onClick={() => document.getElementById(`ppblk-${p.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   onDoubleClick={() => { setRenamingId(p.id); setRenameValue(data.label || ""); }}
                 >
-                  {data.label || "Unnamed Panel"}
+                  {data.label || t("Unnamed Panel")}
                 </button>
               )}
               <span className="text-neutral-400 whitespace-nowrap ml-auto">
-                {used}/{passthroughCount} used{offCanvas ? " · virtual" : ""}
+                {t("{used}/{total} used", { used, total: passthroughCount })}{offCanvas ? t(" · virtual") : ""}
               </span>
             </div>
             <div className="hidden group-hover:flex gap-3 pt-0.5">
               <button
                 className="text-blue-600 hover:underline disabled:text-neutral-300 disabled:no-underline"
                 disabled={!offCanvas && wired}
-                title={!offCanvas && wired ? "Panel has wired connections on the schematic" : undefined}
+                title={!offCanvas && wired ? t("Panel has wired connections on the schematic") : undefined}
                 onClick={() => setPanelOffCanvas(p.id, !offCanvas)}
               >
-                {offCanvas ? "Show on canvas" : "Make virtual"}
+                {offCanvas ? t("Show on canvas") : t("Make virtual")}
               </button>
               <button
                 className="text-red-600 hover:underline"
                 onClick={() => {
-                  if (confirm(`Delete panel "${data.label}"? Patch assignments through it are removed; connections stay.`)) {
+                  if (confirm(t('Delete panel "{name}"? Patch assignments through it are removed; connections stay.', { name: data.label }))) {
                     deleteNode(p.id);
                   }
                 }}
               >
-                Delete
+                {t("Delete")}
               </button>
             </div>
           </div>
@@ -215,7 +217,7 @@ export default function PatchPanelSidebar() {
       })}
 
       {/* ── Cables ── */}
-      <div className="px-3 pt-4 pb-1 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Cables</div>
+      <div className="px-3 pt-4 pb-1 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{t("Cables")}</div>
       <div className="px-3 pb-2 flex gap-1">
         {(["all", "patched", "direct"] as const).map((f) => (
           <button
@@ -227,13 +229,13 @@ export default function PatchPanelSidebar() {
             }`}
             onClick={() => setFilter(f)}
           >
-            {f === "all" ? "All" : f === "patched" ? "Patched" : "Direct"}
+            {f === "all" ? t("All") : f === "patched" ? t("Patched") : t("Direct")}
           </button>
         ))}
       </div>
 
       {filteredCables.length === 0 && (
-        <div className="px-3 py-2 text-neutral-400 border-t border-neutral-100">No cables match.</div>
+        <div className="px-3 py-2 text-neutral-400 border-t border-neutral-100">{t("No cables match.")}</div>
       )}
       {filteredCables.map((e) => {
         const patched = (e.data?.patchHops?.length ?? 0) > 0;
@@ -266,25 +268,25 @@ export default function PatchPanelSidebar() {
                   patched ? "bg-green-100 text-green-700 font-semibold" : "bg-neutral-100 text-neutral-500"
                 }`}
               >
-                {patched ? "Patched" : "Direct"}
+                {patched ? t("Patched") : t("Direct")}
               </span>
             </div>
             {patched && via && (
-              <div className="pl-4 text-[10px] text-neutral-400 font-mono truncate">via {via}</div>
+              <div className="pl-4 text-[10px] text-neutral-400 font-mono truncate">{t("via {path}", { path: via })}</div>
             )}
             <div className="pl-4 pt-0.5 flex gap-3">
               {patched ? (
                 <>
                   <button className="text-blue-600 hover:underline" onClick={() => clearEdgePatchHops(e.id)}>
-                    Unpatch
+                    {t("Unpatch")}
                   </button>
                   <button className="text-blue-600 hover:underline" onClick={() => setPatchAssignEdge(e.id)}>
-                    Add hop…
+                    {t("Add hop…")}
                   </button>
                 </>
               ) : (
                 <button className="text-blue-600 hover:underline" onClick={() => setPatchAssignEdge(e.id)}>
-                  Patch…
+                  {t("Patch…")}
                 </button>
               )}
             </div>

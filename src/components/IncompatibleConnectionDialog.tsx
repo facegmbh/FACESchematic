@@ -4,8 +4,10 @@ import { findAdaptersForSignalBridge, findAdaptersForConnectorBridge } from "../
 import { SIGNAL_LABELS, CONNECTOR_LABELS } from "../types";
 import type { DeviceTemplate } from "../types";
 import { DEVICE_TEMPLATES } from "../deviceLibrary";
+import { useT } from "../i18n";
 
 export default function IncompatibleConnectionDialog() {
+  const t = useT();
   const pending = useSchematicStore((s) => s.pendingIncompatibleConnection);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const dismiss = useSchematicStore((s) => s.dismissIncompatibleDialog);
@@ -57,7 +59,7 @@ export default function IncompatibleConnectionDialog() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text-heading)]">
-            {isConnectorMismatch ? "Connector Mismatch" : "Incompatible Connection"}
+            {isConnectorMismatch ? t("Connector Mismatch") : t("Incompatible Connection")}
           </span>
           <button
             onClick={dismiss}
@@ -77,8 +79,8 @@ export default function IncompatibleConnectionDialog() {
           </p>
           <p className="text-xs text-[var(--color-text)]">
             {isConnectorMismatch
-              ? "These ports use different connector types. Select an adapter to insert between them."
-              : "These ports use different signal types. You can insert an adapter/converter or force the connection."
+              ? t("These ports use different connector types. Select an adapter to insert between them.")
+              : t("These ports use different signal types. You can insert an adapter/converter or force the connection.")
             }
           </p>
 
@@ -107,7 +109,7 @@ export default function IncompatibleConnectionDialog() {
             </div>
           ) : (
             <div className="text-xs text-[var(--color-text-muted)] italic px-1 py-3">
-              No matching adapters found in the device library
+              {t("No matching adapters found in the device library")}
             </div>
           )}
         </div>
@@ -118,20 +120,20 @@ export default function IncompatibleConnectionDialog() {
             onClick={dismiss}
             className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={forceConnect}
             className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer text-[var(--color-text)]"
           >
-            Connect Anyway
+            {t("Connect Anyway")}
           </button>
           <button
             onClick={handleInsert}
             disabled={selectedIdx === null}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Insert Adapter
+            {t("Insert Adapter")}
           </button>
         </div>
       </div>

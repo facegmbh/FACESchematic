@@ -2,8 +2,10 @@ import { useEffect, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import type { RoomData } from "../types";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { useT } from "../i18n";
 
 export default function RoomContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.roomContextMenu);
   const { ref: menuRef, pos: menuPos } = useContextMenuPosition(
     menu?.screenX ?? 0,
@@ -80,15 +82,15 @@ export default function RoomContextMenu() {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <MenuItem label="Edit Properties..." onClick={editProperties} />
-      <MenuItem label={isLocked ? "Unlock Room" : "Lock Room"} onClick={toggleLock} />
+      <MenuItem label={t("Edit Properties...")} onClick={editProperties} />
+      <MenuItem label={isLocked ? t("Unlock Room") : t("Lock Room")} onClick={toggleLock} />
       <MenuItem
-        label={isEquipmentRack ? "Remove Equipment Rack" : "Mark as Equipment Rack"}
+        label={isEquipmentRack ? t("Remove Equipment Rack") : t("Mark as Equipment Rack")}
         onClick={toggleEquipmentRack}
       />
       <div className="border-t border-gray-200 my-1" />
-      <MenuItem label="Delete Room" onClick={deleteRoom} danger />
-      <MenuItem label="Delete Room & Contents" onClick={deleteRoomAndContents} danger />
+      <MenuItem label={t("Delete Room")} onClick={deleteRoom} danger />
+      <MenuItem label={t("Delete Room & Contents")} onClick={deleteRoomAndContents} danger />
     </div>
   );
 }

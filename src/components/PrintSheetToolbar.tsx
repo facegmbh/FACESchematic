@@ -3,12 +3,14 @@ import type { PrintSheetPage, RackElevationPage } from "../types";
 import { PAPER_SIZES } from "../printConfig";
 import { autoFillSheetForRack } from "../printSheetAutoFill";
 import { runPrintSheetExport } from "../printSheetExport";
+import { useT } from "../i18n";
 
 interface Props {
   page: PrintSheetPage;
 }
 
 export default function PrintSheetToolbar({ page }: Props) {
+  const t = useT();
   const setPrintSheetPaper = useSchematicStore((s) => s.setPrintSheetPaper);
   const addViewport = useSchematicStore((s) => s.addViewport);
   const removeViewport = useSchematicStore((s) => s.removeViewport);
@@ -33,14 +35,14 @@ export default function PrintSheetToolbar({ page }: Props) {
   return (
     <div className="flex items-center gap-3 px-3 py-1.5 bg-blue-50 border-b border-blue-200 text-xs" data-print-hide>
       {/* Paper size */}
-      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Paper</label>
+      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>{t("Paper")}</label>
       <select
         className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-blue-400"
         value={page.paperId}
         onChange={(e) => setPrintSheetPaper(page.id, e.target.value, page.orientation, page.customWidthIn, page.customHeightIn)}
       >
         {PAPER_SIZES.map((ps) => <option key={ps.id} value={ps.id}>{ps.label}</option>)}
-        <option value="custom">Custom</option>
+        <option value="custom">{t("Custom")}</option>
       </select>
 
       {/* Custom paper dimensions */}
@@ -54,7 +56,7 @@ export default function PrintSheetToolbar({ page }: Props) {
             value={page.customWidthIn ?? 24}
             onChange={(e) => setPrintSheetPaper(page.id, "custom", page.orientation, Number(e.target.value), page.customHeightIn ?? 36)}
             className="w-16 bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-blue-400"
-            title="Width (in)"
+            title={t("Width (in)")}
           />
           <span className="text-neutral-400">×</span>
           <input
@@ -65,7 +67,7 @@ export default function PrintSheetToolbar({ page }: Props) {
             value={page.customHeightIn ?? 36}
             onChange={(e) => setPrintSheetPaper(page.id, "custom", page.orientation, page.customWidthIn ?? 24, Number(e.target.value))}
             className="w-16 bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-blue-400"
-            title="Height (in)"
+            title={t("Height (in)")}
           />
           <span className="text-neutral-500" style={{ fontSize: 9 }}>in</span>
         </>
@@ -76,7 +78,7 @@ export default function PrintSheetToolbar({ page }: Props) {
         className={`px-2 py-0.5 rounded border text-xs transition-colors ${page.orientation === "landscape" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-400"}`}
         onClick={() => setPrintSheetPaper(page.id, page.paperId, page.orientation === "landscape" ? "portrait" : "landscape")}
       >
-        {page.orientation === "landscape" ? "↔ Landscape" : "↕ Portrait"}
+        {page.orientation === "landscape" ? `↔ ${t("Landscape")}` : `↕ ${t("Portrait")}`}
       </button>
 
       {/* Title block toggle */}
@@ -91,7 +93,7 @@ export default function PrintSheetToolbar({ page }: Props) {
             }));
           }}
         />
-        <span className="text-neutral-600">Title Block</span>
+        <span className="text-neutral-600">{t("Title Block")}</span>
       </label>
 
       <div className="border-l border-neutral-200 h-4" />
@@ -99,7 +101,7 @@ export default function PrintSheetToolbar({ page }: Props) {
       {/* Auto-fill from rack */}
       {elevationPages.length > 0 && (
         <div className="flex items-center gap-1">
-          <span className="text-neutral-500">Auto-Fill from:</span>
+          <span className="text-neutral-500">{t("Auto-Fill from:")}</span>
           <select
             className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-blue-400"
             defaultValue=""
@@ -109,7 +111,7 @@ export default function PrintSheetToolbar({ page }: Props) {
               e.target.value = "";
             }}
           >
-            <option value="">— Pick rack —</option>
+            <option value="">{t("— Pick rack —")}</option>
             {elevationPages.flatMap((ep) =>
               ep.racks.map((r) => (
                 <option key={`${ep.id}|${r.id}`} value={`${ep.id}|${r.id}`}>
@@ -124,7 +126,7 @@ export default function PrintSheetToolbar({ page }: Props) {
       {/* Add viewport manually */}
       {elevationPages.length > 0 && (
         <div className="flex items-center gap-1">
-          <span className="text-neutral-500">Add View:</span>
+          <span className="text-neutral-500">{t("Add View:")}</span>
           <select
             className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-blue-400"
             defaultValue=""
@@ -142,12 +144,12 @@ export default function PrintSheetToolbar({ page }: Props) {
               e.target.value = "";
             }}
           >
-            <option value="">— Pick view —</option>
+            <option value="">{t("— Pick view —")}</option>
             {elevationPages.flatMap((ep) =>
               ep.racks.flatMap((r) => [
-                <option key={`front|${ep.id}|${r.id}`} value={`rack-front|${ep.id}|${r.id}`}>{r.label} · Front</option>,
-                <option key={`rear|${ep.id}|${r.id}`} value={`rack-rear|${ep.id}|${r.id}`}>{r.label} · Rear</option>,
-                <option key={`side|${ep.id}|${r.id}`} value={`rack-side|${ep.id}|${r.id}`}>{r.label} · Side</option>,
+                <option key={`front|${ep.id}|${r.id}`} value={`rack-front|${ep.id}|${r.id}`}>{r.label} · {t("Front")}</option>,
+                <option key={`rear|${ep.id}|${r.id}`} value={`rack-rear|${ep.id}|${r.id}`}>{r.label} · {t("Rear")}</option>,
+                <option key={`side|${ep.id}|${r.id}`} value={`rack-side|${ep.id}|${r.id}`}>{r.label} · {t("Side")}</option>,
               ])
             )}
           </select>
@@ -159,7 +161,7 @@ export default function PrintSheetToolbar({ page }: Props) {
       {/* Sheet count */}
       {sheetCount > 1 && (
         <span className="text-neutral-500" style={{ fontFamily: "monospace", fontSize: 11 }}>
-          Sheet {sheetIndex} of {sheetCount}
+          {t("Sheet {i} of {n}", { i: sheetIndex, n: sheetCount })}
         </span>
       )}
 
@@ -169,7 +171,7 @@ export default function PrintSheetToolbar({ page }: Props) {
           className="px-2 py-0.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors"
           onClick={() => { for (const vp of page.viewports) removeViewport(page.id, vp.id); }}
         >
-          Clear All
+          {t("Clear All")}
         </button>
       )}
 
@@ -178,7 +180,7 @@ export default function PrintSheetToolbar({ page }: Props) {
         className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         onClick={() => { void runPrintSheetExport(); }}
       >
-        Export PDF
+        {t("Export PDF")}
       </button>
     </div>
   );

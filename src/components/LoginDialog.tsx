@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { requestLogin } from "../templateApi";
+import { useT } from "../i18n";
 
 const API_URL =
   import.meta.env?.VITE_TEMPLATE_API_URL ?? "https://api.easyschematic.live";
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function LoginDialog({ open, onClose }: Props) {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [sentEmail, setSentEmail] = useState("");
@@ -21,7 +23,7 @@ export default function LoginDialog({ open, onClose }: Props) {
   const handleSend = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !trimmed.includes("@")) {
-      setError("Enter a valid email address");
+      setError(t("Enter a valid email address"));
       return;
     }
     setSending(true);
@@ -31,7 +33,7 @@ export default function LoginDialog({ open, onClose }: Props) {
       setSentEmail(trimmed);
       setSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to send login link");
+      setError(e instanceof Error ? e.message : t("Failed to send login link"));
     } finally {
       setSending(false);
     }
@@ -62,20 +64,20 @@ export default function LoginDialog({ open, onClose }: Props) {
       >
         <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
           <h2 className="text-sm font-semibold" style={{ color: "var(--color-text-heading)" }}>
-            Log in to submit
+            {t("Log in to submit")}
           </h2>
         </div>
         <div className="px-5 py-4">
           {sent ? (
             <div className="text-center py-2">
               <p className="text-sm mb-1" style={{ color: "var(--color-text-heading)" }}>
-                Check your email
+                {t("Check your email")}
               </p>
               <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                We sent a login link to <strong>{sentEmail}</strong>. Click it to log in, then come back here.
+                {t("We sent a login link to")} <strong>{sentEmail}</strong>. {t("Click it to log in, then come back here.")}
               </p>
               <p className="text-xs mt-2" style={{ color: "var(--color-text-muted)", opacity: 0.8 }}>
-                Don't see it? Check your spam folder. Some corporate email systems may block it
+                {t("Don't see it? Check your spam folder. Some corporate email systems may block it")}
                 — <button
                   type="button"
                   onClick={() => {
@@ -84,7 +86,7 @@ export default function LoginDialog({ open, onClose }: Props) {
                   }}
                   className="underline cursor-pointer"
                   style={{ color: "var(--color-text-muted)" }}
-                >try Google sign-in instead</button>.
+                >{t("try Google sign-in instead")}</button>.
               </p>
             </div>
           ) : (
@@ -108,11 +110,11 @@ export default function LoginDialog({ open, onClose }: Props) {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                Sign in with Google
+                {t("Sign in with Google")}
               </button>
               <div className="flex items-center gap-3 my-3">
                 <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border)" }} />
-                <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>or</span>
+                <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>{t("or")}</span>
                 <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border)" }} />
               </div>
               <input
@@ -148,7 +150,7 @@ export default function LoginDialog({ open, onClose }: Props) {
               border: "1px solid var(--color-border)",
             }}
           >
-            {sent ? "Close" : "Cancel"}
+            {sent ? t("Close") : t("Cancel")}
           </button>
           {!sent && (
             <button
@@ -156,7 +158,7 @@ export default function LoginDialog({ open, onClose }: Props) {
               disabled={sending}
               className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer disabled:opacity-50"
             >
-              {sending ? "Sending..." : "Send login link"}
+              {sending ? t("Sending...") : t("Send login link")}
             </button>
           )}
         </div>

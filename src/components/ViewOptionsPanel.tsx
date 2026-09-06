@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { useT } from "../i18n";
 import { SIGNAL_LABELS, SIGNAL_COLORS, LINE_STYLE_DASHARRAY, SIGNAL_GROUPS, type SignalType, type LineStyle, type Port } from "../types";
 import { useSchematicStore } from "../store";
 import { DEFAULT_SIGNAL_COLORS, loadSignalColors } from "../signalColors";
@@ -15,6 +16,7 @@ const LINE_STYLE_TIPS: Record<LineStyle, string> = {
 };
 
 export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean; onClose?: () => void } = {}) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(true);
   const hiddenSignalTypesStr = useSchematicStore((s) => s.hiddenSignalTypes);
   const hiddenPinSignalTypesStr = useSchematicStore((s) => s.hiddenPinSignalTypes);
@@ -171,7 +173,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
         <button
           onClick={() => setCollapsed(false)}
           className="py-3 cursor-pointer hover:bg-[var(--color-surface-hover)] w-full flex justify-center transition-colors"
-          title="View options"
+          title={t("View options")}
         >
           <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M10 3l-5 5 5 5" />
@@ -181,7 +183,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
           className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mt-2 select-none"
           style={{ writingMode: "vertical-rl" }}
         >
-          View
+          {t("View")}
         </div>
       </div>
     );
@@ -201,12 +203,12 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          View Options
+          {t("View Options")}
         </h2>
         <button
           onClick={() => mobile ? onClose?.() : setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
-          title={mobile ? "Close" : "Collapse"}
+          title={mobile ? t("Close") : t("Collapse")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d={mobile ? "M4 4l8 8M12 4l-8 8" : "M6 3l5 5-5 5"} />
@@ -217,7 +219,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
       {/* Ports + Signal Types */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Ports
+          {t("Ports")}
         </div>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -226,7 +228,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setHideUnconnectedPorts(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Hide unconnected ports</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Hide unconnected ports")}</span>
         </label>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -235,7 +237,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowPortCounts(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show IO counts</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show IO counts")}</span>
         </label>
 
         {/* Divider */}
@@ -243,16 +245,16 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
 
         <div className="flex items-center justify-between mb-1">
           <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-            Signal Types
+            {t("Signal Types")}
           </div>
           <div className="flex items-center gap-1">
             {hasCustomizations && (
               <button
                 onClick={handleReset}
                 className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
-                title="Reset colors and line styles to defaults"
+                title={t("Reset colors and line styles to defaults")}
               >
-                Reset
+                {t("Reset")}
               </button>
             )}
             {hasCustomizations && usedSignalTypes.size < ALL_SIGNAL_TYPES.length && (
@@ -263,7 +265,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                 onClick={() => setShowFullList((v) => !v)}
                 className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
               >
-                {showFullList ? "Used only" : `All (${ALL_SIGNAL_TYPES.length})`}
+                {showFullList ? t("Used only") : t("All ({n})", { n: ALL_SIGNAL_TYPES.length })}
               </button>
             )}
           </div>
@@ -276,8 +278,8 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                 onClick={() => toggleSignalGroup(g.types)}
                 title={
                   g.allVisible
-                    ? `Hide all ${g.label} signals`
-                    : `Show all ${g.label} signals`
+                    ? t("Hide all {group} signals", { group: t(g.label) })
+                    : t("Show all {group} signals", { group: t(g.label) })
                 }
                 className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
                   g.allVisible
@@ -287,14 +289,14 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                       : "border-[var(--color-border)] text-[var(--color-text-muted)] opacity-60"
                 }`}
               >
-                {g.label}
+                {t(g.label)}
               </button>
             ))}
           </div>
         )}
         {displayedSignalTypes.length === 0 ? (
           <div className="text-[10px] text-[var(--color-text-muted)] italic px-1 py-1">
-            No signal types in schematic
+            {t("No signal types in schematic")}
           </div>
         ) : (
           displayedSignalTypes.map((type) => {
@@ -310,7 +312,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                 <button
                   className="shrink-0 cursor-pointer rounded hover:bg-[var(--color-surface)] p-0.5 transition-colors"
                   onClick={() => toggleSignalTypeVisibility(type)}
-                  title={wireHidden ? "Show wires" : "Hide wires"}
+                  title={wireHidden ? t("Show wires") : t("Hide wires")}
                 >
                   <svg width="14" height="10" viewBox="0 0 14 10" className="block">
                     <path
@@ -327,7 +329,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                 <button
                   className="shrink-0 cursor-pointer rounded hover:bg-[var(--color-surface)] p-0.5 transition-colors"
                   onClick={() => togglePinSignalTypeVisibility(type)}
-                  title={pinHidden ? "Show pins" : "Hide pins"}
+                  title={pinHidden ? t("Show pins") : t("Hide pins")}
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" className="block">
                     <rect
@@ -343,15 +345,15 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
                   className="w-2.5 h-2.5 rounded-full shrink-0 cursor-pointer border border-transparent hover:border-[var(--color-text-muted)] transition-colors"
                   style={{ background: SIGNAL_COLORS[type] }}
                   onClick={(e) => handleColorClick(type, e)}
-                  title="Change color"
+                  title={t("Change color")}
                 />
                 <span className="text-xs text-[var(--color-text)] flex-1 truncate">
-                  {SIGNAL_LABELS[type]}
+                  {t(SIGNAL_LABELS[type])}
                 </span>
                 <button
                   className="shrink-0 cursor-pointer rounded hover:bg-[var(--color-surface)] p-0.5 transition-colors"
                   onClick={(e) => handleLineStyleClick(type, e)}
-                  title={`Line style: ${LINE_STYLE_TIPS[ls]} (click to cycle)`}
+                  title={t("Line style: {style} (click to cycle)", { style: t(LINE_STYLE_TIPS[ls]) })}
                 >
                   <svg width="16" height="6" className="block">
                     <line
@@ -372,7 +374,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
 
         {/* Connections */}
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Connections
+          {t("Connections")}
         </div>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -381,7 +383,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowLineJumps(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show line jumps at crossings</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show line jumps at crossings")}</span>
         </label>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -390,7 +392,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowCableIdLabels(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show cable IDs</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show cable IDs")}</span>
         </label>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -399,7 +401,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowCustomLabels(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show custom labels</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show custom labels")}</span>
         </label>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -408,22 +410,22 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowCableLengthLabels(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show cable lengths</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show cable lengths")}</span>
         </label>
         <div className="flex items-center gap-2 px-1 py-0.5">
-          <span className="text-xs text-[var(--color-text)]">Cable ID position</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Cable ID position")}</span>
           <select
             value={cableIdLabelMode}
             onChange={(e) => setCableIdLabelMode(e.target.value as "endpoint" | "midpoint")}
             className="text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-0.5 text-[var(--color-text)] cursor-pointer"
           >
-            <option value="endpoint">At endpoints</option>
-            <option value="midpoint">At midpoint</option>
+            <option value="endpoint">{t("At endpoints")}</option>
+            <option value="midpoint">{t("At midpoint")}</option>
           </select>
         </div>
         <div className="flex items-center gap-2 px-1 py-0.5">
           <span className="text-xs text-[var(--color-text)]">
-            {cableIdLabelMode === "endpoint" ? "Cable ID spacing" : "Cable ID offset"}
+            {cableIdLabelMode === "endpoint" ? t("Cable ID spacing") : t("Cable ID offset")}
           </span>
           <input
             type="range"
@@ -447,7 +449,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
 
         {/* Adapters */}
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Adapters
+          {t("Adapters")}
         </div>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -456,7 +458,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setHideAdapters(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Hide all adapters</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Hide all adapters")}</span>
         </label>
 
         {/* Divider */}
@@ -464,7 +466,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
 
         {/* Racks */}
         <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
-          Racks
+          {t("Racks")}
         </div>
         <label className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
           <input
@@ -473,7 +475,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onChange={(e) => setShowFacePlateDetail(e.target.checked)}
             className="w-3 h-3 accent-blue-500 cursor-pointer"
           />
-          <span className="text-xs text-[var(--color-text)]">Show face-plate detail (advanced)</span>
+          <span className="text-xs text-[var(--color-text)]">{t("Show face-plate detail (advanced)")}</span>
         </label>
 
       </div>
@@ -485,7 +487,7 @@ export default function ViewOptionsPanel({ mobile, onClose }: { mobile?: boolean
             onClick={showAllSignalTypes}
             className="w-full text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer py-1 rounded hover:bg-[var(--color-surface-hover)] transition-colors"
           >
-            Show all signal types
+            {t("Show all signal types")}
           </button>
         </div>
       )}

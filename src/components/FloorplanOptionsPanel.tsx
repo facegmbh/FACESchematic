@@ -10,6 +10,7 @@ import { getTemplateById } from "../templateApi";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import type { Selection } from "./FloorplanRenderer";
 import { FLOORPLAN_TOKENS } from "../types";
+import { useT } from "../i18n";
 
 interface Props {
   page: FloorplanPage;
@@ -34,9 +35,10 @@ const STATUS_CLASS: Record<LoadStatus, string> = {
 };
 
 function StatusBadge({ status, title }: { status: LoadStatus; title?: string }) {
+  const t = useT();
   return (
     <span className={`shrink-0 px-1 rounded border ${STATUS_CLASS[status]}`} style={{ fontSize: 9 }} title={title}>
-      {LOAD_STATUS_LABELS[status]}
+      {t(LOAD_STATUS_LABELS[status])}
     </span>
   );
 }
@@ -49,6 +51,7 @@ function StatusBadge({ status, title }: { status: LoadStatus; title?: string }) 
  *  Mirrors the schematic's view-options panel: theme surface, collapsible sections, folds
  *  to a rail. */
 export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineChange, activeGroupId, onActiveGroupChange, selection, onSelectionChange }: Props) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const syncFloorplanLines = useSchematicStore((s) => s.syncFloorplanLines);
@@ -61,6 +64,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanGroup = useSchematicStore((s) => s.removeFloorplanGroup);
@@ -80,9 +84,13 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const specLookup = useMemo(() => loadSpecLookup({ customTemplates }), [customTemplates]);
   const handleSyncLines = () => {
     const res = syncFloorplanLines(page.id);
-    if (lineReport.schematicAmps.length === 0) addToast("No amplifier with speaker-level outputs on the schematic.", "info");
-    else if (res.addedLineNos.length === 0 && res.relabeledCount === 0) addToast("Lines already match the schematic.", "info");
-    else addToast(`${res.addedLineNos.length} line${res.addedLineNos.length === 1 ? "" : "s"} added, ${res.relabeledCount} symbol${res.relabeledCount === 1 ? "" : "s"} renumbered.`, "success");
+    if (lineReport.schematicAmps.length === 0) addToast(t("No amplifier with speaker-level outputs on the schematic."), "info");
+    else if (res.addedLineNos.length === 0 && res.relabeledCount === 0) addToast(t("Lines already match the schematic."), "info");
+    else {
+      const added = res.addedLineNos.length === 1 ? t("1 line added") : t("{n} lines added", { n: res.addedLineNos.length });
+      const renumbered = res.relabeledCount === 1 ? t("1 symbol renumbered") : t("{n} symbols renumbered", { n: res.relabeledCount });
+      addToast(`${added}, ${renumbered}.`, "success");
+    }
   };
 
   const block = page.drawingBlock;
@@ -117,7 +125,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
     try {
       updateFloorplanGroup(page.id, groupId, { imageSrc: await importLegendImage(file) });
     } catch (e) {
-      addToast(e instanceof Error ? e.message : "Could not load that image.", "error");
+      addToast(e instanceof Error ? e.message : t("Could not load that image."), "error");
     }
   };
 
@@ -127,7 +135,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
     try {
       updateFloorplanGroup(page.id, groupId, { symbolImageSrc: await importSymbolImage(file) });
     } catch (e) {
-      addToast(e instanceof Error ? e.message : "Could not load that symbol image.", "error");
+      addToast(e instanceof Error ? e.message : t("Could not load that symbol image."), "error");
     }
   };
 
@@ -143,7 +151,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         <button
           onClick={() => setCollapsed(false)}
           className="py-3 cursor-pointer hover:bg-[var(--color-surface-hover)] w-full flex justify-center transition-colors"
-          title="Plan options — lines, legend, drawing block, notes"
+          title={t("Plan options — lines, legend, drawing block, notes")}
         >
           <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M10 3l-5 5 5 5" />
@@ -153,7 +161,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mt-2 select-none"
           style={{ writingMode: "vertical-rl" }}
         >
-          Plan options
+          {t("Plan options")}
         </div>
       </div>
     );
@@ -164,12 +172,12 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          Plan options
+          {t("Plan options")}
         </h2>
         <button
           onClick={() => setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
-          title="Collapse"
+          title={t("Collapse")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M6 3l5 5-5 5" />
@@ -194,7 +202,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         return (
           <details className="border-b-2 border-emerald-400/60 bg-emerald-500/5" open>
             <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-              {many ? `${selectedSymbols.length} symbols selected` : "Selected symbol"}
+              {many ? t("{n} symbols selected", { n: selectedSymbols.length }) : t("Selected symbol")}
             </summary>
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {/* What it is */}
@@ -203,65 +211,66 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 <div className="min-w-0">
                   <div className="font-semibold text-[var(--color-text)] truncate">{many ? `${first.label} \u2026` : first.label}</div>
                   <div className="text-[var(--color-text-muted)] truncate" style={{ fontSize: 10 }}>
-                    {device ? (device.data as DeviceData).label : "no device linked"}
+                    {device ? (device.data as DeviceData).label : t("no device linked")}
                   </div>
                 </div>
               </div>
 
               {!many && (
                 <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
-                  <span className="shrink-0 w-12">Number</span>
+                  <span className="shrink-0 w-12">{t("Number")}</span>
                   <input
                     className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={first.label}
                     onChange={(e) => updateFloorplanSymbol(page.id, first.id, { label: e.target.value })}
-                    title="The number printed next to the symbol"
+                    title={t("The number printed next to the symbol")}
                   />
                 </label>
               )}
 
               {/* Which group it belongs to — this is what changes the symbol */}
-              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="The group decides how the symbol is drawn and which legend row it belongs to. Moving it here changes the symbol.">
-                <span className="shrink-0 w-12">Group</span>
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("The group decides how the symbol is drawn and which legend row it belongs to. Moving it here changes the symbol.")}>
+                <span className="shrink-0 w-12">{t("Group")}</span>
                 <select
                   className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                   value={many && new Set(selectedSymbols.map((s) => s.groupId)).size > 1 ? "" : first.groupId}
                   onChange={(e) => { if (e.target.value) patchAll({ groupId: e.target.value }); }}
                 >
-                  {many && new Set(selectedSymbols.map((s) => s.groupId)).size > 1 && <option value="">— mixed —</option>}
-                  {page.groups.map((g) => <option key={g.id} value={g.id}>{g.label || "(unnamed)"}</option>)}
+                  {many && new Set(selectedSymbols.map((s) => s.groupId)).size > 1 && <option value="">{t("— mixed —")}</option>}
+                  {page.groups.map((g) => <option key={g.id} value={g.id}>{g.label || t("(unnamed)")}</option>)}
                 </select>
               </label>
 
               {isLoudspeaker && (
-                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="Amplifier line this speaker hangs on. Renumbering happens from the Lines section.">
-                  <span className="shrink-0 w-12">Line</span>
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Amplifier line this speaker hangs on. Renumbering happens from the Lines section.")}>
+                  <span className="shrink-0 w-12">{t("Line")}</span>
                   <input
                     className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={first.lineNo ?? ""}
-                    placeholder="e.g. 4"
+                    placeholder={t("e.g. 4")}
                     onChange={(e) => patchAll({ lineNo: e.target.value || undefined })}
                   />
                 </label>
               )}
 
               {/* Which way it faces */}
-              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="Turn the symbol; the number beside it stays upright.">
-                <span className="shrink-0 w-12">Turn</span>
-                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn - 45 })} title="Turn 45° counter-clockwise">⟲</button>
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Turn the symbol; the number beside it stays upright.")}>
+                <span className="shrink-0 w-12">{t("Turn")}</span>
+                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn - 45 })} title={t("Turn 45° counter-clockwise")}>⟲</button>
                 <input
                   type="number"
                   step={15}
                   className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                   value={turn}
                   onChange={(e) => patchAll({ rotationDeg: Number(e.target.value) || 0 })}
+                  title={t("Symbol rotation in degrees clockwise")}
                 />
-                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn + 45 })} title="Turn 45° clockwise">⟳</button>
+                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn + 45 })} title={t("Turn 45° clockwise")}>⟳</button>
               </label>
 
               {/* Where the number sits */}
               <div className="flex items-start gap-2 text-[var(--color-text-muted)]">
-                <span className="shrink-0 w-12 pt-1">Label</span>
+                <span className="shrink-0 w-12 pt-1">{t("Label")}</span>
                 <div className="grid grid-cols-3 gap-0.5">
                   {LABEL_POSITIONS.map((pos, i) => (
                     <button
@@ -269,7 +278,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       className="w-6 h-5 rounded text-[var(--color-text)] hover:bg-emerald-500/20 hover:text-emerald-700 cursor-pointer"
                       style={i === 4 ? { gridColumnStart: 3 } : undefined}
                       onClick={() => patchAll(labelPlacementFor(pos, page.symbolSizeMm, page.labelSizeMm))}
-                      title={`Put the number ${pos.toUpperCase()} of the symbol`}
+                      title={t("Put the number {dir} of the symbol", { dir: pos.toUpperCase() })}
                     >
                       {arrows[pos]}
                     </button>
@@ -282,12 +291,12 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={labelTurn}
                     onChange={(e) => patchAll({ labelRotationDeg: Number(e.target.value) || 0 })}
-                    title="Number rotation in degrees (clockwise)"
+                    title={t("Number rotation in degrees (clockwise)")}
                   />
                   <button
                     className="px-1 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
                     onClick={() => patchAll({ labelRotationDeg: 0, rotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })}
-                    title="Reset the turn and the number placement"
+                    title={t("Reset the turn and the number placement")}
                   >
                     ↺
                   </button>
@@ -296,23 +305,23 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
 
               {(lineIds.length > 1 || groupIds.length > 1) && (
                 <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
-                  <span className="shrink-0">Apply to</span>
+                  <span className="shrink-0">{t("Apply to")}</span>
                   {lineIds.length > 1 && (
                     <button
                       className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
                       onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
-                      title={`Copy this turn and number placement to every symbol on line ${first.lineNo}`}
+                      title={t("Copy this turn and number placement to every symbol on line {line}", { line: first.lineNo ?? "" })}
                     >
-                      line {first.lineNo}
+                      {t("line")} {first.lineNo}
                     </button>
                   )}
                   {groupIds.length > 1 && (
                     <button
                       className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
                       onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
-                      title="Copy this turn and number placement to every symbol of the group"
+                      title={t("Copy this turn and number placement to every symbol of the group")}
                     >
-                      group
+                      {t("group")}
                     </button>
                   )}
                 </div>
@@ -323,10 +332,23 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   className="w-full border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-y"
                   rows={2}
                   value={first.notes ?? ""}
-                  placeholder="Note for this symbol (appears in the plan schedule)"
+                  placeholder={t("Note for this symbol (appears in the plan schedule)")}
                   onChange={(e) => updateFloorplanSymbol(page.id, first.id, { notes: e.target.value || undefined })}
                   data-allow-scroll
                 />
+              )}
+
+              {group?.hidden && (
+                <div className="flex items-center gap-1.5 rounded border border-amber-400 bg-amber-500/10 px-1.5 py-1 text-amber-700">
+                  <span className="flex-1">{t("Its layer is switched off.")}</span>
+                  <button
+                    className="px-1 rounded border border-amber-400 hover:bg-amber-500/20"
+                    onClick={() => updateFloorplanGroup(page.id, group.id, { hidden: undefined })}
+                    title={t("Draw this group again")}
+                  >
+                    {t("Show")}
+                  </button>
+                </div>
               )}
 
               <div className="flex items-center gap-1">
@@ -334,9 +356,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   <button
                     className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
                     onClick={() => { onActiveGroupChange(group.id); setExpandedGroupId(group.id); }}
-                    title="Open this group below to change the shape, the color or the uploaded picture — that applies to every symbol of the group"
+                    title={t("Open this group below to change the shape, the color or the uploaded picture — that applies to every symbol of the group")}
                   >
-                    Edit symbol…
+                    {t("Edit symbol…")}
                   </button>
                 )}
                 <div className="flex-1" />
@@ -346,9 +368,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     for (const id of ids) removeFloorplanSymbol(page.id, id);
                     onSelectionChange({ kind: "none" });
                   }}
-                  title="Remove from the plan"
+                  title={t("Remove from the plan")}
                 >
-                  Delete
+                  {t("Delete")}
                 </button>
               </div>
             </div>
@@ -359,20 +381,19 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Symbol groups ─────────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-        <span>Symbol Groups</span>
+        <span>{t("Symbol Groups")}</span>
         <button
           className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-500/100/10 border border-transparent hover:border-emerald-200"
           onClick={(e) => { e.preventDefault(); handleAddGroup(); }}
-          title="Add a symbol group"
+          title={t("Add a symbol group")}
         >
-          + Add
+          + {t("Add")}
         </button>
         </summary>
 
       {page.groups.length === 0 && (
         <p className="px-2 pb-2 text-[var(--color-text-muted)] leading-relaxed">
-          A group is one legend row — a color, a shape and the model it stands for. Add one,
-          then drag devices onto the plan.
+          {t("A group is one legend row — a color, a shape and the model it stands for. Add one, then drag devices onto the plan.")}
         </p>
       )}
 
@@ -389,18 +410,27 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 <button
                   className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
                   onClick={() => onActiveGroupChange(group.id)}
-                  title="Make this the active group for placing symbols"
+                  title={t("Make this the active group for placing symbols")}
                 >
-                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} symbolSizeMm={page.symbolSizeMm} className="shrink-0" />
-                  <span className="truncate text-[var(--color-text)]">{group.label}</span>
+                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} symbolSizeMm={page.symbolSizeMm} className={group.hidden ? "shrink-0 opacity-40" : "shrink-0"} />
+                  <span className={`truncate ${group.hidden ? "text-[var(--color-text-muted)] line-through" : "text-[var(--color-text)]"}`}>{group.label}</span>
                 </button>
-                <span className="text-[var(--color-text-muted)] shrink-0" title="Symbols on this plan">
+                <span className="text-[var(--color-text-muted)] shrink-0" title={t("Symbols on this plan")}>
                   {symbolCounts.get(group.id) ?? 0}
                 </span>
+                {/* The group is the layer: switching it off takes its symbols off the sheet,
+                    out of the export and out of the legend, without deleting anything. */}
+                <button
+                  className={`px-1 shrink-0 ${group.hidden ? "text-[var(--color-text-muted)]" : "text-emerald-600 hover:text-emerald-700"}`}
+                  onClick={() => updateFloorplanGroup(page.id, group.id, { hidden: group.hidden ? undefined : true })}
+                  title={group.hidden ? t("Switched off — click to draw it again") : t("On the sheet — click to switch this layer off")}
+                >
+                  {group.hidden ? "🚫" : "👁"}
+                </button>
                 <button
                   className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] px-1"
                   onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
-                  title="Edit group"
+                  title={t("Edit group")}
                 >
                   {isExpanded ? "▾" : "▸"}
                 </button>
@@ -411,13 +441,13 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   <input
                     className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={group.label}
-                    placeholder="Legend title, e.g. Ceiling speakers"
+                    placeholder={t("Legend title, e.g. Ceiling speakers")}
                     onChange={(e) => updateFloorplanGroup(page.id, group.id, { label: e.target.value })}
                   />
                   <input
                     className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={group.description ?? ""}
-                    placeholder="Model | cable spec"
+                    placeholder={t("Model | cable spec")}
                     onChange={(e) => updateFloorplanGroup(page.id, group.id, { description: e.target.value })}
                   />
                   <div className="flex items-center gap-1.5">
@@ -426,15 +456,15 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       value={group.color}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { color: e.target.value })}
                       className="w-7 h-6 shrink-0 border border-[var(--color-border)] rounded cursor-pointer"
-                      title="Symbol color"
+                      title={t("Symbol color")}
                     />
                     <select
                       className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                       value={group.shape}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { shape: e.target.value as FloorplanSymbolGroup["shape"] })}
-                      title="Symbol shape — abstract or a top-view pictogram"
+                      title={t("Symbol shape — abstract or a top-view pictogram")}
                     >
-                      {FLOORPLAN_SYMBOL_SHAPES.map((s) => <option key={s} value={s}>{FLOORPLAN_SYMBOL_SHAPE_LABELS[s]}</option>)}
+                      {FLOORPLAN_SYMBOL_SHAPES.map((s) => <option key={s} value={s}>{t(FLOORPLAN_SYMBOL_SHAPE_LABELS[s])}</option>)}
                     </select>
                     <input
                       className="w-10 shrink-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 text-center"
@@ -443,18 +473,18 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       placeholder="S"
                       disabled={Boolean(group.symbolImageSrc)}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { glyph: e.target.value.trim() || undefined })}
-                      title={group.symbolImageSrc ? "An uploaded symbol carries no glyph — the picture is the symbol" : "Up to two characters drawn inside the symbol"}
+                      title={group.symbolImageSrc ? t("An uploaded symbol carries no glyph — the picture is the symbol") : t("Up to two characters drawn inside the symbol")}
                     />
                   </div>
                   <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
-                    <span className="shrink-0" style={{ fontSize: 10 }}>Outline</span>
+                    <span className="shrink-0" style={{ fontSize: 10 }}>{t("Outline")}</span>
                     <input
                       type="color"
                       value={group.outlineColor || DEFAULT_SYMBOL_OUTLINE}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { outlineColor: e.target.value })}
                       className="w-7 h-6 shrink-0 border border-[var(--color-border)] rounded cursor-pointer disabled:opacity-40"
                       disabled={(group.outlineWidthMm ?? 1) <= 0}
-                      title="Outline color around the symbol body"
+                      title={t("Outline color around the symbol body")}
                     />
                     <input
                       type="number"
@@ -464,14 +494,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                       value={group.outlineWidthMm ?? Math.round(page.symbolSizeMm * DEFAULT_SYMBOL_OUTLINE_RATIO * 100) / 100}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { outlineWidthMm: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value)) })}
-                      title="Outline thickness on paper in mm. 0 draws no outline."
+                      title={t("Outline thickness on paper in mm. 0 draws no outline.")}
                     />
                     <span style={{ fontSize: 10 }}>mm</span>
                     {(group.outlineColor !== undefined || group.outlineWidthMm !== undefined) && (
                       <button
                         className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-emerald-700"
                         onClick={() => updateFloorplanGroup(page.id, group.id, { outlineColor: undefined, outlineWidthMm: undefined })}
-                        title="Back to the default outline"
+                        title={t("Back to the default outline")}
                       >
                         ↺
                       </button>
@@ -481,22 +511,22 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     <button
                       className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
                       onClick={() => { symbolImageTargetRef.current = group.id; symbolImageInputRef.current?.click(); }}
-                      title="Upload your own symbol (PNG, JPG, WebP or SVG). It replaces the shape, the color and the glyph, and prints on the plan and in the legend."
+                      title={t("Upload your own symbol (PNG, JPG, WebP or SVG). It replaces the shape, the color and the glyph, and prints on the plan and in the legend.")}
                     >
-                      {group.symbolImageSrc ? "Replace symbol…" : "Upload symbol…"}
+                      {group.symbolImageSrc ? t("Replace symbol…") : t("Upload symbol…")}
                     </button>
                     {group.symbolImageSrc && (
                       <button
                         className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
                         onClick={() => updateFloorplanGroup(page.id, group.id, { symbolImageSrc: undefined })}
-                        title="Back to the drawn shape"
+                        title={t("Back to the drawn shape")}
                       >
                         ✕
                       </button>
                     )}
                     <div className="flex-1" />
-                    <label className="flex items-center gap-1 text-[var(--color-text-muted)]" title="Direction new symbols of this group start at, in degrees clockwise. Turn a placed symbol with the Symbol control on the sheet.">
-                      <span style={{ fontSize: 10 }}>Turn</span>
+                    <label className="flex items-center gap-1 text-[var(--color-text-muted)]" title={t("Direction new symbols of this group start at, in degrees clockwise. Turn a placed symbol with the Symbol control on the sheet.")}>
+                      <span style={{ fontSize: 10 }}>{t("Turn")}</span>
                       <input
                         type="number"
                         step={15}
@@ -510,9 +540,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   <input
                     className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={group.labelPrefix ?? ""}
-                    placeholder="No. prefix"
+                    placeholder={t("No. prefix")}
                     onChange={(e) => updateFloorplanGroup(page.id, group.id, { labelPrefix: e.target.value || undefined })}
-                    title="Seed for auto-numbering, e.g. “SB.” or “4.1”"
+                    title={t("Seed for auto-numbering, e.g. “SB.” or “4.1”")}
                   />
                   <div className="flex flex-wrap gap-1">
                     {FLOORPLAN_GROUP_COLORS.map((c) => (
@@ -537,24 +567,24 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                           <button
                             className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
                             onClick={() => { imageTargetGroupRef.current = group.id; imageInputRef.current?.click(); }}
-                            title="Upload a product shot (stored in the project, always printed)"
+                            title={t("Upload a product shot (stored in the project, always printed)")}
                           >
-                            {group.imageSrc ? "Replace image" : "Upload image…"}
+                            {group.imageSrc ? t("Replace image") : t("Upload image…")}
                           </button>
                           {templateImage && !group.imageSrc && group.imageUrl !== templateImage && (
                             <button
                               className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
                               onClick={() => updateFloorplanGroup(page.id, group.id, { imageUrl: templateImage })}
-                              title="Use the device template's image"
+                              title={t("Use the device template's image")}
                             >
-                              Template image
+                              {t("Template image")}
                             </button>
                           )}
                           {shown && (
                             <button
                               className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
                               onClick={() => updateFloorplanGroup(page.id, group.id, { imageSrc: undefined, imageUrl: undefined, imageCaption: undefined })}
-                              title="Remove image"
+                              title={t("Remove image")}
                             >
                               ✕
                             </button>
@@ -563,9 +593,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                         <input
                           className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                           value={group.imageUrl ?? ""}
-                          placeholder="Image URL (template today, Odoo product later)"
+                          placeholder={t("Image URL (template today, Odoo product later)")}
                           onChange={(e) => updateFloorplanGroup(page.id, group.id, { imageUrl: e.target.value || undefined })}
-                          title="A remote image reference. Shown on screen; the PDF embeds it when the host allows — an uploaded image always wins."
+                          title={t("A remote image reference. Shown on screen; the PDF embeds it when the host allows — an uploaded image always wins.")}
                         />
                       </>
                     );
@@ -574,7 +604,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     <input
                       className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                       value={group.imageCaption ?? ""}
-                      placeholder="Image caption, e.g. DM6SE"
+                      placeholder={t("Image caption, e.g. DM6SE")}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { imageCaption: e.target.value })}
                     />
                   )}
@@ -584,30 +614,33 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       checked={!group.hiddenInLegend}
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { hiddenInLegend: e.target.checked ? undefined : true })}
                     />
-                    Show in legend
+                    {t("Show in legend")}
                   </label>
                   <div className="flex items-center gap-1">
                     <button
                       className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
                       onClick={() => {
-                        const start = prompt("Renumber this group starting at:", group.labelPrefix ?? "1.1");
+                        const start = prompt(t("Renumber this group starting at:"), group.labelPrefix ?? "1.1");
                         if (start?.trim()) renumberFloorplanGroup(page.id, group.id, start.trim());
                       }}
-                      title="Renumber every symbol of this group in placement order"
+                      title={t("Renumber every symbol of this group in placement order")}
                     >
-                      Renumber
+                      {t("Renumber")}
                     </button>
                     <div className="flex-1" />
                     <button
                       className="px-1.5 py-0.5 rounded text-red-500 hover:bg-red-500/10 hover:text-red-700"
                       onClick={() => {
                         const count = symbolCounts.get(group.id) ?? 0;
-                        if (count > 0 && !confirm(`Delete “${group.label}” and its ${count} symbol${count > 1 ? "s" : ""} on this plan?`)) return;
+                        const question = count === 1
+                          ? t("Delete “{group}” and its 1 symbol on this plan?", { group: group.label })
+                          : t("Delete “{group}” and its {n} symbols on this plan?", { group: group.label, n: count });
+                        if (count > 0 && !confirm(question)) return;
                         removeFloorplanGroup(page.id, group.id);
                         setExpandedGroupId(null);
                       }}
                     >
-                      Delete
+                      {t("Delete")}
                     </button>
                   </div>
                 </div>
@@ -636,15 +669,15 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Numbering (line.speaker) ─────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-          Numbering
+          {t("Numbering")}
         </summary>
       <div className="px-2 pb-2 flex flex-col gap-1.5">
-        <label className="flex items-center gap-2 text-[var(--color-text)]" title="Amplifier line / circuit the next symbols hang on. Speakers are numbered per line: 4.1, 4.2 …">
-          <span className="shrink-0">Line</span>
+        <label className="flex items-center gap-2 text-[var(--color-text)]" title={t("Amplifier line / circuit the next symbols hang on. Speakers are numbered per line: 4.1, 4.2 …")}>
+          <span className="shrink-0">{t("Line")}</span>
           <input
             className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
             value={activeLine}
-            placeholder={isLoudspeaker ? "e.g. 4 or SB" : "optional"}
+            placeholder={isLoudspeaker ? t("e.g. 4 or SB") : t("optional")}
             onChange={(e) => onActiveLineChange(e.target.value)}
             list="floorplan-lines"
           />
@@ -652,8 +685,8 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             {lines.map((l) => <option key={l.line.lineNo} value={l.line.lineNo} />)}
           </datalist>
         </label>
-        <label className="flex items-center gap-2 text-[var(--color-text)]" title="How labels are composed: {{line}}, {{n}}, {{group}}, {{device}}">
-          <span className="shrink-0">Label</span>
+        <label className="flex items-center gap-2 text-[var(--color-text)]" title={t("How labels are composed: {{line}}, {{n}}, {{group}}, {{device}}")}>
+          <span className="shrink-0">{t("Label")}</span>
           <input
             className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 font-mono"
             value={page.labelTemplate ?? ""}
@@ -662,7 +695,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           />
         </label>
         {!isLoudspeaker && !activeLine && (
-          <p className="text-[var(--color-text-muted)] leading-snug">Leave the line empty to continue each group's own numbering (1.1 → 1.2). Set a line to number per amplifier line instead.</p>
+          <p className="text-[var(--color-text-muted)] leading-snug">{t("Leave the line empty to continue each group's own numbering (1.1 → 1.2). Set a line to number per amplifier line instead.")}</p>
         )}
       </div>
       </details>
@@ -670,19 +703,19 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Lines ↔ amplifier channels ────────────────────────────── */}
       <details open>
         <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-        <span>Lines &amp; load</span>
+        <span>{t("Lines & load")}</span>
         <button
           className="normal-case tracking-normal font-normal px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
           onClick={(e) => { e.preventDefault(); handleSyncLines(); }}
-          title="Read the amplifier channels off the schematic: one line per channel with speakers, placed symbols moved onto their channel's line"
+          title={t("Read the amplifier channels off the schematic: one line per channel with speakers, placed symbols moved onto their channel's line")}
         >
-          Sync from schematic
+          {t("Sync from schematic")}
         </button>
         </summary>
       <div className="px-2 pb-2 flex flex-col gap-1.5">
         {lines.length === 0 && (
           <p className="text-[var(--color-text-muted)] leading-snug">
-            No lines yet. Drop speakers that are wired to an amplifier on the schematic — they take their channel's line automatically on a loudspeaker plan — or press Sync.
+            {t("No lines yet. Drop speakers that are wired to an amplifier on the schematic — they take their channel's line automatically on a loudspeaker plan — or press Sync.")}
           </p>
         )}
         {lines.map((row) => (
@@ -699,7 +732,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           />
         ))}
         {[...lineReport.amps.values()].filter((a) => a.result.channels.some((c) => c.speakerCount > 0)).map(({ amplifier, result }) => (
-          <div key={amplifier.nodeId} className="flex items-center justify-between gap-1 text-[var(--color-text)] border border-dashed border-[var(--color-border)] rounded px-1.5 py-0.5" title={result.hasSpec ? `Burst pool ${formatWatt(result.totalRequestedW)} of ${formatWatt(result.limits?.maxBurstTotalW)} · average ${formatWatt(result.totalAverageW)} of ${formatWatt(result.limits?.maxAvgTotalW)}` : "No amplifier load data on the template — open the device and fill in its ratings"}>
+          <div key={amplifier.nodeId} className="flex items-center justify-between gap-1 text-[var(--color-text)] border border-dashed border-[var(--color-border)] rounded px-1.5 py-0.5" title={result.hasSpec ? t("Burst pool {burst} of {maxBurst} · average {avg} of {maxAvg}", { burst: formatWatt(result.totalRequestedW), maxBurst: formatWatt(result.limits?.maxBurstTotalW), avg: formatWatt(result.totalAverageW), maxAvg: formatWatt(result.limits?.maxAvgTotalW) }) : t("No amplifier load data on the template — open the device and fill in its ratings")}>
             <span className="truncate"><strong>{amplifier.label}</strong> · Σ {formatWatt(result.totalRequestedW)}{result.hasSpec ? ` / ${formatWatt(result.limits?.maxBurstTotalW)} · ${formatHeadroom(result.poolBurstHeadroomDb)}` : ""}</span>
             <StatusBadge status={result.hasSpec ? result.status : "no-data"} />
           </div>
@@ -710,7 +743,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Legend box ────────────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-          Legend Box
+          {t("Legend Box")}
         </summary>
       <div className="px-2 pb-4 flex flex-col gap-1.5">
         <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
@@ -719,12 +752,12 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             checked={page.legend.visible}
             onChange={(e) => updateFloorplanLegend(page.id, { visible: e.target.checked })}
           />
-          Show legend on the sheet
+          {t("Show legend on the sheet")}
         </label>
         <input
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
           value={page.legend.title}
-          placeholder="Legend title"
+          placeholder={t("Legend title")}
           onChange={(e) => updateFloorplanLegend(page.id, { title: e.target.value })}
         />
         <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
@@ -733,7 +766,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             checked={page.legend.showImages}
             onChange={(e) => updateFloorplanLegend(page.id, { showImages: e.target.checked })}
           />
-          Product images
+          {t("Product images")}
         </label>
         <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
           <input
@@ -741,40 +774,40 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             checked={page.legend.onlyUsedGroups}
             onChange={(e) => updateFloorplanLegend(page.id, { onlyUsedGroups: e.target.checked })}
           />
-          Only groups used on this plan
+          {t("Only groups used on this plan")}
         </label>
-        <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer" title="Logo, name, address and contact from Preferences → Company">
+        <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer" title={t("Logo, name, address and contact from Preferences → Company")}>
           <input
             type="checkbox"
             checked={page.legend.showCompany !== false}
             onChange={(e) => updateFloorplanLegend(page.id, { showCompany: e.target.checked })}
           />
-          Company block (logo, address)
+          {t("Company block (logo, address)")}
         </label>
-        <label className="flex items-center gap-2 text-[var(--color-text)]" title="Print the line table (line → amplifier channel, quantity, load) under the legend rows">
+        <label className="flex items-center gap-2 text-[var(--color-text)]" title={t("Print the line table (line → amplifier channel, quantity, load) under the legend rows")}>
           <input type="checkbox" checked={legendShowsLines(page)} onChange={(e) => updateFloorplanLegend(page.id, { showLines: e.target.checked })} />
-          Show line table
+          {t("Show line table")}
         </label>
         {legendShowsLines(page) && (
           <input
             className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
             value={page.legend.linesTitle ?? ""}
-            placeholder={DEFAULT_LEGEND_LINES_TITLE}
+            placeholder={t(DEFAULT_LEGEND_LINES_TITLE)}
             onChange={(e) => updateFloorplanLegend(page.id, { linesTitle: e.target.value || undefined })}
-            title="Heading of the line table"
+            title={t("Heading of the line table")}
           />
         )}
         <input
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
           value={page.legend.notesTitle ?? ""}
-          placeholder="Notes heading"
+          placeholder={t("Notes heading")}
           onChange={(e) => updateFloorplanLegend(page.id, { notesTitle: e.target.value })}
         />
         <textarea
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-y"
           rows={5}
           value={notesText}
-          placeholder="One installation note per line"
+          placeholder={t("One installation note per line")}
           onChange={(e) => updateFloorplanLegend(page.id, { notes: e.target.value.split("\n") })}
           data-allow-scroll
         />
@@ -784,34 +817,34 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Drawing block (Plankopf) ──────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-          Drawing Block
+          {t("Drawing Block")}
         </summary>
         <div className="px-2 pb-3 flex flex-col gap-1.5">
           <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
             <input type="checkbox" checked={block.visible} onChange={(e) => patchBlock({ visible: e.target.checked })} />
-            Show drawing block on the sheet
+            {t("Show drawing block on the sheet")}
           </label>
           <input
             className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 font-semibold"
             value={block.title}
-            placeholder="Drawing title, e.g. Ground floor"
+            placeholder={t("Drawing title, e.g. Ground floor")}
             onChange={(e) => patchBlock({ title: e.target.value })}
-            title="Tokens: {{pageLabel}}, {{showName}}, {{scale}} …"
+            title={t("Tokens: {{pageLabel}}, {{showName}}, {{scale}} …")}
           />
           <input
             className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
             value={block.subtitle ?? ""}
-            placeholder="Subtitle, e.g. Loudspeaker layout"
+            placeholder={t("Subtitle, e.g. Loudspeaker layout")}
             onChange={(e) => patchBlock({ subtitle: e.target.value })}
           />
 
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>Fields</span>
+            <span className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>{t("Fields")}</span>
             <button
               className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-500/100/10 border border-transparent hover:border-emerald-200"
-              onClick={() => patchBlock({ fields: [...block.fields, { id: nextDrawingFieldId(), label: "Field", value: "" }] })}
+              onClick={() => patchBlock({ fields: [...block.fields, { id: nextDrawingFieldId(), label: t("Field"), value: "" }] })}
             >
-              + Field
+              + {t("Field")}
             </button>
           </div>
           {block.fields.map((f, i) => (
@@ -820,28 +853,28 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 className="w-[38%] border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 uppercase"
                 style={{ fontSize: 10 }}
                 value={f.label}
-                placeholder="Label"
+                placeholder={t("Label")}
                 onChange={(e) => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })}
               />
               <textarea
                 className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-none leading-tight"
                 rows={Math.max(1, Math.min(4, f.value.split("\n").length))}
                 value={f.value}
-                placeholder="Value or {{token}}"
-                title="Multi-line values (addresses) wrap onto several lines in the block"
+                placeholder={t("Value or {{token}}")}
+                title={t("Multi-line values (addresses) wrap onto several lines in the block")}
                 onChange={(e) => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })}
                 data-allow-scroll
               />
               <button
                 className={`px-1 rounded border ${f.wide ? "border-emerald-400 text-emerald-700 bg-emerald-500/10" : "border-[var(--color-border)] text-[var(--color-text-muted)]"}`}
-                title="Span both columns"
+                title={t("Span both columns")}
                 onClick={() => patchBlock({ fields: block.fields.map((x, j) => (j === i ? { ...x, wide: !x.wide } : x)) })}
               >
                 ⟷
               </button>
               <button
                 className="px-1 text-[var(--color-text-muted)] hover:text-red-600"
-                title="Remove field"
+                title={t("Remove field")}
                 onClick={() => patchBlock({ fields: block.fields.filter((_, j) => j !== i) })}
               >
                 ✕
@@ -849,18 +882,18 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             </div>
           ))}
           <p className="text-[var(--color-text-muted)] leading-snug" style={{ fontSize: 10 }}>
-            Tokens: {FLOORPLAN_TOKENS.map((t) => `{{${t}}}`).join(" ")} — resolved from the project title block and the page.
+            {t("Tokens: {tokens} — resolved from the project title block and the page.", { tokens: FLOORPLAN_TOKENS.map((tok) => `{{${tok}}}`).join(" ") })}
           </p>
 
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>Revisions</span>
+            <span className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>{t("Revisions")}</span>
             <button
               className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-500/100/10 border border-transparent hover:border-emerald-200"
               onClick={() => patchBlock({
                 revisions: [...block.revisions, { index: nextRevisionIndex(block.revisions), date: formatPlanDate(), description: "", author: "", checkedBy: "" }],
               })}
             >
-              + Revision
+              + {t("Revision")}
             </button>
           </div>
           <div className="flex gap-1 text-[var(--color-text-muted)] uppercase" style={{ fontSize: 9 }}>
@@ -875,18 +908,18 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   headers[i] = e.target.value;
                   patchBlock({ revisionHeaders: headers });
                 }}
-                title="Column header"
+                title={t("Column header")}
               />
             ))}
           </div>
           {block.revisions.map((r, i) => (
             <div key={i} className="flex gap-1 items-center">
-              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.index} onChange={(e) => patchRevision(i, { index: e.target.value })} title="Index" />
-              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.date} onChange={(e) => patchRevision(i, { date: e.target.value })} title="Date" />
-              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0 flex-1" value={r.description} placeholder="Change" onChange={(e) => patchRevision(i, { description: e.target.value })} title="Change" />
-              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.author ?? ""} placeholder="By" onChange={(e) => patchRevision(i, { author: e.target.value })} title="Drawn by" />
-              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.checkedBy ?? ""} placeholder="Chk" onChange={(e) => patchRevision(i, { checkedBy: e.target.value })} title="Checked by" />
-              <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" title="Remove revision" onClick={() => patchBlock({ revisions: block.revisions.filter((_, j) => j !== i) })}>✕</button>
+              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.index} onChange={(e) => patchRevision(i, { index: e.target.value })} title={t("Index")} />
+              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "15%" }} value={r.date} onChange={(e) => patchRevision(i, { date: e.target.value })} title={t("Date")} />
+              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0 flex-1" value={r.description} placeholder={t("Change")} onChange={(e) => patchRevision(i, { description: e.target.value })} title={t("Change")} />
+              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.author ?? ""} placeholder={t("By")} onChange={(e) => patchRevision(i, { author: e.target.value })} title={t("Drawn by")} />
+              <input className="border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 min-w-0" style={{ width: "11%" }} value={r.checkedBy ?? ""} placeholder={t("Chk")} onChange={(e) => patchRevision(i, { checkedBy: e.target.value })} title={t("Checked by")} />
+              <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" title={t("Remove revision")} onClick={() => patchBlock({ revisions: block.revisions.filter((_, j) => j !== i) })}>✕</button>
             </div>
           ))}
 
@@ -894,21 +927,21 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             className="w-full border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-y mt-1"
             rows={3}
             value={block.disclaimer ?? ""}
-            placeholder="Small print above the title, e.g. “All dimensions to be verified on site …”"
+            placeholder={t("Small print above the title, e.g. “All dimensions to be verified on site …”")}
             onChange={(e) => patchBlock({ disclaimer: e.target.value })}
             data-allow-scroll
           />
           <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
               <input type="checkbox" checked={block.showLogo} onChange={(e) => patchBlock({ showLogo: e.target.checked })} />
-              Logo
+              {t("Logo")}
             </label>
             <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
               <input type="checkbox" checked={block.showNorthArrow} onChange={(e) => patchBlock({ showNorthArrow: e.target.checked })} />
-              North arrow
+              {t("North arrow")}
             </label>
             {block.showNorthArrow && (
-              <label className="flex items-center gap-1 text-[var(--color-text)]" title="North arrow rotation (° clockwise)">
+              <label className="flex items-center gap-1 text-[var(--color-text)]" title={t("North arrow rotation (° clockwise)")}>
                 <input
                   type="number"
                   className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
@@ -924,19 +957,62 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       </details>
 
       {/* ── Covers (erased parts of the underlay) ─────────────────── */}
-      <details className="border-t border-[var(--color-border)]">
+      <details className="border-t border-[var(--color-border)]" open={page.masks.length > 0}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-          Erased areas ({page.masks.length})
+          {t("Erased areas ({n})", { n: page.masks.length })}
         </summary>
         <div className="px-2 pb-3 flex flex-col gap-1">
           <p className="text-[var(--color-text-muted)] leading-snug">
-            White covers over the architect&apos;s plan — use <strong>▭ Erase</strong> on the sheet to drag one out over a
-            legend, a note or a title block you want gone. Drag to move, corner to resize, <kbd>Delete</kbd> to remove.
+            {t("White covers over the architect's plan — use")} <strong>▭ {t("Erase")}</strong>{" "}
+            {t("on the sheet to drag one out over a legend, a note or a title block you want gone. Drag to move, corner to resize,")}{" "}
+            <kbd>{t("Delete::key")}</kbd>{" "}
+            {t("to remove. Turn one when the block underneath is not square to the sheet, and fade it to quiet the linework instead of erasing it.")}
           </p>
           {page.masks.map((m, i) => (
-            <div key={m.id} className="flex items-center justify-between text-[var(--color-text)] border border-[var(--color-border)] rounded px-1.5 py-0.5">
-              <span>Cover {i + 1} · {Math.round(m.sizeMm.w)} × {Math.round(m.sizeMm.h)} mm</span>
-              <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" onClick={() => removeFloorplanMask(page.id, m.id)} title="Remove cover">✕</button>
+            <div key={m.id} className="border border-[var(--color-border)] rounded px-1.5 py-1 flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[var(--color-text)]">
+                <span>{t("Cover {n}", { n: i + 1 })} · {Math.round(m.sizeMm.w)} × {Math.round(m.sizeMm.h)} mm</span>
+                <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" onClick={() => removeFloorplanMask(page.id, m.id)} title={t("Remove cover")}>✕</button>
+              </div>
+              <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                <span className="shrink-0" style={{ fontSize: 10 }}>{t("Turn")}</span>
+                <button
+                  className="px-1 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                  onClick={() => updateFloorplanMask(page.id, m.id, { rotationDeg: (m.rotationDeg ?? 0) - 15 })}
+                  title={t("Turn 15° counter-clockwise")}
+                >
+                  ⟲
+                </button>
+                <input
+                  type="number"
+                  step={5}
+                  className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={m.rotationDeg ?? 0}
+                  onChange={(e) => updateFloorplanMask(page.id, m.id, { rotationDeg: Number(e.target.value) || 0 })}
+                  title={t("Rotation in degrees clockwise — an architect's title block is not always square to the sheet. Resize the cover before turning it: the corner handle measures in the cover's unturned frame.")}
+                />
+                <button
+                  className="px-1 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                  onClick={() => updateFloorplanMask(page.id, m.id, { rotationDeg: (m.rotationDeg ?? 0) + 15 })}
+                  title={t("Turn 15° clockwise")}
+                >
+                  ⟳
+                </button>
+                <span style={{ fontSize: 10 }}>°</span>
+              </div>
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("Below 1 the cover fades what is underneath instead of erasing it — a way to quiet the architect's linework without losing it.")}>
+                <span className="shrink-0" style={{ fontSize: 10 }}>{t("Opacity")}</span>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={m.opacity ?? 1}
+                  onChange={(e) => updateFloorplanMask(page.id, m.id, { opacity: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{Math.round((m.opacity ?? 1) * 100)}%</span>
+              </label>
             </div>
           ))}
         </div>
@@ -945,18 +1021,18 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       {/* ── Notes on the plan ─────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
-          Notes on the plan ({page.notes.length})
+          {t("Notes on the plan ({n})", { n: page.notes.length })}
         </summary>
         <div className="px-2 pb-4 flex flex-col gap-1.5">
           <button
             className="self-start px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-500/100/10 border border-transparent hover:border-emerald-200"
             onClick={() => {
               const area = drawingAreaMm(page);
-              addFloorplanNote(page.id, { positionMm: { x: area.x + area.w / 2 - 30, y: area.y + area.h / 2 }, text: "Note", boxed: true });
+              addFloorplanNote(page.id, { positionMm: { x: area.x + area.w / 2 - 30, y: area.y + area.h / 2 }, text: t("Note"), boxed: true });
             }}
-            title="Adds a note at the sheet center — or use the ✎ Note tool to click it into place"
+            title={t("Adds a note at the sheet center — or use the ✎ Note tool to click it into place")}
           >
-            + Note
+            + {t("Note")}
           </button>
           {page.notes.map((n) => (
             <div key={n.id} className="border border-[var(--color-border)] rounded p-1.5 flex flex-col gap-1">
@@ -968,17 +1044,17 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 data-allow-scroll
               />
               <div className="flex items-center gap-2 text-[var(--color-text)]">
-                <label className="flex items-center gap-1" title="Font size (mm)">
+                <label className="flex items-center gap-1" title={t("Font size (mm)")}>
                   <input type="number" className="w-12 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400" min={1} max={20} step={0.2} value={n.fontSizeMm} onChange={(e) => updateFloorplanNote(page.id, n.id, { fontSizeMm: Number(e.target.value) || 2.8 })} />
                   mm
                 </label>
-                <input type="color" className="w-6 h-5 border border-[var(--color-border)] rounded cursor-pointer" value={n.color ?? "#111111"} onChange={(e) => updateFloorplanNote(page.id, n.id, { color: e.target.value })} title="Text color" />
+                <input type="color" className="w-6 h-5 border border-[var(--color-border)] rounded cursor-pointer" value={n.color ?? "#111111"} onChange={(e) => updateFloorplanNote(page.id, n.id, { color: e.target.value })} title={t("Text color")} />
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input type="checkbox" checked={Boolean(n.boxed)} onChange={(e) => updateFloorplanNote(page.id, n.id, { boxed: e.target.checked })} />
-                  Box
+                  {t("Box")}
                 </label>
                 <div className="flex-1" />
-                <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" onClick={() => removeFloorplanNote(page.id, n.id)} title="Delete note">✕</button>
+                <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" onClick={() => removeFloorplanNote(page.id, n.id)} title={t("Delete note")}>✕</button>
               </div>
             </div>
           ))}
@@ -1004,6 +1080,7 @@ interface LineCardProps {
 
 /** One amplifier line: number, channel binding, mode / tap and the load verdict. */
 function LineCard({ row, channelOptions, active, onActivate, onRenumber, onChange, onForget, speakerTaps }: LineCardProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [lineNoDraft, setLineNoDraft] = useState<string | null>(null);
   const { line, channel, load, amp } = row;
@@ -1011,50 +1088,50 @@ function LineCard({ row, channelOptions, active, onActivate, onRenumber, onChang
   const limits = amp?.limits;
   const modeSupported = (m: SpeakerLineMode) => !limits || (m === "lo-z" ? limits.supportsLoZ : m === "70v" ? limits.supports70V : limits.supports100V);
   const status: LoadStatus = load ? load.status : channel ? "no-data" : "empty";
-  const tapChoices = [...new Set(speakerTaps.filter((t): t is number => typeof t === "number"))].sort((a, b) => b - a);
+  const tapChoices = [...new Set(speakerTaps.filter((w): w is number => typeof w === "number"))].sort((a, b) => b - a);
   const detail = load && load.speakerCount > 0
     ? [
         load.impedanceOhm !== undefined ? `Z ${formatOhm(load.impedanceOhm)}` : null,
         `P ${formatWatt(load.requestedW)}`,
         load.peakVoltageV !== undefined ? `Vpk ${Math.round(load.peakVoltageV)} V` : null,
         load.peakCurrentA !== undefined ? `Ipk ${Math.round(load.peakCurrentA * 10) / 10} A` : null,
-        load.headroomDb !== undefined ? `${formatHeadroom(load.headroomDb)}${load.limitedBy ? ` (${LOAD_LIMITER_LABELS[load.limitedBy]})` : ""}` : null,
-        load.speakersWithoutData > 0 ? `${load.speakersWithoutData} without load data` : null,
+        load.headroomDb !== undefined ? `${formatHeadroom(load.headroomDb)}${load.limitedBy ? ` (${t(LOAD_LIMITER_LABELS[load.limitedBy])})` : ""}` : null,
+        load.speakersWithoutData > 0 ? t("{n} without load data", { n: load.speakersWithoutData }) : null,
       ].filter(Boolean).join(" · ")
     : null;
 
   return (
     <div className={`border rounded ${active ? "border-emerald-400 bg-emerald-500/100/10" : "border-[var(--color-border)]"}`}>
       <div className="flex items-center gap-1 px-1.5 py-0.5 text-[var(--color-text)]">
-        <button className="text-left flex-1 min-w-0 hover:text-emerald-700" onClick={onActivate} title="Make this the active line for the next symbols">
-          Line <strong>{line.lineNo}</strong>
+        <button className="text-left flex-1 min-w-0 hover:text-emerald-700" onClick={onActivate} title={t("Make this the active line for the next symbols")}>
+          {t("Line")} <strong>{line.lineNo}</strong>
           {line.name ? <span className="text-[var(--color-text-muted)]"> · {line.name}</span> : null}
-          <span className="text-[var(--color-text-muted)]"> · {row.placedCount} placed{channel ? ` / ${row.wiredCount} wired` : ""}</span>
+          <span className="text-[var(--color-text-muted)]"> · {t("{n} placed", { n: row.placedCount })}{channel ? ` / ${t("{n} wired", { n: row.wiredCount })}` : ""}</span>
         </button>
         <StatusBadge status={status} title={detail ?? undefined} />
-        <button className="px-1 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => setOpen((v) => !v)} title={open ? "Collapse" : "Wiring, mode and load"}>
+        <button className="px-1 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => setOpen((v) => !v)} title={open ? t("Collapse") : t("Wiring, mode and load")}>
           {open ? "▾" : "▸"}
         </button>
       </div>
       <div className="px-1.5 pb-1 text-[var(--color-text)] truncate" style={{ fontSize: 10 }} title={detail ?? undefined}>
-        {channel ? `${channel.ampLabel} · ${channelShortLabel(channel)} · ${LINE_MODE_LABELS[mode]}` : "not wired to an amplifier channel"}
+        {channel ? `${channel.ampLabel} · ${channelShortLabel(channel)} · ${LINE_MODE_LABELS[mode]}` : t("not wired to an amplifier channel")}
         {detail ? ` — ${detail}` : ""}
       </div>
       {open && (
         <div className="px-1.5 pb-1.5 flex flex-col gap-1 border-t border-[var(--color-border)] pt-1">
           <label className="flex items-center gap-2 text-[var(--color-text)]">
-            <span className="shrink-0 w-14">Number</span>
+            <span className="shrink-0 w-14">{t("Number")}</span>
             <input
               className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
               value={lineNoDraft ?? line.lineNo}
               onChange={(e) => setLineNoDraft(e.target.value)}
               onBlur={() => { if (lineNoDraft !== null && lineNoDraft.trim() && lineNoDraft.trim() !== line.lineNo) onChange({ newLineNo: lineNoDraft.trim() }); setLineNoDraft(null); }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-              title="Renaming the line relabels its symbols"
+              title={t("Renaming the line relabels its symbols")}
             />
           </label>
           <label className="flex items-center gap-2 text-[var(--color-text)]">
-            <span className="shrink-0 w-14">Channel</span>
+            <span className="shrink-0 w-14">{t("Channel")}</span>
             <select
               className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 bg-[var(--color-surface)]"
               value={line.ampNodeId && line.ampPortId ? `${line.ampNodeId}::${line.ampPortId}` : ""}
@@ -1062,69 +1139,69 @@ function LineCard({ row, channelOptions, active, onActivate, onRenumber, onChang
                 const opt = channelOptions.find((o) => o.key === e.target.value);
                 onChange(opt ? { ampNodeId: opt.ch.ampNodeId, ampPortId: opt.ch.portId } : { ampNodeId: undefined, ampPortId: undefined });
               }}
-              title="Amplifier channel feeding this line (speaker-level output on the schematic)"
+              title={t("Amplifier channel feeding this line (speaker-level output on the schematic)")}
             >
-              <option value="">— not wired —</option>
+              <option value="">{t("— not wired —")}</option>
               {channelOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
             </select>
           </label>
           <label className="flex items-center gap-2 text-[var(--color-text)]">
-            <span className="shrink-0 w-14">Mode</span>
+            <span className="shrink-0 w-14">{t("Mode")}</span>
             <select
               className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 bg-[var(--color-surface)]"
               value={mode}
               onChange={(e) => onChange({ mode: e.target.value as SpeakerLineMode })}
-              title="Low impedance or 70 V / 100 V constant-voltage line"
+              title={t("Low impedance or 70 V / 100 V constant-voltage line")}
             >
               {SPEAKER_LINE_MODES.map((m) => (
-                <option key={m} value={m} disabled={!modeSupported(m)}>{LINE_MODE_LABELS[m]}{modeSupported(m) ? "" : " (amp: n/a)"}</option>
+                <option key={m} value={m} disabled={!modeSupported(m)}>{LINE_MODE_LABELS[m]}{modeSupported(m) ? "" : ` ${t("(amp: n/a)")}`}</option>
               ))}
             </select>
           </label>
           {mode !== "lo-z" && (
             <label className="flex items-center gap-2 text-[var(--color-text)]">
-              <span className="shrink-0 w-14">Tap</span>
+              <span className="shrink-0 w-14">{t("Tap")}</span>
               <input
                 type="number"
                 min={0}
                 step="any"
                 className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                 value={line.tapW ?? ""}
-                placeholder={tapChoices.length ? `max (${tapChoices[0]} W)` : "W per speaker"}
+                placeholder={tapChoices.length ? t("max ({w} W)", { w: tapChoices[0] }) : t("W per speaker")}
                 list={`taps-${line.lineNo}`}
                 onChange={(e) => onChange({ tapW: e.target.value === "" ? undefined : Number(e.target.value) })}
-                title="Transformer tap per speaker in watts; empty = each speaker's highest tap"
+                title={t("Transformer tap per speaker in watts; empty = each speaker's highest tap")}
               />
               <datalist id={`taps-${line.lineNo}`}>
-                {tapChoices.map((t) => <option key={t} value={t} />)}
+                {tapChoices.map((w) => <option key={w} value={w} />)}
               </datalist>
             </label>
           )}
           <label className="flex items-center gap-2 text-[var(--color-text)]">
-            <span className="shrink-0 w-14">Name</span>
+            <span className="shrink-0 w-14">{t("Name")}</span>
             <input
               className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
               value={line.name ?? ""}
-              placeholder="e.g. Terrasse"
+              placeholder={t("e.g. Terrasse")}
               onChange={(e) => onChange({ name: e.target.value || undefined })}
-              title="Printed in the legend's line table"
+              title={t("Printed in the legend's line table")}
             />
           </label>
           {limits && (
             <p className="text-[var(--color-text-muted)] leading-snug" style={{ fontSize: 10 }}>
-              Amp limits: {formatWatt(limits.maxBurstPerChannelW)}/ch · Σ {formatWatt(limits.maxBurstTotalW)} burst · {Math.round(limits.peakVoltageV)} V / {Math.round(limits.peakCurrentA)} A peak · min {formatOhm(limits.minImpedanceOhm)}
+              {t("Amp limits: {perCh}/ch · Σ {total} burst · {v} V / {a} A peak · min {z}", { perCh: formatWatt(limits.maxBurstPerChannelW), total: formatWatt(limits.maxBurstTotalW), v: Math.round(limits.peakVoltageV), a: Math.round(limits.peakCurrentA), z: formatOhm(limits.minImpedanceOhm) })}
             </p>
           )}
           {channel && !amp?.hasSpec && (
-            <p className="text-amber-600 leading-snug" style={{ fontSize: 10 }}>The amplifier has no load data — fill in its ratings on the device (Load section) to get a verdict.</p>
+            <p className="text-amber-600 leading-snug" style={{ fontSize: 10 }}>{t("The amplifier has no load data — fill in its ratings on the device (Load section) to get a verdict.")}</p>
           )}
           <div className="flex items-center gap-1">
-            <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700" onClick={onRenumber} title="Renumber this line 1…n in placement order">
-              Renumber
+            <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700" onClick={onRenumber} title={t("Renumber this line 1…n in placement order")}>
+              {t("Renumber")}
             </button>
             {(line.ampNodeId || line.mode || line.name || line.tapW !== undefined) && (
-              <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-red-400 hover:text-red-700" onClick={onForget} title="Drop the wiring / mode of this line; its symbols keep their numbers">
-                Forget wiring
+              <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-red-400 hover:text-red-700" onClick={onForget} title={t("Drop the wiring / mode of this line; its symbols keep their numbers")}>
+                {t("Forget wiring")}
               </button>
             )}
           </div>

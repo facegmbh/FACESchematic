@@ -4,6 +4,7 @@ import { useSchematicStore, GRID_SIZE } from "../store";
 import { getBundledTemplates, fetchTemplates } from "../templateApi";
 import { scoreTemplate } from "../templateSearch";
 import type { DeviceTemplate } from "../types";
+import { useT } from "../i18n";
 
 export default function DeviceCreatorPicker({
   position: positionProp,
@@ -14,6 +15,7 @@ export default function DeviceCreatorPicker({
   onClose: () => void;
   onImport?: () => void;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
@@ -106,17 +108,17 @@ export default function DeviceCreatorPicker({
       >
         <div className="px-3 pt-3 pb-1">
           <div className="text-xs font-semibold text-[var(--color-text-heading)] mb-2">
-            Create New Device
+            {t("Create New Device")}
           </div>
           <button
             onClick={createBlank}
             className="w-full text-left px-2.5 py-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-blue-400 hover:bg-blue-50 transition-colors mb-2"
           >
             <div className="text-xs font-medium text-[var(--color-text-heading)]">
-              Start Blank
+              {t("Start Blank")}
             </div>
             <div className="text-[10px] text-[var(--color-text-muted)]">
-              Empty device with no ports
+              {t("Empty device with no ports")}
             </div>
           </button>
           {onImport && (
@@ -125,10 +127,10 @@ export default function DeviceCreatorPicker({
               className="w-full text-left px-2.5 py-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-blue-400 hover:bg-blue-50 transition-colors mb-2"
             >
               <div className="text-xs font-medium text-[var(--color-text-heading)]">
-                Import from JSON or CSV
+                {t("Import from JSON or CSV")}
               </div>
               <div className="text-[10px] text-[var(--color-text-muted)]">
-                Bulk-add devices from external data
+                {t("Bulk-add devices from external data")}
               </div>
             </button>
           )}
@@ -136,7 +138,7 @@ export default function DeviceCreatorPicker({
 
         <div className="px-3 pb-1">
           <div className="text-[10px] font-medium text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
-            Or clone from library device
+            {t("Or clone from library device")}
           </div>
           <input
             ref={inputRef}
@@ -144,7 +146,7 @@ export default function DeviceCreatorPicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search the device library..."
+            placeholder={t("Search the device library...")}
             className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2.5 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 placeholder:text-[var(--color-text-muted)]"
           />
         </div>
@@ -152,34 +154,37 @@ export default function DeviceCreatorPicker({
         <div className="max-h-48 overflow-y-auto px-3 pb-3 pt-1">
           {!search.trim() ? (
             <div className="text-[10px] text-[var(--color-text-muted)] py-2 text-center">
-              Type to search {allTemplates.length} library devices
+              {t("Type to search {n} library devices", { n: allTemplates.length })}
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-[10px] text-[var(--color-text-muted)] py-2 text-center">
-              No matching devices
+              {t("No matching devices")}
             </div>
           ) : (
-            filtered.map((t) => {
-              const key = t.id ?? t.deviceType;
+            filtered.map((tpl) => {
+              const key = tpl.id ?? tpl.deviceType;
               return (
                 <button
                   key={key}
-                  onClick={() => createFromTemplate(t)}
+                  onClick={() => createFromTemplate(tpl)}
                   className="w-full text-left px-2 py-1.5 rounded hover:bg-[var(--color-surface)] transition-colors flex items-center gap-2"
                 >
-                  {t.color && (
+                  {tpl.color && (
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: t.color }}
+                      style={{ backgroundColor: tpl.color }}
                     />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs text-[var(--color-text-heading)] truncate">
-                      {t.label}
+                      {tpl.label}
                     </div>
                     <div className="text-[10px] text-[var(--color-text-muted)] truncate">
-                      {t.manufacturer ? `${t.manufacturer} \u00b7 ` : ""}
-                      {t.deviceType} \u00b7 {t.ports.length} port{t.ports.length !== 1 ? "s" : ""}
+                      {tpl.manufacturer ? `${tpl.manufacturer} \u00b7 ` : ""}
+                      {tpl.deviceType} \u00b7{" "}
+                      {tpl.ports.length === 1
+                        ? t("1 port")
+                        : t("{n} ports", { n: tpl.ports.length })}
                     </div>
                   </div>
                 </button>

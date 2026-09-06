@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../i18n";
 
 const DISMISS_KEY = "easyschematic-beta-banner-dismissed";
 
@@ -11,6 +12,7 @@ export default function BetaBanner() {
   const [dismissed, setDismissed] = useState(
     () => typeof sessionStorage !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
   );
+  const t = useT();
 
   if (!isBetaHost() || dismissed) return null;
 
@@ -30,15 +32,17 @@ export default function BetaBanner() {
       data-print-hide
     >
       <span>
-        <strong>Beta:</strong> testing new features before they hit production. Your saved schematics
-        are real — don't save anything you can't lose.
+        <strong>{t("Beta:")}</strong>{" "}
+        {t(
+          "testing new features before they hit production. Your saved schematics are real — don't save anything you can't lose.",
+        )}
       </span>
       <button
         onClick={handleDismiss}
         className="text-xs cursor-pointer hover:underline shrink-0"
         style={{ color: "#1f2937" }}
       >
-        Dismiss
+        {t("Dismiss")}
       </button>
     </div>
   );

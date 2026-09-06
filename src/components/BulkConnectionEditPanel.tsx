@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 
 import { useSchematicStore } from "../store";
 import { LINE_STYLE_LABELS, LINE_STYLE_DASHARRAY, type LineStyle } from "../types";
+import { useT } from "../i18n";
 
 const LINE_STYLES: LineStyle[] = ["solid", "dashed", "dotted", "dash-dot"];
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function BulkConnectionEditPanel({ onClose }: Props) {
+  const t = useT();
   // Serialize to a stable string — avoids the "new array ref every tick" infinite-loop
   // trap. Include relevant data fields so the panel reflects applied patches.
   const selectionKey = useSchematicStore((s) =>
@@ -197,7 +199,7 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-[var(--color-text)]">
-          {hasEdges ? `Edit ${selectedEdges.length} connections` : "Edit connections"}
+          {hasEdges ? t("Edit {n} connections", { n: selectedEdges.length }) : t("Edit connections")}
         </span>
         <button
           onClick={onClose}
@@ -209,14 +211,14 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
 
       {!hasEdges && (
         <p className="text-xs text-[var(--color-text-muted)] text-center py-3">
-          Select 2 or more connections to edit them.
+          {t("Select 2 or more connections to edit them.")}
         </p>
       )}
 
       {hasEdges && <>{/* Bundle */}
       <section className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Bundle
+          {t("Bundle")}
         </div>
         {isOneBundle ? (
           <>
@@ -226,13 +228,13 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
               defaultValue={bundleLabel}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commitBundleLabel((e.target as HTMLInputElement).value); }}
               onBlur={(e) => commitBundleLabel(e.target.value)}
-              placeholder="Bundle label…"
+              placeholder={t("Bundle label…")}
             />
             <button
               onClick={doUnbundle}
               className="w-full px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-red-600 border border-[var(--color-border)] rounded hover:border-red-300 cursor-pointer"
             >
-              Unbundle these connections
+              {t("Unbundle these connections")}
             </button>
           </>
         ) : (
@@ -240,12 +242,14 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
             onClick={doBundle}
             className="w-full px-2 py-1 text-[11px] bg-blue-600 text-white rounded hover:bg-blue-500 cursor-pointer"
           >
-            Bundle onto one trunk
+            {t("Bundle onto one trunk")}
           </button>
         )}
         {mixedSignals && (
           <p className="text-[10px] text-[var(--color-text-muted)] leading-tight mt-1.5">
-            Mixed signal types — trunk drawn neutral; each connection keeps its own color and cable.
+            {t(
+              "Mixed signal types — trunk drawn neutral; each connection keeps its own color and cable.",
+            )}
           </p>
         )}
       </section>
@@ -253,10 +257,10 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       {/* Labels */}
       <section className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Labels
+          {t("Labels")}
         </div>
         <p className="text-[10px] text-[var(--color-text-muted)] leading-tight mb-1.5">
-          Each slot is visible when it has text. Leave blank to hide.
+          {t("Each slot is visible when it has text. Leave blank to hide.")}
         </p>
         <div className="space-y-1">
           <input
@@ -264,21 +268,21 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
             value={srcLabelInput}
             onChange={(e) => setSrcLabelInput(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") applyLabels(); }}
-            placeholder="Source-end label…"
+            placeholder={t("Source-end label…")}
           />
           <input
             className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-blue-500"
             value={midLabelInput}
             onChange={(e) => setMidLabelInput(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") applyLabels(); }}
-            placeholder="Midpoint label…"
+            placeholder={t("Midpoint label…")}
           />
           <input
             className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-blue-500"
             value={tgtLabelInput}
             onChange={(e) => setTgtLabelInput(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") applyLabels(); }}
-            placeholder="Target-end label…"
+            placeholder={t("Target-end label…")}
           />
         </div>
         <div className="flex gap-1 mt-1.5">
@@ -287,14 +291,14 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
             disabled={!srcLabelInput.trim() && !midLabelInput.trim() && !tgtLabelInput.trim()}
             className="flex-1 px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-40 cursor-pointer"
           >
-            Apply
+            {t("Apply")}
           </button>
           <button
             onClick={clearAllLabels}
             disabled={!anyLabelSet}
             className="flex-1 px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-red-600 border border-[var(--color-border)] rounded hover:border-red-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Clear all
+            {t("Clear all")}
           </button>
         </div>
       </section>
@@ -302,13 +306,16 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       {/* Line style */}
       <section className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Line Style{!allSameStyle && <span className="ml-1 normal-case text-[var(--color-text-muted)]">(mixed)</span>}
+          {t("Line Style")}
+          {!allSameStyle && (
+            <span className="ml-1 normal-case text-[var(--color-text-muted)]">{t("(mixed)")}</span>
+          )}
         </div>
         <div className="flex gap-1">
           {LINE_STYLES.map((ls) => (
             <button
               key={ls}
-              title={LINE_STYLE_LABELS[ls]}
+              title={t(LINE_STYLE_LABELS[ls])}
               onClick={() => applyLineStyle(ls)}
               className={`flex-1 py-1.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
                 consensusStyle === ls
@@ -336,7 +343,8 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       {!anyDirectAttach && (
         <section className="mb-3">
           <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-            Color{!allSameColor && <span className="ml-1 normal-case">(mixed)</span>}
+            {t("Color")}
+            {!allSameColor && <span className="ml-1 normal-case">{t("(mixed)")}</span>}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -344,18 +352,22 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
               value={sharedColor || "#9ca3af"}
               onChange={(e) => applyColor(e.target.value)}
               className="w-8 h-7 cursor-pointer border border-[var(--color-border)] rounded p-0.5 bg-white"
-              title={sharedColor ? `Override: ${sharedColor}` : "Pick a custom cable color"}
+              title={
+                sharedColor
+                  ? t("Override: {color}", { color: sharedColor })
+                  : t("Pick a custom cable color")
+              }
             />
             <span className="flex-1 text-[11px] text-[var(--color-text-muted)] truncate">
-              {sharedColor ? sharedColor : "Signal-type default"}
+              {sharedColor ? sharedColor : t("Signal-type default")}
             </span>
             <button
               onClick={clearColor}
               disabled={selectedEdges.every((e) => !e.data?.color)}
               className="px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-red-600 border border-[var(--color-border)] rounded hover:border-red-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-              title="Reset to signal-type color"
+              title={t("Reset to signal-type color")}
             >
-              Reset
+              {t("Reset")}
             </button>
           </div>
         </section>
@@ -364,8 +376,10 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
       {/* Cable ID placement */}
       <section className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Cable ID Position
-          {sharedCableIdMode === null && <span className="ml-1 normal-case">(mixed)</span>}
+          {t("Cable ID Position")}
+          {sharedCableIdMode === null && (
+            <span className="ml-1 normal-case">{t("(mixed)")}</span>
+          )}
         </div>
         <select
           className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
@@ -375,31 +389,31 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
             applyCableIdMode(e.target.value);
           }}
         >
-          {sharedCableIdMode === null && <option value="__mixed__">— mixed —</option>}
-          <option value="endpoint">At endpoints</option>
-          <option value="midpoint">At midpoint</option>
+          {sharedCableIdMode === null && <option value="__mixed__">{t("— mixed —")}</option>}
+          <option value="endpoint">{t("At endpoints")}</option>
+          <option value="midpoint">{t("At midpoint")}</option>
         </select>
       </section>
 
       {/* Route */}
       <section className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Route
+          {t("Route")}
         </div>
         <button
           onClick={resetRoutes}
           disabled={!anyManualRoute}
           className="w-full px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-blue-700 border border-[var(--color-border)] rounded hover:border-blue-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Drop manual waypoints so these connections re-route automatically"
+          title={t("Drop manual waypoints so these connections re-route automatically")}
         >
-          Reset routes
+          {t("Reset routes")}
         </button>
       </section>
 
       {/* Options / toggles */}
       <section>
         <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
-          Options
+          {t("Options")}
         </div>
         <div className="space-y-1">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -413,16 +427,16 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
               className="cursor-pointer"
             />
             <span className="text-xs text-[var(--color-text)]">
-              Stub Connection
+              {t("Stub Connection")}
               {stubbed.mixed && (
-                <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">(mixed)</span>
+                <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">{t("(mixed)")}</span>
               )}
             </span>
           </label>
           {(
             [
-              { field: "directAttach" as const, label: "Direct Attach", state: directAttach },
-              { field: "hideCableId" as const, label: "Hide Cable ID", state: hideCableId },
+              { field: "directAttach" as const, label: t("Direct Attach"), state: directAttach },
+              { field: "hideCableId" as const, label: t("Hide Cable ID"), state: hideCableId },
             ] as const
           ).map(({ field, label, state }) => (
             <label key={field} className="flex items-center gap-2 cursor-pointer">
@@ -438,7 +452,7 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
               <span className="text-xs text-[var(--color-text)]">
                 {label}
                 {state.mixed && (
-                  <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">(mixed)</span>
+                  <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">{t("(mixed)")}</span>
                 )}
               </span>
             </label>

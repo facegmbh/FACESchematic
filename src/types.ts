@@ -1066,6 +1066,10 @@ export interface FloorplanSymbolGroup {
   /** Rotation new symbols of this group start at, in degrees clockwise. Lets a group of
    *  projectors default to the direction they face in the room. */
   rotationDeg?: number;
+  /** Hidden groups are a layer switched off: their symbols are not drawn on the sheet, not
+   *  exported and not listed in the legend, but they stay in the project. One drawing then
+   *  yields several sheets — a loudspeaker plan and a video plan from the same underlay. */
+  hidden?: boolean;
   /** Hide this group from the legend box without deleting it. */
   hiddenInLegend?: boolean;
 }
@@ -1156,6 +1160,13 @@ export interface FloorplanMask {
   /** Top-left corner on the sheet, in paper mm. */
   positionMm: { x: number; y: number };
   sizeMm: { w: number; h: number };
+  /** Clockwise rotation about the cover's center, in degrees. An architect's title block is
+   *  not always square to the sheet, and a cover that cannot turn then takes neighbouring
+   *  linework with it. */
+  rotationDeg?: number;
+  /** 0–1. Below 1 the cover fades what is underneath instead of erasing it, which is what
+   *  you want to keep a dimension readable while quieting the rest. Default 1, opaque. */
+  opacity?: number;
 }
 
 /** One row of a drawing block's revision table — the "Index" history every issued plan

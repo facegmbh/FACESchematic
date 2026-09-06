@@ -1,9 +1,11 @@
 import { useEffect, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { useT } from "../i18n";
 
 /** Right-click menu for text-stub nodes (#196): edit the note text or delete the stub. */
 export default function TextStubContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.textStubContextMenu);
   const { ref: menuRef, pos: menuPos } = useContextMenuPosition(
     menu?.screenX ?? 0,
@@ -56,9 +58,9 @@ export default function TextStubContextMenu() {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <MenuItem label="Edit Text..." onClick={editText} />
+      <MenuItem label={t("Edit Text...")} onClick={editText} />
       <div className="border-t border-gray-200 my-1" />
-      <MenuItem label="Delete Text Stub" onClick={deleteStub} />
+      <MenuItem label={t("Delete Text Stub")} onClick={deleteStub} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { LINE_STYLE_DASHARRAY, type ConnectionEdge, type LineStyle, type DeviceD
 import { usbcPowerShortfallW } from "../connectorTypes";
 import { midCustomLabelPlacement } from "../stubPlacement";
 import { computeEdgeLengthEstimate, resolveCableLengthLabel } from "../cableLengthLabel";
+import { useT } from "../i18n";
 
 function OffsetEdgeComponent({
   id,
@@ -22,6 +23,7 @@ function OffsetEdgeComponent({
   selected,
   interactionWidth,
 }: EdgeProps<ConnectionEdge>) {
+  const t = useT();
   const debugEdges = useSchematicStore((s) => s.debugEdges);
   const debugShowLabels = useSchematicStore((s) => s.debugShowLabels);
 
@@ -605,7 +607,7 @@ function OffsetEdgeComponent({
     pointerEvents: "auto",
     cursor: placingLabel ? "grabbing" : "grab",
   };
-  const cidGrabTitle = "Doppelklick: Label aufnehmen, dann klicken zum Ablegen (Esc bricht ab)";
+  const cidGrabTitle = t("Double-click to pick the label up, then click to drop it (Esc cancels)");
   const freeCidPos = placingLabel
     ? (livePos ?? customMidPt)
     : labelOffset
@@ -690,7 +692,10 @@ function OffsetEdgeComponent({
   const usbcWarningBadge = usbcShortfall != null ? (
     <div
       key="usbc-undersupply"
-      title={`USB-C power undersupply: source delivers ${usbcShortfall}W less than the connected device draws`}
+      title={t(
+        "USB-C power undersupply: source delivers {n}W less than the connected device draws",
+        { n: usbcShortfall },
+      )}
       style={{
         position: "absolute",
         transform: `translate(-50%, -50%) translate(${customMidPt.x}px, ${customMidPt.y}px)`,
@@ -716,7 +721,7 @@ function OffsetEdgeComponent({
   const cableLengthBadge = (cableLengthLabel && routeStr) ? (
     <div
       key="cable-length"
-      title="Double-click to set cable length"
+      title={t("Double-click to set cable length")}
       onDoubleClick={(e) => {
         e.stopPropagation();
         useSchematicStore.setState({
@@ -760,13 +765,13 @@ function OffsetEdgeComponent({
       {tooltipType === "source" && (
         <div className="reconnect-tooltip"
           style={{ transform: `translate(-50%, -100%) translate(${srcVisualX}px, ${srcVisualY - 10}px)` }}>
-          Drag to reroute
+          {t("Drag to reroute")}
         </div>
       )}
       {tooltipType === "target" && (
         <div className="reconnect-tooltip"
           style={{ transform: `translate(-50%, -100%) translate(${tgtVisualX}px, ${tgtVisualY - 10}px)` }}>
-          Drag to reroute
+          {t("Drag to reroute")}
         </div>
       )}
     </>

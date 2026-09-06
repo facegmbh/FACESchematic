@@ -5,8 +5,10 @@ import type { DeviceData, Port } from "../types";
 import { portSide } from "../types";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { resolvePortGender } from "../connectorTypes";
+import { useT } from "../i18n";
 
 export default function PortContextMenu() {
+  const t = useT();
   const menu = useSchematicStore((s) => s.portContextMenu);
   const updateNodeInternals = useUpdateNodeInternals();
   const { ref: menuRef, pos: menuPos } = useContextMenuPosition(
@@ -176,7 +178,7 @@ export default function PortContextMenu() {
   if (!port) return null;
 
   const side = portSide(port);
-  const flipLabel = side === "left" ? "Flip to Right" : "Flip to Left";
+  const flipLabel = side === "left" ? t("Flip to Right") : t("Flip to Left");
 
   // Show "Convert to passthrough" only for paired input/output ports on patch-panel or wall-plate devices.
   const canConvert =
@@ -212,19 +214,19 @@ export default function PortContextMenu() {
       onClick={(e) => e.stopPropagation()}
     >
       <MenuItem label={flipLabel} onClick={flipPort} />
-      <MenuItem label="Flip All Ports" onClick={flipAllPorts} />
+      <MenuItem label={t("Flip All Ports")} onClick={flipAllPorts} />
       {(canConvert || canConvertAll) && (
         <div className="border-t border-gray-200 my-1" />
       )}
       {canConvert && (
-        <MenuItem label="Convert to Passthrough Circuit" onClick={convertToPassthrough} />
+        <MenuItem label={t("Convert to Passthrough Circuit")} onClick={convertToPassthrough} />
       )}
       {canConvertAll && (
-        <MenuItem label="Convert All Ports to Passthrough" onClick={convertAllToPassthrough} />
+        <MenuItem label={t("Convert All Ports to Passthrough")} onClick={convertAllToPassthrough} />
       )}
       <div className="border-t border-gray-200 my-1" />
-      <MenuItem label="Add Text Stub..." onClick={addTextStub} />
-      <MenuItem label="Edit Device..." onClick={editDevice} />
+      <MenuItem label={t("Add Text Stub...")} onClick={addTextStub} />
+      <MenuItem label={t("Edit Device...")} onClick={editDevice} />
     </div>
   );
 }

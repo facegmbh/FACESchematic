@@ -11,6 +11,7 @@ import { useSchematicStore } from "../store";
 import { listSchematics, loadSchematic } from "../cloudSync";
 import type { CachedSchematic } from "../cloudCache";
 import type { SchematicFile } from "../types";
+import { useT } from "../i18n";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -33,6 +34,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
   const [renameValue, setRenameValue] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const isOnline = useSchematicStore((s) => s.isOnline);
+  const t = useT();
 
   const load = async () => {
     try {
@@ -41,7 +43,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
       const list = await listSchematics();
       setSchematics(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load schematics");
+      setError(e instanceof Error ? e.message : t("Failed to load schematics"));
     } finally {
       setLoading(false);
     }
@@ -57,12 +59,12 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
       useSchematicStore.getState().setCloudSavedAt(s.updated_at);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to open schematic");
+      setError(e instanceof Error ? e.message : t("Failed to open schematic"));
     }
   };
 
   const handleDelete = async (s: CloudSchematic) => {
-    if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
+    if (!confirm(t('Delete "{name}"? This cannot be undone.', { name: s.name }))) return;
     try {
       await deleteCloudSchematic(s.id);
       // If we just deleted the currently-open cloud schematic, clear the ID
@@ -72,7 +74,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
       }
       setSchematics((prev) => prev.filter((x) => x.id !== s.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete");
+      setError(e instanceof Error ? e.message : t("Failed to delete"));
     }
   };
 
@@ -87,7 +89,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
       setSchematics((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...updated } : x)));
       setRenamingId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to rename");
+      setError(e instanceof Error ? e.message : t("Failed to rename"));
     }
   };
 
@@ -96,7 +98,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
       const updated = await toggleSchematicSharing(s.id, !s.shared);
       setSchematics((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...updated } : x)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to toggle sharing");
+      setError(e instanceof Error ? e.message : t("Failed to toggle sharing"));
     }
   };
 
@@ -110,7 +112,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
         setSchematics((prev) => prev.map((x) => ({ ...x, is_template: x.id === s.id ? 1 : 0 })));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update template");
+      setError(e instanceof Error ? e.message : t("Failed to update template"));
     }
   };
 
@@ -143,7 +145,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
         <div className="px-5 py-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: "var(--color-border)" }}>
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold" style={{ color: "var(--color-text-heading)" }}>
-              My Schematics
+              {t("My Schematics")}
             </h2>
             {!loading && (
               <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text-muted)" }}>
@@ -166,7 +168,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
           {/* Offline banner */}
           {!isOnline && (
             <div className="mb-3 px-3 py-2 rounded text-xs bg-amber-50 text-amber-800 border border-amber-200">
-              You're offline — showing cached schematics. Changes will sync when you reconnect.
+              {t("You're offline — showing cached schematics. Changes will sync when you reconnect.")}
             </div>
           )}
 
@@ -175,12 +177,12 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
           )}
 
           {loading ? (
-            <p className="text-xs py-8 text-center" style={{ color: "var(--color-text-muted)" }}>Loading...</p>
+            <p className="text-xs py-8 text-center" style={{ color: "var(--color-text-muted)" }}>{t("Loading...")}</p>
           ) : schematics.length === 0 ? (
             <p className="text-xs py-8 text-center" style={{ color: "var(--color-text-muted)" }}>
               {isOnline
-                ? "No saved schematics yet. Use File → Save to Cloud to save your first schematic."
-                : "No cached schematics available offline."
+                ? t("No saved schematics yet. Use File → Save to Cloud to save your first schematic.")
+                : t("No cached schematics available offline.")
               }
             </p>
           ) : (
@@ -212,8 +214,8 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     )}
                     <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-muted)" }}>
                       {formatDate(s.updated_at)}{s.size_bytes ? ` · ${formatSize(s.size_bytes)}` : ""}
-                      {s.shared ? " · Shared" : ""}
-                      {s.is_template ? " · New File Template" : ""}
+                      {s.shared ? ` · ${t("Shared")}` : ""}
+                      {s.is_template ? ` · ${t("New File Template")}` : ""}
                     </p>
                   </div>
 
@@ -222,15 +224,15 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => handleOpen(s)}
                       disabled={!canOpen(s)}
-                      title={canOpen(s) ? undefined : "Not cached — open when online"}
+                      title={canOpen(s) ? undefined : t("Not cached — open when online")}
                       className="px-2 py-1 text-[10px] rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
-                      Open
+                      {t("Open")}
                     </button>
                     <button
                       onClick={() => { setRenamingId(s.id); setRenameValue(s.name); }}
                       disabled={!isOnline}
-                      title={isOnline ? "Rename" : "Requires internet connection"}
+                      title={isOnline ? t("Rename") : t("Requires internet connection")}
                       className="p-1 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -240,7 +242,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => handleShare(s)}
                       disabled={!isOnline}
-                      title={isOnline ? (s.shared ? "Disable sharing" : "Enable sharing") : "Requires internet connection"}
+                      title={isOnline ? (s.shared ? t("Disable sharing") : t("Enable sharing")) : t("Requires internet connection")}
                       className="p-1 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke={s.shared ? "#3b82f6" : "currentColor"} strokeWidth={2}>
@@ -250,7 +252,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     {s.shared && s.share_token && (
                       <button
                         onClick={() => copyShareLink(s)}
-                        title="Copy share link"
+                        title={t("Copy share link")}
                         className="p-1 rounded hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke={copiedId === s.id ? "#22c55e" : "currentColor"} strokeWidth={2}>
@@ -265,7 +267,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => handleToggleTemplate(s)}
                       disabled={!isOnline}
-                      title={isOnline ? (s.is_template ? "Remove as New File Template" : "Set as New File Template") : "Requires internet connection"}
+                      title={isOnline ? (s.is_template ? t("Remove as New File Template") : t("Set as New File Template")) : t("Requires internet connection")}
                       className="p-1 rounded hover:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" fill={s.is_template ? "#eab308" : "none"} viewBox="0 0 24 24" stroke={s.is_template ? "#eab308" : "currentColor"} strokeWidth={2}>
@@ -275,7 +277,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => handleDelete(s)}
                       disabled={!isOnline}
-                      title={isOnline ? "Delete" : "Requires internet connection"}
+                      title={isOnline ? t("Delete") : t("Requires internet connection")}
                       className="p-1 rounded hover:bg-red-50 text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -303,7 +305,7 @@ export default function SchematicBrowser({ onClose }: { onClose: () => void }) {
               border: "1px solid var(--color-border)",
             }}
           >
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>

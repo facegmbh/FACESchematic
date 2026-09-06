@@ -6,6 +6,7 @@ import { PAGE_MARGIN_IN, getPaperSize } from "../printConfig";
 import type { TitleBlock, TitleBlockLayout, DeviceData, SignalType } from "../types";
 import type { RoutedEdge } from "../edgeRouter";
 import { computeCellRects, normalizeSizes, getFieldValue, getFieldLabel } from "../titleBlockLayout";
+import { useT } from "../i18n";
 import { DEFAULT_SIGNAL_COLORS } from "../signalColors";
 import { collectColorKeyEntries, layoutColorKey, type ColorKeyEntry } from "../colorKeyLayout";
 
@@ -160,6 +161,7 @@ function measureTextWidth(text: string, font: string): number {
 }
 
 function CrossingLabels({ labels, pxPerPt }: { labels: CrossingLabel[]; pxPerPt: number }) {
+  const t = useT();
   if (labels.length === 0) return null;
   const fontSize = 6.5 * pxPerPt;
   const pad = 1.5 * pxPerPt;
@@ -170,7 +172,7 @@ function CrossingLabels({ labels, pxPerPt }: { labels: CrossingLabel[]; pxPerPt:
     <g>
       {labels.map((l, i) => {
         const arrow = l.anchor === "left" ? "\u2192" : l.anchor === "right" ? "\u2190" : l.anchor === "up" ? "\u2193" : "\u2191";
-        const pgRef = l.pageNum > 0 ? ` Pg ${l.pageNum}` : "";
+        const pgRef = l.pageNum > 0 ? " " + t("Pg {n}", { n: l.pageNum }) : "";
         const displayText = `${arrow} ${l.text}${pgRef}`;
 
         const textW = measureTextWidth(displayText, font);
@@ -364,6 +366,7 @@ function ColorKeyLegend({
   pageFilter: "first" | "last" | "all";
   pxPerPt: number;
 }) {
+  const t = useT();
   if (entries.length === 0 || pages.length === 0) return null;
 
   const fontSize = 6.5 * pxPerPt;
@@ -425,7 +428,7 @@ function ColorKeyLegend({
               fontWeight="600"
               fill="#000000"
             >
-              SIGNAL KEY
+              {t("SIGNAL KEY")}
             </text>
             {/* Entries */}
             {geo.entries.map(({ entry, x, y }) => {
@@ -590,6 +593,7 @@ function PageOverlay({
   minCol: number;
   minRow: number;
 }) {
+  const t = useT();
   const fontSize = 14 / zoom;
   const labelFontSize = 10 / zoom;
 
@@ -770,7 +774,7 @@ function PageOverlay({
                 textContent = cell.content.text;
                 break;
               case "pageNumber":
-                textContent = `Page ${p.index + 1} / ${totalPages}`;
+                textContent = t("Page {n} / {total}", { n: p.index + 1, total: totalPages });
                 break;
               case "logo":
                 return tb.logo ? (

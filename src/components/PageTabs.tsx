@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
+import { useT } from "../i18n";
 
 interface ContextMenuState {
   pageId: string;
@@ -32,6 +33,7 @@ export default function PageTabs() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   // Close context menu on outside click or Escape
   useEffect(() => {
@@ -95,17 +97,17 @@ export default function PageTabs() {
     if (!menuPage) return;
     setContextMenu(null);
     if (menuPage.type === "print-sheet") {
-      if (confirm(`Delete print sheet "${menuPage.label}"?`)) removePrintSheetPage(menuPage.id);
+      if (confirm(t('Delete print sheet "{name}"?', { name: menuPage.label }))) removePrintSheetPage(menuPage.id);
     } else if (menuPage.type === "floorplan") {
-      if (confirm(`Delete floorplan "${menuPage.label}"? The underlay and every symbol on it are removed; devices stay on the schematic.`)) {
+      if (confirm(t('Delete floorplan "{name}"? The underlay and every symbol on it are removed; devices stay on the schematic.', { name: menuPage.label }))) {
         removeFloorplanPage(menuPage.id);
       }
     } else if (menuPage.type === "patch-panel") {
-      if (confirm(`Delete patch bay page "${menuPage.label}"? Panels and patch assignments are kept — only the tab is removed.`)) {
+      if (confirm(t('Delete patch bay page "{name}"? Panels and patch assignments are kept — only the tab is removed.', { name: menuPage.label }))) {
         removePatchPanelPage(menuPage.id);
       }
     } else {
-      if (confirm(`Delete rack page "${menuPage.label}"? This will remove all racks and placements on this page.`)) {
+      if (confirm(t('Delete rack page "{name}"? This will remove all racks and placements on this page.', { name: menuPage.label }))) {
         removeRackPage(menuPage.id);
       }
     }
@@ -140,7 +142,7 @@ export default function PageTabs() {
       >
         {/* Schematic tab */}
         <button className={tabClass(activePage === "schematic")} onClick={() => setActivePage("schematic")}>
-          Schematic
+          {t("Schematic")}
         </button>
 
         {/* Page tabs */}
@@ -158,7 +160,7 @@ export default function PageTabs() {
               onClick={() => setActivePage(page.id)}
               onDoubleClick={() => startRename(page.id, page.label)}
               onContextMenu={(e) => handleContextMenu(e, page.id)}
-              title="Double-click to rename, right-click for options"
+              title={t("Double-click to rename, right-click for options")}
             >
               {editingId === page.id ? (
                 <input
@@ -184,8 +186,12 @@ export default function PageTabs() {
         {/* Add rack page */}
         <button
           className="px-2 py-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded"
-          onClick={() => addRackPage(`Rack Page ${pages.filter((p) => p.type === "rack-elevation").length + 1}`)}
-          title="Add rack elevation page"
+          onClick={() =>
+            addRackPage(
+              t("Rack Page {n}", { n: pages.filter((p) => p.type === "rack-elevation").length + 1 }),
+            )
+          }
+          title={t("Add rack elevation page")}
         >
           +
         </button>
@@ -194,7 +200,7 @@ export default function PageTabs() {
         <button
           className="px-2 py-1 text-violet-400 hover:text-violet-700 hover:bg-violet-100 rounded"
           onClick={() => addPrintSheetPage()}
-          title="Add print sheet"
+          title={t("Add print sheet")}
         >
           📄+
         </button>
@@ -203,7 +209,7 @@ export default function PageTabs() {
         <button
           className="px-2 py-1 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-100 rounded"
           onClick={() => addFloorplanPage()}
-          title="Add floorplan page — an architect's drawing with device symbols"
+          title={t("Add floorplan page — an architect's drawing with device symbols")}
         >
           🗺+
         </button>
@@ -213,7 +219,7 @@ export default function PageTabs() {
           <button
             className="px-2 py-1 text-sky-400 hover:text-sky-700 hover:bg-sky-100 rounded"
             onClick={() => addPatchPanelPage()}
-            title="Add patch bay page"
+            title={t("Add patch bay page")}
           >
             🔌+
           </button>
@@ -235,14 +241,14 @@ export default function PageTabs() {
             className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer"
             onClick={handleRename}
           >
-            Rename
+            {t("Rename")}
           </button>
           {!isPatchBay && (
             <button
               className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer"
               onClick={handleDuplicate}
             >
-              Duplicate
+              {t("Duplicate")}
             </button>
           )}
           <div className="border-t border-gray-100 my-1" />
@@ -250,7 +256,7 @@ export default function PageTabs() {
             className="w-full text-left px-3 py-1.5 text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"
             onClick={handleDelete}
           >
-            Delete
+            {t("Delete")}
           </button>
         </div>
       )}

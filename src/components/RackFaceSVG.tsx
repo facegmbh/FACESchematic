@@ -6,6 +6,7 @@ import {
   uToY, sideW, ACC_COLORS, wrapLabel,
 } from "./rackFaceConstants";
 import { resolveDeviceLabel, type SchematicDisplayDefaults } from "../displayName";
+import { useT } from "../i18n";
 
 export interface RackFaceSVGProps {
   rack: RackData;
@@ -37,6 +38,7 @@ export default function RackFaceSVG({
   heightPx,
   schematicDefaults,
 }: RackFaceSVGProps) {
+  const t = useT();
   const defaults: SchematicDisplayDefaults = schematicDefaults ?? {};
   const totalH = rack.heightU * PX_PER_U;
   const is2Post = rack.rackType === "open-2post";
@@ -60,11 +62,11 @@ export default function RackFaceSVG({
           <line key={i} x1={0} y1={i * PX_PER_U} x2={SW} y2={i * PX_PER_U} stroke="#eee" strokeWidth={0.5} />
         ))}
         <line x1={4} y1={0} x2={4} y2={totalH} stroke="#aaa" strokeWidth={1} strokeDasharray="2 2" />
-        <text x={4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">F</text>
+        <text x={4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">{t("F::rack-side-front")}</text>
         {!is2Post && (
           <>
             <line x1={SW - 4} y1={0} x2={SW - 4} y2={totalH} stroke="#aaa" strokeWidth={1} strokeDasharray="2 2" />
-            <text x={SW - 4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">R</text>
+            <text x={SW - 4} y={-3} textAnchor="middle" fontSize={7} fill="#aaa">{t("R::rack-side-rear")}</text>
           </>
         )}
         {rackAccessories.filter((a) => a.type === "shelf").map((a) => {
@@ -225,7 +227,7 @@ export default function RackFaceSVG({
             ))}
             {!isShelf && (
               <text x={DEVICE_INSET + FULL_WIDTH / 2} y={ay + ah / 2} textAnchor="middle" dominantBaseline="central" fontSize={8} fill="rgba(255,255,255,0.8)" style={{ pointerEvents: "none" }}>
-                {a.label ?? RACK_ACCESSORY_LABELS[a.type]}
+                {a.label ?? t(RACK_ACCESSORY_LABELS[a.type])}
               </text>
             )}
             {isShelf && (() => {

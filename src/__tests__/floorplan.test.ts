@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildFloorplanSchedule,
   buildLegendRows,
+  isGroupVisible,
   computeCalibration,
   createDefaultDrawingBlock,
   createDefaultLegend,
@@ -693,6 +694,25 @@ describe("plan symbols from the library", () => {
     expect(sym.outlineColor).toBe("#112233");
     expect(sym.outlineWidthMm).toBe(0);
     expect(planSymbolFor({ deviceType: "speaker", templateId: "t1" }).outlineColor).toBeUndefined();
+  });
+
+  it("takes a switched-off layer out of the legend but leaves it in the project", () => {
+    const page = makePage({
+      groups: [
+        { id: "g1", label: "Lautsprecher", color: "#e11d1d", shape: "circle" as const },
+        { id: "g2", label: "Video", color: "#1d4ed8", shape: "diamond" as const, hidden: true },
+      ],
+      symbols: [
+        makeSymbol({ id: "s1", groupId: "g1", label: "1" }),
+        makeSymbol({ id: "s2", groupId: "g2", label: "2" }),
+      ],
+    });
+    expect(buildLegendRows(page).map((r) => r.label)).toEqual(["Lautsprecher"]);
+    // The symbols are still there — a layer is switched off, not deleted.
+    expect(page.symbols).toHaveLength(2);
+    expect(isGroupVisible(page.groups[0])).toBe(true);
+    expect(isGroupVisible(page.groups[1])).toBe(false);
+    expect(isGroupVisible(undefined)).toBe(false);
   });
 
   it("picks a readable glyph color", () => {

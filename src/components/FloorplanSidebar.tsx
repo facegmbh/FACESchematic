@@ -4,6 +4,7 @@ import { resolveDeviceLabel } from "../displayName";
 import type { DeviceData, FloorplanPage } from "../types";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import type { Selection } from "./FloorplanRenderer";
+import { useT } from "../i18n";
 
 /** MIME type carrying a device node id from this sidebar to the sheet. */
 export const FLOORPLAN_DEVICE_MIME = "application/x-floorplan-device-id";
@@ -22,6 +23,7 @@ interface Props {
  *  Same frame as the schematic's device library: theme surface, header with a collapse
  *  button, search on top, folding to a narrow rail. */
 export default function FloorplanSidebar({ page, selection, onSelectionChange }: Props) {
+  const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const useShortNames = useSchematicStore((s) => s.useShortNames);
 
@@ -82,7 +84,7 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
         <button
           onClick={() => setCollapsed(false)}
           className="py-3 cursor-pointer hover:bg-[var(--color-surface-hover)] w-full flex justify-center transition-colors"
-          title="Show what is on the plan and the devices to place"
+          title={t("Show what is on the plan and the devices to place")}
         >
           <svg viewBox="0 0 16 16" className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M6 3l5 5-5 5" />
@@ -92,7 +94,7 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
           className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mt-2 select-none"
           style={{ writingMode: "vertical-rl" }}
         >
-          Plan
+          {t("Plan")}
         </div>
       </div>
     );
@@ -103,12 +105,12 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          Plan
+          {t("Plan")}
         </h2>
         <button
           onClick={() => setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
-          title="Collapse"
+          title={t("Collapse")}
         >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M10 3l-5 5 5 5" />
@@ -131,7 +133,7 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
           </svg>
           <input
             className="w-full pl-7 pr-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-            placeholder="Search plan and devices…"
+            placeholder={t("Search plan and devices…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -141,16 +143,15 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
       <div className="flex-1 overflow-y-auto" data-allow-scroll>
         {/* ── On the plan ────────────────────────────────────────────── */}
         <div className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>
-          On the plan ({page.symbols.length})
+          {t("On the plan ({n})", { n: page.symbols.length })}
         </div>
         <div className="px-1 pb-2">
           {page.symbols.length === 0 ? (
             <p className="px-1 text-[var(--color-text-muted)] leading-snug">
-              Nothing placed yet. Drag a device from the list below onto the sheet, or use the
-              Place tool.
+              {t("Nothing placed yet. Drag a device from the list below onto the sheet, or use the Place tool.")}
             </p>
           ) : placed.length === 0 ? (
-            <p className="px-1 text-[var(--color-text-muted)]">No symbol matches the search.</p>
+            <p className="px-1 text-[var(--color-text-muted)]">{t("No symbol matches the search.")}</p>
           ) : placed.map((sym) => {
             const group = groupById.get(sym.groupId);
             const device = sym.deviceNodeId ? deviceLabelFor.get(sym.deviceNodeId) : undefined;
@@ -171,11 +172,12 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
                     : [sym.id];
                   onSelectionChange(next.length > 0 ? { kind: "symbols", ids: next } : { kind: "none" });
                 }}
-                title={device ? `${sym.label} · ${device}` : sym.label}
+                title={[sym.label, device, group?.hidden ? t("group switched off") : undefined].filter(Boolean).join(" · ")}
               >
-                {group && <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className="shrink-0" rotationDeg={sym.rotationDeg} symbolSizeMm={page.symbolSizeMm} />}
-                <span className="shrink-0 font-semibold text-[var(--color-text)]">{sym.label}</span>
+                {group && <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className={group.hidden ? "shrink-0 opacity-40" : "shrink-0"} rotationDeg={sym.rotationDeg} symbolSizeMm={page.symbolSizeMm} />}
+                <span className={`shrink-0 font-semibold ${group?.hidden ? "text-[var(--color-text-muted)]" : "text-[var(--color-text)]"}`}>{sym.label}</span>
                 <span className="truncate text-[var(--color-text-muted)]">{device ?? group?.label ?? ""}</span>
+                {group?.hidden && <span className="ml-auto shrink-0 text-[var(--color-text-muted)]" style={{ fontSize: 9 }} title={t("Its group is switched off — not on the sheet, not in the export")}>{t("hidden")}</span>}
               </button>
             );
           })}
@@ -183,11 +185,11 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
 
         {/* ── Devices to place ───────────────────────────────────────── */}
         <div className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider border-t border-[var(--color-border)]" style={{ fontSize: 9 }}>
-          Devices — drag onto the plan
+          {t("Devices — drag onto the plan")}
         </div>
         <div className="px-1 pb-4">
           {devices.length === 0 ? (
-            <p className="px-1 text-[var(--color-text-muted)]">No devices on the schematic yet.</p>
+            <p className="px-1 text-[var(--color-text-muted)]">{t("No devices on the schematic yet.")}</p>
           ) : devices.map((node) => {
             const data = node.data as DeviceData;
             const resolved = resolveDeviceLabel(data, { useShortNames, wrapDeviceLabels: false });
@@ -205,7 +207,7 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
                   e.dataTransfer.setData(FLOORPLAN_DEVICE_MIME, node.id);
                   e.dataTransfer.effectAllowed = "copy";
                 }}
-                title={placedLabel ? `Already on this plan as ${placedLabel} — drag to place a second symbol` : data.label}
+                title={placedLabel ? t("Already on this plan as {label} — drag to place a second symbol", { label: placedLabel }) : data.label}
               >
                 <span className="truncate">{resolved.text}</span>
                 {placedLabel && <span className="shrink-0 text-emerald-600" style={{ fontSize: 10 }}>{placedLabel}</span>}

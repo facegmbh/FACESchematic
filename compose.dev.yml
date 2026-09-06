@@ -10,6 +10,8 @@ services:
     environment:
       REPO_URL: https://github.com/duremovich/EasySchematic.git
       BRANCH: master
+      # Same German default as the production image (see Dockerfile).
+      VITE_DEFAULT_LOCALE: de
     env_file:
       - path: .env
         required: false

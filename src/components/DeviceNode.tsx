@@ -16,6 +16,7 @@ import { DEVICE_NODE_WIDTH } from "../gridConstants";
 import { useDisplayLabel } from "../labelCaseUtils";
 import { resolveDeviceLabel } from "../displayName";
 import { isPortConnected } from "../portVisibility";
+import { t, useT } from "../i18n";
 
 type ColumnItem =
   | { type: "port"; port: Port }
@@ -25,8 +26,8 @@ type ColumnItem =
 /** Hover-tooltip suffix surfacing a USB-C port's Power Delivery rating, if set. */
 function usbcPowerSuffix(port: Port): string {
   const parts: string[] = [];
-  if (port.usbcPowerSourceW != null) parts.push(`delivers ${port.usbcPowerSourceW}W`);
-  if (port.usbcPowerDrawW != null) parts.push(`draws ${port.usbcPowerDrawW}W`);
+  if (port.usbcPowerSourceW != null) parts.push(t("delivers {n}W", { n: port.usbcPowerSourceW }));
+  if (port.usbcPowerDrawW != null) parts.push(t("draws {n}W", { n: port.usbcPowerDrawW }));
   return parts.length ? ` — USB-C PD: ${parts.join(", ")}` : "";
 }
 
@@ -51,6 +52,7 @@ function buildColumnItems(ports: Port[]): ColumnItem[] {
 }
 
 function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) {
+  const t = useT();
   const setEditingNodeId = useSchematicStore((s) => s.setEditingNodeId);
   const displayLabel = useDisplayLabel();
   const useShortNames = useSchematicStore((s) => s.useShortNames);
@@ -222,20 +224,18 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
 
   const isPatchPanel = data.deviceType === "patch-panel";
 
-  const leftItems = useMemo(() => {
-    const items = buildColumnItems(leftPorts);
-    if (isPatchPanel && leftPorts.length > 0) {
-      return [{ type: "section" as const, name: "Rear" }, ...items];
-    }
-    return items;
-  }, [leftPorts, isPatchPanel]);
-  const rightItems = useMemo(() => {
-    const items = buildColumnItems(rightPorts);
-    if (isPatchPanel && rightPorts.length > 0) {
-      return [{ type: "section" as const, name: "Front" }, ...items];
-    }
-    return items;
-  }, [rightPorts, isPatchPanel]);
+  const leftBase = useMemo(() => buildColumnItems(leftPorts), [leftPorts]);
+  const rightBase = useMemo(() => buildColumnItems(rightPorts), [rightPorts]);
+  // The patch-panel face headers are translated per render (not inside the memo) so a
+  // language switch relabels them right away.
+  const leftItems =
+    isPatchPanel && leftPorts.length > 0
+      ? [{ type: "section" as const, name: t("Rear") }, ...leftBase]
+      : leftBase;
+  const rightItems =
+    isPatchPanel && rightPorts.length > 0
+      ? [{ type: "section" as const, name: t("Front") }, ...rightBase]
+      : rightBase;
 
   const hasSections = leftItems.some((i) => i.type === "section") ||
     rightItems.some((i) => i.type === "section");
@@ -332,7 +332,10 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
         <span
           className="text-[10px] leading-4 truncate px-3 flex-1 text-center"
           style={{ color: signalColor }}
-          title={`${displayLabel(port.label)} (${signalLabel}) — passthrough`}
+          title={t("{label} ({signal}) — passthrough", {
+            label: displayLabel(port.label),
+            signal: signalLabel,
+          })}
         >
           ⇔ {displayLabel(port.label)}
         </span>
@@ -686,7 +689,10 @@ function DeviceNodeComponent({ id, data, selected }: NodeProps<DeviceNodeType>) 
                 <span
                   className="text-[10px] leading-4 truncate"
                   style={{ color: SIGNAL_COLORS[port.signalType] }}
-                  title={`${displayLabel(port.label)} (${SIGNAL_LABELS[port.signalType]}) — bidirectional${usbcPowerSuffix(port)}`}
+                  title={`${t("{label} ({signal}) — bidirectional", {
+                    label: displayLabel(port.label),
+                    signal: SIGNAL_LABELS[port.signalType],
+                  })}${usbcPowerSuffix(port)}`}
                 >
                   ↔ {displayLabel(port.label)}
                 </span>
