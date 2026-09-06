@@ -82,10 +82,15 @@ export default function FloorplansPage() {
         times that on its own.
       </p>
       <p>
-        Two limits worth knowing. A source over 25 MB is not kept, and the app says so at
-        import: the plan works, but redrawing it later needs the file again. And the bytes do
-        not travel inside an exported project file yet, so a project opened on another machine
-        needs a re-import before its plan can be redrawn.
+        Saving the project <strong>to a file</strong> writes those bytes into it, so a colleague
+        who opens the file can redraw the plan too — switch its page, change its layers, raise
+        its resolution. The file grows accordingly, and a save over 20 MB says so. A
+        <em>cloud</em> save does not carry them: that path has a 10 MB ceiling per schematic,
+        which one architect&apos;s PDF would use up on its own.
+      </p>
+      <p>
+        One limit worth knowing: a source over 25 MB is not kept at all, and the app says so at
+        import. The plan works, but redrawing it later needs the file again.
       </p>
 
       <h2>Scale and calibration</h2>

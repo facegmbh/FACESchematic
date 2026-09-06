@@ -217,18 +217,30 @@ export default function MenuBar() {
 
   // ─── File actions ──────────────────────────────────────
 
+  /** A project that carries its plans' PDFs can get big. Say so once, at the moment it
+   *  happens, rather than leaving the user to wonder about a 30 MB .json. */
+  const noteLargeSave = (bytes: number) => {
+    if (bytes < 20_000_000) return;
+    useSchematicStore.getState().addToast(
+      `Saved ${(bytes / 1_000_000).toFixed(0)} MB — the file carries the imported plans so they can be redrawn elsewhere.`,
+      "info",
+      6000,
+    );
+  };
+
   // Write schematic JSON to a FileSystemFileHandle (silent, no dialog)
   const writeToFileHandle = useCallback(async (handle: FileSystemFileHandle) => {
-    const data = exportToJSON();
+    const data = await useSchematicStore.getState().exportToJSONWithSources();
     const json = JSON.stringify(data, null, 2);
     const writable = await handle.createWritable();
     await writable.write(json);
     await writable.close();
-  }, [exportToJSON]);
+    noteLargeSave(json.length);
+  }, []);
 
   // Legacy download fallback (always triggers browser download)
-  const downloadFile = useCallback(() => {
-    const data = exportToJSON();
+  const downloadFile = useCallback(async () => {
+    const data = await useSchematicStore.getState().exportToJSONWithSources();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json; charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -236,7 +248,8 @@ export default function MenuBar() {
     a.download = `${data.name.replace(/[^a-zA-Z0-9-_ ]/g, "")}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [exportToJSON]);
+    noteLargeSave(blob.size);
+  }, []);
 
   // Show the native file picker and return the chosen handle
   const pickFileHandle = useCallback(async (): Promise<FileSystemFileHandle | null> => {
@@ -298,7 +311,11 @@ export default function MenuBar() {
         store.addToast(e instanceof Error ? e.message : "Save failed", "error");
       }
     } else {
-      downloadFile();
+      try {
+        await downloadFile();
+      } catch (e: unknown) {
+        useSchematicStore.getState().addToast(e instanceof Error ? e.message : "Save failed", "error");
+      }
     }
   }, [writeToFileHandle, downloadFile, pickFileHandle]);
 
@@ -319,7 +336,11 @@ export default function MenuBar() {
         store.addToast(e instanceof Error ? e.message : "Save failed", "error");
       }
     } else {
-      downloadFile();
+      try {
+        await downloadFile();
+      } catch (e: unknown) {
+        useSchematicStore.getState().addToast(e instanceof Error ? e.message : "Save failed", "error");
+      }
     }
   }, [pickFileHandle, writeToFileHandle, downloadFile]);
 

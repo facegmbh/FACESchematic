@@ -79,7 +79,7 @@ import {
 import type { Orientation } from "./printConfig";
 import { computeAlignment, resolveAlignmentOverlaps, type AlignOperation } from "./alignUtils";
 import { CURRENT_SCHEMA_VERSION, STUB_LABEL_Z_INDEX, migrateSchematic } from "./migrations";
-import { pruneUnderlaySources } from "./underlaySource";
+import { collectUnderlaySources, pruneUnderlaySources, restoreUnderlaySources } from "./underlaySource";
 import { healStaleWaypoints } from "./waypointHealing";
 import { newBundleId, gcBundles, reconcileBundleJunctions, bundleJunctionsFor, splitMemberWaypoints } from "./bundles";
 import { computeBundleTrunk, type BundleEndpoint } from "./routing/bundleRoute";
@@ -930,6 +930,10 @@ interface SchematicState {
   pruneUnderlaySources: () => void;
   loadFromLocalStorage: () => boolean;
   exportToJSON: () => SchematicFile;
+  /** exportToJSON plus the floorplan underlays' source files, for a save to a file. Async
+   *  because the sources live in IndexedDB. Cloud saves keep using exportToJSON: that path
+   *  has a 10 MB ceiling one architect's PDF would blow on its own. */
+  exportToJSONWithSources: () => Promise<SchematicFile>;
   importFromJSON: (data: SchematicFile) => void;
   importCsvData: (newNodes: SchematicNode[], newEdges: ConnectionEdge[]) => void;
   newSchematic: (templateData?: SchematicFile) => void;
@@ -6206,6 +6210,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     }
   },
 
+  exportToJSONWithSources: async () => {
+    const data = get().exportToJSON();
+    const keys = get().pages.flatMap((p) => (p.type === "floorplan" && p.underlay?.sourceKey ? [p.underlay.sourceKey] : []));
+    if (keys.length === 0) return data;
+    return { ...data, underlaySources: await collectUnderlaySources(keys) };
+  },
+
   exportToJSON: () => {
     const state = get();
     return {
@@ -6390,7 +6401,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       if (data.pages?.length) syncRackCounters(data.pages);
       saveCategoryOrder(data.categoryOrder ?? null);
       get().saveToLocalStorage();
-      get().pruneUnderlaySources();
+      // Adopt the plan sources the file brought, then drop what nothing references. Order
+      // matters: pruning first would delete what we are about to restore.
+      void restoreUnderlaySources(data.underlaySources).then(() => get().pruneUnderlaySources());
     } catch (err) {
       console.error("Post-import side-effect failed (schematic still loaded):", err);
     }

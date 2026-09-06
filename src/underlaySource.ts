@@ -11,8 +11,9 @@
  * that has a budget of roughly 5 MB for the whole document, and an architect's PDF can be
  * many times that on its own. The underlay carries only a `sourceKey` pointing here.
  *
- * Not yet included: the bytes do not travel inside an exported project file, so moving a
- * project to another machine still needs a re-import to redraw it.
+ * A project saved to a *file* carries the bytes along (see collectUnderlaySources), so the
+ * plan can be redrawn on another machine too. A cloud save does not: that path has a 10 MB
+ * ceiling per schematic, which one architect's PDF would blow on its own.
  */
 
 const DB_NAME = "easyschematic-underlay-sources";
@@ -147,5 +148,70 @@ export async function pruneUnderlaySources(keep: Iterable<string>): Promise<void
     for (const k of stale) memory.delete(k);
   } catch {
     // Storage that will not open needs no pruning.
+  }
+}
+
+
+// ── Travelling inside a project file ─────────────────────────────────
+
+/** A source as it is written into a project file. */
+export interface SerializedUnderlaySource {
+  name: string;
+  type: string;
+  /** The file's bytes, base64. */
+  data: string;
+}
+
+/** Chunked so a multi-megabyte buffer cannot blow the argument limit of String.fromCharCode. */
+function toBase64(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes);
+  const CHUNK = 0x8000;
+  let out = "";
+  for (let i = 0; i < view.length; i += CHUNK) {
+    out += String.fromCharCode(...view.subarray(i, i + CHUNK));
+  }
+  return btoa(out);
+}
+
+function fromBase64(data: string): ArrayBuffer {
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/**
+ * The sources behind `keys`, ready to be written into a project file. Keys whose source is
+ * gone are skipped: a project that travels without its plan source is still a valid
+ * project, it just needs a re-import to redraw.
+ */
+export async function collectUnderlaySources(keys: Iterable<string>): Promise<Record<string, SerializedUnderlaySource> | undefined> {
+  const out: Record<string, SerializedUnderlaySource> = {};
+  for (const key of new Set(keys)) {
+    const file = await getUnderlaySource(key);
+    if (!file) continue;
+    try {
+      out[key] = { name: file.name, type: file.type, data: toBase64(await file.arrayBuffer()) };
+    } catch {
+      // A source we cannot read simply does not travel.
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Adopt the sources from a loaded project file, so its plans can be redrawn here.
+ * Best-effort: the rasters are already in the project, so a failure costs the redraw, not
+ * the plan.
+ */
+export async function restoreUnderlaySources(sources: Record<string, SerializedUnderlaySource> | undefined): Promise<void> {
+  if (!sources) return;
+  for (const [key, src] of Object.entries(sources)) {
+    if (!src?.data) continue;
+    try {
+      await putUnderlaySource(key, new File([fromBase64(src.data)], src.name || "plan.pdf", { type: src.type || "application/pdf" }));
+    } catch {
+      // Skip this one and keep the rest.
+    }
   }
 }

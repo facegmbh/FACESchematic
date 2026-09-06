@@ -1,4 +1,5 @@
 import type { Node, Edge } from "@xyflow/react";
+import type { SerializedUnderlaySource } from "./underlaySource";
 
 export type ConnectorType =
   | "bnc" | "hdmi" | "displayport" | "vga"
@@ -1299,6 +1300,11 @@ export interface BundleMeta {
 }
 
 export interface SchematicFile {
+  /** Source files behind the floorplan underlays, keyed by the underlay's sourceKey, so a
+   *  project carries its plans' originals to another machine and can redraw them there
+   *  (page switch, PDF layers, resolution). Written only into file saves — a cloud save has
+   *  a 10 MB ceiling that one architect's PDF would blow on its own. */
+  underlaySources?: Record<string, SerializedUnderlaySource>;
   version: number;
   name: string;
   nodes: SchematicNode[];
