@@ -6,6 +6,7 @@ import {
   coveragePathD,
   coveragePointsOnSheet,
   coverageRotationDeg,
+  effectiveRangeM,
   formatCoverageSpec,
   isCoverageVisible,
   DEFAULT_COVERAGE_OPACITY,
@@ -56,7 +57,7 @@ export default function FloorplanCoverageLayer({
     const areas = (page.coverages ?? []).filter((c) => isCoverageVisible(c, page.groups));
     // Sort by drawn extent, biggest at the back. Ties keep their document order.
     return areas
-      .map((c, i) => ({ c, i, reach: c.rangeM }))
+      .map((c, i) => ({ c, i, reach: effectiveRangeM(c) }))
       .sort((a, b) => b.reach - a.reach || a.i - b.i)
       .map((e) => e.c);
   }, [page.coverages, page.groups]);
@@ -80,7 +81,7 @@ export default function FloorplanCoverageLayer({
         const outline = coverage.showOutline !== false;
         const anchor = coverageAnchorMm(coverage, page.symbols);
         const turn = coverageRotationDeg(coverage, page.symbols);
-        const rPaper = realMmToPaperMm(coverage.rangeM * 1000, page.scaleDenominator);
+        const rPaper = realMmToPaperMm(effectiveRangeM(coverage) * 1000, page.scaleDenominator);
         const handle = handlePosMm(anchor, rPaper, turn);
         const labelAt = coverageLabelAnchorMm(coverage, page);
         const grabbable = interactive && !coverage.locked;
@@ -147,7 +148,7 @@ export default function FloorplanCoverageLayer({
                   onAimStart(e, coverage);
                 }}
               >
-                <title>{t("Drag to set range and direction")}</title>
+                <title>{coverage.optics ? t("Drag to aim it — the reach follows the lens") : t("Drag to set range and direction")}</title>
               </circle>
             )}
           </g>

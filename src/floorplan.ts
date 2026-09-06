@@ -14,7 +14,9 @@
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import type { FloorplanSymbolShape,
   CompanyProfile,
+  CoverageOptics,
   CoverageShape,
+  DoriLevel,
   FloorplanCoverage,
   FloorplanKind,
   PlanSymbolSpec,
@@ -31,7 +33,7 @@ import type { FloorplanSymbolShape,
   FloorplanUnderlay,
   TitleBlock,
 } from "./types";
-import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM } from "./types";
+import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M } from "./types";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -980,6 +982,71 @@ export function coverageApertureDeg(coverage: Pick<FloorplanCoverage, "apertureD
   return Math.min(360, Math.max(1, a));
 }
 
+// ── Camera optics: from lens and sensor to a range ───────────────────
+
+export const DEFAULT_COVERAGE_ASPECT_RATIO = 16 / 9;
+export const DEFAULT_DORI_LEVEL: DoriLevel = "recognise";
+/** Sensor sizes worth offering as presets — the ones cameras are actually sold in. */
+export const COVERAGE_MP_PRESETS = [2, 4, 5, 8, 12];
+export const COVERAGE_ASPECT_PRESETS: { label: string; value: number }[] = [
+  { label: "16:9", value: 16 / 9 },
+  { label: "4:3", value: 4 / 3 },
+  { label: "1:1", value: 1 },
+];
+
+/** How many pixels wide the sensor is, derived from megapixels and the aspect ratio.
+ *  w × h = MP and w ÷ h = aspect, so w = √(MP · aspect). */
+export function coverageHorizontalPixels(optics: Pick<CoverageOptics, "megapixels" | "aspectRatio">): number {
+  const mp = Math.max(0.1, Number.isFinite(optics.megapixels) ? optics.megapixels : 2);
+  const aspect = optics.aspectRatio && optics.aspectRatio > 0 ? optics.aspectRatio : DEFAULT_COVERAGE_ASPECT_RATIO;
+  return Math.sqrt(mp * 1e6 * aspect);
+}
+
+/** How wide the scene is, in metres, at a given distance from a lens of this angle.
+ *  Straight trigonometry: the field of view is an isoceles triangle. */
+export function coverageSceneWidthM(hfovDeg: number, distanceM: number): number {
+  const half = (Math.min(179, Math.max(1, hfovDeg)) * Math.PI) / 360;
+  return 2 * distanceM * Math.tan(half);
+}
+
+/** Pixel density at a given distance, in pixels per metre of scene width — the number
+ *  every DORI judgement is actually made on. */
+export function coveragePixelDensityAt(
+  optics: Pick<CoverageOptics, "megapixels" | "aspectRatio">,
+  hfovDeg: number,
+  distanceM: number,
+): number {
+  const width = coverageSceneWidthM(hfovDeg, distanceM);
+  return width <= 0 ? 0 : coverageHorizontalPixels(optics) / width;
+}
+
+/**
+ * The distance at which this lens still delivers the pixel density its DORI level needs.
+ * Inverting the density formula: d = pixels ÷ (2 · required · tan(hfov/2)).
+ *
+ * This is why a camera's area cannot be dragged to size — widen the lens and the reach
+ * genuinely shrinks, because the same pixels are spread over more scene.
+ */
+export function coverageDoriRangeM(optics: CoverageOptics, hfovDeg: number): number {
+  const required = DORI_PX_PER_M[optics.dori] ?? DORI_PX_PER_M[DEFAULT_DORI_LEVEL];
+  const half = (Math.min(179, Math.max(1, hfovDeg)) * Math.PI) / 360;
+  const tan = Math.tan(half);
+  if (tan <= 0 || required <= 0) return DEFAULT_COVERAGE_RANGE_M;
+  return coverageHorizontalPixels(optics) / (2 * required * tan);
+}
+
+/**
+ * The reach an area is actually drawn with. A camera's comes from its optics, everything
+ * else carries the metres someone typed. Single source of truth on purpose: the derived
+ * range is never written back, so it cannot drift out of step with the lens.
+ */
+export function effectiveRangeM(
+  coverage: Pick<FloorplanCoverage, "rangeM" | "optics" | "apertureDeg">,
+): number {
+  if (!coverage.optics) return clampRange(coverage.rangeM);
+  return clampRange(coverageDoriRangeM(coverage.optics, coverageApertureDeg(coverage)));
+}
+
 /**
  * The outline of a coverage area in paper mm, relative to its anchor point and unrotated
  * (0° faces +x, to the right of the sheet). One closed polygon serves both renderers:
@@ -990,10 +1057,10 @@ export function coverageApertureDeg(coverage: Pick<FloorplanCoverage, "apertureD
  * device and reach away from it, a circle is centred on it.
  */
 export function coverageOutlineMm(
-  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM">,
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics">,
   scaleDenominator: number,
 ): Vec2[] {
-  const r = realMmToPaperMm(clampRange(coverage.rangeM) * 1000, scaleDenominator);
+  const r = realMmToPaperMm(effectiveRangeM(coverage) * 1000, scaleDenominator);
   if (r <= 0) return [];
 
   const arc = (fromDeg: number, toDeg: number): Vec2[] => {
@@ -1097,11 +1164,16 @@ export function isCoverageVisible(
   return group ? isGroupVisible(group) : true;
 }
 
-/** How an area reads in a legend or a list: "12,0 m / 90°", "R 8,0 m", "15,0 × 2,0 m". */
+/** How an area reads in a legend or a list: "12.0 m / 90°", "R 8.0 m", "15.0 × 2.0 m",
+ *  and for a camera the lens it follows from: "4 MP · 90° · 10.7 m (recognise)". */
 export function formatCoverageSpec(
-  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM">,
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics">,
 ): string {
-  const range = clampRange(coverage.rangeM).toFixed(1);
+  const range = effectiveRangeM(coverage).toFixed(1);
+  if (coverage.optics) {
+    const mp = coverage.optics.megapixels;
+    return `${mp} MP · ${Math.round(coverageApertureDeg(coverage))}° · ${range} m (${coverage.optics.dori})`;
+  }
   switch (coverage.shape) {
     case "circle":
       return `R ${range} m`;
@@ -1113,6 +1185,28 @@ export function formatCoverageSpec(
   }
 }
 
+/** A camera area for a device that has just been placed: a generic lens at the level most
+ *  plans are actually judged on. */
+export function defaultCameraOptics(): CoverageOptics {
+  return { megapixels: 4, aspectRatio: DEFAULT_COVERAGE_ASPECT_RATIO, dori: DEFAULT_DORI_LEVEL };
+}
+
+/** Device types whose coverage is a lens rather than a measured reach. The broadcast
+ *  camera types are in here too: a PTZ documenting a room is aimed the same way. */
+export const CAMERA_DEVICE_TYPES = new Set(["ip-camera", "camera", "ptz-camera"]);
+
+export function isCameraDeviceType(deviceType?: string): boolean {
+  return Boolean(deviceType && CAMERA_DEVICE_TYPES.has(deviceType));
+}
+
+/** A new area for a device, already set up the way that kind of device is judged: a
+ *  camera gets a lens that computes its own reach, a detector gets metres. */
+export function defaultCoverageForDevice(deviceType?: string): Omit<FloorplanCoverage, "id"> {
+  const base = defaultCoverage("sector");
+  if (!isCameraDeviceType(deviceType)) return base;
+  return { ...base, optics: defaultCameraOptics() };
+}
+
 /** Where an area's caption goes: just past the far edge, along the direction it faces, so
  *  the text sits outside the fill instead of being swallowed by it. */
 export function coverageLabelAnchorMm(
@@ -1121,7 +1215,7 @@ export function coverageLabelAnchorMm(
 ): Vec2 {
   const anchor = coverageAnchorMm(coverage, page.symbols);
   const turn = coverageRotationDeg(coverage, page.symbols);
-  const r = realMmToPaperMm(clampRange(coverage.rangeM) * 1000, page.scaleDenominator) + 2;
+  const r = realMmToPaperMm(effectiveRangeM(coverage) * 1000, page.scaleDenominator) + 2;
   // A circle has no direction to write along, so its caption drops below the ring.
   const out = rotateVec(coverage.shape === "circle" ? { x: 0, y: r } : { x: r, y: 0 }, turn);
   return { x: anchor.x + out.x, y: anchor.y + out.y };

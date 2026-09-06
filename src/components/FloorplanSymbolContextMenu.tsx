@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
-import { defaultCoverage } from "../floorplan";
-import type { FloorplanPage } from "../types";
+import { defaultCoverageForDevice } from "../floorplan";
+import type { DeviceData, FloorplanPage } from "../types";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import { useT } from "../i18n";
 
@@ -32,6 +32,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
+  const nodes = useSchematicStore((s) => s.nodes);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -90,8 +91,9 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
           // Anchored and filed under the device's own group, so aiming the camera aims what
           // it sees and the area switches off with that layer.
           for (const sym of symbols) {
+            const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
             addFloorplanCoverage(page.id, {
-              ...defaultCoverage("sector"),
+              ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
               symbolId: sym.id,
               groupId: sym.groupId,
               positionMm: { ...sym.positionMm },

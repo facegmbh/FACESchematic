@@ -111,6 +111,7 @@ import { PAPER_SIZES } from "./printConfig";
 import {
   appendLegendNote,
   drawingAreaMm,
+  effectiveRangeM,
   formatPlanDate,
   legendDescriptionFor,
   legendInstallNoteFor,
@@ -464,7 +465,9 @@ function floorplanSummary(page: FloorplanPage) {
     /** Detection and surveillance areas — what the cameras see, what the detectors reach.
      *  Ranges are metres on site; an area with a symbolId follows and turns with that device. */
     coverages: (page.coverages ?? []).map((c) => ({
-      coverageId: c.id, shape: c.shape, rangeM: c.rangeM, apertureDeg: c.apertureDeg, widthM: c.widthM,
+      // rangeM is what is drawn: computed from the lens for a camera, else the typed reach.
+      coverageId: c.id, shape: c.shape, rangeM: Number(effectiveRangeM(c).toFixed(2)), apertureDeg: c.apertureDeg, widthM: c.widthM,
+      optics: c.optics ? { megapixels: c.optics.megapixels, dori: c.optics.dori, aspectRatio: c.optics.aspectRatio } : undefined,
       rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: c.label,
       xMm: c.positionMm.x, yMm: c.positionMm.y, hidden: c.hidden ?? false,
     })),

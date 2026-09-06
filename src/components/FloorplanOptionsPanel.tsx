@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, defaultCoverage, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
-import { COVERAGE_SHAPES, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
-import type { CoverageShape, DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
+import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
+import type { CoverageShape, DoriLevel, DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
@@ -372,8 +372,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     // start — the offset is 0.
                     let last: string | null = null;
                     for (const sym of selectedSymbols) {
+                      // A camera arrives with a lens that computes its own reach; a
+                      // detector arrives with metres to type.
+                      const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
                       last = addFloorplanCoverage(page.id, {
-                        ...defaultCoverage("sector"),
+                        ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
                         symbolId: sym.id,
                         groupId: sym.groupId,
                         positionMm: { ...sym.positionMm },
@@ -464,26 +467,117 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 </select>
               </label>
 
-              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Reach on site, in metres — the number off the datasheet. It is converted through the drawing scale, so it stays true when the plan is re-scaled.")}>
-                <span className="shrink-0 w-12">{t("Range")}</span>
+              {/* A camera is set by its lens; everything else by a measured reach. */}
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("A camera has no range of its own — it has pixels spread over an angle. Switch this on and the reach is computed from the megapixels, the opening angle and the DORI level you need.")}>
                 <input
-                  type="number"
-                  step={0.5}
-                  min={COVERAGE_MIN_RANGE_M}
-                  max={COVERAGE_MAX_RANGE_M}
-                  className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-                  value={coverage.rangeM}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (Number.isFinite(v)) patch({ rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, v)) });
-                  }}
+                  type="checkbox"
+                  checked={Boolean(coverage.optics)}
+                  onChange={(e) => patch({ optics: e.target.checked ? defaultCameraOptics() : undefined })}
                 />
-                <span style={{ fontSize: 10 }}>m</span>
+                <span>{t("Camera — compute the reach from the lens")}</span>
               </label>
+
+              {coverage.optics ? (() => {
+                const optics = coverage.optics;
+                const hfov = coverageApertureDeg(coverage);
+                const reach = effectiveRangeM(coverage);
+                const doriLabels: Record<DoriLevel, string> = {
+                  detect: t("Detect"),
+                  observe: t("Observe"),
+                  recognise: t("Recognise"),
+                  identify: t("Identify"),
+                };
+                return (
+                  <>
+                    <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Sensor resolution as the datasheet states it. More megapixels spread over the same angle reach further.")}>
+                      <span className="shrink-0 w-12">{t("Sensor")}</span>
+                      <input
+                        type="number"
+                        step={1}
+                        min={0.3}
+                        max={64}
+                        className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={optics.megapixels}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v) && v > 0) patch({ optics: { ...optics, megapixels: v } });
+                        }}
+                      />
+                      <span style={{ fontSize: 10 }}>MP</span>
+                      <select
+                        className="min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={optics.aspectRatio ?? DEFAULT_COVERAGE_ASPECT_RATIO}
+                        onChange={(e) => patch({ optics: { ...optics, aspectRatio: Number(e.target.value) } })}
+                        title={t("Sensor aspect ratio — it decides how the megapixels split into width and height.")}
+                      >
+                        {COVERAGE_ASPECT_PRESETS.map((a) => <option key={a.label} value={a.value}>{a.label}</option>)}
+                      </select>
+                    </label>
+
+                    <div className="flex items-center gap-1 pl-14">
+                      {COVERAGE_MP_PRESETS.map((mp) => (
+                        <button
+                          key={mp}
+                          className={`px-1.5 py-0.5 rounded border ${Math.abs(optics.megapixels - mp) < 0.05 ? "border-sky-400 text-sky-700 bg-sky-500/10" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-sky-300"}`}
+                          onClick={() => patch({ optics: { ...optics, megapixels: mp } })}
+                          style={{ fontSize: 10 }}
+                        >
+                          {mp}
+                        </button>
+                      ))}
+                    </div>
+
+                    <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("How much of the picture a person has to fill. Identify needs four times the pixel density of Observe, so it reaches half as far.")}>
+                      <span className="shrink-0 w-12">{t("Purpose")}</span>
+                      <select
+                        className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={optics.dori}
+                        onChange={(e) => patch({ optics: { ...optics, dori: e.target.value as DoriLevel } })}
+                      >
+                        {DORI_LEVELS.map((lvl) => (
+                          <option key={lvl} value={lvl}>{doriLabels[lvl]} — {DORI_PX_PER_M[lvl]} px/m</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {/* The computed reach, read-only on purpose: it is a result, not a field. */}
+                    <div className="rounded border border-sky-300 bg-sky-500/5 px-1.5 py-1 text-[var(--color-text)]">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-semibold tabular-nums" style={{ fontSize: 13 }}>{reach.toFixed(1)} m</span>
+                        <span className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                          {t("at")} {Math.round(hfov)}° · {doriLabels[optics.dori]}
+                        </span>
+                      </div>
+                      <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                        {t("{n} px/m at 5 m", { n: Math.round(coveragePixelDensityAt(optics, hfov, 5)) })}
+                        {" · "}
+                        {t("{n} px/m at 10 m", { n: Math.round(coveragePixelDensityAt(optics, hfov, 10)) })}
+                      </div>
+                    </div>
+                  </>
+                );
+              })() : (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Reach on site, in metres — the number off the datasheet. It is converted through the drawing scale, so it stays true when the plan is re-scaled.")}>
+                  <span className="shrink-0 w-12">{t("Range")}</span>
+                  <input
+                    type="number"
+                    step={0.5}
+                    min={COVERAGE_MIN_RANGE_M}
+                    max={COVERAGE_MAX_RANGE_M}
+                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={coverage.rangeM}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) patch({ rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, v)) });
+                    }}
+                  />
+                  <span style={{ fontSize: 10 }}>m</span>
+                </label>
+              )}
 
               {coverage.shape === "sector" && (
                 <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Opening angle — a wide-angle PIR's 90°, a lens's horizontal field of view. 360° covers the full circle.")}>
-                  <span className="shrink-0 w-12">{t("Angle")}</span>
+                  <span className="shrink-0 w-12">{coverage.optics ? t("Lens") : t("Angle")}</span>
                   <input
                     type="range"
                     min={5}

@@ -576,6 +576,71 @@ export const templates: DeviceTemplate[] = [
     ],
   },
 
+  // ══ Generic cameras ════════════════════════════════════════════
+  // Vendor-neutral bodies for the stage where the lens matters and the brand does not.
+  // Drop one on the plan, add a coverage area, and set the megapixels and the opening
+  // angle — the reach follows from the optics, so the plan is right before the model is
+  // chosen. Swap in the real product later; the coverage area stays.
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000170",
+    deviceType: "ip-camera",
+    label: "Generic IP Camera (2 MP)",
+    shortName: "IP-Kamera 2 MP",
+    searchTerms: ["kamera", "camera", "generisch", "generic", "ip", "poe", "2mp", "1080p", "full hd", "onvif"],
+    planSymbol: { shape: "camera", glyph: "K" },
+    poeDrawW: 6,
+    voltage: "12V DC / PoE",
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+      port("12V DC In", "power", "input"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000171",
+    deviceType: "ip-camera",
+    label: "Generic IP Camera (4 MP)",
+    shortName: "IP-Kamera 4 MP",
+    searchTerms: ["kamera", "camera", "generisch", "generic", "ip", "poe", "4mp", "onvif"],
+    planSymbol: { shape: "camera", glyph: "K" },
+    poeDrawW: 7,
+    voltage: "12V DC / PoE",
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+      port("12V DC In", "power", "input"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000172",
+    deviceType: "ip-camera",
+    label: "Generic IP Camera (8 MP / 4K)",
+    shortName: "IP-Kamera 8 MP",
+    searchTerms: ["kamera", "camera", "generisch", "generic", "ip", "poe", "8mp", "4k", "uhd", "onvif"],
+    planSymbol: { shape: "camera", glyph: "K" },
+    poeDrawW: 9,
+    voltage: "12V DC / PoE",
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+      port("12V DC In", "power", "input"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000173",
+    deviceType: "nvr",
+    label: "Generic NVR (16 ch, PoE)",
+    shortName: "NVR 16 PoE",
+    searchTerms: ["nvr", "recorder", "aufzeichnung", "generisch", "generic", "poe", "video", "16"],
+    planSymbol: { shape: "rack", glyph: "NVR" },
+    powerDrawW: 40,
+    // A PoE recorder feeds its own cameras — the budget is what a plan sizes against.
+    poeBudgetW: 120,
+    voltage: "110-240V",
+    ports: [
+      port("AC In", "power", "input"),
+      port("LAN", "ethernet", "bidirectional"),
+      ...ports("PoE", "ethernet", "output", 16),
+    ],
+  },
+
   // ══ Telenot — complex panels and BUS-2 ══════════════════════════
   {
     id: "c0a80101-0ba2-4000-8000-000000000150",

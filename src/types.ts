@@ -1190,6 +1190,41 @@ export type CoverageShape = "sector" | "circle" | "rect";
 
 export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect"];
 
+/** The four operational levels of EN 62676-4 (DORI) and, with them, how much of the
+ *  picture a person has to fill before that level is actually reachable. */
+export type DoriLevel = "detect" | "observe" | "recognise" | "identify";
+
+export const DORI_LEVELS: DoriLevel[] = ["detect", "observe", "recognise", "identify"];
+
+/** Required pixel density per DORI level, in pixels per metre of scene width. These are
+ *  the figures the standard fixes; they are what turns a lens angle into a range. */
+export const DORI_PX_PER_M: Record<DoriLevel, number> = {
+  detect: 25,
+  observe: 62.5,
+  recognise: 125,
+  identify: 250,
+};
+
+/**
+ * What a camera's optics are, so its range on the plan follows from the lens instead of
+ * being typed in. A camera does not have "a range" — it has a resolution spread over an
+ * angle, and the useful distance is wherever the picture still carries enough pixels per
+ * metre for the job. Widen the lens and the reach drops; add megapixels and it grows.
+ *
+ * The horizontal pixel count is derived from megapixels and the aspect ratio rather than
+ * asked for separately, because the datasheet leads with megapixels. That derivation is
+ * approximate by a few percent (a "4 MP" sensor is 2560 px wide, the formula says 2667),
+ * which is well inside lens and mounting tolerance.
+ */
+export interface CoverageOptics {
+  /** Sensor resolution in megapixels, as the datasheet states it. */
+  megapixels: number;
+  /** Sensor aspect ratio as width ÷ height. Undefined counts as 16:9. */
+  aspectRatio?: number;
+  /** The level the drawn range should still reach. */
+  dori: DoriLevel;
+}
+
 /**
  * A detection or surveillance area drawn on the plan: what a camera sees, what a motion
  * detector reaches. Unlike a symbol, this is measured in the building — the range is
@@ -1215,8 +1250,13 @@ export interface FloorplanCoverage {
    *  sheet, in paper mm. Ignored while `symbolId` resolves to a symbol. */
   positionMm: { x: number; y: number };
   /** Reach in metres on site: a sector's and a rect's depth, a circle's radius. This is
-   *  the number off the datasheet ("12 m / 90°"). */
+   *  the number off the datasheet ("12 m / 90°"). Ignored while `optics` is set — a
+   *  camera's reach is computed from its lens, not typed. */
   rangeM: number;
+  /** Camera optics. Set → the range is computed from megapixels, the opening angle and
+   *  the DORI level, and `rangeM` is no longer read. This is what makes a generic camera
+   *  usable: set the angle and the megapixels, and the area follows. */
+  optics?: CoverageOptics;
   /** Opening angle in degrees for "sector" — a PIR's 90°, a lens's horizontal field of
    *  view. 360 covers the full circle. Ignored by the other shapes. */
   apertureDeg?: number;

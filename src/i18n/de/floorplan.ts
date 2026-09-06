@@ -512,4 +512,31 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "drücken für einen Bereich, der mitfolgt und mitdreht, oder",
   "on the sheet for a free-standing one. Drag the dot on its far edge to aim it and set the reach; ranges are metres on site.":
     "auf dem Blatt für einen freistehenden. Den Punkt an der Außenkante ziehen, um Richtung und Reichweite zu setzen; Reichweiten sind Meter am Bau.",
+
+  // ─── Kamera-Optik: Reichweite aus Objektiv und Sensor (DORI) ───
+  "Camera — compute the reach from the lens": "Kamera — Reichweite aus dem Objektiv rechnen",
+  "It is a camera — compute the reach": "Ist eine Kamera — Reichweite rechnen",
+  "Not a camera — set the reach by hand": "Keine Kamera — Reichweite selbst setzen",
+  "A camera has no range of its own — it has pixels spread over an angle. Switch this on and the reach is computed from the megapixels, the opening angle and the DORI level you need.":
+    "Eine Kamera hat keine eigene Reichweite — sie hat Pixel, verteilt über einen Winkel. Eingeschaltet wird die Reichweite aus Megapixeln, Öffnungswinkel und der benötigten DORI-Stufe gerechnet.",
+  "A camera has no range of its own: it has pixels spread over an angle. Computed from the megapixels, the opening angle and the level you need.":
+    "Eine Kamera hat keine eigene Reichweite: sie hat Pixel, verteilt über einen Winkel. Gerechnet aus Megapixeln, Öffnungswinkel und der benötigten Stufe.",
+  "Drag to aim it — the reach follows the lens": "Zum Ausrichten ziehen — die Reichweite folgt dem Objektiv",
+  "Lens": "Objektiv",
+  "Sensor": "Sensor",
+  "Sensor resolution as the datasheet states it. More megapixels spread over the same angle reach further.":
+    "Sensorauflösung wie im Datenblatt. Mehr Megapixel über denselben Winkel reichen weiter.",
+  "Sensor aspect ratio — it decides how the megapixels split into width and height.":
+    "Seitenverhältnis des Sensors — es entscheidet, wie sich die Megapixel auf Breite und Höhe verteilen.",
+  "Purpose": "Zweck",
+  "How much of the picture a person has to fill. Identify needs four times the pixel density of Observe, so it reaches half as far.":
+    "Wie viel vom Bild eine Person ausfüllen muss. Identifizieren braucht die vierfache Pixeldichte von Beobachten und reicht darum halb so weit.",
+  // DORI-Stufen nach EN 62676-4 — die deutschen Begriffe der Norm.
+  "Detect": "Entdecken",
+  "Observe": "Beobachten",
+  "Recognise": "Erkennen",
+  "Identify": "Identifizieren",
+  "at": "bei",
+  "{n} px/m at 5 m": "{n} px/m bei 5 m",
+  "{n} px/m at 10 m": "{n} px/m bei 10 m",
 };

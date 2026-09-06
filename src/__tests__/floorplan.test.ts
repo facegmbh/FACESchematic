@@ -40,6 +40,14 @@ import {
   COVERAGE_MAX_RANGE_M,
   COVERAGE_MIN_RANGE_M,
   DEFAULT_COVERAGE_COLOR,
+  coverageHorizontalPixels,
+  coverageSceneWidthM,
+  coveragePixelDensityAt,
+  coverageDoriRangeM,
+  effectiveRangeM,
+  defaultCameraOptics,
+  defaultCoverageForDevice,
+  isCameraDeviceType,
   rectFromDrag,
   legendDescriptionFor,
   legendInstallNoteFor,
@@ -70,7 +78,8 @@ import {
   AVG_GLYPH_WIDTH_FACTOR,
   PAGE_MARGIN_MM,
 } from "../floorplan";
-import type { FloorplanCoverage, FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
+import type { CoverageOptics, FloorplanCoverage, FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
+import { DORI_PX_PER_M } from "../types";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
 
 const paper = { paperId: "iso-a1", orientation: "landscape" as const };
@@ -894,5 +903,106 @@ describe("coverage areas", () => {
     expect(defaultCoverage("sector").widthM).toBeUndefined();
     expect(defaultCoverage("rect").widthM).toBe(2);
     expect(defaultCoverage("circle").apertureDeg).toBeUndefined();
+  });
+});
+
+describe("camera optics — reach from the lens", () => {
+  function optics(over: Partial<CoverageOptics> = {}): CoverageOptics {
+    return { megapixels: 4, aspectRatio: 16 / 9, dori: "recognise", ...over };
+  }
+  function camera(over: Partial<FloorplanCoverage> = {}): FloorplanCoverage {
+    return { id: "c1", shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 12, apertureDeg: 90, optics: optics(), ...over };
+  }
+
+  it("derives the horizontal pixel count from megapixels and aspect ratio", () => {
+    // w × h = MP and w ÷ h = aspect → w = √(MP · aspect). A "2 MP" 16:9 sensor is
+    // 1920 px wide in reality; the derivation lands within a few percent of that.
+    expect(coverageHorizontalPixels(optics({ megapixels: 2 }))).toBeCloseTo(1885.6, 1);
+    expect(coverageHorizontalPixels(optics({ megapixels: 8 }))).toBeCloseTo(3771.2, 1);
+    // A 4:3 sensor of the same megapixel count is narrower.
+    expect(coverageHorizontalPixels(optics({ megapixels: 4, aspectRatio: 4 / 3 })))
+      .toBeLessThan(coverageHorizontalPixels(optics({ megapixels: 4, aspectRatio: 16 / 9 })));
+  });
+
+  it("measures the scene the way a field of view actually opens", () => {
+    // At 90° the half-angle is 45°, tan = 1, so the scene is exactly twice the distance.
+    expect(coverageSceneWidthM(90, 10)).toBeCloseTo(20, 6);
+    expect(coverageSceneWidthM(60, 10)).toBeCloseTo(2 * 10 * Math.tan(Math.PI / 6), 6);
+  });
+
+  it("hits the DORI density it was asked for, exactly at the drawn range", () => {
+    // The range is defined as the distance where density still equals the requirement,
+    // so measuring density back at that range has to return the requirement.
+    for (const dori of ["detect", "observe", "recognise", "identify"] as const) {
+      const o = optics({ dori });
+      const range = coverageDoriRangeM(o, 90);
+      expect(coveragePixelDensityAt(o, 90, range)).toBeCloseTo(DORI_PX_PER_M[dori], 4);
+    }
+  });
+
+  it("reaches half as far for each doubling of the required density", () => {
+    const o = optics();
+    const observe = coverageDoriRangeM(optics({ dori: "observe" }), 90);
+    const recognise = coverageDoriRangeM(optics({ dori: "recognise" }), 90);
+    const identify = coverageDoriRangeM(optics({ dori: "identify" }), 90);
+    expect(recognise).toBeCloseTo(observe / 2, 4);
+    expect(identify).toBeCloseTo(recognise / 2, 4);
+    // And the numbers are the ones a CCTV table gives: 4 MP at 90° recognises to ~11 m.
+    expect(coverageDoriRangeM(o, 90)).toBeCloseTo(10.7, 1);
+  });
+
+  it("shortens the reach as the lens widens and lengthens it with more megapixels", () => {
+    const narrow = coverageDoriRangeM(optics(), 30);
+    const wide = coverageDoriRangeM(optics(), 120);
+    expect(narrow).toBeGreaterThan(wide);
+
+    const small = coverageDoriRangeM(optics({ megapixels: 2 }), 90);
+    const big = coverageDoriRangeM(optics({ megapixels: 8 }), 90);
+    expect(big).toBeGreaterThan(small);
+    // Four times the pixels is twice the width, so twice the reach.
+    expect(big).toBeCloseTo(small * 2, 4);
+  });
+
+  it("draws a camera at its computed reach and ignores the typed one", () => {
+    // rangeM stays 12 in the record but must not be what gets drawn.
+    const cam = camera({ rangeM: 12 });
+    expect(effectiveRangeM(cam)).toBeCloseTo(10.7, 1);
+    expect(effectiveRangeM(cam)).not.toBeCloseTo(12, 1);
+    // Drop the optics and the typed reach takes over again.
+    expect(effectiveRangeM({ ...cam, optics: undefined })).toBe(12);
+  });
+
+  it("re-computes the reach when the opening angle changes, with nothing written back", () => {
+    const at90 = effectiveRangeM(camera({ apertureDeg: 90 }));
+    const at45 = effectiveRangeM(camera({ apertureDeg: 45 }));
+    expect(at45).toBeGreaterThan(at90);
+    // The outline follows, which is the whole point — no stale rangeM can survive.
+    const wedge90 = coverageOutlineMm(camera({ apertureDeg: 90 }), 50);
+    const wedge45 = coverageOutlineMm(camera({ apertureDeg: 45 }), 50);
+    expect(Math.hypot(wedge45[1].x, wedge45[1].y)).toBeGreaterThan(Math.hypot(wedge90[1].x, wedge90[1].y));
+  });
+
+  it("reads out as the lens rather than as a bare distance", () => {
+    expect(formatCoverageSpec(camera({ apertureDeg: 90 }))).toBe("4 MP · 90° · 10.7 m (recognise)");
+    expect(formatCoverageSpec(camera({ optics: undefined, rangeM: 12 }))).toBe("12.0 m / 90°");
+  });
+
+  it("keeps a camera's reach inside the same bounds as any other area", () => {
+    // A pinhole-narrow lens on a huge sensor must not run off the sheet.
+    const absurd = camera({ apertureDeg: 1, optics: optics({ megapixels: 64, dori: "detect" }) });
+    expect(effectiveRangeM(absurd)).toBeLessThanOrEqual(COVERAGE_MAX_RANGE_M);
+    const ultrawide = camera({ apertureDeg: 360, optics: optics({ megapixels: 0.3, dori: "identify" }) });
+    expect(effectiveRangeM(ultrawide)).toBeGreaterThanOrEqual(COVERAGE_MIN_RANGE_M);
+  });
+
+  it("gives a camera device a computing area and a detector a measured one", () => {
+    expect(isCameraDeviceType("ip-camera")).toBe(true);
+    expect(isCameraDeviceType("ptz-camera")).toBe(true);
+    expect(isCameraDeviceType("motion-detector")).toBe(false);
+    expect(isCameraDeviceType(undefined)).toBe(false);
+
+    expect(defaultCoverageForDevice("ip-camera").optics).toEqual(defaultCameraOptics());
+    expect(defaultCoverageForDevice("motion-detector").optics).toBeUndefined();
+    expect(defaultCoverageForDevice(undefined).optics).toBeUndefined();
   });
 });

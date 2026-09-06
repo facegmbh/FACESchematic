@@ -537,9 +537,12 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           const dx = at.x - anchor.x, dy = at.y - anchor.y;
           // Reach comes out of the pointer distance measured in the building, not on paper.
           const rangeM = paperMmToRealMm(Math.hypot(dx, dy), page.scaleDenominator) / 1000;
-          const patch: Partial<FloorplanCoverage> = {
-            rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, free ? rangeM : Math.round(rangeM * 10) / 10)),
-          };
+          const patch: Partial<FloorplanCoverage> = {};
+          // A camera's reach comes out of its lens, so dragging only aims it. Writing a
+          // range here would be a number the optics immediately contradict.
+          if (!coverage.optics) {
+            patch.rangeM = Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, free ? rangeM : Math.round(rangeM * 10) / 10));
+          }
           // A ring has no direction to set; for everything else the pointer aims it. On an
           // anchored area rotationDeg is an offset, so the device's own aim comes back out.
           if (coverage.shape !== "circle" && Math.hypot(dx, dy) > 0.5) {

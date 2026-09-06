@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
-import { formatCoverageSpec, coverageApertureDeg, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
+import { formatCoverageSpec, coverageApertureDeg, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
 import { useT } from "../i18n";
-import { COVERAGE_SHAPES, type CoverageShape, type FloorplanPage } from "../types";
+import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, type CoverageShape, type DoriLevel, type FloorplanPage } from "../types";
 
 interface Props {
   page: FloorplanPage;
@@ -116,15 +116,46 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
       )}
 
       <Divider />
-      <Section>{t("Range")}</Section>
-      {RANGE_PRESETS_M.map((m) => (
-        <Item
-          key={m}
-          label={`${m} m`}
-          selected={Math.abs(coverage.rangeM - m) < 0.05}
-          onClick={() => patch({ rangeM: m })}
-        />
-      ))}
+      <Item
+        label={coverage.optics ? t("Not a camera — set the reach by hand") : t("It is a camera — compute the reach")}
+        onClick={() => patch({ optics: coverage.optics ? undefined : defaultCameraOptics() })}
+        title={t("A camera has no range of its own: it has pixels spread over an angle. Computed from the megapixels, the opening angle and the level you need.")}
+      />
+
+      {coverage.optics ? (
+        <>
+          <Section>{t("Sensor")}</Section>
+          {COVERAGE_MP_PRESETS.map((mp) => (
+            <Item
+              key={mp}
+              label={`${mp} MP`}
+              selected={Math.abs(coverage.optics!.megapixels - mp) < 0.05}
+              onClick={() => patch({ optics: { ...coverage.optics!, megapixels: mp } })}
+            />
+          ))}
+          <Section>{t("Purpose")}</Section>
+          {DORI_LEVELS.map((lvl) => (
+            <Item
+              key={lvl}
+              label={`${doriLabel(lvl, t)} — ${DORI_PX_PER_M[lvl]} px/m`}
+              selected={coverage.optics!.dori === lvl}
+              onClick={() => patch({ optics: { ...coverage.optics!, dori: lvl } })}
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          <Section>{t("Range")}</Section>
+          {RANGE_PRESETS_M.map((m) => (
+            <Item
+              key={m}
+              label={`${m} m`}
+              selected={Math.abs(coverage.rangeM - m) < 0.05}
+              onClick={() => patch({ rangeM: m })}
+            />
+          ))}
+        </>
+      )}
 
       <Divider />
       <Section>{t("Turn")}</Section>
@@ -176,6 +207,15 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
       <Item label={t("Remove coverage")} danger onClick={() => act(() => removeFloorplanCoverage(page.id, coverageId))} />
     </div>
   );
+}
+
+function doriLabel(level: DoriLevel, t: (s: string) => string): string {
+  switch (level) {
+    case "detect": return t("Detect");
+    case "observe": return t("Observe");
+    case "recognise": return t("Recognise");
+    case "identify": return t("Identify");
+  }
 }
 
 function Section({ children }: { children: React.ReactNode }) {
