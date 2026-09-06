@@ -3,7 +3,7 @@ import { useSchematicStore } from "../store";
 import type { FloorplanKind, FloorplanPage, FloorplanUnderlay } from "../types";
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
-import { UNDERLAY_ACCEPT, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile } from "../floorplanUnderlay";
+import { UNDERLAY_ACCEPT, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, readPdfLayers } from "../floorplanUnderlay";
 import { runFloorplanExport } from "../floorplanExport";
 import type { FloorplanTool } from "./FloorplanPage";
 
@@ -31,14 +31,15 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [layerPanel, setLayerPanel] = useState(false);
 
   const underlay = page.underlay;
   const isCustomPaper = page.paperId === "custom";
 
-  const applyImport = useCallback(async (file: File, pageNumber: number) => {
+  const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>) => {
     setImporting(true);
     try {
-      const imported = await importUnderlayFile(file, { pageNumber });
+      const imported = await importUnderlayFile(file, { pageNumber, layers });
       // Keep an existing underlay's placement when only the PDF page changes — the user
       // has usually calibrated it already and every sheet of a set shares one scale.
       const keepPlacement = underlay && underlay.sourceName === imported.sourceName;
@@ -87,6 +88,11 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
         sizeMm: keepPlacement ? underlay.sizeMm : fitted.sizeMm,
         opacity: underlay?.opacity ?? 1,
         locked: underlay?.locked ?? false,
+        pdfLayers: imported.layers,
+        // Re-rendering the same source — another page of the set, or a different layer
+        // choice — must not throw away a calibration the user already did. The raster keeps
+        // its resolution, so mm-per-pixel still holds.
+        ...(keepPlacement && underlay?.mmPerPx !== undefined ? { mmPerPx: underlay.mmPerPx } : {}),
       };
       setFloorplanUnderlay(page.id, next);
       sourceFiles.set(page.id, file);
@@ -114,7 +120,27 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
-    void applyImport(file, 1);
+    void (async () => {
+      // A layered plan is worth asking about before it is baked into a raster: an architect
+      // ships furniture, electrical and dimensions as layers, and a loudspeaker sheet wants
+      // a quieter background than a cable sheet.
+      const layers = await readPdfLayers(file).catch(() => []);
+      await applyImport(file, 1);
+      if (layers.length > 0) setLayerPanel(true);
+    })();
+  };
+
+  const handleLayerToggle = (id: string, visible: boolean) => {
+    const file = sourceFiles.get(page.id);
+    const current = underlay?.pdfLayers;
+    if (!current) return;
+    if (!file) {
+      addToast("Re-import the PDF to change layers — the source file isn't in memory any more.", "info", 5000);
+      return;
+    }
+    const choice: Record<string, boolean> = {};
+    for (const l of current) choice[l.id] = l.id === id ? visible : l.visible;
+    void applyImport(file, underlay?.pageNumber ?? 1, choice);
   };
 
   const handlePdfPageChange = (pageNumber: number) => {
@@ -123,7 +149,10 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
       addToast("Re-import the PDF to switch pages — the source file isn't in memory any more.", "info", 5000);
       return;
     }
-    void applyImport(file, pageNumber);
+    const choice = underlay?.pdfLayers
+      ? Object.fromEntries(underlay.pdfLayers.map((l) => [l.id, l.visible]))
+      : undefined;
+    void applyImport(file, pageNumber, choice);
   };
 
   return (
@@ -262,6 +291,42 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
               />
               <span className="text-[var(--color-text-muted)]">/ {underlay.pageCount}</span>
             </label>
+          )}
+          {(underlay.pdfLayers?.length ?? 0) > 0 && (
+            <div className="relative">
+              <button
+                className={`px-2 py-0.5 rounded border text-xs transition-colors ${layerPanel ? "bg-emerald-500/10 border-emerald-400 text-emerald-700" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400"}`}
+                onClick={() => setLayerPanel((v) => !v)}
+                title="Layers of the source PDF — pick what gets drawn into the plan"
+              >
+                ▤ Layers ({underlay.pdfLayers!.filter((l) => l.visible).length}/{underlay.pdfLayers!.length})
+              </button>
+              {layerPanel && (
+                <div className="absolute z-40 mt-1 left-0 w-64 max-h-80 overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg p-2 flex flex-col gap-1" data-allow-scroll>
+                  <div className="flex items-center justify-between pb-1 border-b border-[var(--color-border)]">
+                    <span className="font-semibold text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>
+                      PDF layers
+                    </span>
+                    <button className="px-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" onClick={() => setLayerPanel(false)} title="Close">✕</button>
+                  </div>
+                  {underlay.pdfLayers!.map((layer) => (
+                    <label key={layer.id} className="flex items-center gap-1.5 text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-surface-hover)] rounded px-1 py-0.5">
+                      <input
+                        type="checkbox"
+                        checked={layer.visible}
+                        disabled={importing}
+                        onChange={(e) => handleLayerToggle(layer.id, e.target.checked)}
+                      />
+                      <span className="truncate" title={layer.name}>{layer.name}</span>
+                    </label>
+                  ))}
+                  <p className="text-[var(--color-text-muted)] leading-snug pt-1" style={{ fontSize: 10 }}>
+                    Ticking redraws the plan from the PDF, so the source file has to still be
+                    open in this session. The placement and the calibration stay as they are.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
           <label className="flex items-center gap-1 text-[var(--color-text)]" title="Underlay opacity">
             <span style={{ fontSize: 9 }}>OPACITY</span>

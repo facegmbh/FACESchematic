@@ -48,6 +48,16 @@ export default function FloorplansPage() {
         a file always works.
       </p>
       <ul>
+        <li>
+          <strong>Layers</strong> — a PDF from AutoCAD or Revit usually carries its own layers
+          (furniture, electrical, dimensions). When the imported plan has any, the
+          <em>Layers</em> picker opens with the list and you tick what gets drawn. A
+          loudspeaker sheet wants a quieter background than a cable sheet, and importing the
+          same plan twice with different layers gives two backgrounds to work on. The choice is
+          baked into the raster, so changing it later redraws from the PDF — that needs the
+          source file to still be open in the session, the same condition as switching pages.
+          The placement and the calibration are kept.
+        </li>
         <li><strong>Opacity</strong> fades the drawing back so symbols stay readable over dense linework.</li>
         <li><strong>Lock</strong> pins the underlay so it can&apos;t be nudged while placing symbols.</li>
         <li>Unlocked, drag the underlay to reposition it; the corner handle resizes it with the aspect ratio locked.</li>

@@ -8,6 +8,7 @@
  */
 
 import { PT_TO_MM, rotatedSquareFactor } from "./floorplan";
+import type { PdfLayerChoice } from "./types";
 
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
 export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg";
@@ -33,6 +34,9 @@ export interface ImportedUnderlay {
   naturalSizeMm?: { w: number; h: number };
   /** Approximate byte size of the data URL, so callers can warn about autosave. */
   approxBytes: number;
+  /** The source PDF's layers and whether each was drawn. Undefined for images and for
+   *  PDFs that carry no layers. */
+  layers?: PdfLayerChoice[];
 }
 
 /** Rough decoded byte count of a data URL (base64 is 4/3 of the payload). */
@@ -100,7 +104,7 @@ export async function getPdfPageCount(file: File): Promise<number> {
   }
 }
 
-async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: number): Promise<ImportedUnderlay> {
+async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: number, layers?: Record<string, boolean>): Promise<ImportedUnderlay> {
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
   const task = pdfjs.getDocument({ data });
@@ -122,7 +126,24 @@ async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: numb
     // doesn't turn into black-on-black in dark mode.
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    // The PDF's own layers. Without a choice the document's own visibility stands, so a
+    // plain import still looks the way its author drew it.
+    const config = await doc.getOptionalContentConfig().catch(() => null);
+    const groups = (config?.getGroups?.() ?? null) as Record<string, { name?: unknown; visible?: unknown }> | null;
+    let chosen: PdfLayerChoice[] | undefined;
+    if (config && groups) {
+      for (const [id, visible] of Object.entries(layers ?? {})) {
+        if (id in groups) config.setVisibility(id, visible);
+      }
+      chosen = Object.entries(groups).map(([id, group], i) => layerChoice(id, group, i));
+    }
+
+    await page.render({
+      canvasContext: ctx,
+      viewport,
+      ...(config ? { optionalContentConfigPromise: Promise.resolve(config) } : {}),
+    }).promise;
 
     const src = encodeCanvas(canvas);
     return {
@@ -135,6 +156,7 @@ async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: numb
       pageCount: doc.numPages,
       naturalSizeMm: { w: base.width * PT_TO_MM, h: base.height * PT_TO_MM },
       approxBytes: dataUrlBytes(src),
+      layers: chosen,
     };
   } finally {
     await task.destroy();
@@ -258,6 +280,48 @@ export interface ImportUnderlayOptions {
   /** 1-based page to rasterize from a PDF. Defaults to 1. */
   pageNumber?: number;
   maxLongEdgePx?: number;
+  /** Which of the PDF's own layers to draw, as id → visible. Ids come from
+   *  {@link readPdfLayers} or from a previous import's `layers`. Omitted layers keep the
+   *  visibility the PDF itself specifies, so leaving this out renders the plan as its
+   *  author intended. */
+  layers?: Record<string, boolean>;
+}
+
+/** One layer as the UI sees it. The group object carries its own visibility — the config's
+ *  isVisible() wants a content-stream reference, not a plain id, so it is the wrong tool. */
+function layerChoice(id: string, group: { name?: unknown; visible?: unknown } | undefined, i: number): PdfLayerChoice {
+  return {
+    id,
+    name: typeof group?.name === "string" && group.name.trim() ? group.name.trim() : `Layer ${i + 1}`,
+    visible: group?.visible !== false,
+  };
+}
+
+/** Whether this file is a PDF, by extension or declared type. */
+function isPdf(file: File): boolean {
+  return extensionOf(file.name) === "pdf" || file.type === "application/pdf";
+}
+
+/** The layers (optional content groups) a PDF page offers, with the visibility the document
+ *  itself specifies. Empty when the PDF has none — most exported plans from AutoCAD and
+ *  Revit do, hand-made ones often do not. */
+export async function readPdfLayers(file: File): Promise<PdfLayerChoice[]> {
+  if (!isPdf(file)) return [];
+  const pdfjs = await loadPdfjs();
+  const data = new Uint8Array(await file.arrayBuffer());
+  const task = pdfjs.getDocument({ data });
+  try {
+    const doc = await task.promise;
+    const config = await doc.getOptionalContentConfig();
+    const groups = config?.getGroups?.() as Record<string, { name?: unknown; visible?: unknown }> | null | undefined;
+    if (!groups) return [];
+    return Object.entries(groups).map(([id, group], i) => layerChoice(id, group, i));
+  } catch {
+    // A PDF that will not report its layers still imports — it simply has none to offer.
+    return [];
+  } finally {
+    await task.destroy();
+  }
 }
 
 /**
@@ -279,8 +343,8 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
   if (ext === "dxf") {
     throw new Error("DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF.");
   }
-  if (ext === "pdf" || file.type === "application/pdf") {
-    return renderPdfPage(file, opts.pageNumber ?? 1, maxLongEdgePx);
+  if (isPdf(file)) {
+    return renderPdfPage(file, opts.pageNumber ?? 1, maxLongEdgePx, opts.layers);
   }
   if (file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "svg"].includes(ext)) {
     return rasterizeImage(file, maxLongEdgePx);

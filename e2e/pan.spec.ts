@@ -21,21 +21,36 @@ test("trackpad two-finger scroll pans the floorplan and the schematic", async ({
 
   // Schematic first — this one already worked and must keep working.
   const rfVp = page.locator(".react-flow__viewport");
-  const before = await rfVp.evaluate((el) => getComputedStyle(el).transform);
-  await swipe(page, 700, 500, 120, 160);
-  const after = await rfVp.evaluate((el) => getComputedStyle(el).transform);
-  expect(after).not.toBe(before);
+  const canvasBefore = await rfVp.evaluate((el) => getComputedStyle(el).transform);
+  await expect.poll(async () => {
+    await swipe(page, 700, 500, 120, 160);
+    return rfVp.evaluate((el) => getComputedStyle(el).transform);
+  }, { timeout: 30_000 }).not.toBe(canvasBefore);
 
-  // Floorplan: the surface that zoomed instead of panning.
+  // Floorplan: the surface that zoomed instead of panning. Read the sheet's own transform
+  // rather than its box on screen — a panned sheet can leave the viewport, and then waiting
+  // for a bounding box just times out.
   await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
   const sheet = page.locator("div.bg-white.shadow-xl").first();
   await expect(sheet).toBeVisible();
-  const box0 = (await sheet.boundingBox())!;
-  await swipe(page, box0.x + box0.width / 2, box0.y + box0.height / 2, 140, 90);
-  const box1 = (await sheet.boundingBox())!;
+  const read = async () => sheet.evaluate((el) => {
+    const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+    return { x: m.e, y: m.f, zoom: m.a };
+  });
+  // fitView runs in an effect on mount; wait for it to settle before measuring.
+  await expect.poll(async () => (await read()).zoom, { timeout: 10_000 }).toBeGreaterThan(0);
+  const sheetBefore = await read();
 
-  // Panned, not zoomed: the sheet moved but kept its size.
-  expect(Math.abs(box1.x - box0.x)).toBeGreaterThan(20);
-  expect(Math.abs(box1.y - box0.y)).toBeGreaterThan(10);
-  expect(Math.abs(box1.width - box0.width)).toBeLessThan(2);
+  // Repeat the gesture until it lands. Under a loaded machine a single burst of wheel
+  // events can be swallowed; a pan that never happens still fails, which is the point.
+  const box = (await sheet.boundingBox())!;
+  await expect.poll(async () => {
+    await swipe(page, box.x + box.width / 2, box.y + box.height / 2, 140, 90);
+    return (await read()).x;
+  }, { timeout: 30_000 }).not.toBe(sheetBefore.x);
+  const sheetAfter = await read();
+  // Panned, not zoomed.
+  expect(Math.abs(sheetAfter.x - sheetBefore.x)).toBeGreaterThan(20);
+  expect(Math.abs(sheetAfter.y - sheetBefore.y)).toBeGreaterThan(10);
+  expect(sheetAfter.zoom).toBeCloseTo(sheetBefore.zoom, 5);
 });

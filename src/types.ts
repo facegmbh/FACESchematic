@@ -1001,6 +1001,22 @@ export interface FloorplanUnderlay {
   /** Real-world mm per underlay pixel, set by the calibration tool. Undefined until the
    *  user calibrates — measurements are unavailable rather than wrong. */
   mmPerPx?: number;
+  /** The source PDF's own layers (optional content groups) and whether each one was drawn
+   *  into the raster. Architects ship furniture, electrical and dimensions as layers; a
+   *  loudspeaker plan wants a quieter background than a cable plan. Kept so the toolbar can
+   *  show the choice and re-render it while the source file is still in memory — the raster
+   *  itself is already baked, so this is a record of what went in, not a live switch. */
+  pdfLayers?: PdfLayerChoice[];
+}
+
+/** One layer of the source PDF, as offered at import. */
+export interface PdfLayerChoice {
+  /** pdfjs optional-content-group id. Stable within one document. */
+  id: string;
+  /** The name the PDF gives it, e.g. "A-WALL" or "Möblierung". */
+  name: string;
+  /** Whether it was drawn into the raster. */
+  visible: boolean;
 }
 
 /** One legend entry: a color + shape that a set of symbols on the plan share.

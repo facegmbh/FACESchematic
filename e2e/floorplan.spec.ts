@@ -17,6 +17,10 @@ import { join } from "node:path";
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEklEQVR4nGP8//8/AzJgYkAFRPEBW1YDzUZ2eiIAAAAASUVORK5CYII=";
 
+// Rasterizing a plan in the browser is the slowest thing the suite does — under parallel
+// load the default timeout is not enough, and a timeout here says nothing about the app.
+test.slow();
+
 test("floorplan: import an underlay, place numbered symbols, calibrate", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
