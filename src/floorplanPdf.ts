@@ -26,6 +26,8 @@ import {
   LEGEND_COMPANY_LOGO_MM,
   symbolLabelAnchor,
   SYMBOL_INK,
+  symbolOutlineColor,
+  symbolOutlineWidth,
   rotateVec,
   rotatedSquareFactor,
   symbolGlyphOffset,
@@ -95,7 +97,7 @@ function imageFormat(dataUrl: string): "PNG" | "JPEG" {
  *  paper is the pictogram on screen. */
 function drawSymbol(
   doc: jsPDF,
-  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc">,
+  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "outlineColor" | "outlineWidthMm">,
   cx: number,
   cy: number,
   sizeMm: number,
@@ -107,6 +109,8 @@ function drawSymbol(
   const [r, g, b] = hexToRgb(group.color);
   const [cr, cg, cb] = hexToRgb(glyphColorOn(group.color));
   const [ir, ig, ib] = hexToRgb(SYMBOL_INK);
+  const [or_, og, ob] = hexToRgb(symbolOutlineColor(group));
+  const outlineMm = symbolOutlineWidth(group, sizeMm, sizeMm);
   const turn = (v: { x: number; y: number }) => rotateVec(v, rotationDeg);
 
   // An uploaded picture is the symbol: it replaces shape, color and glyph. A turned raster
@@ -137,9 +141,11 @@ function drawSymbol(
     let style: "F" | "S" | "FD";
     if (prim.fill === "color") {
       doc.setFillColor(r, g, b);
-      doc.setDrawColor(60, 60, 60);
-      doc.setLineWidth(0.2);
-      style = "FD";
+      if (outlineMm > 0) {
+        doc.setDrawColor(or_, og, ob);
+        doc.setLineWidth(outlineMm);
+      }
+      style = outlineMm > 0 ? "FD" : "F";
     } else if (prim.fill === "contrast") {
       doc.setFillColor(cr, cg, cb);
       doc.setDrawColor(ir, ig, ib);

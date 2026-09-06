@@ -395,6 +395,10 @@ export interface FloorplanGroupSpec {
   glyph?: string;
   /** Direction new symbols of this group face, in degrees clockwise. */
   rotationDeg?: number;
+  /** Outline around the symbol body, #rrggbb. */
+  outlineColor?: string;
+  /** Outline thickness in paper mm; 0 = no outline. */
+  outlineWidthMm?: number;
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
 }

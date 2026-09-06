@@ -29,7 +29,7 @@ import type { FloorplanSymbolShape,
   FloorplanUnderlay,
   TitleBlock,
 } from "./types";
-import { DEFAULT_FLOORPLAN_SCALE } from "./types";
+import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM } from "./types";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -435,6 +435,30 @@ export const FLOORPLAN_SYMBOL_SHAPE_LABELS: Record<FloorplanSymbolShape, string>
  *  rather than the glyph's contrast color, because a beam leaves the body and a white line
  *  on white paper is no line at all. */
 export const SYMBOL_INK = "#333333";
+
+/** Default outline around a symbol body, and its thickness as a fraction of the symbol
+ *  size. Screen and paper share both, so a symbol is outlined identically on either. */
+export const DEFAULT_SYMBOL_OUTLINE = "#3c3c3c";
+export const DEFAULT_SYMBOL_OUTLINE_RATIO = 0.04;
+
+/** Outline color of a group's symbol body. */
+export function symbolOutlineColor(group: Pick<FloorplanSymbolGroup, "outlineColor">): string {
+  return group.outlineColor || DEFAULT_SYMBOL_OUTLINE;
+}
+
+/** Outline thickness for a symbol drawn `drawSize` wide, where the page draws symbols
+ *  `symbolSizeMm` wide on paper. Callers on screen pass pixels and get pixels; the PDF
+ *  passes mm and gets mm, so a legend chip and the printed symbol keep the same
+ *  proportions. Returns 0 when the group asked for no outline. */
+export function symbolOutlineWidth(
+  group: Pick<FloorplanSymbolGroup, "outlineWidthMm">,
+  drawSize: number,
+  symbolSizeMm: number = DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
+): number {
+  const mm = group.outlineWidthMm ?? symbolSizeMm * DEFAULT_SYMBOL_OUTLINE_RATIO;
+  if (mm <= 0) return 0;
+  return symbolSizeMm > 0 ? (mm / symbolSizeMm) * drawSize : 0;
+}
 
 export type SymbolPrimitive =
   | { kind: "polygon"; points: Vec2[]; fill: "color" | "contrast" | "none" }
@@ -1013,13 +1037,15 @@ export function defaultSymbolColorFor(seed: string): string {
 
 /** The symbol a group for this model should start with: the library's own, completed
  *  with derived defaults where it says nothing. */
-export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph" | "imageSrc"> {
+export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph" | "imageSrc" | "outlineColor" | "outlineWidthMm"> {
   const seed = src.templateId ?? src.id ?? src.modelNumber ?? src.label ?? "";
   return {
     shape: src.planSymbol?.shape ?? defaultSymbolShapeFor(src.deviceType),
     color: src.planSymbol?.color ?? defaultSymbolColorFor(seed),
     glyph: src.planSymbol?.glyph?.trim().slice(0, 2) || undefined,
     imageSrc: src.planSymbol?.imageSrc || undefined,
+    outlineColor: src.planSymbol?.outlineColor || undefined,
+    outlineWidthMm: src.planSymbol?.outlineWidthMm,
   };
 }
 

@@ -967,6 +967,10 @@ export interface PlanSymbolSpec {
   /** An uploaded picture for this model, as a data URL. A group created from the model
    *  inherits it, and it wins over shape, color and glyph. */
   imageSrc?: string;
+  /** Outline around the symbol body, #rrggbb. */
+  outlineColor?: string;
+  /** Outline thickness in paper mm; 0 = none. */
+  outlineWidthMm?: number;
 }
 
 /** The architect's drawing a floorplan page is built on. Both PDF pages and images
@@ -1029,6 +1033,11 @@ export interface FloorplanSymbolGroup {
    *  so screen and PDF show the same pixels). Replaces shape, color and glyph — the
    *  picture is the symbol. */
   symbolImageSrc?: string;
+  /** Outline around the symbol body, #rrggbb. Undefined = the default dark ink. */
+  outlineColor?: string;
+  /** Outline thickness in paper mm. 0 = no outline at all; undefined = a line that scales
+   *  with the symbol size. */
+  outlineWidthMm?: number;
   /** Rotation new symbols of this group start at, in degrees clockwise. Lets a group of
    *  projectors default to the direction they face in the room. */
   rotationDeg?: number;

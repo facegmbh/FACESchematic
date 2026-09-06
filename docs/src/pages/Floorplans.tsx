@@ -139,6 +139,13 @@ export default function FloorplansPage() {
           editor → <em>Plan symbol</em>) and every plan that uses the model gets it.
         </li>
         <li>
+          <strong>Outline</strong> — the line around the symbol body, in color and in
+          thickness. The thickness is given in paper mm, so it prints the same weight whatever
+          the symbol size; <code>0</code> drops the outline entirely for a flat, filled symbol.
+          Left empty it scales with the symbol. The pictogram details (lens, cabinet diagonals,
+          screen face) keep their own dark ink so they read on white paper.
+        </li>
+        <li>
           <strong>Turn</strong> — a projector, a display or a camera faces a direction. Select
           symbols on the sheet and use <em>Symbol ⟲ ⟳</em> to turn the picture; the number beside
           it stays upright. <em>Apply to line / group</em> copies the turn to the rest, and a

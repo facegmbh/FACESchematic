@@ -36,7 +36,7 @@ import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from ".
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
-import { FLOORPLAN_SYMBOL_SHAPE_LABELS } from "../floorplan";
+import { DEFAULT_SYMBOL_OUTLINE, FLOORPLAN_SYMBOL_SHAPE_LABELS } from "../floorplan";
 import { importSymbolImage } from "../floorplanUnderlay";
 import type { AmplifierLoadSpec, SpeakerLoadSpec, FloorplanSymbolShape, PlanSymbolSpec } from "../types";
 import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
@@ -178,6 +178,8 @@ export default function DeviceEditor() {
   const [planColor, setPlanColor] = useState("");
   const [planGlyph, setPlanGlyph] = useState("");
   const [planImage, setPlanImage] = useState("");
+  const [planOutline, setPlanOutline] = useState("");
+  const [planOutlineWidth, setPlanOutlineWidth] = useState("");
   const planSymbolInputRef = useRef<HTMLInputElement>(null);
 
   // The model's floorplan symbol, saved with the template. An uploaded picture alone is
@@ -185,13 +187,16 @@ export default function DeviceEditor() {
   // is ever removed.
   const planSymbolSpec = useMemo<PlanSymbolSpec | undefined>(() => {
     if (!planShape && !planImage) return undefined;
+    const width = planOutlineWidth.trim() === "" ? undefined : Math.max(0, Number(planOutlineWidth));
     return {
       shape: planShape || "circle",
       ...(planColor ? { color: planColor } : {}),
       ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}),
       ...(planImage ? { imageSrc: planImage } : {}),
+      ...(planOutline ? { outlineColor: planOutline } : {}),
+      ...(width !== undefined && Number.isFinite(width) ? { outlineWidthMm: width } : {}),
     };
-  }, [planShape, planColor, planGlyph, planImage]);
+  }, [planShape, planColor, planGlyph, planImage, planOutline, planOutlineWidth]);
 
   const handlePlanSymbolPicked = async (file: File | undefined) => {
     if (!file) return;
@@ -309,6 +314,8 @@ export default function DeviceEditor() {
     setPlanColor(ps?.color ?? "");
     setPlanGlyph(ps?.glyph ?? "");
     setPlanImage(ps?.imageSrc ?? "");
+    setPlanOutline(ps?.outlineColor ?? "");
+    setPlanOutlineWidth(ps?.outlineWidthMm === undefined ? "" : String(ps.outlineWidthMm));
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
@@ -853,6 +860,8 @@ export default function DeviceEditor() {
       setPlanColor(tpl.planSymbol?.color ?? "");
       setPlanGlyph(tpl.planSymbol?.glyph ?? "");
       setPlanImage(tpl.planSymbol?.imageSrc ?? "");
+      setPlanOutline(tpl.planSymbol?.outlineColor ?? "");
+      setPlanOutlineWidth(tpl.planSymbol?.outlineWidthMm === undefined ? "" : String(tpl.planSymbol.outlineWidthMm));
       setCategory(tpl.category ?? "");
       setHostname(tpl.hostname ?? "");
       setPowerDrawW(tpl.powerDrawW);
@@ -1240,6 +1249,30 @@ export default function DeviceEditor() {
                   placeholder="S"
                   title="Up to two characters drawn inside the symbol"
                 />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5 text-[var(--color-text-muted)]">
+                <span className="shrink-0 text-[10px]">Outline</span>
+                <input
+                  type="color"
+                  className="w-8 h-7 border border-[var(--color-border)] rounded cursor-pointer disabled:opacity-40"
+                  value={planOutline || DEFAULT_SYMBOL_OUTLINE}
+                  disabled={!planShape && !planImage}
+                  onChange={(e) => setPlanOutline(e.target.value)}
+                  title="Outline color around the symbol body on floorplans"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  className="w-16 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 disabled:opacity-40"
+                  value={planOutlineWidth}
+                  disabled={!planShape && !planImage}
+                  onChange={(e) => setPlanOutlineWidth(e.target.value)}
+                  placeholder="auto"
+                  title="Outline thickness on paper in mm. 0 draws no outline; empty scales with the symbol size."
+                />
+                <span className="text-[10px]">mm</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1.5">
                 {planImage && (

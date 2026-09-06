@@ -397,6 +397,8 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
   if (spec.imageCaption !== undefined) patch.imageCaption = String(spec.imageCaption) || undefined;
   if (spec.glyph !== undefined) patch.glyph = String(spec.glyph).trim().slice(0, 2) || undefined;
   if (spec.rotationDeg !== undefined) patch.rotationDeg = Number(spec.rotationDeg) || undefined;
+  if (spec.outlineColor !== undefined) patch.outlineColor = String(spec.outlineColor).trim() || undefined;
+  if (spec.outlineWidthMm !== undefined) patch.outlineWidthMm = Math.max(0, Number(spec.outlineWidthMm));
   if (spec.imageUrl !== undefined) {
     const url = String(spec.imageUrl).trim();
     if (url && !/^(https?:|data:image\/)/i.test(url)) throw new CommandError("imageUrl must be an https URL (or a data:image URL).");
@@ -437,6 +439,7 @@ function floorplanSummary(page: FloorplanPage) {
       labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
       imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption, glyph: g.glyph,
       hasUploadedSymbol: Boolean(g.symbolImageSrc), rotationDeg: g.rotationDeg,
+      outlineColor: g.outlineColor, outlineWidthMm: g.outlineWidthMm,
       symbolCount: counts.get(g.id) ?? 0,
     })),
     symbols: page.symbols.map((sym) => ({
@@ -1256,6 +1259,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       if (patch.color === undefined) patch.color = symbol.color;
       if (patch.glyph === undefined && symbol.glyph) patch.glyph = symbol.glyph;
       if (patch.symbolImageSrc === undefined && symbol.imageSrc) patch.symbolImageSrc = symbol.imageSrc;
+      if (patch.outlineColor === undefined && symbol.outlineColor) patch.outlineColor = symbol.outlineColor;
+      if (patch.outlineWidthMm === undefined && symbol.outlineWidthMm !== undefined) patch.outlineWidthMm = symbol.outlineWidthMm;
     }
     const groupId = st().addFloorplanGroup(page.id, patch);
     const note = template ? legendInstallNoteFor(template) : undefined;

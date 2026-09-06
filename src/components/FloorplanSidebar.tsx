@@ -173,7 +173,7 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
                 }}
                 title={device ? `${sym.label} · ${device}` : sym.label}
               >
-                {group && <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className="shrink-0" rotationDeg={sym.rotationDeg} />}
+                {group && <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className="shrink-0" rotationDeg={sym.rotationDeg} symbolSizeMm={page.symbolSizeMm} />}
                 <span className="shrink-0 font-semibold text-[var(--color-text)]">{sym.label}</span>
                 <span className="truncate text-[var(--color-text-muted)]">{device ?? group?.label ?? ""}</span>
               </button>

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { DEFAULT_LEGEND_LINES_TITLE, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
@@ -199,7 +199,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {/* What it is */}
               <div className="flex items-center gap-2">
-                {group && <FloorplanSymbolSvg group={group} sizePx={24} paddingPx={2} rotationDeg={first.rotationDeg} className="shrink-0" />}
+                {group && <FloorplanSymbolSvg group={group} sizePx={24} paddingPx={2} rotationDeg={first.rotationDeg} symbolSizeMm={page.symbolSizeMm} className="shrink-0" />}
                 <div className="min-w-0">
                   <div className="font-semibold text-[var(--color-text)] truncate">{many ? `${first.label} \u2026` : first.label}</div>
                   <div className="text-[var(--color-text-muted)] truncate" style={{ fontSize: 10 }}>
@@ -391,7 +391,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   onClick={() => onActiveGroupChange(group.id)}
                   title="Make this the active group for placing symbols"
                 >
-                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className="shrink-0" />
+                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} symbolSizeMm={page.symbolSizeMm} className="shrink-0" />
                   <span className="truncate text-[var(--color-text)]">{group.label}</span>
                 </button>
                 <span className="text-[var(--color-text-muted)] shrink-0" title="Symbols on this plan">
@@ -445,6 +445,37 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       onChange={(e) => updateFloorplanGroup(page.id, group.id, { glyph: e.target.value.trim() || undefined })}
                       title={group.symbolImageSrc ? "An uploaded symbol carries no glyph — the picture is the symbol" : "Up to two characters drawn inside the symbol"}
                     />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                    <span className="shrink-0" style={{ fontSize: 10 }}>Outline</span>
+                    <input
+                      type="color"
+                      value={group.outlineColor || DEFAULT_SYMBOL_OUTLINE}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { outlineColor: e.target.value })}
+                      className="w-7 h-6 shrink-0 border border-[var(--color-border)] rounded cursor-pointer disabled:opacity-40"
+                      disabled={(group.outlineWidthMm ?? 1) <= 0}
+                      title="Outline color around the symbol body"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={group.outlineWidthMm ?? Math.round(page.symbolSizeMm * DEFAULT_SYMBOL_OUTLINE_RATIO * 100) / 100}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { outlineWidthMm: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value)) })}
+                      title="Outline thickness on paper in mm. 0 draws no outline."
+                    />
+                    <span style={{ fontSize: 10 }}>mm</span>
+                    {(group.outlineColor !== undefined || group.outlineWidthMm !== undefined) && (
+                      <button
+                        className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-emerald-700"
+                        onClick={() => updateFloorplanGroup(page.id, group.id, { outlineColor: undefined, outlineWidthMm: undefined })}
+                        title="Back to the default outline"
+                      >
+                        ↺
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button

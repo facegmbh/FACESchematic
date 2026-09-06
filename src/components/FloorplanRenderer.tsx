@@ -94,8 +94,8 @@ type DragState =
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
-function SymbolGlyph({ group, sizePx, rotationDeg }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc">; sizePx: number; rotationDeg?: number }) {
-  return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} />;
+function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
+  return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} symbolSizeMm={symbolSizeMm} />;
 }
 
 export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine, selection, onSelectionChange }: Props) {
@@ -752,7 +752,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   }}
                   title={[symbol.label, deviceLabel, symbol.notes].filter(Boolean).join(" · ")}
                 >
-                  <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} />
+                  <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} symbolSizeMm={page.symbolSizeMm} />
                   {isSelected && (
                     <div
                       className="absolute pointer-events-none border-2 border-blue-500 rounded-sm"
@@ -890,7 +890,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     className="flex items-center"
                     style={{ height: mmToPx(page.legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM), gap: mmToPx(2) }}
                   >
-                    <SymbolGlyph group={row} sizePx={mmToPx(page.symbolSizeMm)} />
+                    <SymbolGlyph group={row} sizePx={mmToPx(page.symbolSizeMm)} symbolSizeMm={page.symbolSizeMm} />
                     <div className="flex-1 min-w-0">
                       <div style={{ fontSize: mmToPx(3.2), fontWeight: 700 }}>{row.label}</div>
                       {row.description && (

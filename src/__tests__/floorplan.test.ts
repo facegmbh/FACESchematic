@@ -38,6 +38,10 @@ import {
   symbolPrimitives,
   rotateVec,
   rotatedSquareFactor,
+  symbolOutlineColor,
+  symbolOutlineWidth,
+  DEFAULT_SYMBOL_OUTLINE,
+  DEFAULT_SYMBOL_OUTLINE_RATIO,
   FLOORPLAN_SYMBOL_SHAPE_LABELS,
   formatSymbolLabel,
   nextSeqInLine,
@@ -669,6 +673,26 @@ describe("plan symbols from the library", () => {
     expect(rotatedSquareFactor(0)).toBeCloseTo(1, 6);
     expect(rotatedSquareFactor(90)).toBeCloseTo(1, 6);
     expect(rotatedSquareFactor(45)).toBeCloseTo(Math.SQRT2, 6);
+  });
+
+  it("scales the outline with the drawn size and switches it off at zero", () => {
+    // Default: a fraction of the symbol size, so a 12 px chip and a 6 mm print match.
+    expect(symbolOutlineWidth({}, 6, 6)).toBeCloseTo(6 * DEFAULT_SYMBOL_OUTLINE_RATIO, 6);
+    expect(symbolOutlineWidth({}, 12, 6)).toBeCloseTo(12 * DEFAULT_SYMBOL_OUTLINE_RATIO, 6);
+    // An explicit width is given in paper mm and converted to the caller's unit.
+    expect(symbolOutlineWidth({ outlineWidthMm: 0.5 }, 6, 6)).toBeCloseTo(0.5, 6);
+    expect(symbolOutlineWidth({ outlineWidthMm: 0.5 }, 60, 6)).toBeCloseTo(5, 6);
+    // Zero means no outline at all, on screen and on paper alike.
+    expect(symbolOutlineWidth({ outlineWidthMm: 0 }, 60, 6)).toBe(0);
+    expect(symbolOutlineColor({})).toBe(DEFAULT_SYMBOL_OUTLINE);
+    expect(symbolOutlineColor({ outlineColor: "#ff0000" })).toBe("#ff0000");
+  });
+
+  it("carries a model's outline onto the group", () => {
+    const sym = planSymbolFor({ planSymbol: { shape: "square", outlineColor: "#112233", outlineWidthMm: 0 }, templateId: "t1" });
+    expect(sym.outlineColor).toBe("#112233");
+    expect(sym.outlineWidthMm).toBe(0);
+    expect(planSymbolFor({ deviceType: "speaker", templateId: "t1" }).outlineColor).toBeUndefined();
   });
 
   it("picks a readable glyph color", () => {
