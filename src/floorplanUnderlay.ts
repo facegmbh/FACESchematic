@@ -7,7 +7,7 @@
  * pdfjs lazily so the main bundle is untouched for everyone who never opens a plan.
  */
 
-import { PT_TO_MM } from "./floorplan";
+import { PT_TO_MM, rotatedSquareFactor } from "./floorplan";
 
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
 export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg";
@@ -201,6 +201,56 @@ export async function importLegendImage(file: File, maxLongEdgePx = 320): Promis
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not create a canvas to resize the image.");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
+}
+
+/** Import an uploaded picture as a plan symbol. Always rasterized to a square-fitting PNG
+ *  (transparent background preserved), so an SVG, a photo and a logo all end up as the
+ *  same kind of data URL — the one jsPDF can embed and the sheet can rotate. */
+export async function importSymbolImage(file: File, maxEdgePx = 256): Promise<string> {
+  if (!file.type.startsWith("image/") && !["png", "jpg", "jpeg", "webp", "svg"].includes(extensionOf(file.name))) {
+    throw new Error("Pick an image file for the symbol.");
+  }
+  const dataUrl = await readAsDataUrl(file);
+  const img = await loadImageElement(dataUrl);
+  // An SVG that carries only a viewBox reports no intrinsic size in Chromium; such a
+  // picture fills the square rather than being rejected.
+  const naturalW = img.naturalWidth || img.width || maxEdgePx;
+  const naturalH = img.naturalHeight || img.height || maxEdgePx;
+  // Square canvas with the picture contained and centered: a symbol slot is square, so a
+  // square source maps onto it 1:1 and rotation about the center needs no re-fitting.
+  const scale = Math.min(maxEdgePx / Math.max(naturalW, naturalH), 1);
+  const w = Math.max(1, Math.round(naturalW * scale));
+  const h = Math.max(1, Math.round(naturalH * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = maxEdgePx;
+  canvas.height = maxEdgePx;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create a canvas to resize the image.");
+  ctx.drawImage(img, (maxEdgePx - w) / 2, (maxEdgePx - h) / 2, w, h);
+  return canvas.toDataURL("image/png");
+}
+
+
+/** The same picture turned by `deg` clockwise, on a square canvas that fits the turned
+ *  image. The PDF export needs real rotated pixels — jsPDF cannot rotate an image the way
+ *  an SVG transform does on screen. */
+export async function rotatedImageDataUrl(src: string, deg: number): Promise<string> {
+  const norm = ((deg % 360) + 360) % 360;
+  if (norm === 0) return src;
+  const img = await loadImageElement(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const rad = (norm * Math.PI) / 180;
+  const side = Math.max(1, Math.round(Math.max(w, h) * rotatedSquareFactor(norm)));
+  const canvas = document.createElement("canvas");
+  canvas.width = side;
+  canvas.height = side;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create a canvas to rotate the image.");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(img, -w / 2, -h / 2);
   return canvas.toDataURL("image/png");
 }
 

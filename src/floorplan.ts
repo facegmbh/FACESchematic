@@ -12,7 +12,7 @@
  */
 
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
-import type {
+import type { FloorplanSymbolShape,
   CompanyProfile,
   FloorplanKind,
   PlanSymbolSpec,
@@ -274,6 +274,8 @@ export interface LegendRow {
   imageUrl?: string;
   imageCaption?: string;
   glyph?: string;
+  /** The group's uploaded symbol picture, so the legend shows what the plan shows. */
+  symbolImageSrc?: string;
   /** How many symbols of this group sit on the plan. */
   count: number;
 }
@@ -303,6 +305,7 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
       imageUrl: g.imageUrl,
       imageCaption: g.imageCaption,
       glyph: g.glyph,
+      symbolImageSrc: g.symbolImageSrc,
       count: counts.get(g.id) ?? 0,
     }));
 }
@@ -408,6 +411,110 @@ export function symbolPolygon(shape: FloorplanSymbolGroup["shape"], sizeMm: numb
     }
     default:
       return [];
+  }
+}
+
+/** Names for the shape pickers (device editor, group editor). */
+export const FLOORPLAN_SYMBOL_SHAPE_LABELS: Record<FloorplanSymbolShape, string> = {
+  circle: "Circle",
+  square: "Square",
+  triangle: "Triangle",
+  diamond: "Diamond",
+  projector: "Projector (top view)",
+  rack: "Rack (top view)",
+  display: "Display (top view)",
+  camera: "Camera (top view)",
+};
+
+/** One stroke of a symbol picture, centered on the origin. `color` fills with the group
+ *  color under a dark outline; `contrast` fills with the glyph color (black or white,
+ *  whichever reads on the group color) and has no outline; `none` is an outline only,
+ *  drawn in the contrast color — like lines. Every renderer (sheet, sidebar chip, PDF)
+ *  walks the same list so a projector looks like the same projector everywhere. */
+/** Ink for a pictogram's details — lens, beam, cabinet diagonals, screen face. Fixed dark
+ *  rather than the glyph's contrast color, because a beam leaves the body and a white line
+ *  on white paper is no line at all. */
+export const SYMBOL_INK = "#333333";
+
+export type SymbolPrimitive =
+  | { kind: "polygon"; points: Vec2[]; fill: "color" | "contrast" | "none" }
+  | { kind: "circle"; center: Vec2; r: number; fill: "color" | "contrast" | "none" }
+  | { kind: "line"; from: Vec2; to: Vec2 };
+
+function rectPrimitive(x0: number, y0: number, x1: number, y1: number, fill: "color" | "contrast" | "none"): SymbolPrimitive {
+  return { kind: "polygon", points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], fill };
+}
+
+/** The picture of a symbol shape, fitted into a sizeMm square around the origin. The
+ *  abstract shapes are one filled outline; the pictograms are top views: a projector's
+ *  body with lens and beam, a rack as the cabinet rectangle with the crossed diagonals
+ *  architects use for cabinets, a display as a thin bar with its mount, a camera as body
+ *  and lens cone. */
+export function symbolPrimitives(shape: FloorplanSymbolShape, sizeMm: number): SymbolPrimitive[] {
+  const r = sizeMm / 2;
+  switch (shape) {
+    case "circle":
+      return [{ kind: "circle", center: { x: 0, y: 0 }, r, fill: "color" }];
+    case "square":
+    case "diamond":
+    case "triangle":
+      return [{ kind: "polygon", points: symbolPolygon(shape, sizeMm), fill: "color" }];
+    case "projector":
+      return [
+        rectPrimitive(-r, -0.55 * r, 0.45 * r, 0.55 * r, "color"),
+        { kind: "circle", center: { x: 0.5 * r, y: 0 }, r: 0.3 * r, fill: "contrast" },
+        { kind: "line", from: { x: 0.8 * r, y: -0.1 * r }, to: { x: r, y: -0.55 * r } },
+        { kind: "line", from: { x: 0.8 * r, y: 0.1 * r }, to: { x: r, y: 0.55 * r } },
+      ];
+    case "rack":
+      return [
+        rectPrimitive(-0.6 * r, -0.85 * r, 0.6 * r, 0.85 * r, "color"),
+        rectPrimitive(-0.42 * r, -0.67 * r, 0.42 * r, 0.67 * r, "none"),
+        { kind: "line", from: { x: -0.42 * r, y: -0.67 * r }, to: { x: 0.42 * r, y: 0.67 * r } },
+        { kind: "line", from: { x: 0.42 * r, y: -0.67 * r }, to: { x: -0.42 * r, y: 0.67 * r } },
+      ];
+    case "display":
+      return [
+        rectPrimitive(-0.15 * r, 0.2 * r, 0.15 * r, 0.5 * r, "color"),
+        rectPrimitive(-r, -0.22 * r, r, 0.22 * r, "color"),
+        { kind: "line", from: { x: -0.85 * r, y: -0.08 * r }, to: { x: 0.85 * r, y: -0.08 * r } },
+      ];
+    case "camera":
+      return [
+        rectPrimitive(-0.9 * r, -0.42 * r, 0.15 * r, 0.42 * r, "color"),
+        { kind: "polygon", points: [{ x: 0.15 * r, y: -0.22 * r }, { x: 0.9 * r, y: -0.5 * r }, { x: 0.9 * r, y: 0.5 * r }, { x: 0.15 * r, y: 0.22 * r }], fill: "color" },
+        { kind: "circle", center: { x: -0.38 * r, y: 0 }, r: 0.16 * r, fill: "contrast" },
+      ];
+    default:
+      return [{ kind: "circle", center: { x: 0, y: 0 }, r, fill: "color" }];
+  }
+}
+
+/** Where the glyph sits relative to the symbol center, so it lands on the body of a
+ *  pictogram (left of a projector's lens) and on the optical center of a triangle. */
+export function symbolGlyphOffset(shape: FloorplanSymbolShape, sizeMm: number): Vec2 {
+  switch (shape) {
+    case "triangle": return { x: 0, y: sizeMm * 0.12 };
+    case "projector": return { x: -sizeMm * 0.16, y: 0 };
+    case "camera": return { x: -sizeMm * 0.06, y: 0 };
+    case "display": return { x: 0, y: -sizeMm * 0.01 };
+    default: return { x: 0, y: 0 };
+  }
+}
+
+/** Glyph font size as a fraction of the symbol size. Pictograms have less body to write on
+ *  than a full circle, so their glyph shrinks to stay clear of lens, diagonals and beam. */
+export function symbolGlyphScale(shape: FloorplanSymbolShape, glyph: string): number {
+  const twoChars = glyph.length > 1;
+  switch (shape) {
+    case "projector":
+    case "rack":
+    case "camera":
+      return twoChars ? 0.3 : 0.4;
+    case "display":
+      return twoChars ? 0.26 : 0.34;
+    default:
+      return twoChars ? 0.42 : 0.55;
   }
 }
 
@@ -883,12 +990,16 @@ export function legendCompanyHeightMm(p: CompanyProfile): number {
 
 /** Shape by device type when a model has no symbol of its own: what installers expect to
  *  read at a glance — round for loudspeakers, square for subs, triangles for microphones,
- *  diamonds for video. */
+ *  pictograms for projectors, cameras, racks and displays, diamonds for other video. */
 export function defaultSymbolShapeFor(deviceType: string | undefined): FloorplanSymbolGroup["shape"] {
   const t = (deviceType ?? "").toLowerCase();
   if (/sub/.test(t)) return "square";
   if (/mic/.test(t)) return "triangle";
-  if (/display|monitor|projector|camera|screen|video/.test(t)) return "diamond";
+  if (/projector/.test(t)) return "projector";
+  if (/camera/.test(t)) return "camera";
+  if (/rack/.test(t)) return "rack";
+  if (/display|screen|video-wall|^monitor$|^tv$/.test(t)) return "display";
+  if (/monitor|video/.test(t)) return "diamond";
   return "circle";
 }
 
@@ -902,13 +1013,31 @@ export function defaultSymbolColorFor(seed: string): string {
 
 /** The symbol a group for this model should start with: the library's own, completed
  *  with derived defaults where it says nothing. */
-export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph"> {
+export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph" | "imageSrc"> {
   const seed = src.templateId ?? src.id ?? src.modelNumber ?? src.label ?? "";
   return {
     shape: src.planSymbol?.shape ?? defaultSymbolShapeFor(src.deviceType),
     color: src.planSymbol?.color ?? defaultSymbolColorFor(seed),
     glyph: src.planSymbol?.glyph?.trim().slice(0, 2) || undefined,
+    imageSrc: src.planSymbol?.imageSrc || undefined,
   };
+}
+
+/** How much wider a square grows when turned by `deg` — the factor both the rotated raster
+ *  and its placement on the sheet use, so a turned picture keeps its scale. */
+/** A point turned `deg` clockwise about the origin. Screen and legend rotate with a CSS /
+ *  SVG transform; the PDF has no transform stack for filled paths, so it turns the points
+ *  through here instead — both end up drawing the same picture. */
+export function rotatedSquareFactor(deg: number): number {
+  const rad = (deg * Math.PI) / 180;
+  return Math.abs(Math.cos(rad)) + Math.abs(Math.sin(rad));
+}
+
+export function rotateVec(v: Vec2, deg: number): Vec2 {
+  if (!deg) return v;
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos };
 }
 
 /** Black or white, whichever reads on the given fill. */

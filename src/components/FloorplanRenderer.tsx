@@ -18,7 +18,6 @@ import {
   companyProfileLines,
   hasCompanyProfile,
   planSymbolFor,
-  glyphColorOn,
   labelPlacementFor,
   type LabelPosition,
   LEGEND_COMPANY_GAP_MM,
@@ -29,7 +28,6 @@ import {
   MASK_MIN_SIZE_MM,
   sheetSizeMm,
   symbolLabelAnchor,
-  symbolPolygon,
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
   LEGEND_NOTE_LINE_MM,
@@ -45,6 +43,7 @@ import {
 } from "../floorplan";
 import { TITLE_BLOCK_HEIGHT_IN } from "../printConfig";
 import TitleBlockSVG from "./TitleBlockSVG";
+import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
@@ -93,35 +92,8 @@ type DragState =
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
-function SymbolGlyph({ group, sizePx }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph">; sizePx: number }) {
-  const half = sizePx / 2;
-  const pts = symbolPolygon(group.shape, sizePx)
-    .map((p) => `${p.x + half},${p.y + half}`)
-    .join(" ");
-  const glyph = group.glyph?.trim().slice(0, 2);
-  return (
-    <svg width={sizePx} height={sizePx} style={{ display: "block", overflow: "visible" }}>
-      {group.shape === "circle" ? (
-        <circle cx={half} cy={half} r={half} fill={group.color} stroke="#00000066" strokeWidth={Math.max(0.5, sizePx * 0.04)} />
-      ) : (
-        <polygon points={pts} fill={group.color} stroke="#00000066" strokeWidth={Math.max(0.5, sizePx * 0.04)} />
-      )}
-      {glyph && (
-        <text
-          x={half}
-          y={group.shape === "triangle" ? half + sizePx * 0.12 : half}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={sizePx * (glyph.length > 1 ? 0.42 : 0.55)}
-          fontWeight={700}
-          fill={glyphColorOn(group.color)}
-          style={{ pointerEvents: "none" }}
-        >
-          {glyph}
-        </text>
-      )}
-    </svg>
-  );
+function SymbolGlyph({ group, sizePx, rotationDeg }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc">; sizePx: number; rotationDeg?: number }) {
+  return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} />;
 }
 
 export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine }: Props) {
@@ -342,6 +314,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       shape: symbol.shape,
       color: symbol.color,
       glyph: symbol.glyph,
+      symbolImageSrc: symbol.imageSrc,
       label: data.model ?? data.label,
       description: legendDescriptionFor(source),
       templateId: data.templateId,
@@ -778,7 +751,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   }}
                   title={[symbol.label, deviceLabel, symbol.notes].filter(Boolean).join(" · ")}
                 >
-                  <SymbolGlyph group={group} sizePx={sizePx} />
+                  <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} />
                   {isSelected && (
                     <div
                       className="absolute pointer-events-none border-2 border-blue-500 rounded-sm"
@@ -1175,6 +1148,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           updateFloorplanSymbols(page.id, targets, labelPlacementFor(pos, page.symbolSizeMm, page.labelSizeMm));
         const rotate = (deg: number, targets: string[]) => updateFloorplanSymbols(page.id, targets, { labelRotationDeg: deg });
         const rot = first.labelRotationDeg ?? 0;
+        const turn = (deg: number, targets: string[]) => updateFloorplanSymbols(page.id, targets, { rotationDeg: deg });
+        const symRot = first.rotationDeg ?? 0;
         const arrows: Record<LabelPosition, string> = { nw: "↖", n: "↑", ne: "↗", w: "←", e: "→", sw: "↙", s: "↓", se: "↘" };
         return (
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/95 border border-neutral-300 rounded shadow px-2 py-1 text-xs select-none" data-print-hide>
@@ -1193,7 +1168,20 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               ))}
             </div>
             <div className="border-l border-neutral-200 h-4" />
-            <span className="text-neutral-500">Rotate</span>
+            <span className="text-neutral-500">Symbol</span>
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => turn(symRot - 45, ids)} title="Turn the symbol 45° counter-clockwise">⟲</button>
+            <input
+              type="number"
+              step={15}
+              className="w-14 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400"
+              value={symRot}
+              onChange={(e) => turn(Number(e.target.value) || 0, ids)}
+              onKeyDown={(e) => e.stopPropagation()}
+              title="Symbol rotation in degrees (clockwise) — the number stays upright"
+            />
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => turn(symRot + 45, ids)} title="Turn the symbol 45° clockwise">⟳</button>
+            <div className="border-l border-neutral-200 h-4" />
+            <span className="text-neutral-500">Label</span>
             <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot - 45, ids)} title="Rotate label 45° counter-clockwise">⟲</button>
             <input
               type="number"
@@ -1205,7 +1193,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               title="Label rotation in degrees (clockwise)"
             />
             <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot + 45, ids)} title="Rotate label 45° clockwise">⟳</button>
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer text-neutral-500" onClick={() => updateFloorplanSymbols(page.id, ids, { labelRotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })} title="Reset label placement">↺</button>
+            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer text-neutral-500" onClick={() => updateFloorplanSymbols(page.id, ids, { labelRotationDeg: 0, rotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })} title="Reset symbol turn and label placement">↺</button>
             {(lineIds.length > 1 || groupIds.length > 1) && (
               <>
                 <div className="border-l border-neutral-200 h-4" />
@@ -1213,7 +1201,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 {lineIds.length > 1 && (
                   <button
                     className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
-                    onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg })}
+                    onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
                     title={`Copy this label placement to every speaker on line ${first.lineNo}`}
                   >
                     line {first.lineNo}
@@ -1222,7 +1210,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 {groupIds.length > 1 && (
                   <button
                     className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
-                    onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg })}
+                    onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
                     title="Copy this label placement to every symbol of the group"
                   >
                     group

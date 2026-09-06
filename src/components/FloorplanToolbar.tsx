@@ -127,11 +127,11 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 bg-emerald-50 border-b border-emerald-200 text-xs flex-wrap" data-print-hide>
+    <div className="flex items-center gap-3 px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)] text-xs flex-wrap text-[var(--color-text)]" data-print-hide>
       {/* Plan type */}
-      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Type</label>
+      <label className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>Type</label>
       <select
-        className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+        className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
         value={page.kind ?? "generic"}
         onChange={(e) => {
           const kind = e.target.value as FloorplanKind;
@@ -146,12 +146,12 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
         <option value="loudspeaker">Loudspeaker plan</option>
       </select>
 
-      <div className="border-l border-neutral-200 h-4" />
+      <div className="border-l border-[var(--color-border)] h-4" />
 
       {/* Paper size */}
-      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Paper</label>
+      <label className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>Paper</label>
       <select
-        className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+        className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
         value={page.paperId}
         onChange={(e) => setFloorplanPaper(page.id, e.target.value, page.orientation, page.customWidthIn, page.customHeightIn)}
       >
@@ -168,10 +168,10 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             step={0.01}
             value={page.customWidthIn ?? 24}
             onChange={(e) => setFloorplanPaper(page.id, "custom", page.orientation, Number(e.target.value), page.customHeightIn ?? 36)}
-            className="w-16 bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+            className="w-16 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
             title="Width (in)"
           />
-          <span className="text-neutral-400">×</span>
+          <span className="text-[var(--color-text-muted)]">×</span>
           <input
             type="number"
             min={1}
@@ -179,26 +179,26 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             step={0.01}
             value={page.customHeightIn ?? 36}
             onChange={(e) => setFloorplanPaper(page.id, "custom", page.orientation, page.customWidthIn ?? 24, Number(e.target.value))}
-            className="w-16 bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+            className="w-16 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
             title="Height (in)"
           />
-          <span className="text-neutral-500" style={{ fontSize: 9 }}>in</span>
+          <span className="text-[var(--color-text-muted)]" style={{ fontSize: 9 }}>in</span>
         </>
       )}
 
       <button
-        className={`px-2 py-0.5 rounded border text-xs transition-colors ${page.orientation === "landscape" ? "bg-emerald-50 border-emerald-400 text-emerald-700" : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-400"}`}
+        className={`px-2 py-0.5 rounded border text-xs transition-colors ${page.orientation === "landscape" ? "bg-emerald-500/10 border-emerald-400 text-emerald-700" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-border)]"}`}
         onClick={() => setFloorplanPaper(page.id, page.paperId, page.orientation === "landscape" ? "portrait" : "landscape", page.customWidthIn, page.customHeightIn)}
       >
         {page.orientation === "landscape" ? "↔ Landscape" : "↕ Portrait"}
       </button>
 
-      <div className="border-l border-neutral-200 h-4" />
+      <div className="border-l border-[var(--color-border)] h-4" />
 
       {/* Drawing scale */}
-      <label className="text-neutral-500 uppercase tracking-wider" style={{ fontSize: 9 }}>Scale</label>
+      <label className="text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>Scale</label>
       <select
-        className="bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+        className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
         value={FLOORPLAN_SCALES.includes(page.scaleDenominator) ? String(page.scaleDenominator) : "custom"}
         onChange={(e) => {
           if (e.target.value === "custom") return;
@@ -221,11 +221,11 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           const v = Number(e.target.value);
           if (v > 0) setFloorplanScale(page.id, v);
         }}
-        className="w-16 bg-white border border-neutral-200 rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
+        className="w-16 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-0.5 text-xs outline-none focus:border-emerald-400"
         title="Custom scale denominator"
       />
 
-      <div className="border-l border-neutral-200 h-4" />
+      <div className="border-l border-[var(--color-border)] h-4" />
 
       {/* Underlay */}
       <input
@@ -236,7 +236,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
         onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
       />
       <button
-        className="px-2 py-0.5 rounded border border-neutral-200 bg-white text-neutral-700 hover:border-emerald-400 hover:text-emerald-700 transition-colors disabled:opacity-50"
+        className="px-2 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700 transition-colors disabled:opacity-50"
         disabled={importing}
         onClick={() => fileInputRef.current?.click()}
         title="Import an architect's drawing (PDF or image) as the underlay"
@@ -246,11 +246,11 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
 
       {underlay && (
         <>
-          <span className="text-neutral-500 truncate max-w-[160px]" title={underlay.sourceName}>
+          <span className="text-[var(--color-text-muted)] truncate max-w-[160px]" title={underlay.sourceName}>
             {underlay.sourceName}
           </span>
           {underlay.kind === "pdf" && (underlay.pageCount ?? 1) > 1 && (
-            <label className="flex items-center gap-1 text-neutral-600">
+            <label className="flex items-center gap-1 text-[var(--color-text)]">
               Page
               <input
                 type="number"
@@ -258,12 +258,12 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
                 max={underlay.pageCount}
                 value={underlay.pageNumber ?? 1}
                 onChange={(e) => handlePdfPageChange(Number(e.target.value))}
-                className="w-12 bg-white border border-neutral-200 rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
+                className="w-12 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
               />
-              <span className="text-neutral-400">/ {underlay.pageCount}</span>
+              <span className="text-[var(--color-text-muted)]">/ {underlay.pageCount}</span>
             </label>
           )}
-          <label className="flex items-center gap-1 text-neutral-600" title="Underlay opacity">
+          <label className="flex items-center gap-1 text-[var(--color-text)]" title="Underlay opacity">
             <span style={{ fontSize: 9 }}>OPACITY</span>
             <input
               type="range"
@@ -276,31 +276,31 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
             />
           </label>
           <button
-            className={`px-2 py-0.5 rounded border text-xs transition-colors ${underlay.locked ? "bg-emerald-50 border-emerald-400 text-emerald-700" : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-400"}`}
+            className={`px-2 py-0.5 rounded border text-xs transition-colors ${underlay.locked ? "bg-emerald-500/10 border-emerald-400 text-emerald-700" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-border)]"}`}
             onClick={() => updateFloorplanUnderlay(page.id, { locked: !underlay.locked })}
             title={underlay.locked ? "Underlay is locked — click to unlock" : "Lock the underlay so it can't be dragged while placing symbols"}
           >
             {underlay.locked ? "🔒 Locked" : "🔓 Unlocked"}
           </button>
           <button
-            className="px-2 py-0.5 rounded border border-neutral-200 bg-white text-neutral-600 hover:border-emerald-400 hover:text-emerald-700 transition-colors"
+            className="px-2 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700 transition-colors"
             onClick={() => updateFloorplanUnderlay(page.id, fillSheetPlacement(page, underlay))}
             title="Lay the plan over the whole sheet again (edge to edge, aspect kept)"
           >
             ⤢ Fill Sheet
           </button>
           <button
-            className={`px-2 py-0.5 rounded border text-xs transition-colors ${tool === "calibrate" ? "bg-amber-100 border-amber-400 text-amber-800" : "bg-white border-neutral-200 text-neutral-600 hover:border-amber-400"}`}
+            className={`px-2 py-0.5 rounded border text-xs transition-colors ${tool === "calibrate" ? "bg-amber-100 border-amber-400 text-amber-800" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-amber-400"}`}
             onClick={() => onToolChange(tool === "calibrate" ? "select" : "calibrate")}
             title="Click two points a known distance apart, then enter that distance"
           >
             📏 Calibrate
           </button>
-          <span className="text-neutral-500" style={{ fontSize: 10 }} title="Real-world size of one pixel of the imported drawing">
+          <span className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }} title="Real-world size of one pixel of the imported drawing">
             {underlay.mmPerPx ? `${underlay.mmPerPx.toFixed(1)} mm/px` : "not calibrated"}
           </span>
           <button
-            className="px-2 py-0.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors"
+            className="px-2 py-0.5 text-red-500 hover:text-red-700 hover:bg-red-500/10 rounded border border-transparent hover:border-red-200 transition-colors"
             onClick={() => {
               if (confirm("Remove the underlay? Symbols stay where they are.")) {
                 setFloorplanUnderlay(page.id, undefined);
@@ -316,7 +316,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
       <div className="flex-1" />
 
       {/* Symbol size */}
-      <label className="flex items-center gap-1 text-neutral-600" title="Symbol diameter on paper (mm)">
+      <label className="flex items-center gap-1 text-[var(--color-text)]" title="Symbol diameter on paper (mm)">
         <span style={{ fontSize: 9 }}>SYMBOL</span>
         <input
           type="number"
@@ -325,7 +325,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           step={0.5}
           value={page.symbolSizeMm}
           onChange={(e) => updateFloorplanPage(page.id, { symbolSizeMm: Number(e.target.value) })}
-          className="w-14 bg-white border border-neutral-200 rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
+          className="w-14 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
         />
         <span style={{ fontSize: 9 }}>MM</span>
       </label>
@@ -336,7 +336,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
           checked={page.showTitleBlock}
           onChange={(e) => updateFloorplanPage(page.id, { showTitleBlock: e.target.checked })}
         />
-        <span className="text-neutral-600">Title Block</span>
+        <span className="text-[var(--color-text)]">Title Block</span>
       </label>
 
       <button

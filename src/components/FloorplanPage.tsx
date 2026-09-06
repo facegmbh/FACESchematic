@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSchematicStore } from "../store";
 import FloorplanToolbar from "./FloorplanToolbar";
 import FloorplanSidebar from "./FloorplanSidebar";
+import FloorplanOptionsPanel from "./FloorplanOptionsPanel";
 import FloorplanRenderer from "./FloorplanRenderer";
 import type { FloorplanPage as FloorplanPageType } from "../types";
 
@@ -48,6 +49,7 @@ export default function FloorplanPage() {
           onActiveGroupChange={setActiveGroupId}
           activeLine={activeLine}
         />
+        <FloorplanOptionsPanel page={fp} activeLine={activeLine} onActiveLineChange={setActiveLine} />
       </div>
     </div>
   );

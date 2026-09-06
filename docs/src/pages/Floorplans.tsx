@@ -98,13 +98,34 @@ export default function FloorplansPage() {
         Where the symbol comes from: a group created from a library model takes the model&apos;s{" "}
         <strong>plan symbol</strong> — shape, color and an optional one- or two-letter glyph inside
         the symbol — set once in the device editor and saved with the template. A model without
-        one is drawn by type: loudspeakers round, subwoofers square, microphones as triangles, video
-        as diamonds, with a color derived from the model so it never changes between plans. Every
-        value stays editable on the group afterwards.
+        one is drawn by type: loudspeakers round, subwoofers square, microphones as triangles,
+        projectors, cameras, racks and displays as top-view pictograms, other video as diamonds,
+        with a color derived from the model so it never changes between plans. Every value stays
+        editable on the group afterwards.
       </p>
       <ul>
         <li><strong>Color</strong> — from the swatch row or any custom color.</li>
-        <li><strong>Shape</strong> — circle, square, diamond or triangle, so groups stay apart on a monochrome print.</li>
+        <li>
+          <strong>Shape</strong> — circle, square, diamond or triangle, so groups stay apart on a
+          monochrome print; or a pictogram — <em>projector</em>, <em>rack</em>, <em>display</em>,{" "}
+          <em>camera</em> — drawn as the top view an installer reads on an architect&apos;s plan.
+          Pictograms take the group color for the body and print their details (lens, cabinet
+          diagonals, screen face) in the glyph color.
+        </li>
+        <li>
+          <strong>Your own symbol</strong> — <em>Upload symbol…</em> puts a PNG, JPG, WebP or SVG
+          in place of the drawn shape. It is rasterized to a square on import and stored in the
+          project, so the plan, the legend and the PDF all show the same picture and nothing
+          depends on a server being reachable. An uploaded symbol replaces the shape, the color
+          and the glyph — the picture is the symbol. Upload it on the device instead (device
+          editor → <em>Plan symbol</em>) and every plan that uses the model gets it.
+        </li>
+        <li>
+          <strong>Turn</strong> — a projector, a display or a camera faces a direction. Select
+          symbols on the sheet and use <em>Symbol ⟲ ⟳</em> to turn the picture; the number beside
+          it stays upright. <em>Apply to line / group</em> copies the turn to the rest, and a
+          group&apos;s <em>Turn</em> field sets the direction new symbols start at.
+        </li>
         <li>
           <strong>Number prefix</strong> — seeds the auto-numbering. Type <code>1.1</code> and the
           group numbers 1.1, 1.2, 1.3…; type <code>SB.</code> and it runs SB.1, SB.2, …

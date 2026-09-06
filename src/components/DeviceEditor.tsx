@@ -36,7 +36,9 @@ import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from ".
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
 import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
-import type { AmplifierLoadSpec, SpeakerLoadSpec, FloorplanSymbolShape } from "../types";
+import { FLOORPLAN_SYMBOL_SHAPE_LABELS } from "../floorplan";
+import { importSymbolImage } from "../floorplanUnderlay";
+import type { AmplifierLoadSpec, SpeakerLoadSpec, FloorplanSymbolShape, PlanSymbolSpec } from "../types";
 import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types";
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
@@ -175,6 +177,30 @@ export default function DeviceEditor() {
   const [planShape, setPlanShape] = useState<"" | FloorplanSymbolShape>("");
   const [planColor, setPlanColor] = useState("");
   const [planGlyph, setPlanGlyph] = useState("");
+  const [planImage, setPlanImage] = useState("");
+  const planSymbolInputRef = useRef<HTMLInputElement>(null);
+
+  // The model's floorplan symbol, saved with the template. An uploaded picture alone is
+  // enough — the shape then only matters as what the symbol falls back to if the picture
+  // is ever removed.
+  const planSymbolSpec = useMemo<PlanSymbolSpec | undefined>(() => {
+    if (!planShape && !planImage) return undefined;
+    return {
+      shape: planShape || "circle",
+      ...(planColor ? { color: planColor } : {}),
+      ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}),
+      ...(planImage ? { imageSrc: planImage } : {}),
+    };
+  }, [planShape, planColor, planGlyph, planImage]);
+
+  const handlePlanSymbolPicked = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setPlanImage(await importSymbolImage(file));
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : "Could not load that symbol image.", "error");
+    }
+  };
   const [category, setCategory] = useState("");
   const [color, setColor] = useState<string | undefined>(undefined);
   const [headerColor, setHeaderColor] = useState<string | undefined>(undefined);
@@ -282,6 +308,7 @@ export default function DeviceEditor() {
     setPlanShape(ps?.shape ?? "");
     setPlanColor(ps?.color ?? "");
     setPlanGlyph(ps?.glyph ?? "");
+    setPlanImage(ps?.imageSrc ?? "");
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
@@ -439,7 +466,7 @@ export default function DeviceEditor() {
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(speakerLoad ? { speakerLoad } : {}),
       ...(ampLoad ? { ampLoad } : {}),
-      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
+      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.templateId ? { templateId: existing.templateId } : {}),
       ...(existing?.templateVersion ? { templateVersion: existing.templateVersion } : {}),
@@ -489,7 +516,7 @@ export default function DeviceEditor() {
       ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
     };
     return overrides ? { ...data, ...overrides } : data;
-  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
+  }, [editingNodeId, ports, label, shortName, useShortName, wrapLabel, hostname, deviceType, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, color, headerColor, node, showAllPorts, hiddenPorts, dhcpServer, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, serialNumber, note, isSpare, procurementSource, heightMm, widthMm, depthMm, weightKg, rackForm, isCableAccessory, integratedWithCable, isVenueProvided, adapterVisibility, auxiliaryData, searchTermsRaw, knxAddress, daliAddress, assetCode, odooLink]);
 
   const handleSave = useCallback(() => {
     if (!editingNodeId) return;
@@ -537,13 +564,13 @@ export default function DeviceEditor() {
         ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(speakerLoad ? { speakerLoad } : {}),
       ...(ampLoad ? { ampLoad } : {}),
-        ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
-      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
+        ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
+      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
       ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(speakerLoad ? { speakerLoad } : {}),
       ...(ampLoad ? { ampLoad } : {}),
-      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
+      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
         ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
         ...(powerDrawW != null ? { powerDrawW } : {}),
         ...(powerCapacityW != null ? { powerCapacityW } : {}),
@@ -577,7 +604,7 @@ export default function DeviceEditor() {
         ...overrides,
       };
     },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, auxiliaryData, searchTermsRaw],
+    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -685,7 +712,7 @@ export default function DeviceEditor() {
       ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
       ...(speakerLoad ? { speakerLoad } : {}),
       ...(ampLoad ? { ampLoad } : {}),
-      ...(planShape ? { planSymbol: { shape: planShape, ...(planColor ? { color: planColor } : {}), ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}) } } : {}),
+      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
       ...(category.trim() ? { category: category.trim() } : {}),
       ...(existing?.slots ? { slots: existing.slots } : {}),
       ...(existing?.slotFamily ? { slotFamily: existing.slotFamily } : {}),
@@ -732,7 +759,7 @@ export default function DeviceEditor() {
     } catch (e) {
       console.error("Failed to create draft:", e);
     }
-  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planShape, planColor, planGlyph, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
+  }, [ports, label, shortName, deviceType, color, headerColor, node, hostname, poeBudgetW, poeDrawW, unitCost, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, auxiliaryData, searchTermsRaw]);
 
   const handleSaveAsPreset = useCallback(() => {
     if (!editingNodeId || !node?.data.templateId) return;
@@ -825,6 +852,7 @@ export default function DeviceEditor() {
       setPlanShape(tpl.planSymbol?.shape ?? "");
       setPlanColor(tpl.planSymbol?.color ?? "");
       setPlanGlyph(tpl.planSymbol?.glyph ?? "");
+      setPlanImage(tpl.planSymbol?.imageSrc ?? "");
       setCategory(tpl.category ?? "");
       setHostname(tpl.hostname ?? "");
       setPowerDrawW(tpl.powerDrawW);
@@ -1190,10 +1218,10 @@ export default function DeviceEditor() {
                   className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
                   value={planShape}
                   onChange={(e) => setPlanShape(e.target.value as "" | FloorplanSymbolShape)}
-                  title="Shape on floorplans — empty follows the device type"
+                  title="Symbol on floorplans — abstract shape or a top-view pictogram; empty follows the device type"
                 >
                   <option value="">Auto (by type)</option>
-                  {FLOORPLAN_SYMBOL_SHAPES.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+                  {FLOORPLAN_SYMBOL_SHAPES.map((sh) => <option key={sh} value={sh}>{FLOORPLAN_SYMBOL_SHAPE_LABELS[sh]}</option>)}
                 </select>
                 <input
                   type="color"
@@ -1211,6 +1239,36 @@ export default function DeviceEditor() {
                   onChange={(e) => setPlanGlyph(e.target.value)}
                   placeholder="S"
                   title="Up to two characters drawn inside the symbol"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                {planImage && (
+                  <img src={planImage} alt="" className="w-7 h-7 object-contain border border-[var(--color-border)] rounded bg-white" />
+                )}
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border border-[var(--color-border)] text-xs text-[var(--color-text)] hover:border-blue-500"
+                  onClick={() => planSymbolInputRef.current?.click()}
+                  title="Upload your own symbol for this model (PNG, JPG, WebP or SVG). Every plan that uses the model draws the picture instead of the shape."
+                >
+                  {planImage ? "Replace symbol…" : "Upload symbol…"}
+                </button>
+                {planImage && (
+                  <button
+                    type="button"
+                    className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                    onClick={() => setPlanImage("")}
+                    title="Back to the drawn shape"
+                  >
+                    ✕
+                  </button>
+                )}
+                <input
+                  ref={planSymbolInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { void handlePlanSymbolPicked(e.target.files?.[0]); e.target.value = ""; }}
                 />
               </div>
             </Field>

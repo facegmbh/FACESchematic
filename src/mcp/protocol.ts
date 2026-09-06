@@ -92,7 +92,7 @@ export type PortFace = "in" | "out" | "rear" | "front";
 export const RACK_TYPES = ["floor-19", "wall-mount", "desktop", "open-2post", "open-4post"] as const;
 
 /** Symbol shapes a floorplan group may use, mirroring `FloorplanSymbolShape` in `src/types.ts`. */
-export const FLOORPLAN_SHAPES = ["circle", "square", "triangle", "diamond"] as const;
+export const FLOORPLAN_SHAPES = ["circle", "square", "triangle", "diamond", "projector", "rack", "display", "camera"] as const;
 
 // ---------------------------------------------------------------------------
 // App -> server: handshake. The app proves it is the real editor (token) and the
@@ -393,6 +393,8 @@ export interface FloorplanGroupSpec {
   imageUrl?: string;
   /** One or two characters drawn inside every symbol of the group, e.g. "S". */
   glyph?: string;
+  /** Direction new symbols of this group face, in degrees clockwise. */
+  rotationDeg?: number;
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
 }

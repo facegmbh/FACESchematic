@@ -12,7 +12,7 @@ import { buildLegendLineRows, computeLineLoads, legendShowsLines, type LegendLin
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
-import { fetchImageAsDataUrl } from "./floorplanUnderlay";
+import { fetchImageAsDataUrl, rotatedImageDataUrl } from "./floorplanUnderlay";
 import {
   buildLegendRows,
   layoutDrawingBlock,
@@ -25,7 +25,12 @@ import {
   LEGEND_COMPANY_LINE_MM,
   LEGEND_COMPANY_LOGO_MM,
   symbolLabelAnchor,
-  symbolPolygon,
+  SYMBOL_INK,
+  rotateVec,
+  rotatedSquareFactor,
+  symbolGlyphOffset,
+  symbolGlyphScale,
+  symbolPrimitives,
   glyphColorOn,
   DB_DISCLAIMER_FONT_MM,
   DB_FIELD_LABEL_FONT_MM,
@@ -85,31 +90,86 @@ function imageFormat(dataUrl: string): "PNG" | "JPEG" {
   return dataUrl.startsWith("data:image/jpeg") || dataUrl.startsWith("data:image/jpg") ? "JPEG" : "PNG";
 }
 
-/** Draw one symbol at (cx, cy) in mm, with the group's glyph inside when it has one. */
-function drawSymbol(doc: jsPDF, group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph">, cx: number, cy: number, sizeMm: number) {
+/** Draw one symbol at (cx, cy) in mm, with the group's glyph inside when it has one.
+ *  Walks the same primitives as the screen renderer (symbolPrimitives), so a pictogram on
+ *  paper is the pictogram on screen. */
+function drawSymbol(
+  doc: jsPDF,
+  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc">,
+  cx: number,
+  cy: number,
+  sizeMm: number,
+  rotationDeg = 0,
+  /** The group's picture already turned by rotationDeg — jsPDF cannot rotate a raster the
+   *  way an SVG transform does, so the caller rasterizes it beforehand. */
+  rotatedImage?: string,
+) {
   const [r, g, b] = hexToRgb(group.color);
-  doc.setFillColor(r, g, b);
-  doc.setDrawColor(60, 60, 60);
-  doc.setLineWidth(0.2);
-  if (group.shape === "circle") {
-    doc.circle(cx, cy, sizeMm / 2, "FD");
-  } else {
-    const pts = symbolPolygon(group.shape, sizeMm);
-    if (pts.length === 0) return;
-    // jsPDF wants relative segments from the starting point.
-    const deltas: [number, number][] = [];
-    for (let i = 1; i < pts.length; i++) {
-      deltas.push([pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y]);
+  const [cr, cg, cb] = hexToRgb(glyphColorOn(group.color));
+  const [ir, ig, ib] = hexToRgb(SYMBOL_INK);
+  const turn = (v: { x: number; y: number }) => rotateVec(v, rotationDeg);
+
+  // An uploaded picture is the symbol: it replaces shape, color and glyph. A turned raster
+  // grew by rotatedSquareFactor, so it is placed that much larger to keep its scale.
+  const picture = rotatedImage ?? group.symbolImageSrc;
+  if (picture) {
+    const side = sizeMm * (rotatedImage ? rotatedSquareFactor(rotationDeg) : 1);
+    try {
+      doc.addImage(picture, imageFormat(picture), cx - side / 2, cy - side / 2, side, side, undefined, "MEDIUM");
+    } catch {
+      doc.setDrawColor(cr, cg, cb);
+      doc.setLineWidth(0.2);
+      doc.rect(cx - sizeMm / 2, cy - sizeMm / 2, sizeMm, sizeMm, "S");
     }
-    doc.lines(deltas, cx + pts[0].x, cy + pts[0].y, [1, 1], "FD", true);
+    return;
+  }
+
+  for (const prim of symbolPrimitives(group.shape, sizeMm)) {
+    if (prim.kind === "line") {
+      const from = turn(prim.from), to = turn(prim.to);
+      doc.setDrawColor(ir, ig, ib);
+      doc.setLineWidth(Math.max(0.15, sizeMm * 0.07));
+      doc.line(cx + from.x, cy + from.y, cx + to.x, cy + to.y);
+      continue;
+    }
+    // Filled body: group color under a dark outline. Contrast detail: glyph color, no
+    // outline. Outline-only: the contrast color as a stroke.
+    let style: "F" | "S" | "FD";
+    if (prim.fill === "color") {
+      doc.setFillColor(r, g, b);
+      doc.setDrawColor(60, 60, 60);
+      doc.setLineWidth(0.2);
+      style = "FD";
+    } else if (prim.fill === "contrast") {
+      doc.setFillColor(cr, cg, cb);
+      doc.setDrawColor(ir, ig, ib);
+      doc.setLineWidth(Math.max(0.1, sizeMm * 0.05));
+      style = "FD";
+    } else {
+      doc.setDrawColor(ir, ig, ib);
+      doc.setLineWidth(Math.max(0.1, sizeMm * 0.05));
+      style = "S";
+    }
+    if (prim.kind === "circle") {
+      const c = turn(prim.center);
+      doc.circle(cx + c.x, cy + c.y, prim.r, style);
+    } else if (prim.points.length > 0) {
+      // jsPDF wants relative segments from the starting point.
+      const pts = prim.points.map(turn);
+      const deltas: [number, number][] = [];
+      for (let i = 1; i < pts.length; i++) {
+        deltas.push([pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y]);
+      }
+      doc.lines(deltas, cx + pts[0].x, cy + pts[0].y, [1, 1], style, true);
+    }
   }
   const glyph = group.glyph?.trim().slice(0, 2);
   if (glyph) {
-    const [gr, gg, gb] = hexToRgb(glyphColorOn(group.color));
+    const at = turn(symbolGlyphOffset(group.shape, sizeMm));
     doc.setFont("Inter", "bold");
-    doc.setFontSize(sizeMm * (glyph.length > 1 ? 0.42 : 0.55) * MM_TO_PT);
-    doc.setTextColor(gr, gg, gb);
-    doc.text(glyph, cx, cy + (group.shape === "triangle" ? sizeMm * 0.12 : 0), { align: "center", baseline: "middle" });
+    doc.setFontSize(sizeMm * symbolGlyphScale(group.shape, glyph) * MM_TO_PT);
+    doc.setTextColor(cr, cg, cb);
+    doc.text(glyph, cx + at.x, cy + at.y, { align: "center", baseline: "middle" });
   }
 }
 
@@ -457,12 +517,35 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     doc.setLineWidth(0.12);
     doc.rect(PAGE_MARGIN_MM, PAGE_MARGIN_MM, pageW - 2 * PAGE_MARGIN_MM, pageH - 2 * PAGE_MARGIN_MM);
 
-    // Symbols
+    // Symbols. Turned pictures are rasterized once per group + angle, not per symbol —
+    // a plan with fifty rotated speakers would otherwise redraw the same canvas fifty times.
     const groupById = new Map(page.groups.map((g) => [g.id, g]));
+    const turnedSymbolImages = new Map<string, string>();
+    for (const symbol of page.symbols) {
+      const group = groupById.get(symbol.groupId);
+      const rot = ((((symbol.rotationDeg ?? 0) % 360) + 360) % 360);
+      if (!group?.symbolImageSrc || !rot) continue;
+      const key = `${group.id}|${rot}`;
+      if (turnedSymbolImages.has(key)) continue;
+      try {
+        turnedSymbolImages.set(key, await rotatedImageDataUrl(group.symbolImageSrc, rot));
+      } catch {
+        // A picture that will not rotate is drawn unturned rather than dropped.
+      }
+    }
     for (const symbol of page.symbols) {
       const group = groupById.get(symbol.groupId);
       if (!group) continue;
-      drawSymbol(doc, group, symbol.positionMm.x, symbol.positionMm.y, page.symbolSizeMm);
+      const rot = symbol.rotationDeg ?? 0;
+      drawSymbol(
+        doc,
+        group,
+        symbol.positionMm.x,
+        symbol.positionMm.y,
+        page.symbolSizeMm,
+        rot,
+        group.symbolImageSrc && rot ? turnedSymbolImages.get(`${group.id}|${((rot % 360) + 360) % 360}`) : undefined,
+      );
 
       const anchor = symbolLabelAnchor(symbol, page.symbolSizeMm);
       doc.setFont("Inter", "bold");

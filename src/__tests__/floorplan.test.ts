@@ -34,6 +34,11 @@ import {
   companyProfileLines,
   companyContactLine,
   planSymbolFor,
+  symbolPolygon,
+  symbolPrimitives,
+  rotateVec,
+  rotatedSquareFactor,
+  FLOORPLAN_SYMBOL_SHAPE_LABELS,
   formatSymbolLabel,
   nextSeqInLine,
   renumberLine,
@@ -49,6 +54,7 @@ import {
   PAGE_MARGIN_MM,
 } from "../floorplan";
 import type { FloorplanPage, FloorplanSymbol, FloorplanUnderlay } from "../types";
+import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
 
 const paper = { paperId: "iso-a1", orientation: "landscape" as const };
 
@@ -597,12 +603,72 @@ describe("plan symbols from the library", () => {
     expect(defaultSymbolShapeFor("speaker")).toBe("circle");
     expect(defaultSymbolShapeFor("subwoofer")).toBe("square");
     expect(defaultSymbolShapeFor("microphone")).toBe("triangle");
-    expect(defaultSymbolShapeFor("display")).toBe("diamond");
+    expect(defaultSymbolShapeFor("display")).toBe("display");
+    expect(defaultSymbolShapeFor("projector")).toBe("projector");
+    expect(defaultSymbolShapeFor("ptz-camera")).toBe("camera");
+    expect(defaultSymbolShapeFor("rack")).toBe("rack");
+    expect(defaultSymbolShapeFor("video-wall-controller")).toBe("display");
+    expect(defaultSymbolShapeFor("studio-monitor")).toBe("diamond");
     expect(defaultSymbolColorFor("face-0015")).toBe(defaultSymbolColorFor("face-0015"));
     const sym = planSymbolFor({ deviceType: "subwoofer", templateId: "face-0015" });
     expect(sym.shape).toBe("square");
     expect(sym.color).toMatch(/^#[0-9a-f]{6}$/);
     expect(sym.glyph).toBeUndefined();
+  });
+
+  it("draws every shape from primitives that fit the symbol square", () => {
+    for (const shape of FLOORPLAN_SYMBOL_SHAPES) {
+      const prims = symbolPrimitives(shape, 6);
+      expect(prims.length).toBeGreaterThan(0);
+      for (const p of prims) {
+        const pts = p.kind === "polygon" ? p.points : p.kind === "line" ? [p.from, p.to] : [{ x: p.center.x - p.r, y: p.center.y - p.r }, { x: p.center.x + p.r, y: p.center.y + p.r }];
+        for (const q of pts) {
+          expect(Math.abs(q.x)).toBeLessThanOrEqual(3.0001);
+          expect(Math.abs(q.y)).toBeLessThanOrEqual(3.0001);
+        }
+      }
+    }
+    // The abstract shapes keep their old outline; pictograms carry a body in the group color.
+    expect(symbolPrimitives("circle", 6)).toEqual([{ kind: "circle", center: { x: 0, y: 0 }, r: 3, fill: "color" }]);
+    expect(symbolPrimitives("square", 6)).toEqual([{ kind: "polygon", points: symbolPolygon("square", 6), fill: "color" }]);
+    expect(symbolPrimitives("projector", 6).some((p) => p.kind === "polygon" && p.fill === "color")).toBe(true);
+    expect(symbolPrimitives("rack", 6).filter((p) => p.kind === "line")).toHaveLength(2);
+    expect(FLOORPLAN_SYMBOL_SHAPES.every((sh) => FLOORPLAN_SYMBOL_SHAPE_LABELS[sh])).toBe(true);
+  });
+
+  it("turns a point clockwise about the origin, and leaves 0° alone", () => {
+    const p = { x: 3, y: 0 };
+    expect(rotateVec(p, 0)).toBe(p);
+    const q = rotateVec(p, 90);
+    expect(q.x).toBeCloseTo(0, 6);
+    expect(q.y).toBeCloseTo(3, 6);
+    const r = rotateVec(p, 180);
+    expect(r.x).toBeCloseTo(-3, 6);
+    expect(r.y).toBeCloseTo(0, 6);
+    // Turning a pictogram turns every one of its parts, so the picture stays whole.
+    const turned = symbolPrimitives("projector", 6).map((prim) =>
+      prim.kind === "line" ? rotateVec(prim.from, 90) : prim.kind === "circle" ? rotateVec(prim.center, 90) : rotateVec(prim.points[0], 90),
+    );
+    expect(turned).toHaveLength(symbolPrimitives("projector", 6).length);
+  });
+
+  it("carries a model's uploaded symbol picture onto the group and the legend", () => {
+    const png = "data:image/png;base64,AAAA";
+    const sym = planSymbolFor({ planSymbol: { shape: "square", imageSrc: png }, templateId: "t1" });
+    expect(sym.imageSrc).toBe(png);
+    expect(planSymbolFor({ deviceType: "speaker", templateId: "t1" }).imageSrc).toBeUndefined();
+
+    const page = makePage({
+      groups: [{ id: "g1", label: "LS", color: "#e11d1d", shape: "circle", symbolImageSrc: png }],
+      symbols: [makeSymbol({ id: "s1", groupId: "g1", label: "1.1" })],
+    });
+    expect(buildLegendRows(page)[0].symbolImageSrc).toBe(png);
+  });
+
+  it("grows a turned square by cos+sin so a rotated picture keeps its scale", () => {
+    expect(rotatedSquareFactor(0)).toBeCloseTo(1, 6);
+    expect(rotatedSquareFactor(90)).toBeCloseTo(1, 6);
+    expect(rotatedSquareFactor(45)).toBeCloseTo(Math.SQRT2, 6);
   });
 
   it("picks a readable glyph color", () => {

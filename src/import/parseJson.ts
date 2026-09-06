@@ -1,12 +1,13 @@
-import type { DeviceTemplate, Port } from "../types";
+import type { DeviceTemplate, FloorplanSymbolShape, Port } from "../types";
+import { FLOORPLAN_SYMBOL_SHAPES } from "../types";
 import { DEVICE_TYPE_TO_CATEGORY } from "../deviceTypeCategories";
 import { validateTemplate } from "./validate";
 import { generatePortId, generateTemplateId, type ParseResult, type ParsedTemplate } from "./types";
 
 /** Parse a JSON string into one or more device templates.
  * Accepts either a single object or an array. Unknown fields are stripped. */
-const PLAN_SHAPES = new Set(["circle", "square", "triangle", "diamond"]);
-function isPlanSymbol(v: unknown): v is { shape: "circle" | "square" | "triangle" | "diamond"; color?: unknown; glyph?: unknown } {
+const PLAN_SHAPES = new Set<string>(FLOORPLAN_SYMBOL_SHAPES);
+function isPlanSymbol(v: unknown): v is { shape: FloorplanSymbolShape; color?: unknown; glyph?: unknown; imageSrc?: unknown } {
   return !!v && typeof v === "object" && PLAN_SHAPES.has(String((v as { shape?: unknown }).shape));
 }
 
@@ -66,7 +67,7 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     referenceUrl: str(raw.referenceUrl),
     installCable: str(raw.installCable),
     installNotes: str(raw.installNotes),
-    planSymbol: isPlanSymbol(raw.planSymbol) ? { shape: raw.planSymbol.shape, color: str(raw.planSymbol.color), glyph: str(raw.planSymbol.glyph) } : undefined,
+    planSymbol: isPlanSymbol(raw.planSymbol) ? { shape: raw.planSymbol.shape, color: str(raw.planSymbol.color), glyph: str(raw.planSymbol.glyph), imageSrc: str(raw.planSymbol.imageSrc) } : undefined,
     speakerLoad: speakerLoad(raw.speakerLoad),
     ampLoad: ampLoad(raw.ampLoad),
     color: str(raw.color),

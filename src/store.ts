@@ -5680,7 +5680,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         } else {
           label = label ?? nextSymbolLabel(p.symbols.filter((sym) => sym.groupId === symbol.groupId).map((sym) => sym.label), group?.labelPrefix);
         }
-        return { ...p, lines, symbols: [...p.symbols, { ...symbol, id, lineNo, seq, label }] };
+        // A new symbol starts turned the way its group is set up (a row of projectors all
+        // facing the same wall), unless the caller already said which way this one faces.
+        const rotationDeg = symbol.rotationDeg ?? group?.rotationDeg;
+        return { ...p, lines, symbols: [...p.symbols, { ...symbol, id, lineNo, seq, label, rotationDeg }] };
       }),
       undoSize: undoStack.length, redoSize: 0,
     });

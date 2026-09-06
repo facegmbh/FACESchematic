@@ -948,9 +948,14 @@ export interface FloorplanLine {
   name?: string;
 }
 
-export type FloorplanSymbolShape = "circle" | "square" | "triangle" | "diamond";
+/** Shape a floorplan symbol is drawn with. The four abstract shapes keep device families
+ *  apart on a monochrome print; the pictograms (top views of a projector, an equipment
+ *  rack, a display, a camera) read as the thing itself, the way installers expect on an
+ *  architect's plan. Geometry lives in `symbolPrimitives()` (src/floorplan.ts) so screen,
+ *  legend and PDF draw the same picture. */
+export type FloorplanSymbolShape = "circle" | "square" | "triangle" | "diamond" | "projector" | "rack" | "display" | "camera";
 
-export const FLOORPLAN_SYMBOL_SHAPES: FloorplanSymbolShape[] = ["circle", "square", "triangle", "diamond"];
+export const FLOORPLAN_SYMBOL_SHAPES: FloorplanSymbolShape[] = ["circle", "square", "triangle", "diamond", "projector", "rack", "display", "camera"];
 
 /** A model's standing floorplan symbol (see DeviceTemplate.planSymbol). */
 export interface PlanSymbolSpec {
@@ -959,6 +964,9 @@ export interface PlanSymbolSpec {
   color?: string;
   /** One or two characters drawn inside the symbol, e.g. "S" for a subwoofer. */
   glyph?: string;
+  /** An uploaded picture for this model, as a data URL. A group created from the model
+   *  inherits it, and it wins over shape, color and glyph. */
+  imageSrc?: string;
 }
 
 /** The architect's drawing a floorplan page is built on. Both PDF pages and images
@@ -1017,6 +1025,13 @@ export interface FloorplanSymbolGroup {
   labelPrefix?: string;
   /** One or two characters drawn inside every symbol of the group, e.g. "S". */
   glyph?: string;
+  /** An uploaded picture drawn instead of the shape, as a data URL (rasterized on import
+   *  so screen and PDF show the same pixels). Replaces shape, color and glyph — the
+   *  picture is the symbol. */
+  symbolImageSrc?: string;
+  /** Rotation new symbols of this group start at, in degrees clockwise. Lets a group of
+   *  projectors default to the direction they face in the room. */
+  rotationDeg?: number;
   /** Hide this group from the legend box without deleting it. */
   hiddenInLegend?: boolean;
 }
@@ -1047,6 +1062,10 @@ export interface FloorplanSymbol {
   labelAlign?: "start" | "middle" | "end";
   /** Clockwise rotation of the label about its anchor, in degrees. */
   labelRotationDeg?: number;
+  /** Clockwise rotation of the symbol picture about its center, in degrees. Points a
+   *  projector, a display or a camera the way it actually faces on the plan. The number
+   *  next to it stays upright — only the picture turns. */
+  rotationDeg?: number;
   /** Per-symbol note, surfaced in the floorplan schedule. */
   notes?: string;
 }
