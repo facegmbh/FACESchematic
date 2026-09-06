@@ -48,11 +48,11 @@ test("floorplan: import an underlay, place numbered symbols, calibrate", async (
   for (const [dx, dy] of [[0.3, 0.3], [0.4, 0.45], [0.35, 0.6]]) {
     await page.mouse.click(box.x + box.width * dx, box.y + box.height * dy);
   }
-  await expect(page.getByText("1.1", { exact: true })).toBeVisible();
-  await expect(page.getByText("1.3", { exact: true })).toBeVisible();
+  await expect(paper.getByText("1.1", { exact: true })).toBeVisible();
+  await expect(paper.getByText("1.3", { exact: true })).toBeVisible();
 
   // The legend generates itself from the groups in use.
-  await expect(page.getByText("Bose DM6SE | 2x2,5 mm²", { exact: true })).toBeVisible();
+  await expect(paper.getByText("Bose DM6SE | 2x2,5 mm²", { exact: true })).toBeVisible();
 
   // Calibrating from a known dimension resolves the underlay's real-world scale.
   await page.getByRole("button", { name: /Select/ }).click();
@@ -66,15 +66,15 @@ test("floorplan: import an underlay, place numbered symbols, calibrate", async (
   await page.getByPlaceholder("Drawing title, e.g. Ground floor").fill("Ground floor");
   await page.getByRole("button", { name: "+ Revision" }).click();
   await page.getByPlaceholder("Change").fill("First issue");
-  await expect(page.getByText("Ground floor", { exact: true })).toBeVisible();
-  await expect(page.getByText("First issue", { exact: true })).toBeVisible();
+  await expect(paper.getByText("Ground floor", { exact: true })).toBeVisible();
+  await expect(paper.getByText("First issue", { exact: true })).toBeVisible();
 
   // A free text note dropped with the note tool, edited inline.
   await page.getByTitle("Click the plan to add a text note (installation hint, remark)").click();
   await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.4);
-  await page.keyboard.press("Control+A");
+  await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("Reinforce ceiling 1.2 x 0.6 m");
-  await page.keyboard.press("Control+Enter");
+  await page.keyboard.press("ControlOrMeta+Enter");
   // The text also sits in the sidebar's note editor — assert on the sheet itself.
   await expect(paper.getByText("Reinforce ceiling 1.2 x 0.6 m", { exact: true })).toBeVisible();
 

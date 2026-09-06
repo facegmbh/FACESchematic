@@ -18,8 +18,6 @@ import {
   companyProfileLines,
   hasCompanyProfile,
   planSymbolFor,
-  labelPlacementFor,
-  type LabelPosition,
   LEGEND_COMPANY_GAP_MM,
   LEGEND_COMPANY_LINE_MM,
   LEGEND_COMPANY_LOGO_MM,
@@ -63,9 +61,13 @@ interface Props {
   onActiveGroupChange: (groupId: string) => void;
   /** Amplifier line new symbols are numbered on; empty = none. */
   activeLine: string;
+  /** What is selected on the sheet. Owned by FloorplanPage so the options panel on the
+   *  right can show and edit whatever the click landed on. */
+  selection: Selection;
+  onSelectionChange: (selection: Selection) => void;
 }
 
-type Selection =
+export type Selection =
   | { kind: "none" }
   | { kind: "symbols"; ids: string[] }
   | { kind: "underlay" }
@@ -96,7 +98,7 @@ function SymbolGlyph({ group, sizePx, rotationDeg }: { group: Pick<FloorplanSymb
   return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} />;
 }
 
-export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine }: Props) {
+export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine, selection, onSelectionChange }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const allPages = useSchematicStore((s) => s.pages);
@@ -106,7 +108,6 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const useShortNames = useSchematicStore((s) => s.useShortNames);
   const addFloorplanSymbol = useSchematicStore((s) => s.addFloorplanSymbol);
   const updateFloorplanSymbol = useSchematicStore((s) => s.updateFloorplanSymbol);
-  const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
   const updateFloorplanUnderlay = useSchematicStore((s) => s.updateFloorplanUnderlay);
@@ -228,7 +229,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   }, [setViewport]);
 
   // ── Interaction state ────────────────────────────────────────────
-  const [selection, setSelection] = useState<Selection>({ kind: "none" });
+  const setSelection = onSelectionChange;
   const selectionRef = useRef<Selection>(selection);
   useEffect(() => { selectionRef.current = selection; }, [selection]);
 
@@ -1138,90 +1139,6 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       </div>
 
       {/* Label placement for the selected symbols */}
-      {selection.kind === "symbols" && selection.ids.length > 0 && tool === "select" && (() => {
-        const ids = selection.ids;
-        const first = page.symbols.find((s) => s.id === ids[0]);
-        if (!first) return null;
-        const lineIds = first.lineNo ? page.symbols.filter((s) => (s.lineNo ?? "") === (first.lineNo ?? "")).map((s) => s.id) : [];
-        const groupIds = page.symbols.filter((s) => s.groupId === first.groupId).map((s) => s.id);
-        const place = (pos: LabelPosition, targets: string[]) =>
-          updateFloorplanSymbols(page.id, targets, labelPlacementFor(pos, page.symbolSizeMm, page.labelSizeMm));
-        const rotate = (deg: number, targets: string[]) => updateFloorplanSymbols(page.id, targets, { labelRotationDeg: deg });
-        const rot = first.labelRotationDeg ?? 0;
-        const turn = (deg: number, targets: string[]) => updateFloorplanSymbols(page.id, targets, { rotationDeg: deg });
-        const symRot = first.rotationDeg ?? 0;
-        const arrows: Record<LabelPosition, string> = { nw: "↖", n: "↑", ne: "↗", w: "←", e: "→", sw: "↙", s: "↓", se: "↘" };
-        return (
-          <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/95 border border-neutral-300 rounded shadow px-2 py-1 text-xs select-none" data-print-hide>
-            <span className="text-neutral-500">Label{ids.length > 1 ? ` (${ids.length})` : ""}</span>
-            <div className="grid grid-cols-3 gap-0.5">
-              {(["nw", "n", "ne", "w", "e", "sw", "s", "se"] as LabelPosition[]).map((pos, i) => (
-                <button
-                  key={pos}
-                  className="w-6 h-5 rounded text-neutral-700 hover:bg-emerald-100 hover:text-emerald-800 cursor-pointer"
-                  style={i === 4 ? { gridColumnStart: 3 } : undefined}
-                  onClick={() => place(pos, ids)}
-                  title={`Put the label ${pos.toUpperCase()} of the symbol`}
-                >
-                  {arrows[pos]}
-                </button>
-              ))}
-            </div>
-            <div className="border-l border-neutral-200 h-4" />
-            <span className="text-neutral-500">Symbol</span>
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => turn(symRot - 45, ids)} title="Turn the symbol 45° counter-clockwise">⟲</button>
-            <input
-              type="number"
-              step={15}
-              className="w-14 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400"
-              value={symRot}
-              onChange={(e) => turn(Number(e.target.value) || 0, ids)}
-              onKeyDown={(e) => e.stopPropagation()}
-              title="Symbol rotation in degrees (clockwise) — the number stays upright"
-            />
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => turn(symRot + 45, ids)} title="Turn the symbol 45° clockwise">⟳</button>
-            <div className="border-l border-neutral-200 h-4" />
-            <span className="text-neutral-500">Label</span>
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot - 45, ids)} title="Rotate label 45° counter-clockwise">⟲</button>
-            <input
-              type="number"
-              step={5}
-              className="w-14 border border-neutral-200 rounded px-1 py-0.5 outline-none focus:border-emerald-400"
-              value={rot}
-              onChange={(e) => rotate(Number(e.target.value) || 0, ids)}
-              onKeyDown={(e) => e.stopPropagation()}
-              title="Label rotation in degrees (clockwise)"
-            />
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer" onClick={() => rotate(rot + 45, ids)} title="Rotate label 45° clockwise">⟳</button>
-            <button className="px-1.5 py-0.5 rounded hover:bg-neutral-100 cursor-pointer text-neutral-500" onClick={() => updateFloorplanSymbols(page.id, ids, { labelRotationDeg: 0, rotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })} title="Reset symbol turn and label placement">↺</button>
-            {(lineIds.length > 1 || groupIds.length > 1) && (
-              <>
-                <div className="border-l border-neutral-200 h-4" />
-                <span className="text-neutral-500">Apply to</span>
-                {lineIds.length > 1 && (
-                  <button
-                    className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
-                    onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
-                    title={`Copy this label placement to every speaker on line ${first.lineNo}`}
-                  >
-                    line {first.lineNo}
-                  </button>
-                )}
-                {groupIds.length > 1 && (
-                  <button
-                    className="px-1.5 py-0.5 rounded border border-neutral-200 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer"
-                    onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
-                    title="Copy this label placement to every symbol of the group"
-                  >
-                    group
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })()}
-
       {/* Calibration prompt */}
       {tool === "calibrate" && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-white border border-amber-300 rounded shadow-lg px-3 py-2 text-xs flex items-center gap-2" data-print-hide>

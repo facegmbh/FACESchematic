@@ -18,7 +18,8 @@ export default function FloorplansPage() {
       <h2>Creating a floorplan</h2>
       <p>
         Click the <strong>🗺+</strong> button at the right end of the page tab bar. The new page
-        opens as an A1 landscape sheet at 1:50 with the symbol sidebar on the left. Right-click the
+        opens as an A1 landscape sheet at 1:50 between two panels: on the left what is on the plan
+        and the devices still to place, on the right everything about how the plan reads. Right-click the
         tab for rename / duplicate / delete — deleting a floorplan removes its underlay and symbols,
         never the devices themselves.
       </p>
@@ -65,6 +66,23 @@ export default function FloorplansPage() {
         the page scale, and the toolbar then reports the drawing&apos;s resolution in mm per pixel.
         Until you calibrate, the plan is placed at its nominal size and distances taken off it are
         only as good as the source.
+      </p>
+
+      <h2>The two panels</h2>
+      <p>
+        The <strong>left panel</strong> is the plan&apos;s contents: <em>On the plan</em> lists every
+        placed symbol with its number, its picture and the device behind it — click a row to select
+        that symbol on the sheet, shift-click to add to the selection. Below it sit the schematic&apos;s
+        devices; drag one onto the sheet to place it. One search box filters both lists.
+      </p>
+      <p>
+        The <strong>right panel</strong> edits. Select a symbol — on the sheet or in the left list —
+        and <em>Selected symbol</em> opens at the top with its number, the <strong>group</strong> it
+        belongs to (changing it changes the symbol), the line it hangs on, which way it faces, where
+        its number sits, and a note. <em>Edit symbol…</em> jumps to that group below, where the
+        shape, the color and the uploaded picture live — those apply to every symbol of the group.
+        Under it sit the symbol groups, the numbering, the amplifier lines, the legend box, the
+        drawing block, the erased areas and the notes. Both panels fold away to a narrow rail.
       </p>
 
       <h2>Symbol groups</h2>

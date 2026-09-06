@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { DEFAULT_LEGEND_LINES_TITLE, drawingAreaMm, formatPlanDate, nextDrawingFieldId, nextRevisionIndex } from "../floorplan";
+import { DEFAULT_LEGEND_LINES_TITLE, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
-import { SPEAKER_LINE_MODES } from "../types";
-import type { FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, SpeakerLineMode } from "../types";
+import { FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES } from "../types";
+import type { DeviceData, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
+import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
+import { getTemplateById } from "../templateApi";
+import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
+import type { Selection } from "./FloorplanRenderer";
 import { FLOORPLAN_TOKENS } from "../types";
 
 interface Props {
@@ -12,6 +16,12 @@ interface Props {
   /** Amplifier line the next symbols are numbered on — a line card can make itself active. */
   activeLine: string;
   onActiveLineChange: (line: string) => void;
+  /** Group new symbols are placed into. */
+  activeGroupId: string | null;
+  onActiveGroupChange: (groupId: string | null) => void;
+  /** What is selected on the sheet — the panel edits it at the top. */
+  selection: Selection;
+  onSelectionChange: (selection: Selection) => void;
 }
 
 const STATUS_CLASS: Record<LoadStatus, string> = {
@@ -31,10 +41,14 @@ function StatusBadge({ status, title }: { status: LoadStatus; title?: string }) 
   );
 }
 
-/** Right panel of a floorplan page — how the sheet reads: amplifier lines and their load,
- *  the legend box, the drawing block (Plankopf), erased areas and notes. Mirrors the
- *  schematic's view-options panel: theme surface, collapsible sections, folds to a rail. */
-export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineChange }: Props) {
+/** Right panel of a floorplan page — everything about what a symbol is and how the sheet
+ *  reads. Selecting a symbol (on the sheet or in the left list) opens its properties at the
+ *  top: its number, which group it belongs to, how that group's symbol looks, which way it
+ *  faces, where its label sits. Below that sit the symbol groups, the numbering, the
+ *  amplifier lines, the legend box, the drawing block (Plankopf), erased areas and notes.
+ *  Mirrors the schematic's view-options panel: theme surface, collapsible sections, folds
+ *  to a rail. */
+export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineChange, activeGroupId, onActiveGroupChange, selection, onSelectionChange }: Props) {
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
   const syncFloorplanLines = useSchematicStore((s) => s.syncFloorplanLines);
@@ -47,6 +61,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const updateFloorplanNote = useSchematicStore((s) => s.updateFloorplanNote);
   const removeFloorplanNote = useSchematicStore((s) => s.removeFloorplanNote);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
+  const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
+  const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
+  const removeFloorplanGroup = useSchematicStore((s) => s.removeFloorplanGroup);
+  const renumberFloorplanGroup = useSchematicStore((s) => s.renumberFloorplanGroup);
+  const updateFloorplanPage = useSchematicStore((s) => s.updateFloorplanPage);
+  const updateFloorplanSymbol = useSchematicStore((s) => s.updateFloorplanSymbol);
+  const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
+  const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const addToast = useSchematicStore((s) => s.addToast);
   const lineReport = useMemo(() => computeLineLoads(page, nodes, edges, loadSpecLookup({ customTemplates })), [page, nodes, edges, customTemplates]);
@@ -70,6 +92,50 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const notesText = (page.legend.notes ?? []).join("\n");
 
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageTargetGroupRef = useRef<string | null>(null);
+  const symbolImageInputRef = useRef<HTMLInputElement>(null);
+  const symbolImageTargetRef = useRef<string | null>(null);
+  const isLoudspeaker = page.kind === "loudspeaker";
+
+  const symbolCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const sym of page.symbols) m.set(sym.groupId, (m.get(sym.groupId) ?? 0) + 1);
+    return m;
+  }, [page.symbols]);
+
+  const handleAddGroup = () => {
+    const id = addFloorplanGroup(page.id, {});
+    onActiveGroupChange(id);
+    setExpandedGroupId(id);
+  };
+
+  const handleImagePicked = async (file: File | undefined) => {
+    const groupId = imageTargetGroupRef.current;
+    if (!file || !groupId) return;
+    try {
+      updateFloorplanGroup(page.id, groupId, { imageSrc: await importLegendImage(file) });
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : "Could not load that image.", "error");
+    }
+  };
+
+  const handleSymbolImagePicked = async (file: File | undefined) => {
+    const groupId = symbolImageTargetRef.current;
+    if (!file || !groupId) return;
+    try {
+      updateFloorplanGroup(page.id, groupId, { symbolImageSrc: await importSymbolImage(file) });
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : "Could not load that symbol image.", "error");
+    }
+  };
+
+  // The selected symbols, in the order they sit on the plan.
+  const selectedSymbols = useMemo(
+    () => (selection.kind === "symbols" ? page.symbols.filter((sym) => selection.ids.includes(sym.id)) : []),
+    [selection, page.symbols],
+  );
 
   if (collapsed) {
     return (
@@ -112,6 +178,464 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       </div>
 
       <div className="flex-1 overflow-y-auto" data-allow-scroll>
+      {/* ── Selected symbol ───────────────────────────────────────── */}
+      {selectedSymbols.length > 0 && (() => {
+        const first = selectedSymbols[0];
+        const ids = selectedSymbols.map((sym) => sym.id);
+        const group = page.groups.find((g) => g.id === first.groupId);
+        const many = selectedSymbols.length > 1;
+        const lineIds = first.lineNo ? page.symbols.filter((s) => (s.lineNo ?? "") === (first.lineNo ?? "")).map((s) => s.id) : [];
+        const groupIds = page.symbols.filter((s) => s.groupId === first.groupId).map((s) => s.id);
+        const device = first.deviceNodeId ? nodes.find((n) => n.id === first.deviceNodeId) : undefined;
+        const patchAll = (patch: Parameters<typeof updateFloorplanSymbols>[2]) => updateFloorplanSymbols(page.id, ids, patch);
+        const turn = first.rotationDeg ?? 0;
+        const labelTurn = first.labelRotationDeg ?? 0;
+        const arrows: Record<LabelPosition, string> = { nw: "\u2196", n: "\u2191", ne: "\u2197", w: "\u2190", e: "\u2192", sw: "\u2199", s: "\u2193", se: "\u2198" };
+        return (
+          <details className="border-b-2 border-emerald-400/60 bg-emerald-500/5" open>
+            <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+              {many ? `${selectedSymbols.length} symbols selected` : "Selected symbol"}
+            </summary>
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              {/* What it is */}
+              <div className="flex items-center gap-2">
+                {group && <FloorplanSymbolSvg group={group} sizePx={24} paddingPx={2} rotationDeg={first.rotationDeg} className="shrink-0" />}
+                <div className="min-w-0">
+                  <div className="font-semibold text-[var(--color-text)] truncate">{many ? `${first.label} \u2026` : first.label}</div>
+                  <div className="text-[var(--color-text-muted)] truncate" style={{ fontSize: 10 }}>
+                    {device ? (device.data as DeviceData).label : "no device linked"}
+                  </div>
+                </div>
+              </div>
+
+              {!many && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                  <span className="shrink-0 w-12">Number</span>
+                  <input
+                    className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={first.label}
+                    onChange={(e) => updateFloorplanSymbol(page.id, first.id, { label: e.target.value })}
+                    title="The number printed next to the symbol"
+                  />
+                </label>
+              )}
+
+              {/* Which group it belongs to — this is what changes the symbol */}
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="The group decides how the symbol is drawn and which legend row it belongs to. Moving it here changes the symbol.">
+                <span className="shrink-0 w-12">Group</span>
+                <select
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={many && new Set(selectedSymbols.map((s) => s.groupId)).size > 1 ? "" : first.groupId}
+                  onChange={(e) => { if (e.target.value) patchAll({ groupId: e.target.value }); }}
+                >
+                  {many && new Set(selectedSymbols.map((s) => s.groupId)).size > 1 && <option value="">— mixed —</option>}
+                  {page.groups.map((g) => <option key={g.id} value={g.id}>{g.label || "(unnamed)"}</option>)}
+                </select>
+              </label>
+
+              {isLoudspeaker && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="Amplifier line this speaker hangs on. Renumbering happens from the Lines section.">
+                  <span className="shrink-0 w-12">Line</span>
+                  <input
+                    className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={first.lineNo ?? ""}
+                    placeholder="e.g. 4"
+                    onChange={(e) => patchAll({ lineNo: e.target.value || undefined })}
+                  />
+                </label>
+              )}
+
+              {/* Which way it faces */}
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title="Turn the symbol; the number beside it stays upright.">
+                <span className="shrink-0 w-12">Turn</span>
+                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn - 45 })} title="Turn 45° counter-clockwise">⟲</button>
+                <input
+                  type="number"
+                  step={15}
+                  className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={turn}
+                  onChange={(e) => patchAll({ rotationDeg: Number(e.target.value) || 0 })}
+                />
+                <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700" onClick={() => patchAll({ rotationDeg: turn + 45 })} title="Turn 45° clockwise">⟳</button>
+              </label>
+
+              {/* Where the number sits */}
+              <div className="flex items-start gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-12 pt-1">Label</span>
+                <div className="grid grid-cols-3 gap-0.5">
+                  {LABEL_POSITIONS.map((pos, i) => (
+                    <button
+                      key={pos}
+                      className="w-6 h-5 rounded text-[var(--color-text)] hover:bg-emerald-500/20 hover:text-emerald-700 cursor-pointer"
+                      style={i === 4 ? { gridColumnStart: 3 } : undefined}
+                      onClick={() => patchAll(labelPlacementFor(pos, page.symbolSizeMm, page.labelSizeMm))}
+                      title={`Put the number ${pos.toUpperCase()} of the symbol`}
+                    >
+                      {arrows[pos]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <input
+                    type="number"
+                    step={5}
+                    className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={labelTurn}
+                    onChange={(e) => patchAll({ labelRotationDeg: Number(e.target.value) || 0 })}
+                    title="Number rotation in degrees (clockwise)"
+                  />
+                  <button
+                    className="px-1 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                    onClick={() => patchAll({ labelRotationDeg: 0, rotationDeg: 0, labelOffsetMm: undefined, labelAlign: undefined })}
+                    title="Reset the turn and the number placement"
+                  >
+                    ↺
+                  </button>
+                </div>
+              </div>
+
+              {(lineIds.length > 1 || groupIds.length > 1) && (
+                <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
+                  <span className="shrink-0">Apply to</span>
+                  {lineIds.length > 1 && (
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                      onClick={() => updateFloorplanSymbols(page.id, lineIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
+                      title={`Copy this turn and number placement to every symbol on line ${first.lineNo}`}
+                    >
+                      line {first.lineNo}
+                    </button>
+                  )}
+                  {groupIds.length > 1 && (
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] hover:border-emerald-400 hover:text-emerald-700"
+                      onClick={() => updateFloorplanSymbols(page.id, groupIds, { labelOffsetMm: first.labelOffsetMm, labelAlign: first.labelAlign, labelRotationDeg: first.labelRotationDeg, rotationDeg: first.rotationDeg })}
+                      title="Copy this turn and number placement to every symbol of the group"
+                    >
+                      group
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!many && (
+                <textarea
+                  className="w-full border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-y"
+                  rows={2}
+                  value={first.notes ?? ""}
+                  placeholder="Note for this symbol (appears in the plan schedule)"
+                  onChange={(e) => updateFloorplanSymbol(page.id, first.id, { notes: e.target.value || undefined })}
+                  data-allow-scroll
+                />
+              )}
+
+              <div className="flex items-center gap-1">
+                {group && (
+                  <button
+                    className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                    onClick={() => { onActiveGroupChange(group.id); setExpandedGroupId(group.id); }}
+                    title="Open this group below to change the shape, the color or the uploaded picture — that applies to every symbol of the group"
+                  >
+                    Edit symbol…
+                  </button>
+                )}
+                <div className="flex-1" />
+                <button
+                  className="px-1.5 py-0.5 rounded text-red-500 hover:bg-red-500/10 hover:text-red-700"
+                  onClick={() => {
+                    for (const id of ids) removeFloorplanSymbol(page.id, id);
+                    onSelectionChange({ kind: "none" });
+                  }}
+                  title="Remove from the plan"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </details>
+        );
+      })()}
+
+      {/* ── Symbol groups ─────────────────────────────────────────── */}
+      <details className="border-t border-[var(--color-border)]" open>
+        <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+        <span>Symbol Groups</span>
+        <button
+          className="px-1.5 py-0.5 rounded text-emerald-700 hover:bg-emerald-500/100/10 border border-transparent hover:border-emerald-200"
+          onClick={(e) => { e.preventDefault(); handleAddGroup(); }}
+          title="Add a symbol group"
+        >
+          + Add
+        </button>
+        </summary>
+
+      {page.groups.length === 0 && (
+        <p className="px-2 pb-2 text-[var(--color-text-muted)] leading-relaxed">
+          A group is one legend row — a color, a shape and the model it stands for. Add one,
+          then drag devices onto the plan.
+        </p>
+      )}
+
+      <div className="px-1">
+        {page.groups.map((group) => {
+          const isActive = group.id === activeGroupId;
+          const isExpanded = group.id === expandedGroupId;
+          return (
+            <div
+              key={group.id}
+              className={`mb-1 rounded border ${isActive ? "border-emerald-400 bg-emerald-500/10" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}
+            >
+              <div className="flex items-center gap-1.5 px-1.5 py-1">
+                <button
+                  className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                  onClick={() => onActiveGroupChange(group.id)}
+                  title="Make this the active group for placing symbols"
+                >
+                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} className="shrink-0" />
+                  <span className="truncate text-[var(--color-text)]">{group.label}</span>
+                </button>
+                <span className="text-[var(--color-text-muted)] shrink-0" title="Symbols on this plan">
+                  {symbolCounts.get(group.id) ?? 0}
+                </span>
+                <button
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)] px-1"
+                  onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
+                  title="Edit group"
+                >
+                  {isExpanded ? "▾" : "▸"}
+                </button>
+              </div>
+
+              {isExpanded && (
+                <div className="px-1.5 pb-2 flex flex-col gap-1.5 border-t border-[var(--color-border)] pt-1.5">
+                  <input
+                    className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={group.label}
+                    placeholder="Legend title, e.g. Ceiling speakers"
+                    onChange={(e) => updateFloorplanGroup(page.id, group.id, { label: e.target.value })}
+                  />
+                  <input
+                    className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={group.description ?? ""}
+                    placeholder="Model | cable spec"
+                    onChange={(e) => updateFloorplanGroup(page.id, group.id, { description: e.target.value })}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={group.color}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { color: e.target.value })}
+                      className="w-7 h-6 shrink-0 border border-[var(--color-border)] rounded cursor-pointer"
+                      title="Symbol color"
+                    />
+                    <select
+                      className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={group.shape}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { shape: e.target.value as FloorplanSymbolGroup["shape"] })}
+                      title="Symbol shape — abstract or a top-view pictogram"
+                    >
+                      {FLOORPLAN_SYMBOL_SHAPES.map((s) => <option key={s} value={s}>{FLOORPLAN_SYMBOL_SHAPE_LABELS[s]}</option>)}
+                    </select>
+                    <input
+                      className="w-10 shrink-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 text-center"
+                      value={group.glyph ?? ""}
+                      maxLength={2}
+                      placeholder="S"
+                      disabled={Boolean(group.symbolImageSrc)}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { glyph: e.target.value.trim() || undefined })}
+                      title={group.symbolImageSrc ? "An uploaded symbol carries no glyph — the picture is the symbol" : "Up to two characters drawn inside the symbol"}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                      onClick={() => { symbolImageTargetRef.current = group.id; symbolImageInputRef.current?.click(); }}
+                      title="Upload your own symbol (PNG, JPG, WebP or SVG). It replaces the shape, the color and the glyph, and prints on the plan and in the legend."
+                    >
+                      {group.symbolImageSrc ? "Replace symbol…" : "Upload symbol…"}
+                    </button>
+                    {group.symbolImageSrc && (
+                      <button
+                        className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                        onClick={() => updateFloorplanGroup(page.id, group.id, { symbolImageSrc: undefined })}
+                        title="Back to the drawn shape"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <div className="flex-1" />
+                    <label className="flex items-center gap-1 text-[var(--color-text-muted)]" title="Direction new symbols of this group start at, in degrees clockwise. Turn a placed symbol with the Symbol control on the sheet.">
+                      <span style={{ fontSize: 10 }}>Turn</span>
+                      <input
+                        type="number"
+                        step={15}
+                        className="w-14 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={group.rotationDeg ?? 0}
+                        onChange={(e) => updateFloorplanGroup(page.id, group.id, { rotationDeg: Number(e.target.value) || undefined })}
+                      />
+                      °
+                    </label>
+                  </div>
+                  <input
+                    className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    value={group.labelPrefix ?? ""}
+                    placeholder="No. prefix"
+                    onChange={(e) => updateFloorplanGroup(page.id, group.id, { labelPrefix: e.target.value || undefined })}
+                    title="Seed for auto-numbering, e.g. “SB.” or “4.1”"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {FLOORPLAN_GROUP_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={`w-4 h-4 rounded-sm border ${group.color.toLowerCase() === c ? "border-[var(--color-text)]" : "border-[var(--color-border)]"}`}
+                        style={{ background: c }}
+                        onClick={() => updateFloorplanGroup(page.id, group.id, { color: c })}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                  {(() => {
+                    const shown = group.imageSrc || group.imageUrl;
+                    const templateImage = group.templateId ? getTemplateById(group.templateId, customTemplates)?.imageUrl : undefined;
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          {shown && (
+                            <img src={shown} alt="" className="w-8 h-8 object-contain border border-[var(--color-border)] rounded bg-[var(--color-surface)]__KEEP" />
+                          )}
+                          <button
+                            className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                            onClick={() => { imageTargetGroupRef.current = group.id; imageInputRef.current?.click(); }}
+                            title="Upload a product shot (stored in the project, always printed)"
+                          >
+                            {group.imageSrc ? "Replace image" : "Upload image…"}
+                          </button>
+                          {templateImage && !group.imageSrc && group.imageUrl !== templateImage && (
+                            <button
+                              className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                              onClick={() => updateFloorplanGroup(page.id, group.id, { imageUrl: templateImage })}
+                              title="Use the device template's image"
+                            >
+                              Template image
+                            </button>
+                          )}
+                          {shown && (
+                            <button
+                              className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                              onClick={() => updateFloorplanGroup(page.id, group.id, { imageSrc: undefined, imageUrl: undefined, imageCaption: undefined })}
+                              title="Remove image"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                          value={group.imageUrl ?? ""}
+                          placeholder="Image URL (template today, Odoo product later)"
+                          onChange={(e) => updateFloorplanGroup(page.id, group.id, { imageUrl: e.target.value || undefined })}
+                          title="A remote image reference. Shown on screen; the PDF embeds it when the host allows — an uploaded image always wins."
+                        />
+                      </>
+                    );
+                  })()}
+                  {(group.imageSrc || group.imageUrl) && (
+                    <input
+                      className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={group.imageCaption ?? ""}
+                      placeholder="Image caption, e.g. DM6SE"
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { imageCaption: e.target.value })}
+                    />
+                  )}
+                  <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!group.hiddenInLegend}
+                      onChange={(e) => updateFloorplanGroup(page.id, group.id, { hiddenInLegend: e.target.checked ? undefined : true })}
+                    />
+                    Show in legend
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                      onClick={() => {
+                        const start = prompt("Renumber this group starting at:", group.labelPrefix ?? "1.1");
+                        if (start?.trim()) renumberFloorplanGroup(page.id, group.id, start.trim());
+                      }}
+                      title="Renumber every symbol of this group in placement order"
+                    >
+                      Renumber
+                    </button>
+                    <div className="flex-1" />
+                    <button
+                      className="px-1.5 py-0.5 rounded text-red-500 hover:bg-red-500/10 hover:text-red-700"
+                      onClick={() => {
+                        const count = symbolCounts.get(group.id) ?? 0;
+                        if (count > 0 && !confirm(`Delete “${group.label}” and its ${count} symbol${count > 1 ? "s" : ""} on this plan?`)) return;
+                        removeFloorplanGroup(page.id, group.id);
+                        setExpandedGroupId(null);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { void handleImagePicked(e.target.files?.[0]); e.target.value = ""; }}
+      />
+      <input
+        ref={symbolImageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { void handleSymbolImagePicked(e.target.files?.[0]); e.target.value = ""; }}
+      />
+      </details>
+
+      {/* ── Numbering (line.speaker) ─────────────────────────────── */}
+      <details className="border-t border-[var(--color-border)]" open>
+        <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+          Numbering
+        </summary>
+      <div className="px-2 pb-2 flex flex-col gap-1.5">
+        <label className="flex items-center gap-2 text-[var(--color-text)]" title="Amplifier line / circuit the next symbols hang on. Speakers are numbered per line: 4.1, 4.2 …">
+          <span className="shrink-0">Line</span>
+          <input
+            className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+            value={activeLine}
+            placeholder={isLoudspeaker ? "e.g. 4 or SB" : "optional"}
+            onChange={(e) => onActiveLineChange(e.target.value)}
+            list="floorplan-lines"
+          />
+          <datalist id="floorplan-lines">
+            {lines.map((l) => <option key={l.line.lineNo} value={l.line.lineNo} />)}
+          </datalist>
+        </label>
+        <label className="flex items-center gap-2 text-[var(--color-text)]" title="How labels are composed: {{line}}, {{n}}, {{group}}, {{device}}">
+          <span className="shrink-0">Label</span>
+          <input
+            className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 font-mono"
+            value={page.labelTemplate ?? ""}
+            placeholder={effectiveLabelTemplate(page)}
+            onChange={(e) => updateFloorplanPage(page.id, { labelTemplate: e.target.value || undefined })}
+          />
+        </label>
+        {!isLoudspeaker && !activeLine && (
+          <p className="text-[var(--color-text-muted)] leading-snug">Leave the line empty to continue each group's own numbering (1.1 → 1.2). Set a line to number per amplifier line instead.</p>
+        )}
+      </div>
+      </details>
+
       {/* ── Lines ↔ amplifier channels ────────────────────────────── */}
       <details open>
         <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>

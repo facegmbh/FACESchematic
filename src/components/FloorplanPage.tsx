@@ -3,7 +3,7 @@ import { useSchematicStore } from "../store";
 import FloorplanToolbar from "./FloorplanToolbar";
 import FloorplanSidebar from "./FloorplanSidebar";
 import FloorplanOptionsPanel from "./FloorplanOptionsPanel";
-import FloorplanRenderer from "./FloorplanRenderer";
+import FloorplanRenderer, { type Selection } from "./FloorplanRenderer";
 import type { FloorplanPage as FloorplanPageType } from "../types";
 
 /** Active tool on a floorplan page. `place` drops symbols of the active group on click,
@@ -19,6 +19,9 @@ export default function FloorplanPage() {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   // Amplifier line new symbols are numbered on (loudspeaker plans): "4" → 4.1, 4.2 …
   const [activeLine, setActiveLine] = useState("");
+  // What is selected on the sheet. Lives here so the renderer draws the highlight and the
+  // options panel on the right shows the selected symbol's properties.
+  const [selection, setSelection] = useState<Selection>({ kind: "none" });
 
   const page = pages.find((p) => p.id === activePage);
   if (!page || page.type !== "floorplan") return null;
@@ -34,13 +37,7 @@ export default function FloorplanPage() {
     <div className="flex flex-1 overflow-hidden flex-col">
       <FloorplanToolbar page={fp} tool={tool} onToolChange={setTool} />
       <div className="flex flex-1 overflow-hidden">
-        <FloorplanSidebar
-          page={fp}
-          activeGroupId={effectiveGroupId}
-          onActiveGroupChange={setActiveGroupId}
-          activeLine={activeLine}
-          onActiveLineChange={setActiveLine}
-        />
+        <FloorplanSidebar page={fp} selection={selection} onSelectionChange={setSelection} />
         <FloorplanRenderer
           page={fp}
           tool={tool}
@@ -48,8 +45,18 @@ export default function FloorplanPage() {
           activeGroupId={effectiveGroupId}
           onActiveGroupChange={setActiveGroupId}
           activeLine={activeLine}
+          selection={selection}
+          onSelectionChange={setSelection}
         />
-        <FloorplanOptionsPanel page={fp} activeLine={activeLine} onActiveLineChange={setActiveLine} />
+        <FloorplanOptionsPanel
+          page={fp}
+          activeLine={activeLine}
+          onActiveLineChange={setActiveLine}
+          activeGroupId={effectiveGroupId}
+          onActiveGroupChange={setActiveGroupId}
+          selection={selection}
+          onSelectionChange={setSelection}
+        />
       </div>
     </div>
   );
