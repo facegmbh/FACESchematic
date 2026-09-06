@@ -1218,7 +1218,14 @@ export interface WifiRadioSpec {
   txDbm: Partial<Record<WifiBand, number>>;
   /** Antenna gain in dBi per band. */
   gainDbi: Partial<Record<WifiBand, number>>;
+  /** How the model is mounted. A ceiling unit radiates all round; a wall or in-wall unit
+   *  throws into the room, so its coverage starts as a sector rather than a circle.
+   *  Undefined counts as ceiling. */
+  mount?: "ceiling" | "wall";
 }
+
+/** The spread a wall-mounted access point is drawn with — wide, but not all round. */
+export const WALL_AP_APERTURE_DEG = 120;
 
 /** Wall build-ups a plan distinguishes. The list is deliberately short: these are the
  *  cases whose attenuation genuinely differs, not a materials catalogue. */

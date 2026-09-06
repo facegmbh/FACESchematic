@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { defaultCoverageForDevice } from "../floorplan";
+import { planningRadiusM } from "../wifiCoverage";
+import { getTemplateById } from "../templateApi";
+import { DEFAULT_HEATMAP } from "../types";
 import type { DeviceData, FloorplanPage } from "../types";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import { useT } from "../i18n";
@@ -35,6 +38,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const nodes = useSchematicStore((s) => s.nodes);
+  const customTemplates = useSchematicStore((s) => s.customTemplates);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -105,10 +109,16 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
         onClick={() => act(() => {
           // Anchored and filed under the device's own group, so aiming the camera aims what
           // it sees and the area switches off with that layer.
+          const cfgHm = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
           for (const sym of symbols) {
             const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
+            const devData = dev?.data as DeviceData | undefined;
+            const tpl = devData?.templateId ? getTemplateById(devData.templateId, customTemplates) : undefined;
             addFloorplanCoverage(page.id, {
-              ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
+              ...defaultCoverageForDevice(devData?.deviceType, {
+                rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
+                mount: tpl?.wifi?.mount,
+              }),
               symbolId: sym.id,
               groupId: sym.groupId,
               positionMm: { ...sym.positionMm },

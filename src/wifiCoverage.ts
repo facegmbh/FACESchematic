@@ -186,6 +186,24 @@ export function rangeForRssiM(
   return Math.pow(10, budget / (10 * pathLossExponent));
 }
 
+/**
+ * The radius a coverage circle for this access point should start at: its free run to
+ * −60 dBm, a good signal rather than the −67 dBm floor.
+ *
+ * Deliberately tied to the page's path-loss exponent, so the circle shrinks by itself
+ * once someone tells the plan it is a cluttered building — a U7 Pro goes from ~24 m in an
+ * open hall to ~13 m at n = 3.2. It ignores walls entirely; the heatmap is what accounts
+ * for those, and this is only meant as the quick visual.
+ */
+export function planningRadiusM(
+  spec: WifiRadioSpec | undefined,
+  band: WifiBand,
+  pathLossExponent: number,
+): number {
+  const radio = radioForBand(spec, band);
+  return rangeForRssiM(radio, -60, band, pathLossExponent);
+}
+
 /** The colour a level is drawn in. */
 export function rssiColor(dbm: number): string {
   for (const step of RSSI_STEPS) {

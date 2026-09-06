@@ -48,6 +48,7 @@ import {
   defaultCameraOptics,
   defaultCoverageForDevice,
   isCameraDeviceType,
+  isAccessPointDeviceType,
   rectFromDrag,
   legendDescriptionFor,
   legendInstallNoteFor,
@@ -994,6 +995,38 @@ describe("camera optics — reach from the lens", () => {
     expect(effectiveRangeM(absurd)).toBeLessThanOrEqual(COVERAGE_MAX_RANGE_M);
     const ultrawide = camera({ apertureDeg: 360, optics: optics({ megapixels: 0.3, dori: "identify" }) });
     expect(effectiveRangeM(ultrawide)).toBeGreaterThanOrEqual(COVERAGE_MIN_RANGE_M);
+  });
+
+  it("gives an access point a circle, not a wedge — it radiates all round", () => {
+    // The bug this guards: a U7 Pro used to arrive with a 90° camera-style sector.
+    expect(isAccessPointDeviceType("access-point")).toBe(true);
+    expect(isAccessPointDeviceType("network-wifi")).toBe(true);
+    expect(isAccessPointDeviceType("ip-camera")).toBe(false);
+
+    const ap = defaultCoverageForDevice("access-point");
+    expect(ap.shape).toBe("circle");
+    expect(ap.apertureDeg).toBeUndefined();
+    expect(ap.optics).toBeUndefined();
+  });
+
+  it("draws a wall-mounted access point as a wide sector, not a circle", () => {
+    // A U7 Pro Wall or an in-wall unit throws into the room; only a ceiling unit is
+    // all round. The mount comes off the model, not out of a guess.
+    const wall = defaultCoverageForDevice("access-point", { mount: "wall" });
+    expect(wall.shape).toBe("sector");
+    expect(wall.apertureDeg).toBe(120);
+    const ceiling = defaultCoverageForDevice("access-point", { mount: "ceiling" });
+    expect(ceiling.shape).toBe("circle");
+  });
+
+  it("starts an access point's circle at the reach its own radio gives it", () => {
+    const withRange = defaultCoverageForDevice("access-point", { rangeM: 24 });
+    expect(withRange.shape).toBe("circle");
+    expect(withRange.rangeM).toBe(24);
+    // A detector's supplied reach is honoured too, and it stays a wedge.
+    const det = defaultCoverageForDevice("motion-detector", { rangeM: 15 });
+    expect(det.shape).toBe("sector");
+    expect(det.rangeM).toBe(15);
   });
 
   it("gives a camera device a computing area and a detector a measured one", () => {

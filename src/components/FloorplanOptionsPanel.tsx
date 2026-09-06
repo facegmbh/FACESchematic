@@ -6,7 +6,7 @@ import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW,
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
   DEFAULT_HEATMAP, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
   WALL_MATERIAL_LABELS, WALL_THICKNESS_PRESETS_MM, WIFI_BANDS, WIFI_BAND_LABELS } from "../types";
-import { collectAccessPoints, coveredFraction, computeHeatmap, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
+import { collectAccessPoints, coveredFraction, computeHeatmap, planningRadiusM, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
 import { getTemplateById as lookupTemplate } from "../templateApi";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
@@ -397,11 +397,18 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                         let last: string | null = null;
                         for (const sym of selectedSymbols) {
                           if ((page.coverages ?? []).some((c) => c.symbolId === sym.id)) continue;
-                          // A camera arrives with a lens that computes its own reach; a
-                          // detector arrives with metres to type.
+                          // A camera arrives with a lens that computes its own reach, an
+                          // access point with a circle at its own radio's reach, and a
+                          // detector with metres to type.
                           const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
+                          const devData = dev?.data as DeviceData | undefined;
+                          const tpl = devData?.templateId ? lookupTemplate(devData.templateId, customTemplates) : undefined;
+                          const cfgHm = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
                           last = addFloorplanCoverage(page.id, {
-                            ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
+                            ...defaultCoverageForDevice(devData?.deviceType, {
+                              rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
+                              mount: tpl?.wifi?.mount,
+                            }),
                             symbolId: sym.id,
                             groupId: sym.groupId,
                             positionMm: { ...sym.positionMm },

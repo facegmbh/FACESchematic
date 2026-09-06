@@ -72,8 +72,6 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://techspecs.ui.com/unifi/wifi/u7-pro-wall",
     searchTerms: ["unifi", "ubiquiti", "u7", "wall", "wandmontage", "wifi 7", "wlan", "access point", "ap", "6ghz"],
     planSymbol: { shape: "square", glyph: "AP" },
-    // A wall-mount AP radiates into the room rather than all round; a coverage sector
-    // aimed off the wall reads truer than a full circle.
     installNotes: "Wandmontage — richtwirkend in den Raum",
     poeDrawW: 21,
     voltage: "PoE+ (802.3at)",
@@ -81,6 +79,8 @@ export const templates: DeviceTemplate[] = [
       bands: ["2.4", "5", "6"],
       txDbm: { "2.4": 16, "5": 17, "6": 17 },
       gainDbi: { "2.4": 4, "5": 6, "6": 6 },
+      // Wall-mounted: its coverage area starts as a sector aimed off the wall.
+      mount: "wall",
     },
     ports: [
       port("LAN (2.5 GbE, PoE+ In)", "ethernet", "bidirectional"),
@@ -147,6 +147,7 @@ export const templates: DeviceTemplate[] = [
       bands: ["2.4", "5", "6"],
       txDbm: { "2.4": 16, "5": 17, "6": 17 },
       gainDbi: { "2.4": 3, "5": 5, "6": 5 },
+      mount: "wall",
     },
     ports: [
       port("LAN In (2.5 GbE, PoE+ In)", "ethernet", "input"),

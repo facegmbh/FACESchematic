@@ -33,7 +33,7 @@ import type { FloorplanSymbolShape,
   FloorplanUnderlay,
   TitleBlock,
 } from "./types";
-import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M } from "./types";
+import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, WALL_AP_APERTURE_DEG } from "./types";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -1199,12 +1199,42 @@ export function isCameraDeviceType(deviceType?: string): boolean {
   return Boolean(deviceType && CAMERA_DEVICE_TYPES.has(deviceType));
 }
 
-/** A new area for a device, already set up the way that kind of device is judged: a
- *  camera gets a lens that computes its own reach, a detector gets metres. */
-export function defaultCoverageForDevice(deviceType?: string): Omit<FloorplanCoverage, "id"> {
+/** Device types that radiate all round rather than in a direction. A ceiling access
+ *  point has no aim, so a wedge would be a lie about it. */
+export const OMNI_DEVICE_TYPES = new Set(["access-point", "network-wifi"]);
+
+export function isAccessPointDeviceType(deviceType?: string): boolean {
+  return Boolean(deviceType && OMNI_DEVICE_TYPES.has(deviceType));
+}
+
+/**
+ * A new area for a device, already set up the way that kind of device is judged.
+ *
+ *  - a camera gets a lens that computes its own reach from megapixels and angle;
+ *  - an access point gets a circle, because it radiates all round — a wall-mounted one
+ *    can be switched to a sector afterwards;
+ *  - everything else gets a wedge and a reach in metres off the datasheet.
+ *
+ * `rangeM` lets the caller supply a computed reach — for an access point that is its own
+ * free-run radius, which the caller can work out because it holds the radio spec.
+ */
+export function defaultCoverageForDevice(
+  deviceType?: string,
+  opts?: { rangeM?: number; mount?: "ceiling" | "wall" },
+): Omit<FloorplanCoverage, "id"> {
+  if (isAccessPointDeviceType(deviceType)) {
+    // A wall or in-wall unit throws into the room; only a ceiling unit is all round.
+    if (opts?.mount === "wall") {
+      const wedge = defaultCoverage("sector");
+      return { ...wedge, apertureDeg: WALL_AP_APERTURE_DEG, rangeM: opts?.rangeM ?? wedge.rangeM };
+    }
+    const circle = defaultCoverage("circle");
+    return { ...circle, rangeM: opts?.rangeM ?? circle.rangeM };
+  }
   const base = defaultCoverage("sector");
-  if (!isCameraDeviceType(deviceType)) return base;
-  return { ...base, optics: defaultCameraOptics() };
+  const withRange = opts?.rangeM ? { ...base, rangeM: opts.rangeM } : base;
+  if (!isCameraDeviceType(deviceType)) return withRange;
+  return { ...withRange, optics: defaultCameraOptics() };
 }
 
 /** Where an area's caption goes: just past the far edge, along the direction it faces, so

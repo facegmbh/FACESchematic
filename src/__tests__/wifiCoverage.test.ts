@@ -295,3 +295,35 @@ describe("the UniFi access points in the library", () => {
     expect(collectAccessPoints(page, "5", () => spec)).toHaveLength(0);
   });
 });
+
+describe("planning radius for an access point's circle", () => {
+  it("is the free run to -60 dBm, a good signal rather than the floor", async () => {
+    const { planningRadiusM } = await import("../wifiCoverage");
+    const spec = { bands: ["5"] as WifiBand[], txDbm: { "5": 17 }, gainDbi: { "5": 6 } };
+    // A U7 Pro in an open building: about 24 m to -60 dBm, and the -67 dBm floor is
+    // roughly twice that, which is why the floor makes a poor starting circle.
+    expect(planningRadiusM(spec, "5", 2.6)).toBeCloseTo(24, 0);
+    expect(planningRadiusM(spec, "5", 2.6)).toBeLessThan(rangeForRssiM({ txDbm: 17, gainDbi: 6 }, -67, "5", 2.6));
+  });
+
+  it("shrinks by itself once the plan says the building is cluttered", async () => {
+    const { planningRadiusM } = await import("../wifiCoverage");
+    const spec = { bands: ["5"] as WifiBand[], txDbm: { "5": 17 }, gainDbi: { "5": 6 } };
+    const open = planningRadiusM(spec, "5", 2.6);
+    const cluttered = planningRadiusM(spec, "5", 3.2);
+    expect(cluttered).toBeLessThan(open);
+    expect(cluttered).toBeCloseTo(13, 0);
+  });
+});
+
+describe("how the UniFi models are mounted", () => {
+  it("marks the wall and in-wall units, and leaves the ceiling ones alone", async () => {
+    const { DEVICE_TEMPLATES } = await import("../deviceLibrary");
+    const byModel = (m: string) => DEVICE_TEMPLATES.find((t) => t.modelNumber === m);
+    expect(byModel("U7-Pro-Wall")?.wifi?.mount).toBe("wall");
+    expect(byModel("U7-IW")?.wifi?.mount).toBe("wall");
+    // Ceiling units say nothing, which is the default.
+    expect(byModel("U7-Pro")?.wifi?.mount).toBeUndefined();
+    expect(byModel("E7")?.wifi?.mount).toBeUndefined();
+  });
+});
