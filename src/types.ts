@@ -1007,6 +1007,9 @@ export interface FloorplanUnderlay {
    *  show the choice and re-render it while the source file is still in memory — the raster
    *  itself is already baked, so this is a record of what went in, not a live switch. */
   pdfLayers?: PdfLayerChoice[];
+  /** Resolution the source PDF was rasterized at, in dpi of the real sheet. Shown in the
+   *  toolbar and re-used when the page or the layer choice changes. */
+  dpi?: number;
 }
 
 /** One layer of the source PDF, as offered at import. */

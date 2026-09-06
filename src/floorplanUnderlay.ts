@@ -13,10 +13,23 @@ import type { PdfLayerChoice } from "./types";
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
 export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg";
 
-/** Long-edge cap for the rasterized underlay. An A1 plan at 2400 px still resolves
- *  individual room labels when zoomed, while keeping the data URL small enough that
- *  the autosave blob fits in localStorage. */
+/** Long-edge cap for a rasterized *image* underlay. Images carry no physical size, so a
+ *  pixel cap is all there is to go on. PDFs are measured in dpi instead — see below. */
 export const DEFAULT_MAX_LONG_EDGE_PX = 2400;
+
+/** Rasterizing resolution for a PDF underlay, in dots per inch of the real sheet.
+ *
+ *  A pixel cap is the wrong measure for a plan: 2400 px is 203 dpi on A4 but only 72 dpi on
+ *  A1, so exactly the large drawings that carry the most detail came out the coarsest. A dpi
+ *  target treats every sheet size alike. 150 dpi is the usual plotting resolution and keeps
+ *  room labels and dimension text readable when zoomed; line art compresses so well as PNG
+ *  that an A1 sheet still lands well under a megabyte. */
+export const DEFAULT_UNDERLAY_DPI = 150;
+export const UNDERLAY_DPI_CHOICES = [100, 150, 200, 300] as const;
+
+/** Hard ceiling on the rasterized long edge. Browsers refuse to allocate canvases beyond
+ *  roughly 16 k px a side, and a plan that large would blow the autosave budget anyway. */
+export const MAX_RASTER_LONG_EDGE_PX = 10000;
 
 /** Warn above this — localStorage autosave is a ~5 MB budget for the whole project. */
 export const UNDERLAY_SIZE_WARN_BYTES = 3_000_000;
@@ -37,6 +50,8 @@ export interface ImportedUnderlay {
   /** The source PDF's layers and whether each was drawn. Undefined for images and for
    *  PDFs that carry no layers. */
   layers?: PdfLayerChoice[];
+  /** Resolution the PDF was rasterized at, in dpi of the real sheet. */
+  dpi?: number;
 }
 
 /** Rough decoded byte count of a data URL (base64 is 4/3 of the payload). */
@@ -104,7 +119,7 @@ export async function getPdfPageCount(file: File): Promise<number> {
   }
 }
 
-async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: number, layers?: Record<string, boolean>): Promise<ImportedUnderlay> {
+async function renderPdfPage(file: File, pageNumber: number, dpi: number, layers?: Record<string, boolean>): Promise<ImportedUnderlay> {
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
   const task = pdfjs.getDocument({ data });
@@ -113,8 +128,12 @@ async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: numb
     const clampedPage = Math.min(Math.max(pageNumber, 1), doc.numPages);
     const page = await doc.getPage(clampedPage);
     // Scale 1 gives PDF user units (points), which carry the sheet's true physical size.
+    // A point is 1/72 inch, so the dpi target is a scale factor directly — capped so a
+    // poster-sized sheet cannot ask for a canvas the browser will refuse.
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(maxLongEdgePx / Math.max(base.width, base.height), 4);
+    const wanted = Math.max(1, dpi) / 72;
+    const ceiling = MAX_RASTER_LONG_EDGE_PX / Math.max(base.width, base.height);
+    const scale = Math.min(wanted, ceiling);
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement("canvas");
@@ -157,6 +176,7 @@ async function renderPdfPage(file: File, pageNumber: number, maxLongEdgePx: numb
       naturalSizeMm: { w: base.width * PT_TO_MM, h: base.height * PT_TO_MM },
       approxBytes: dataUrlBytes(src),
       layers: chosen,
+      dpi: Math.round(scale * 72),
     };
   } finally {
     await task.destroy();
@@ -280,6 +300,9 @@ export interface ImportUnderlayOptions {
   /** 1-based page to rasterize from a PDF. Defaults to 1. */
   pageNumber?: number;
   maxLongEdgePx?: number;
+  /** Rasterizing resolution for a PDF, in dpi of the real sheet. Defaults to
+   *  {@link DEFAULT_UNDERLAY_DPI}. Ignored for images, which have no physical size. */
+  dpi?: number;
   /** Which of the PDF's own layers to draw, as id → visible. Ids come from
    *  {@link readPdfLayers} or from a previous import's `layers`. Omitted layers keep the
    *  visibility the PDF itself specifies, so leaving this out renders the plan as its
@@ -344,7 +367,7 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
     throw new Error("DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF.");
   }
   if (isPdf(file)) {
-    return renderPdfPage(file, opts.pageNumber ?? 1, maxLongEdgePx, opts.layers);
+    return renderPdfPage(file, opts.pageNumber ?? 1, opts.dpi ?? DEFAULT_UNDERLAY_DPI, opts.layers);
   }
   if (file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "svg"].includes(ext)) {
     return rasterizeImage(file, maxLongEdgePx);

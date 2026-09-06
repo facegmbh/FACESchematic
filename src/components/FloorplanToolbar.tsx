@@ -3,7 +3,7 @@ import { useSchematicStore } from "../store";
 import type { FloorplanKind, FloorplanPage, FloorplanUnderlay } from "../types";
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
-import { UNDERLAY_ACCEPT, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, readPdfLayers } from "../floorplanUnderlay";
+import { UNDERLAY_ACCEPT, UNDERLAY_DPI_CHOICES, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, readPdfLayers } from "../floorplanUnderlay";
 import { runFloorplanExport } from "../floorplanExport";
 import type { FloorplanTool } from "./FloorplanPage";
 
@@ -36,10 +36,10 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   const underlay = page.underlay;
   const isCustomPaper = page.paperId === "custom";
 
-  const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>) => {
+  const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>, dpi?: number) => {
     setImporting(true);
     try {
-      const imported = await importUnderlayFile(file, { pageNumber, layers });
+      const imported = await importUnderlayFile(file, { pageNumber, layers, dpi });
       // Keep an existing underlay's placement when only the PDF page changes — the user
       // has usually calibrated it already and every sheet of a set shares one scale.
       const keepPlacement = underlay && underlay.sourceName === imported.sourceName;
@@ -89,6 +89,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
         opacity: underlay?.opacity ?? 1,
         locked: underlay?.locked ?? false,
         pdfLayers: imported.layers,
+        dpi: imported.dpi,
         // Re-rendering the same source — another page of the set, or a different layer
         // choice — must not throw away a calibration the user already did. The raster keeps
         // its resolution, so mm-per-pixel still holds.
@@ -140,7 +141,19 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
     }
     const choice: Record<string, boolean> = {};
     for (const l of current) choice[l.id] = l.id === id ? visible : l.visible;
-    void applyImport(file, underlay?.pageNumber ?? 1, choice);
+    void applyImport(file, underlay?.pageNumber ?? 1, choice, underlay?.dpi);
+  };
+
+  const layerChoiceOf = (u: typeof underlay) =>
+    u?.pdfLayers ? Object.fromEntries(u.pdfLayers.map((l) => [l.id, l.visible])) : undefined;
+
+  const handleDpiChange = (dpi: number) => {
+    const file = sourceFiles.get(page.id);
+    if (!file) {
+      addToast("Re-import the PDF to change the resolution — the source file isn't in memory any more.", "info", 5000);
+      return;
+    }
+    void applyImport(file, underlay?.pageNumber ?? 1, layerChoiceOf(underlay), dpi);
   };
 
   const handlePdfPageChange = (pageNumber: number) => {
@@ -149,10 +162,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
       addToast("Re-import the PDF to switch pages — the source file isn't in memory any more.", "info", 5000);
       return;
     }
-    const choice = underlay?.pdfLayers
-      ? Object.fromEntries(underlay.pdfLayers.map((l) => [l.id, l.visible]))
-      : undefined;
-    void applyImport(file, pageNumber, choice);
+    void applyImport(file, pageNumber, layerChoiceOf(underlay), underlay?.dpi);
   };
 
   return (
@@ -290,6 +300,24 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
                 className="w-12 bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
               />
               <span className="text-[var(--color-text-muted)]">/ {underlay.pageCount}</span>
+            </label>
+          )}
+          {underlay.kind === "pdf" && (
+            <label className="flex items-center gap-1 text-[var(--color-text)]" title="How finely the PDF is rasterized, in dots per inch of the real sheet. Higher keeps room labels and dimension text readable when zoomed, at the cost of project size.">
+              <span style={{ fontSize: 9 }}>QUALITY</span>
+              <select
+                className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
+                value={underlay.dpi ?? ""}
+                disabled={importing}
+                onChange={(e) => { if (e.target.value) handleDpiChange(Number(e.target.value)); }}
+              >
+                {/* A plan imported before the resolution was recorded has no dpi to show. */}
+                {underlay.dpi === undefined && <option value="">—</option>}
+                {underlay.dpi !== undefined && !UNDERLAY_DPI_CHOICES.includes(underlay.dpi as (typeof UNDERLAY_DPI_CHOICES)[number]) && (
+                  <option value={underlay.dpi}>{underlay.dpi} dpi</option>
+                )}
+                {UNDERLAY_DPI_CHOICES.map((d) => <option key={d} value={d}>{d} dpi</option>)}
+              </select>
             </label>
           )}
           {(underlay.pdfLayers?.length ?? 0) > 0 && (

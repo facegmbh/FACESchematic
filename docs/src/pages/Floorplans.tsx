@@ -47,6 +47,16 @@ export default function FloorplansPage() {
         browser&apos;s autosave budget — the app warns when that happens, and saving the project to
         a file always works.
       </p>
+      <p>
+        A PDF is rasterized at a <strong>resolution in dpi of the real sheet</strong>, not at a
+        fixed pixel count: 2400 px is 203 dpi on A4 but only 72 dpi on A1, so a pixel cap made
+        exactly the large drawings — the ones carrying the most detail — come out the coarsest.
+        The default is 150 dpi, the usual plotting resolution, which keeps room labels and
+        dimension text readable when zoomed. <em>Quality</em> in the toolbar switches between 100
+        and 300 dpi; line art compresses so well as PNG that a dense A1 sheet is about 0.6 MB at
+        150 dpi and 1.8 MB at 300. Changing it redraws from the PDF, so the source file has to
+        still be open in the session.
+      </p>
       <ul>
         <li>
           <strong>Layers</strong> — a PDF from AutoCAD or Revit usually carries its own layers
