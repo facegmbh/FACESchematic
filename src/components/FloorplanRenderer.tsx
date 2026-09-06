@@ -1268,6 +1268,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           x={symbolMenu.x}
           y={symbolMenu.y}
           ids={symbolMenu.ids}
+          onSelectCoverage={(id) => setSelection({ kind: "coverage", id })}
           onClose={() => setSymbolMenu(null)}
         />
       )}

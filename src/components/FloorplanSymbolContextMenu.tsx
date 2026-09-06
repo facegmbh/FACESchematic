@@ -13,6 +13,8 @@ interface Props {
   y: number;
   /** The symbols the menu acts on. */
   ids: string[];
+  /** Open an existing coverage area for editing instead of stacking a new one on it. */
+  onSelectCoverage?: (coverageId: string) => void;
   onClose: () => void;
 }
 
@@ -25,7 +27,7 @@ interface Props {
  * and out of the legend, while they stay in the project. Switching one back on happens in
  * the panel — a hidden symbol has nothing left to right-click.
  */
-export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }: Props) {
+export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCoverage, onClose }: Props) {
   const t = useT();
   const { ref: menuRef, pos } = useContextMenuPosition(x, y);
   const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
@@ -55,6 +57,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
   const group = page.groups.find((g) => g.id === first.groupId);
   const many = symbols.length > 1;
   const hiddenGroups = page.groups.filter((g) => g.hidden);
+  const ownCoverage = many ? undefined : (page.coverages ?? []).find((c) => c.symbolId === first.id);
 
   const act = (run: () => void) => { run(); onClose(); };
   const turn = (by: number) => act(() => updateFloorplanSymbols(page.id, ids, { rotationDeg: (first.rotationDeg ?? 0) + by }));
@@ -85,8 +88,20 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
       <Item label={t("Upright again")} onClick={() => act(() => updateFloorplanSymbols(page.id, ids, { rotationDeg: 0 }))} />
 
       <Divider />
+      {/* Editing the area it already has comes first: pressing "add" twice used to stack a
+          second wedge on the device, and the one underneath keeps its own angle — which
+          reads exactly like a rotation that did not take. */}
+      {!many && ownCoverage && onSelectCoverage && (
+        <Item
+          label={t("Edit its coverage area")}
+          onClick={() => act(() => onSelectCoverage(ownCoverage.id))}
+          title={t("Opens the area this device already has, in the panel on the right.")}
+        />
+      )}
       <Item
-        label={many ? t("Add a coverage area to each") : t("Add a coverage area")}
+        label={many
+          ? t("Add a coverage area to each")
+          : ownCoverage ? t("Add another coverage area") : t("Add a coverage area")}
         onClick={() => act(() => {
           // Anchored and filed under the device's own group, so aiming the camera aims what
           // it sees and the area switches off with that layer.
@@ -101,7 +116,9 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onClose }:
             });
           }
         })}
-        title={t("Draw what the device covers — a camera's field of view, a detector's reach. Adjust the reach and the angle in the panel on the right.")}
+        title={ownCoverage
+          ? t("A second area on the same device — a corridor lens beside a wide one, say.")
+          : t("Draw what the device covers — a camera's field of view, a detector's reach. Adjust the reach and the angle in the panel on the right.")}
       />
 
       {page.groups.length > 1 && (

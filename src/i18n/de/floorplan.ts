@@ -539,4 +539,15 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "at": "bei",
   "{n} px/m at 5 m": "{n} px/m bei 5 m",
   "{n} px/m at 10 m": "{n} px/m bei 10 m",
+
+  // Vorhandene Abdeckung öffnen statt eine zweite zu stapeln
+  "Edit coverage": "Abdeckung bearbeiten",
+  "Edit its coverage area": "Abdeckungsbereich bearbeiten",
+  "Add another coverage area": "Weiteren Abdeckungsbereich hinzufügen",
+  "Open the area this device already has. To give it a second one, right-click the symbol.":
+    "Öffnet den Bereich, den dieses Gerät schon hat. Für einen zweiten: Rechtsklick auf das Symbol.",
+  "Opens the area this device already has, in the panel on the right.":
+    "Öffnet den vorhandenen Bereich rechts im Panel.",
+  "A second area on the same device — a corridor lens beside a wide one, say.":
+    "Ein zweiter Bereich am selben Gerät — etwa eine Vorhanglinse neben einer Weitwinkel-Erfassung.",
 };

@@ -364,31 +364,50 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     {t("Edit symbol…")}
                   </button>
                 )}
-                <button
-                  className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-sky-400 hover:text-sky-700"
-                  onClick={() => {
-                    // One area per selected device, anchored to it and filed under its own
-                    // group so it switches with that layer. Aimed by the device from the
-                    // start — the offset is 0.
-                    let last: string | null = null;
-                    for (const sym of selectedSymbols) {
-                      // A camera arrives with a lens that computes its own reach; a
-                      // detector arrives with metres to type.
-                      const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
-                      last = addFloorplanCoverage(page.id, {
-                        ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
-                        symbolId: sym.id,
-                        groupId: sym.groupId,
-                        positionMm: { ...sym.positionMm },
-                        label: sym.label,
-                      });
-                    }
-                    if (last && !many) onSelectionChange({ kind: "coverage", id: last });
-                  }}
-                  title={t("Draw what this device covers — a camera's field of view, a detector's reach. It follows the device and turns with it.")}
-                >
-                  ◔ {t("Coverage")}
-                </button>
+                {(() => {
+                  // Pressing this a second time has to open the area that is already there,
+                  // not stack another one on top of it — two wedges on one device look like
+                  // a rotation that did not take, because the one underneath keeps its own
+                  // angle. Adding a second area stays possible from the right-click menu.
+                  const existing = selectedSymbols
+                    .map((sym) => (page.coverages ?? []).find((c) => c.symbolId === sym.id))
+                    .filter((c): c is NonNullable<typeof c> => Boolean(c));
+                  const allCovered = existing.length === selectedSymbols.length;
+                  return (
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-sky-400 hover:text-sky-700"
+                      onClick={() => {
+                        if (allCovered) {
+                          onSelectionChange({ kind: "coverage", id: existing[0].id });
+                          return;
+                        }
+                        // One area per device that has none yet, anchored to it and filed
+                        // under its own group so it switches with that layer. Aimed by the
+                        // device from the start — the offset is 0.
+                        let last: string | null = null;
+                        for (const sym of selectedSymbols) {
+                          if ((page.coverages ?? []).some((c) => c.symbolId === sym.id)) continue;
+                          // A camera arrives with a lens that computes its own reach; a
+                          // detector arrives with metres to type.
+                          const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
+                          last = addFloorplanCoverage(page.id, {
+                            ...defaultCoverageForDevice((dev?.data as DeviceData | undefined)?.deviceType),
+                            symbolId: sym.id,
+                            groupId: sym.groupId,
+                            positionMm: { ...sym.positionMm },
+                            label: sym.label,
+                          });
+                        }
+                        if (last && !many) onSelectionChange({ kind: "coverage", id: last });
+                      }}
+                      title={allCovered
+                        ? t("Open the area this device already has. To give it a second one, right-click the symbol.")
+                        : t("Draw what this device covers — a camera's field of view, a detector's reach. It follows the device and turns with it.")}
+                    >
+                      ◔ {allCovered ? t("Edit coverage") : t("Coverage")}
+                    </button>
+                  );
+                })()}
                 <div className="flex-1" />
                 <button
                   className="px-1.5 py-0.5 rounded text-red-500 hover:bg-red-500/10 hover:text-red-700"
