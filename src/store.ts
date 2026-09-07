@@ -919,6 +919,8 @@ interface SchematicState {
   updateFloorplanCoverage: (pageId: string, coverageId: string, patch: Partial<Omit<FloorplanCoverage, "id">>) => void;
   removeFloorplanCoverage: (pageId: string, coverageId: string) => void;
   addFloorplanWall: (pageId: string, wall: Omit<FloorplanWall, "id">) => string;
+  /** Many walls at once — an import from the PDF — as a single undo step. */
+  addFloorplanWalls: (pageId: string, walls: Omit<FloorplanWall, "id">[]) => string[];
   updateFloorplanWall: (pageId: string, wallId: string, patch: Partial<Omit<FloorplanWall, "id">>) => void;
   removeFloorplanWall: (pageId: string, wallId: string) => void;
   updateFloorplanHeatmap: (pageId: string, patch: Partial<FloorplanHeatmap>) => void;
@@ -5966,6 +5968,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     });
     get().saveToLocalStorage();
     return id;
+  },
+
+  addFloorplanWalls: (pageId, walls) => {
+    if (walls.length === 0) return [];
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const ids = walls.map(() => nextFloorplanWallId());
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        walls: [...(p.walls ?? []), ...walls.map((w, i) => ({ ...w, id: ids[i] }))],
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return ids;
   },
 
   updateFloorplanWall: (pageId, wallId, patch) => {

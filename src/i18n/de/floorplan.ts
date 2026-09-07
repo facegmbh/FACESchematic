@@ -610,4 +610,36 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Auf WLAN-Ausleuchtungsplan umstellen? Legendentitel, Hinweis-Überschrift, Revisionsspalten und Plankopf-Felder werden auf die Vorgabe dieses Typs zurückgesetzt, Symbole heißen AP1, AP2 … und die Heatmap wird eingeschaltet.",
   "Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend.":
     "Lautsprecherpläne nummerieren je Endstufenlinie (4.1, 4.2 …) und tragen die Beschallungsplan-Vorgaben. Ein WLAN-Ausleuchtungsplan nummeriert Access Points AP1, AP2 …, schaltet die Heatmap ein und druckt die Signalfarbskala in die Legende.",
+
+  // ─── Wände aus dem PDF ─────────────────────────────────────────
+  "Walls from PDF": "Wände aus PDF",
+  "Walls from the PDF": "Wände aus dem PDF",
+  "Reading…": "Lese…",
+  "Read the walls out of the PDF's own geometry — pick the layer they are drawn on, and their thickness comes from the drawing.":
+    "Die Wände aus der Geometrie des PDFs lesen — die Ebene wählen, auf der sie gezeichnet sind; die Dicke kommt aus der Zeichnung.",
+  "Could not read the geometry of this PDF.": "Die Geometrie dieses PDFs ließ sich nicht lesen.",
+  "Layers to take walls from": "Ebenen, aus denen Wände übernommen werden",
+  "all layers (pick by hand)": "alle Ebenen (von Hand auswählen)",
+  "all layers": "alle Ebenen",
+  "This PDF has no layers, so every line is offered. Put the candidates on the sheet and pick the walls by hand.":
+    "Dieses PDF hat keine Ebenen, darum werden alle Linien angeboten. Kandidaten auf das Blatt legen und die Wände von Hand auswählen.",
+  "The plan states {plan}, the page is set to {page}. Thicknesses are read at the page's scale.":
+    "Der Plan nennt {plan}, die Seite steht auf {page}. Dicken werden im Maßstab der Seite gelesen.",
+  "Use {scale}": "{scale} übernehmen",
+  "Min. length": "Mindestlänge",
+  "Shorter pieces — door jambs, ticks — are left out. Real millimetres.":
+    "Kürzere Stücke — Türlaibungen, Striche — bleiben draußen. Echte Millimeter.",
+  "walls": "Wände",
+  "{n} with thickness read from the drawing": "{n} mit aus der Zeichnung gelesener Dicke",
+  "{n} at {mm} mm": "{n} mit {mm} mm",
+  "Take all": "Alle übernehmen",
+  "Put every listed wall on the plan, as one undo step.": "Alle aufgeführten Wände in den Plan setzen, als ein Rückgängig-Schritt.",
+  "Pick on the sheet": "Auf dem Blatt auswählen",
+  "Lay the candidates over the plan and take them one by one with a click.":
+    "Die Kandidaten über den Plan legen und einzeln per Klick übernehmen.",
+  "{n} walls taken from the PDF ({source}).": "{n} Wände aus dem PDF übernommen ({source}).",
+  "{n} candidates on the sheet — hide": "{n} Kandidaten auf dem Blatt — ausblenden",
+  "Stop offering the remaining candidates on the sheet (Esc does the same).":
+    "Die restlichen Kandidaten nicht mehr anbieten (Esc tut dasselbe).",
+  "Take as wall": "Als Wand übernehmen",
 };

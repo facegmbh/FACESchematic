@@ -5,6 +5,7 @@ import FloorplanSidebar from "./FloorplanSidebar";
 import FloorplanOptionsPanel from "./FloorplanOptionsPanel";
 import FloorplanRenderer, { type Selection } from "./FloorplanRenderer";
 import type { FloorplanPage as FloorplanPageType } from "../types";
+import type { WallCandidateSet } from "../pdfWalls";
 
 /** Active tool on a floorplan page. `place` drops symbols of the active group on click,
  *  `note` drops a free text note, `erase` drags out a white cover over part of the
@@ -22,6 +23,9 @@ export default function FloorplanPage() {
   // What is selected on the sheet. Lives here so the renderer draws the highlight and the
   // options panel on the right shows the selected symbol's properties.
   const [selection, setSelection] = useState<Selection>({ kind: "none" });
+  // Wall candidates read out of the PDF, laid over the plan to be picked one by one.
+  // Session state only — a picked candidate becomes a wall, the rest is forgotten.
+  const [wallCandidates, setWallCandidates] = useState<WallCandidateSet | null>(null);
 
   const page = pages.find((p) => p.id === activePage);
   if (!page || page.type !== "floorplan") return null;
@@ -35,7 +39,7 @@ export default function FloorplanPage() {
 
   return (
     <div className="flex flex-1 overflow-hidden flex-col">
-      <FloorplanToolbar page={fp} tool={tool} onToolChange={setTool} />
+      <FloorplanToolbar page={fp} tool={tool} onToolChange={setTool} wallCandidates={wallCandidates} onWallCandidatesChange={setWallCandidates} />
       <div className="flex flex-1 overflow-hidden">
         <FloorplanSidebar page={fp} selection={selection} onSelectionChange={setSelection} />
         <FloorplanRenderer
@@ -47,6 +51,8 @@ export default function FloorplanPage() {
           activeLine={activeLine}
           selection={selection}
           onSelectionChange={setSelection}
+          wallCandidates={wallCandidates}
+          onWallCandidatesChange={setWallCandidates}
         />
         <FloorplanOptionsPanel
           page={fp}

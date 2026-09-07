@@ -1,6 +1,7 @@
 import { realMmToPaperMm, type Vec2 } from "../floorplan";
 import { wallAttenuationDb } from "../wifiCoverage";
 import { useT } from "../i18n";
+import type { WallCandidate } from "../pdfWalls";
 import {
   WALL_MATERIAL_COLORS,
   WALL_MATERIAL_LABELS,
@@ -22,6 +23,13 @@ interface Props {
   drawing?: { pointsMm: Vec2[]; cursorMm: Vec2 } | null;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
+  /** Walls read out of the PDF but not yet taken — drawn faintly, a click takes one. */
+  candidates?: readonly WallCandidate[];
+  onPickCandidate?: (index: number) => void;
+  /** Width of the invisible grab strip in *local* px. The sheet is CSS-scaled by the zoom,
+   *  so the renderer passes something like 12 / zoom — a thin wall stays grabbable when
+   *  an A1 sheet is fitted to the window and a local pixel is a fifth of a real one. */
+  hitPx?: number;
 }
 
 /**
@@ -33,11 +41,11 @@ interface Props {
  * makes a mistyped thickness visible instead of hiding it in a number field.
  */
 export default function FloorplanWallLayer({
-  page, mmToPx, sheetPx, interactive, selectedId, drawing, onSelect, onContextMenu,
+  page, mmToPx, sheetPx, interactive, selectedId, drawing, onSelect, onContextMenu, candidates, onPickCandidate, hitPx = 10,
 }: Props) {
   const t = useT();
   const walls = page.walls ?? [];
-  if (walls.length === 0 && !drawing) return null;
+  if (walls.length === 0 && !drawing && !candidates?.length) return null;
 
   /** Real thickness → stroke width in screen px, with a floor so a thin wall stays
    *  clickable at a zoomed-out view. */
@@ -68,7 +76,7 @@ export default function FloorplanWallLayer({
               points={polyline(wall.pointsMm)}
               fill="none"
               stroke="transparent"
-              strokeWidth={Math.max(width, 10)}
+              strokeWidth={Math.max(width, hitPx)}
               strokeLinecap="butt"
               strokeLinejoin="miter"
               style={{
@@ -119,6 +127,44 @@ export default function FloorplanWallLayer({
                 style={{ pointerEvents: "none" }}
               />
             )}
+          </g>
+        );
+      })}
+
+      {/* Candidates from the PDF: dashed and translucent, so they read as an offer and not
+          as walls that already count. A click takes one over at its read thickness. */}
+      {candidates?.map((c, i) => {
+        const width = c.thicknessMm
+          ? Math.max(2, mmToPx(realMmToPaperMm(c.thicknessMm, page.scaleDenominator)))
+          : 2;
+        return (
+          <g key={`cand-${i}`} data-wall-candidate>
+            {/* Grab strip first, sized for the zoom; the dashed line on top is just the picture. */}
+            <polyline
+              points={polyline(c.pointsMm)}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={Math.max(width, hitPx)}
+              strokeLinecap="butt"
+              style={{ pointerEvents: interactive && onPickCandidate ? "stroke" : "none", cursor: "copy" }}
+              onMouseDown={(e) => {
+                if (!interactive || !onPickCandidate) return;
+                e.stopPropagation();
+                onPickCandidate(i);
+              }}
+            >
+              <title>{c.thicknessMm ? `${t("Take as wall")} · ${c.thicknessMm} mm` : t("Take as wall")}</title>
+            </polyline>
+            <polyline
+              points={polyline(c.pointsMm)}
+              fill="none"
+              stroke="#0284c7"
+              strokeWidth={Math.max(width, 3)}
+              strokeOpacity={0.45}
+              strokeDasharray="6 4"
+              strokeLinecap="butt"
+              style={{ pointerEvents: "none" }}
+            />
           </g>
         );
       })}

@@ -66,6 +66,7 @@ import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
 import { collectAccessPoints } from "../wifiCoverage";
+import type { WallCandidateSet } from "../pdfWalls";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
 import { useT } from "../i18n";
@@ -87,6 +88,9 @@ interface Props {
    *  right can show and edit whatever the click landed on. */
   selection: Selection;
   onSelectionChange: (selection: Selection) => void;
+  /** Walls read out of the PDF, offered on the sheet for picking. */
+  wallCandidates?: WallCandidateSet | null;
+  onWallCandidatesChange?: (set: WallCandidateSet | null) => void;
 }
 
 export type Selection =
@@ -125,7 +129,7 @@ function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick
   return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} symbolSizeMm={symbolSizeMm} />;
 }
 
-export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine, selection, onSelectionChange }: Props) {
+export default function FloorplanRenderer({ page, tool, onToolChange, activeGroupId, onActiveGroupChange, activeLine, selection, onSelectionChange, wallCandidates, onWallCandidatesChange }: Props) {
   const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
   const edges = useSchematicStore((s) => s.edges);
@@ -659,6 +663,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setWallDraft(null);
         return;
       }
+      if (wallCandidates && onWallCandidatesChange) {
+        onWallCandidatesChange(null);
+        return;
+      }
       if (tool !== "select") onToolChange("select");
       setSelection({ kind: "none" });
       setCalibPicks([]);
@@ -697,7 +705,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       removeFloorplanMask(page.id, selection.id);
       setSelection({ kind: "none" });
     }
-  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, removeFloorplanCoverage, removeFloorplanWall, wallDraft, finishWall, editingNoteId]);
+  }, [tool, onToolChange, selection, page.id, removeFloorplanSymbol, removeFloorplanNote, removeFloorplanMask, removeFloorplanCoverage, removeFloorplanWall, wallDraft, finishWall, wallCandidates, onWallCandidatesChange, editingNoteId]);
 
   // ── Calibration dialog ───────────────────────────────────────────
   const calibDistanceMm = calibPicks.length === 2
@@ -910,6 +918,23 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             drawing={tool === "wall" ? wallDraft : null}
             onSelect={(id) => setSelection({ kind: "wall", id })}
             onContextMenu={() => { /* the panel on the right edits walls */ }}
+            candidates={wallCandidates?.candidates}
+            // A grab strip of ~12 real pixels whatever the zoom — at fit-to-window on A1
+            // a local pixel is a fifth of a screen pixel.
+            hitPx={12 / Math.max(zoom, 0.05)}
+            onPickCandidate={(index) => {
+              if (!wallCandidates || !onWallCandidatesChange) return;
+              const c = wallCandidates.candidates[index];
+              if (!c) return;
+              const id = addFloorplanWall(page.id, {
+                pointsMm: [{ ...c.pointsMm[0] }, { ...c.pointsMm[1] }],
+                material: wallCandidates.material,
+                thicknessMm: c.thicknessMm ?? wallCandidates.defaultThicknessMm,
+              });
+              setSelection({ kind: "wall", id });
+              const rest = wallCandidates.candidates.filter((_, i) => i !== index);
+              onWallCandidatesChange(rest.length ? { ...wallCandidates, candidates: rest } : null);
+            }}
           />
 
           {/* What the cameras see and the detectors reach — under the symbols, so a device

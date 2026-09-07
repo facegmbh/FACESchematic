@@ -109,6 +109,29 @@ async function loadPdfjs() {
   return pdfjs;
 }
 
+/**
+ * Open one page of a PDF for reading its geometry (see src/pdfWalls.ts). The caller owns
+ * the handle and must `close()` it — the loading task holds the worker.
+ */
+export async function openPdfPage(file: File, pageNumber: number): Promise<{
+  page: import("pdfjs-dist").PDFPageProxy;
+  OPS: Record<string, number>;
+  /** Layer id → name, for tagging what was drawn on which layer. */
+  layerNames: Record<string, string>;
+  close: () => Promise<void>;
+}> {
+  const pdfjs = await loadPdfjs();
+  const data = new Uint8Array(await file.arrayBuffer());
+  const task = pdfjs.getDocument({ data });
+  const doc = await task.promise;
+  const page = await doc.getPage(Math.min(Math.max(pageNumber, 1), doc.numPages));
+  const config = await doc.getOptionalContentConfig().catch(() => null);
+  const groups = (config?.getGroups?.() ?? null) as Record<string, { name?: unknown }> | null;
+  const layerNames: Record<string, string> = {};
+  if (groups) for (const [id, group] of Object.entries(groups)) layerNames[id] = layerChoice(id, group, Object.keys(layerNames).length).name;
+  return { page, OPS: pdfjs.OPS as unknown as Record<string, number>, layerNames, close: () => task.destroy() };
+}
+
 /** Number of pages in a PDF, so the toolbar can offer a page switcher. */
 export async function getPdfPageCount(file: File): Promise<number> {
   const pdfjs = await loadPdfjs();

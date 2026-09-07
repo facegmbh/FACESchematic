@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
-import type { FloorplanKind, FloorplanPage, FloorplanUnderlay } from "../types";
+import type { FloorplanKind, FloorplanPage, FloorplanUnderlay, WallMaterial } from "../types";
+import { DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, WALL_MATERIALS, WALL_MATERIAL_LABELS } from "../types";
+import {
+  extractPdfGeometry, guessWallLayer, thicknessHistogram, toFloorplanWalls, wallsFromGeometry,
+  type PdfPageGeometry, type WallCandidateSet,
+} from "../pdfWalls";
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
-import { UNDERLAY_ACCEPT, UNDERLAY_DPI_CHOICES, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, readPdfLayers } from "../floorplanUnderlay";
+import { UNDERLAY_ACCEPT, UNDERLAY_DPI_CHOICES, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, openPdfPage, readPdfLayers } from "../floorplanUnderlay";
 import { MAX_STORED_SOURCE_BYTES, getUnderlaySource, nextUnderlaySourceKey, putUnderlaySource } from "../underlaySource";
 import { runFloorplanExport } from "../floorplanExport";
 import { useT } from "../i18n";
@@ -17,9 +22,12 @@ interface Props {
   page: FloorplanPage;
   tool: FloorplanTool;
   onToolChange: (tool: FloorplanTool) => void;
+  /** Walls read out of the PDF and offered on the sheet for picking (see pdfWalls.ts). */
+  wallCandidates?: WallCandidateSet | null;
+  onWallCandidatesChange?: (set: WallCandidateSet | null) => void;
 }
 
-export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
+export default function FloorplanToolbar({ page, tool, onToolChange, wallCandidates, onWallCandidatesChange }: Props) {
   const t = useT();
   const setFloorplanPaper = useSchematicStore((s) => s.setFloorplanPaper);
   const setFloorplanScale = useSchematicStore((s) => s.setFloorplanScale);
@@ -30,10 +38,20 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
   const updateFloorplanLegend = useSchematicStore((s) => s.updateFloorplanLegend);
   const updateFloorplanDrawingBlock = useSchematicStore((s) => s.updateFloorplanDrawingBlock);
   const addToast = useSchematicStore((s) => s.addToast);
+  const addFloorplanWalls = useSchematicStore((s) => s.addFloorplanWalls);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [layerPanel, setLayerPanel] = useState(false);
+  /** The "walls from the PDF" dialog: what was read, and what the user has chosen so far. */
+  const [wallDialog, setWallDialog] = useState<null | {
+    geometry: PdfPageGeometry;
+    layerIds: Set<string>;
+    allLayers: boolean;
+    material: WallMaterial;
+    minLengthMm: number;
+  }>(null);
+  const [extracting, setExtracting] = useState(false);
 
   const underlay = page.underlay;
   const isCustomPaper = page.paperId === "custom";
@@ -176,6 +194,58 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
     }
     run(file);
   };
+
+  /** Read the PDF's geometry and open the wall dialog on it. */
+  const openWallImport = () => {
+    void withSource(async (file) => {
+      setExtracting(true);
+      try {
+        const handle = await openPdfPage(file, underlay?.pageNumber ?? 1);
+        try {
+          const geometry = await extractPdfGeometry(handle.page, handle.OPS, handle.layerNames);
+          const guess = guessWallLayer(geometry.layers);
+          setWallDialog({
+            geometry,
+            layerIds: new Set(guess ? [guess] : []),
+            // No layers at all: the only offer is everything, picked by hand.
+            allLayers: geometry.layers.length === 0,
+            material: DEFAULT_WALL_MATERIAL,
+            minLengthMm: 150,
+          });
+          setLayerPanel(false);
+        } finally {
+          await handle.close();
+        }
+      } catch {
+        addToast(t("Could not read the geometry of this PDF."), "error", 5000);
+      } finally {
+        setExtracting(false);
+      }
+    });
+  };
+
+  // What the current choice would yield — recomputed as the user ticks layers, so the
+  // count and the thickness histogram answer before anything lands on the plan.
+  const wallPreview = useMemo(() => {
+    if (!wallDialog || !underlay) return null;
+    const result = wallsFromGeometry(wallDialog.geometry, {
+      layerIds: wallDialog.allLayers ? undefined : wallDialog.layerIds,
+      underlay,
+      frame: wallDialog.geometry,
+      scaleDenominator: page.scaleDenominator,
+      minLengthMm: wallDialog.minLengthMm,
+    });
+    const histogram = thicknessHistogram(result.walls);
+    return {
+      ...result,
+      histogram,
+      // A face without a partner gets the plan's most common thickness, not a global guess.
+      defaultThicknessMm: histogram[0]?.thicknessMm ?? DEFAULT_WALL_THICKNESS_MM,
+      sourceLabel: wallDialog.allLayers
+        ? t("all layers")
+        : wallDialog.geometry.layers.filter((l) => wallDialog.layerIds.has(l.id)).map((l) => l.name).join(", "),
+    };
+  }, [wallDialog, underlay, page.scaleDenominator, t]);
 
   const handlePdfPageChange = (pageNumber: number) => {
     void withSource((file) => { void applyImport(file, pageNumber, layerChoiceOf(underlay), underlay?.dpi); });
@@ -341,6 +411,158 @@ export default function FloorplanToolbar({ page, tool, onToolChange }: Props) {
                 {UNDERLAY_DPI_CHOICES.map((d) => <option key={d} value={d}>{d} dpi</option>)}
               </select>
             </label>
+          )}
+          {underlay.kind === "pdf" && (
+            <div className="relative">
+              <button
+                className={`px-2 py-0.5 rounded border text-xs transition-colors ${wallDialog ? "bg-sky-500/10 border-sky-400 text-sky-700" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-sky-400"}`}
+                onClick={() => (wallDialog ? setWallDialog(null) : openWallImport())}
+                disabled={extracting || importing}
+                title={t("Read the walls out of the PDF's own geometry — pick the layer they are drawn on, and their thickness comes from the drawing.")}
+              >
+                ▨ {extracting ? t("Reading…") : t("Walls from PDF")}
+              </button>
+              {wallCandidates && onWallCandidatesChange && (
+                <button
+                  className="ml-1 px-2 py-0.5 rounded border text-xs bg-sky-500/10 border-sky-400 text-sky-700 hover:bg-sky-500/20"
+                  onClick={() => onWallCandidatesChange(null)}
+                  title={t("Stop offering the remaining candidates on the sheet (Esc does the same).")}
+                >
+                  {t("{n} candidates on the sheet — hide", { n: wallCandidates.candidates.length })}
+                </button>
+              )}
+              {wallDialog && wallPreview && (
+                <div className="absolute z-40 mt-1 left-0 w-80 max-h-[70vh] overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg p-2 flex flex-col gap-1.5 text-xs" data-allow-scroll data-wall-import-dialog>
+                  <div className="flex items-center justify-between pb-1 border-b border-[var(--color-border)]">
+                    <span className="font-semibold text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>
+                      {t("Walls from the PDF")}
+                    </span>
+                    <button className="px-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" onClick={() => setWallDialog(null)} title={t("Close")}>✕</button>
+                  </div>
+
+                  {/* The stated scale beats a guessed one: a mismatch here halves or doubles every thickness. */}
+                  {wallDialog.geometry.scaleDenominator && wallDialog.geometry.scaleDenominator !== page.scaleDenominator && (
+                    <div className="rounded border border-amber-300 bg-amber-500/10 px-1.5 py-1 text-amber-800 flex items-center gap-2">
+                      <span className="flex-1">
+                        {t("The plan states {plan}, the page is set to {page}. Thicknesses are read at the page's scale.", { plan: formatScale(wallDialog.geometry.scaleDenominator), page: formatScale(page.scaleDenominator) })}
+                      </span>
+                      <button
+                        className="shrink-0 px-1.5 py-0.5 rounded border border-amber-400 hover:bg-amber-500/20"
+                        onClick={() => setFloorplanScale(page.id, wallDialog.geometry.scaleDenominator!)}
+                      >
+                        {t("Use {scale}", { scale: formatScale(wallDialog.geometry.scaleDenominator) })}
+                      </button>
+                    </div>
+                  )}
+
+                  {wallDialog.geometry.layers.length > 0 ? (
+                    <>
+                      <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{t("Layers to take walls from")}</div>
+                      <label className="flex items-center gap-1.5 cursor-pointer hover:bg-[var(--color-surface-hover)] rounded px-1 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={wallDialog.allLayers}
+                          onChange={(e) => setWallDialog({ ...wallDialog, allLayers: e.target.checked })}
+                        />
+                        <span className="italic">{t("all layers (pick by hand)")}</span>
+                      </label>
+                      {wallDialog.geometry.layers.filter((l) => l.count > 0).map((layer) => (
+                        <label key={layer.id} className={`flex items-center gap-1.5 cursor-pointer hover:bg-[var(--color-surface-hover)] rounded px-1 py-0.5 ${wallDialog.allLayers ? "opacity-50" : ""}`}>
+                          <input
+                            type="checkbox"
+                            disabled={wallDialog.allLayers}
+                            checked={wallDialog.layerIds.has(layer.id)}
+                            onChange={(e) => {
+                              const next = new Set(wallDialog.layerIds);
+                              if (e.target.checked) next.add(layer.id); else next.delete(layer.id);
+                              setWallDialog({ ...wallDialog, layerIds: next });
+                            }}
+                          />
+                          <span className="truncate flex-1" title={layer.name}>{layer.name}</span>
+                          <span className="text-[var(--color-text-muted)] tabular-nums" style={{ fontSize: 10 }}>{layer.count}</span>
+                        </label>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="text-[var(--color-text-muted)] leading-snug">
+                      {t("This PDF has no layers, so every line is offered. Put the candidates on the sheet and pick the walls by hand.")}
+                    </p>
+                  )}
+
+                  <label className="flex items-center gap-2 text-[var(--color-text-muted)] pt-1">
+                    <span className="shrink-0 w-14">{t("Build-up")}</span>
+                    <select
+                      className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={wallDialog.material}
+                      onChange={(e) => setWallDialog({ ...wallDialog, material: e.target.value as WallMaterial })}
+                    >
+                      {WALL_MATERIALS.map((m) => <option key={m} value={m}>{t(WALL_MATERIAL_LABELS[m])}</option>)}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Shorter pieces — door jambs, ticks — are left out. Real millimetres.")}>
+                    <span className="shrink-0 w-14">{t("Min. length")}</span>
+                    <input
+                      type="number"
+                      step={50}
+                      min={0}
+                      className="w-20 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={wallDialog.minLengthMm}
+                      onChange={(e) => setWallDialog({ ...wallDialog, minLengthMm: Math.max(0, Number(e.target.value) || 0) })}
+                    />
+                    <span style={{ fontSize: 10 }}>mm</span>
+                  </label>
+
+                  {/* What would land: count, how many carry a read thickness, and the families. */}
+                  <div className="rounded border border-sky-300 bg-sky-500/5 px-1.5 py-1 text-[var(--color-text)]">
+                    <div>
+                      <strong>{wallPreview.walls.length}</strong> {t("walls")} · {t("{n} with thickness read from the drawing", { n: wallPreview.paired })}
+                      {wallPreview.unpaired > 0 && <> · {t("{n} at {mm} mm", { n: wallPreview.unpaired, mm: wallPreview.defaultThicknessMm })}</>}
+                    </div>
+                    {wallPreview.histogram.length > 0 && (
+                      <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                        {wallPreview.histogram.slice(0, 5).map((h) => `${h.thicknessMm} mm ×${h.count}`).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 pt-1">
+                    <button
+                      className="px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      disabled={wallPreview.walls.length === 0}
+                      onClick={() => {
+                        addFloorplanWalls(page.id, toFloorplanWalls(wallPreview.walls, wallDialog.material, wallPreview.defaultThicknessMm));
+                        addToast(t("{n} walls taken from the PDF ({source}).", { n: wallPreview.walls.length, source: wallPreview.sourceLabel }), "success", 4000);
+                        setWallDialog(null);
+                      }}
+                      title={t("Put every listed wall on the plan, as one undo step.")}
+                    >
+                      {t("Take all")}
+                    </button>
+                    {onWallCandidatesChange && (
+                      <button
+                        className="px-2 py-1 rounded border border-sky-400 text-sky-700 hover:bg-sky-500/10 disabled:opacity-50"
+                        disabled={wallPreview.walls.length === 0}
+                        onClick={() => {
+                          onWallCandidatesChange({
+                            candidates: wallPreview.walls,
+                            material: wallDialog.material,
+                            defaultThicknessMm: wallPreview.defaultThicknessMm,
+                            sourceLabel: wallPreview.sourceLabel,
+                          });
+                          setWallDialog(null);
+                        }}
+                        title={t("Lay the candidates over the plan and take them one by one with a click.")}
+                      >
+                        {t("Pick on the sheet")}
+                      </button>
+                    )}
+                    <button className="ml-auto px-2 py-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" onClick={() => setWallDialog(null)}>
+                      {t("Cancel")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {(underlay.pdfLayers?.length ?? 0) > 0 && (
             <div className="relative">
