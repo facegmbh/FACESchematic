@@ -3,7 +3,7 @@
 Status: **Planung, Zuschnitt entschieden** · Stand: 2026-09-13 · Owner: JLD
 
 Ersetzt den Entwurf vom 13.09.2026 („face-light" als eigenes Repo mit zwei Python-Services).
-Was sich geändert hat und warum, steht in §10.
+Was sich geändert hat und warum, steht in §11.
 
 ---
 
@@ -20,6 +20,8 @@ Das Modul soll:
 - Beleuchtungsstärke als Lux-Raster und Falschfarben-Overlay rechnen
 - den Raum in 3D zeigen — Realansicht und Falschfarbe in derselben Szene
 - eine Stückliste ausgeben, die über den bestehenden Weg ins Angebot geht
+- über die vorhandene MCP-Bridge von Claude bedienbar sein: Leuchten aus Datenblättern
+  anlegen, Leuchten platzieren, rechnen, Ergebnis lesen, nachbessern (§7)
 
 ### Nicht-Ziele (bewusst)
 
@@ -50,6 +52,7 @@ für den neuen Zuschnitt.
 | Linienobjekt mit verteilten Symbolen | fertig (Lautsprecherlinien) | `FloorplanLine`, `src/speakerLines.ts` |
 | Stückliste, PDF-Export im FACE-Layout | fertig | `src/packList.ts`, `src/floorplanPdf.ts` |
 | DALI / DMX / KNX als Signaltypen, `daliAddress` je Gerät | fertig | `src/types.ts` |
+| **MCP-Bridge: Werkzeuge, Playbooks, Protokoll, Sicherheit** | **fertig, erweiterbar** | `mcp-server/`, `src/mcpBridge.ts`, `src/mcp/` |
 | Nachladen schwerer Module per `await import(...)` | etabliertes Muster | `src/components/MenuBar.tsx` |
 | Binärdaten je Projekt (IndexedDB, Datei-Save) | etabliert | `src/underlaySource.ts` |
 
@@ -111,7 +114,7 @@ hinweg wird ohnehin nicht gerechnet.
 
 `rtrace` über eine aus demselben Modell erzeugte Szene. Physikalisch korrekt inklusive
 Interreflexion und Verschattung. Ersetzt die Werte aus Stufe 1 hinter unveränderter
-Darstellung. Details in §8.
+Darstellung. Details in §9.
 
 **Warum in dieser Reihenfolge:** Nach Stufe 1 hast du ein benutzbares Werkzeug. Wenn Radiance
 klemmt, ist das dann ein entgangener Ausbau und kein gescheitertes Projekt.
@@ -265,7 +268,141 @@ ins PDF geht.
 
 ---
 
-## 7. Datenmodell
+## 7. MCP — Claude legt Simulationen und Leuchten an
+
+Das Modul bekommt seine MCP-Werkzeuge **nicht am Ende**, sondern in jeder Phase zusammen mit
+der Funktion, die sie bedienen. Wer eine Funktion nur über die Oberfläche baut und den
+Bridge-Befehl vertagt, baut sie zweimal.
+
+### 7.1 Was schon steht
+
+FACESchematic hat bereits eine vollständige MCP-Anbindung — sie muss nur erweitert werden:
+
+```
+Claude  ──stdio──▶  easyschematic-mcp  ──ws://127.0.0.1──▶  Editor-Tab
+        (mcp-server/)                    (src/mcpBridge.ts)
+```
+
+| Teil | Datei | Rolle |
+|---|---|---|
+| Werkzeugkatalog (JSON-Schema je Tool) | `mcp-server/src/tools.ts` | Was Claude sieht |
+| Playbooks + Server-Instruktionen | `mcp-server/src/prompts.ts` | In welcher Reihenfolge Claude arbeitet |
+| Wire-Protokoll, **eine Quelle der Wahrheit** | `src/mcp/protocol.ts` | Wird per `sync-protocol.mjs` in den Server kopiert |
+| Ausführung im Tab | `src/mcpBridge.ts` | Ruft die **vorhandenen Store-Actions** auf |
+| Reine Prüf-Helfer | `src/mcp/validation.ts` | Unit-testbar ohne Store |
+
+**Die entscheidende Eigenschaft:** Der MCP-Server hält kein eigenes Dokument. Er reicht
+Befehle an den laufenden Tab durch, und der führt sie über dieselben Store-Actions aus, die
+auch die Oberfläche benutzt. Deshalb funktionieren Undo, Autosave, Validierung und
+Auto-Routing unverändert weiter. **Für die Lichtwerkzeuge gilt dieselbe Regel ohne Ausnahme:
+kein Befehl schreibt am Store vorbei.**
+
+Sicherheit ist geregelt und bleibt, wie sie ist: WebSocket nur auf `127.0.0.1`, Pairing-Token,
+Origin-Prüfung, und der Nutzer muss die Verbindung in den Einstellungen aktiv einschalten.
+
+### 7.2 Die Arbeitsteilung
+
+Das ist der Punkt, an dem man sich sonst verrennt — **Claude kann den Grundriss nicht selbst
+importieren.** Underlay rastern, Maßstab kalibrieren und die Wandebene wählen bleibt im
+Editor, so wie es beim Beschallungsplan schon ist. Das ist keine Lücke, sondern die Stelle,
+an der ein Mensch hinsehen muss: ein falsch kalibrierter Plan macht jede Lux-Zahl wertlos,
+und der Fehler fiele niemandem auf.
+
+| | |
+|---|---|
+| **Nutzer im Editor** | PDF importieren, Maßstab kalibrieren, Wandebene wählen, Räume bestätigen |
+| **Claude über MCP** | Leuchten anlegen, platzieren, Schienen bestücken, rechnen lassen, Ergebnis lesen, nachbessern |
+| **Claude ohne MCP** | Datenblatt-PDF lesen und die Werte herausziehen — das kann Claude von sich aus, dafür braucht die Bridge nichts |
+
+Der letzte Punkt ist wichtig für den Zuschnitt: **im Protokoll werden nur Zahlen
+transportiert, keine Dateien.** Claude liest das Datenblatt selbst und ruft das Werkzeug mit
+Lichtstrom, Abstrahlwinkel und Leistung auf. Der MCP-Server bekommt keinen PDF-Parser.
+
+### 7.3 Die Werkzeuge
+
+**Leuchten anlegen (Ship-L1)** — deckt „aus meinen Leuchtendaten und Datenblättern":
+
+| Tool | Zweck |
+|---|---|
+| `create_luminaire` | Aus Datenblattwerten: Name, System, Leistung, Lichtstrom, Abstrahlwinkel, CCT, Montageart → Geräte-Template mit Photometrie `origin: "datasheet"` (cos-Modell, §5.2) |
+| `add_luminaire_measurement` | Messreihe nach §5.3: Abstand `d`, Grundhelligkeit, Messpunkte `[{abstandCm, lux}]` → rechnet I(γ), normiert auf den Datenblatt-Lichtstrom, speichert `origin: "measured"` |
+| `import_photometry` | Vorhandene LDT/IES-Werte → `origin: "manufacturer"` |
+| `list_luminaires` | Was im Katalog liegt, mit Herkunft und Messdatum je Eintrag |
+
+`add_luminaire_measurement` ist das Werkzeug, das die Messung praktisch macht: Du liest die
+Luxwerte vom Messgerät ab, Claude rechnet die Kurve, normiert sie, schreibt die LDT und sagt
+dir, ob das Ergebnis zum Datenblatt passt. Aus der Anleitung in §5.3 wird damit ein Diktat.
+
+**Simulation anlegen (Ship-L2)** — deckt „aus Plänen die Simulationen":
+
+| Tool | Zweck |
+|---|---|
+| `create_light_plan` | Plantyp `light` anlegen (erweitert `create_floorplan` um den `kind`-Wert) |
+| `suggest_rooms` | Aus den importierten Wänden geschlossene Polygone vorschlagen — **Vorschlag, der Nutzer bestätigt** |
+| `define_room` | Raum festlegen: Polygon in Metern, Raumhöhe, Nutzebene, Reflexionsgrade |
+| `place_luminaires` | Batch: Leuchten in realen Metern, mit Montagehöhe, Ausrichtung, Dimmung |
+| `place_luminaires_on_track` | Schiene von A nach B, Abstand **oder** Anzahl → verteilt die Köpfe und legt die Schiene als Linienobjekt an |
+| `run_light_calculation` | Rechnung anstoßen, wartet auf das Ergebnis |
+| `light_report` | E<sub>m</sub>, E<sub>min</sub>, E<sub>max</sub>, Gleichmäßigkeit je Raum, plus die Stückliste |
+
+### 7.4 Die Schleife ist der eigentliche Gewinn
+
+Einzelne Werkzeuge sind nett. Wertvoll wird es durch den Zyklus:
+
+```
+place_luminaires → run_light_calculation → light_report
+     ▲                                          │
+     └──────────  zu dunkel / zu ungleichmäßig ──┘
+```
+
+Claude platziert, rechnet, liest die Zahlen, korrigiert, rechnet erneut — bis 300 lx im Mittel
+stehen. Das ist die Arbeit, die am Bildschirm mühsam und für einen Assistenten trivial ist.
+
+**Daraus folgt eine Anforderung an die Rechnung:** Dieser Zyklus braucht Antworten in
+Sekunden, nicht in Minuten. Die Browser-Rechnung aus §4.1 ist dafür der richtige Motor —
+Radiance (§9) ist die Kontrollrechnung am Ende, nicht der Motor der Schleife. Das ist ein
+weiterer Grund, warum Stufe 1 vor Stufe 2 kommt.
+
+### 7.5 Playbook
+
+Ein neuer Prompt `lichtplanung` in `mcp-server/src/prompts.ts`, neben den vorhandenen
+`build-schematic`, `rack-elevation`, `modular-chassis` und `floorplan`. Er hält die
+Reihenfolge fest (Plan prüfen → Räume → Leuchten aus dem Katalog → platzieren → rechnen →
+nachbessern → Legende und Plankopf) und die Regeln, die sonst jedes Mal neu gelernt werden
+müssten:
+
+- Erst lesen, was schon da ist — nie eine leere Seite annehmen.
+- Positionen sind **reale Meter** ab der Ecke der Zeichenfläche, keine Pixel (bestehende
+  Konvention der Floorplan-Tools).
+- Höhen sind reale Millimeter und haben keinen Maßstabsbezug.
+- Keine Leuchten-Ids erfinden — immer aus `list_luminaires`.
+- Ein Ergebnis ohne bestätigte Räume ist wertlos: ohne Raumhöhe und Reflexionsgrade
+  keine Rechnung.
+- Die Zahl, die herauskommt, ist eine Planungshilfe und kein Nachweis (§1). Das gehört in
+  die Antwort an den Nutzer, nicht nur in den PDF-Export.
+
+### 7.6 Was beim Bauen zu beachten ist
+
+- **Photometrie kann nicht über `set_device_property` laufen.** `src/mcp/validation.ts`
+  verwirft alles, was kein einfacher Skalar ist, und die Whitelist `SAFE_DEVICE_FIELDS` ist
+  genau deshalb so eng. Photometrie ist ein Objekt und braucht einen eigenen Befehl mit
+  eigener Prüfung — nicht eine Aufweichung der Whitelist.
+- **Plausibilitätsprüfung gehört ins Werkzeug.** Claude zieht die Werte aus einem
+  PDF-Datenblatt und kann sich verlesen (900 lm statt 9000, Halbwinkel statt vollem
+  Abstrahlwinkel). `create_luminaire` prüft die Grenzen und **gibt die abgeleitete
+  Lichtstärke I₀ und die Beleuchtungsstärke unter der Leuchte zurück**. 505 lx liest sich
+  plausibel, 50 500 lx fällt sofort auf.
+- **`CommandType` und die Parametertypen** kommen nach `src/mcp/protocol.ts`, nicht in den
+  Server — `sync-protocol.mjs` kopiert die Datei beim Build, damit es genau eine Quelle gibt.
+- **`PROTOCOL_VERSION` bumpen**, damit ein alter Server und ein neuer Tab sich nicht koppeln
+  und dann seltsam verhalten.
+- **Batch mit Ergebnis je Element**, wie bei `place_floorplan_symbols`: 24 Spots platzieren
+  und erfahren, welche drei nicht gepasst haben, statt alles oder nichts.
+- **Englische Tool-Namen, deutsche Beschreibungen** — so wie der Rest der Bridge es hält.
+
+---
+
+## 8. Datenmodell
 
 Additiv zum bestehenden `FloorplanPage`. Nichts Vorhandenes wird umgebaut.
 
@@ -316,7 +453,7 @@ eine Linie, Objekte im Abstand darauf verteilt, Meter und Verbinder fallen aus d
 
 ---
 
-## 8. Der Radiance-Service
+## 9. Der Radiance-Service
 
 Ein Service, nicht zwei.
 
@@ -347,16 +484,20 @@ Ergebnis ± 15 % gegen dieselbe Rechnung in DIALux, Rechenzeit < 10 s je Raum.
 
 ---
 
-## 9. Phasen
+## 10. Phasen
 
-| | Inhalt | Dauer | Ergebnis |
+| | Inhalt | MCP-Werkzeuge, die mitgehen | Dauer |
 |---|---|---|---|
-| **A** | Plantyp `light`, Leuchtensymbole mit Montagehöhe, Lux-Raster aus dem cos-Modell (P1) | Tage | Ein Lichtplan mit Falschfarbe, ohne Container, ohne Herstelleranfrage |
-| **B** | `FloorplanRoom` aus den vorhandenen Wänden, Höhe, Reflexionsgrade, indirekter Anteil | Tage | Die Rechnung wird raumbezogen und deutlich richtiger |
-| **C** | Messplatz einrichten, MAG48-Spot und Surf20 vermessen, LDT-Schreiber (P2) | 1 Woche, davon 2 Tage Messen | Eigene Photometrie im Katalog; die Hersteller-Abhängigkeit ist weg |
-| **D** | 3D-Realansicht: extrudierte Räume, IES-Leuchten aus C, Falschfarbe umschaltbar | 1–2 Wochen | Das, was der Kunde zu sehen bekommt |
-| **E** | `light-sim`-Container mit Radiance, ersetzt die Werte aus A/B | 1–2 Wochen | Belastbare Zahlen |
-| **F** | Schienen als Linienobjekt, Stückliste, Odoo-Übergabe | 1–2 Wochen | Vom Plan ins Angebot |
+| **A** | Plantyp `light`, Leuchtensymbole mit Montagehöhe, Lux-Raster aus dem cos-Modell (P1) | `create_luminaire`, `list_luminaires`, `create_light_plan`, `place_luminaires`, `run_light_calculation`, `light_report` | Tage |
+| **B** | `FloorplanRoom` aus den vorhandenen Wänden, Höhe, Reflexionsgrade, indirekter Anteil | `suggest_rooms`, `define_room` | Tage |
+| **C** | Messplatz einrichten, MAG48-Spot und Surf20 vermessen, LDT-Schreiber (P2) | `add_luminaire_measurement`, `import_photometry` | 1 Woche, davon 2 Tage Messen |
+| **D** | 3D-Realansicht: extrudierte Räume, IES-Leuchten aus C, Falschfarbe umschaltbar | — (Ansichtssache, nichts zu steuern) | 1–2 Wochen |
+| **E** | `light-sim`-Container mit Radiance, ersetzt die Werte aus A/B | — (`run_light_calculation` bekommt nur eine Genauigkeitsstufe dazu) | 1–2 Wochen |
+| **F** | Schienen als Linienobjekt, Stückliste, Odoo-Übergabe | `place_luminaires_on_track` | 1–2 Wochen |
+
+Nach **A** kann Claude bereits eine Leuchte aus einem Datenblatt anlegen, sie in einem
+kalibrierten Plan verteilen, rechnen lassen und das Ergebnis vorlesen. Das ist der erste
+Punkt, an dem das Modul seinen Zweck erfüllt — und er liegt vor Messung, 3D und Radiance.
 
 **Warum C vor D:** Die 3D-Ansicht mit echter Photometrie sieht sofort überzeugend aus, mit
 geschätzter nur halb. Und C ist der Schritt, der das größte Projektrisiko auflöst.
@@ -373,7 +514,7 @@ Ausbau statt Voraussetzung.
 
 ---
 
-## 10. Entscheidungen
+## 11. Entscheidungen
 
 | Datum | Entscheidung | Grund |
 |---|---|---|
@@ -386,10 +527,13 @@ Ausbau statt Voraussetzung.
 | 2026-09-13 | **Leuchten selbst vermessen statt auf Hersteller-LDTs warten** | Das war das größte Projektrisiko. Luxmeter-Scan mit Normierung auf den Datenblatt-Lichtstrom erreicht ±10–15 % — genug für ein Werkzeug, das ausdrücklich kein Nachweis ist. |
 | 2026-09-13 | **3D auf Phase D vorgezogen (vorher „später")** | Die Realansicht ist das Verkaufsargument. Der Einwand war nie 3D, sondern zwei konkurrierende Lichtmodelle — das ist über §6 gelöst. |
 | 2026-09-13 | **Leuchten sind Geräte-Templates, kein zweiter Artikelstamm** | Ein Stamm, ein Weg nach Odoo |
+| 2026-09-13 | **MCP-Werkzeuge gehen in jeder Phase mit, nicht als eigene Phase am Ende** | Wer die Funktion nur über die Oberfläche baut und den Bridge-Befehl vertagt, baut sie zweimal |
+| 2026-09-13 | **Kein PDF-Parser im MCP-Server; Claude liest Datenblätter selbst** | Über die Bridge gehen Zahlen, keine Dateien. Hält den Server klein und das Protokoll prüfbar. |
+| 2026-09-13 | **Import und Kalibrierung des Grundrisses bleiben beim Nutzer** | Ein falsch kalibrierter Plan macht jede Lux-Zahl wertlos, und der Fehler fiele niemandem auf |
 
 ---
 
-## 11. Offene Punkte
+## 12. Offene Punkte
 
 - [ ] Luxmeter beschaffen — Klasse C genügt (§5.4), Auswahl und Budget offen
 - [ ] Welche Leuchten zuerst vermessen? Vorschlag: MAG48-Spot (rotationssymmetrisch, einfach),
@@ -399,14 +543,22 @@ Ausbau statt Voraussetzung.
 - [ ] Feature-Flag für Stufe 2: wie verhält sich der öffentliche Build, wenn kein
       `light-sim` erreichbar ist? (Vorschlag: Schalter gar nicht anzeigen)
 - [ ] Referenzprojekt für die Abnahme — Mikulla-Plan (Egbers, E1) liegt vor
+- [ ] Sollen die Lichtwerkzeuge in der Bridge hinter einem eigenen Schalter liegen oder mit
+      der bestehenden AI-Beta-Einstellung mitkommen? (Vorschlag: mitkommen — ein Schalter
+      weniger, dieselbe Sicherheitslage)
+- [ ] Datenblätter der Leuchten sammeln — sie sind ab Phase A die Eingabe für
+      `create_luminaire` und damit früher gebraucht als die Messung
 - [ ] Einen real vermessenen Raum gegen die Rechnung halten: der ehrlichste Test des ganzen
       Moduls, und das Luxmeter ist dann ohnehin da
 
 ---
 
-## 12. Nächster Schritt
+## 13. Nächster Schritt
 
-**Phase A.** Plantyp `light`, ein Leuchtensymbol mit Montagehöhe, Lux-Raster aus dem
-cos-Modell auf der vorhandenen Heatmap-Maschinerie. Ergebnis ist ein Grundriss mit
-Falschfarbenbild und einem E<sub>m</sub>-Wert — ohne Container, ohne Messung, ohne
-Herstelleranfrage.
+**Phase A, mitsamt ihren MCP-Werkzeugen.** Plantyp `light`, ein Leuchtensymbol mit
+Montagehöhe, Lux-Raster aus dem cos-Modell auf der vorhandenen Heatmap-Maschinerie — und die
+Bridge-Befehle dazu, damit die Funktion von Anfang an beides bedient.
+
+Das Abnahmekriterium ist ein Satz: *„Hier ist das Datenblatt des MAG48-Spots, verteile mir
+davon genug im Abschiedsraum für 300 Lux."* — und Claude legt die Leuchte an, platziert sie,
+rechnet und sagt, was herauskommt. Ohne Container, ohne Messung, ohne Herstelleranfrage.
