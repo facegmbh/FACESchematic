@@ -642,4 +642,30 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Stop offering the remaining candidates on the sheet (Esc does the same).":
     "Die restlichen Kandidaten nicht mehr anbieten (Esc tut dasselbe).",
   "Take as wall": "Als Wand übernehmen",
+
+  // ─── Lichtplanung (Plantyp, Lux-Raster, Kennwerte) ─────────────
+  "Lighting plan": "Lichtplan",
+  "Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend. A lighting plan numbers luminaires L1, L2 … and switches the lux grid on.":
+    "Beschallungspläne nummerieren Symbole je Endstufenlinie (4.1, 4.2 …) und tragen die Beschallungsplan-Vorgaben. Ein WLAN-Ausleuchtungsplan nummeriert Access Points AP1, AP2 …, schaltet die Heatmap ein und druckt die Signalfarben in die Legende. Ein Lichtplan nummeriert Leuchten L1, L2 … und schaltet das Lux-Raster ein.",
+  "Lighting calculation": "Lichtrechnung",
+  "Show the lux grid": "Lux-Raster anzeigen",
+  "No luminaires on this plan yet. A symbol counts as one as soon as the device behind it points to a model carrying photometry.":
+    "Noch keine Leuchten auf diesem Plan. Ein Symbol zählt als Leuchte, sobald das Gerät dahinter auf ein Modell mit Photometrie zeigt.",
+  "{n} luminaire(s)": "{n} Leuchten",
+  "average": "im Mittel",
+  "min": "min",
+  "max": "max",
+  "Work plane": "Nutzebene",
+  "Height of the plane the illuminance is calculated on, above finished floor. 0.85 m is the convention for a working surface.":
+    "Höhe der Ebene, auf der gerechnet wird, über OKFF. 0,85 m ist die Konvention für eine Arbeitsfläche.",
+  "Mounting": "Montage",
+  "Mounting height for luminaires that carry none of their own. Set a height per luminaire in its symbol.":
+    "Montagehöhe für Leuchten ohne eigene Angabe. Je Leuchte lässt sich die Höhe am Symbol setzen.",
+  "Maintenance": "Wartung",
+  "Allowance for ageing and soiling. 0.8 is the usual figure for a normally maintained interior.":
+    "Abschlag für Alterung und Verschmutzung. 0,8 ist der übliche Ansatz für einen normal gewarteten Innenraum.",
+  "Sample spacing on paper. Finer is smoother and slower — the cost is samples × luminaires.":
+    "Abtastweite auf dem Papier. Feiner ist glatter und langsamer — der Aufwand ist Stützstellen × Leuchten.",
+  "Direct light only, without interreflection — the room will be somewhat brighter than this. A planning aid, not a verification to DIN EN 12464-1.":
+    "Nur Direktlicht, ohne Interreflexion — der Raum wird etwas heller als hier gezeigt. Eine Planungshilfe, kein Nachweis nach DIN EN 12464-1.",
 };

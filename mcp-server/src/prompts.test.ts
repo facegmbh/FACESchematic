@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { PROMPTS, getPrompt, SERVER_INSTRUCTIONS } from "./prompts.js";
 
-test("PROMPTS: exposes the four named playbooks", () => {
+test("PROMPTS: exposes the five named playbooks", () => {
   assert.deepEqual(
     PROMPTS.map((p) => p.name).sort(),
-    ["build-schematic", "floorplan", "modular-chassis", "rack-elevation"],
+    ["build-schematic", "floorplan", "lichtplanung", "modular-chassis", "rack-elevation"],
   );
   // Every prompt the list advertises must be resolvable by getPrompt.
   for (const p of PROMPTS) {
@@ -34,8 +34,20 @@ test("getPrompt: an unknown name throws an MCP InvalidParams error", () => {
   );
 });
 
-test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
-  for (const name of ["build-schematic", "rack-elevation", "modular-chassis", "floorplan"]) {
+test("SERVER_INSTRUCTIONS: names the five playbooks", () => {
+  for (const name of ["build-schematic", "rack-elevation", "modular-chassis", "floorplan", "lichtplanung"]) {
     assert.ok(SERVER_INSTRUCTIONS.includes(name));
   }
+});
+
+test("lichtplanung: the playbook guards the two traps that cost the most", () => {
+  const text = getPrompt("lichtplanung").messages[0].content;
+  assert.equal(text.type, "text");
+  if (text.type !== "text") return;
+  // An uncalibrated plan makes every lux figure meaningless, and the user has to fix it.
+  assert.match(text.text, /calibrated/);
+  // Half angle instead of full beam angle is the classic datasheet misreading.
+  assert.match(text.text, /FULL beam angle/);
+  // And the result must never be presented as a verification.
+  assert.match(text.text, /not a DIN EN 12464-1 verification/);
 });

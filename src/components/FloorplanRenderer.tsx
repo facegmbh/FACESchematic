@@ -61,11 +61,13 @@ import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
+import FloorplanLuxLayer from "./FloorplanLuxLayer";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
-import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
+import { DEFAULT_HEATMAP, DEFAULT_LIGHT_CALC, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
 import { collectAccessPoints } from "../wifiCoverage";
+import { collectLuminaires } from "../lightSim";
 import type { WallCandidateSet } from "../pdfWalls";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
@@ -399,6 +401,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       return templateId ? getTemplateById(templateId, customTemplates)?.wifi : undefined;
     });
   }, [heatmapCfg.visible, heatmapCfg.band, page, deviceDataMap, customTemplates]);
+
+  // Welche Symbole Leuchten sind. Wie bei den Access Points: ein Symbol zählt, sobald das
+  // Gerät dahinter auf ein Modell mit Photometrie zeigt.
+  const lightCfg = useMemo(() => ({ ...DEFAULT_LIGHT_CALC, ...(page.light ?? {}) }), [page.light]);
+  const luminaires = useMemo(() => {
+    if (!lightCfg.visible) return [];
+    return collectLuminaires(page, lightCfg.defaultMountHeightMm, (nodeId) => {
+      const data = deviceDataMap.get(nodeId);
+      const templateId = data?.templateId;
+      return templateId ? getTemplateById(templateId, customTemplates)?.luminaire : undefined;
+    });
+  }, [lightCfg.visible, lightCfg.defaultMountHeightMm, page, deviceDataMap, customTemplates]);
 
   const snapVec = useCallback((p: Vec2, free: boolean): Vec2 => ({ x: snap(p.x, free), y: snap(p.y, free) }), []);
 
@@ -907,6 +921,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             aps={accessPoints}
             materialOverrides={wallMaterials}
           />
+
+          {/* Die Beleuchtungsstärke auf der Nutzebene, gerechnet aus den Leuchten auf dem
+              Plan. Auf derselben Ebene wie die WLAN-Heatmap — ein Plan hat einen Typ, und
+              beide Bilder sind nie gleichzeitig an. */}
+          <FloorplanLuxLayer page={page} mmToPx={mmToPx} luminaires={luminaires} />
 
           {/* The building's walls: their own geometry, and what the heatmap attenuates through. */}
           <FloorplanWallLayer

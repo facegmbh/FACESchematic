@@ -76,7 +76,11 @@ export type CommandType =
   | "list_floorplan_lines"
   | "sync_floorplan_lines"
   | "update_floorplan_line"
-  | "speaker_load_report";
+  | "speaker_load_report"
+  | "create_luminaire"
+  | "list_luminaires"
+  | "set_light_calculation"
+  | "light_report";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -350,8 +354,9 @@ export const FLOORPLAN_LABEL_POSITIONS = ["n", "ne", "e", "se", "s", "sw", "w", 
 
 export interface CreateFloorplanParams {
   /** "loudspeaker" numbers symbols per amplifier line (4.1, 4.2 …) and applies the
-   *  Beschallungsplan presets (German legend/drawing block headings); default "generic". */
-  kind?: "generic" | "loudspeaker";
+   *  Beschallungsplan presets (German legend/drawing block headings); "light" numbers
+   *  L1, L2 … and switches the lux grid on; default "generic". */
+  kind?: "generic" | "loudspeaker" | "light";
   /** Tab name and default drawing title, e.g. "Ground floor". Default "Floorplan N". */
   label?: string;
   /** Paper id as in the editor ("iso-a1", "iso-a0", "iso-a3", "letter", …). Default "iso-a1". */
@@ -363,7 +368,7 @@ export interface CreateFloorplanParams {
 
 export interface UpdateFloorplanParams extends FloorplanPageRef {
   /** Switching the kind resets legend title, notes heading, revision headers and field labels to the preset. */
-  kind?: "generic" | "loudspeaker";
+  kind?: "generic" | "loudspeaker" | "light";
   /** Label template: {{line}}, {{n}}, {{group}}, {{device}}. Empty string → the kind's default. */
   labelTemplate?: string;
   label?: string;
@@ -431,6 +436,11 @@ export interface FloorplanSymbolSpec {
   labelPosition?: (typeof FLOORPLAN_LABEL_POSITIONS)[number];
   /** Clockwise label rotation in degrees. */
   labelRotationDeg?: number;
+  /** Mounting height above finished floor, in real-world MILLIMETRES — not paper mm and
+   *  not metres. Only read for luminaires; omit to take the page's default. */
+  mountHeightMm?: number;
+  /** Dimming level 0–1 for a luminaire. Omit for full output. */
+  dimming?: number;
   notes?: string;
 }
 
@@ -441,6 +451,10 @@ export interface PlaceFloorplanSymbolsParams extends FloorplanPageRef {
 
 export interface UpdateFloorplanSymbolParams extends FloorplanPageRef {
   symbolId: string;
+  /** Mounting height above finished floor, in real-world millimetres. */
+  mountHeightMm?: number;
+  /** Dimming level 0–1. */
+  dimming?: number;
   groupId?: string;
   deviceId?: string | null;
   xM?: number;
@@ -635,3 +649,59 @@ export const SAFE_DEVICE_FIELDS: Record<string, SafeFieldKind> = {
   useShortName: "patch",
   wrapLabel: "patch",
 };
+
+// ── Lichtplanung (Ship L) ────────────────────────────────────────────
+
+/**
+ * Eine Leuchte aus Datenblattwerten anlegen.
+ *
+ * Über die Bridge gehen Zahlen, keine Dateien: Claude liest das Datenblatt selbst und
+ * schickt Lichtstrom, Abstrahlwinkel und Leistung. Die Antwort enthält die abgeleitete
+ * Lichtstärke und ein Rechenbeispiel, damit ein Verlesen (900 statt 9000 lm, Halbwinkel
+ * statt vollem Abstrahlwinkel) sofort auffällt statt erst im Ergebnis.
+ */
+export interface CreateLuminaireParams {
+  /** Anzeigename, z. B. "Magnetschiene 48 V Spot 10 W 3000 K". */
+  label: string;
+  /** Lichtstrom der Leuchte in Lumen, wie das Datenblatt ihn nennt. */
+  fluxLm: number;
+  /** Voller Abstrahlwinkel bei 50 % Lichtstärke, in Grad ("36°"). */
+  beamAngleDeg: number;
+  /** Leistungsaufnahme in Watt. */
+  powerW?: number;
+  /** Farbtemperatur in Kelvin. */
+  cctK?: number;
+  manufacturer?: string;
+  modelNumber?: string;
+  /** Leuchtensystem als Suchbegriff, z. B. "MAG48" oder "Surf20". */
+  system?: string;
+  /** Wie die Leuchte angesteuert wird. Bestimmt den Anschluss am Symbol. Default "mains". */
+  control?: "mains" | "dali" | "dmx";
+  /** Link auf das Datenblatt. */
+  referenceUrl?: string;
+  /** Herkunft der Photometrie. "measured" wird nicht angenommen — eine Messung kommt über
+   *  ihre eigene Auswertung herein, nicht über getippte Datenblattwerte. */
+  origin?: "datasheet" | "manufacturer";
+}
+
+export interface ListLuminairesParams {
+  /** Filtert über Name, Hersteller, Modell und System. Leer = alle. */
+  query?: string;
+}
+
+/** Einstellungen der Lichtrechnung einer Seite. Nur die übergebenen Felder ändern sich. */
+export interface SetLightCalculationParams extends FloorplanPageRef {
+  visible?: boolean;
+  /** Höhe der Nutzebene über OKFF in realen mm (Standard 850). */
+  workPlaneMm?: number;
+  /** Montagehöhe für Leuchten ohne eigene Angabe, in realen mm. */
+  defaultMountHeightMm?: number;
+  /** Wartungsfaktor 0–1 (Standard 0,8). */
+  maintenanceFactor?: number;
+  /** Deckkraft des Rasters 0–1. */
+  opacity?: number;
+  /** Schrittweite des Rasters in Papier-mm. */
+  gridMm?: number;
+}
+
+export type LightReportParams = FloorplanPageRef;

@@ -68,6 +68,10 @@ import {
   type FloorplanPageRef,
   type UpdateFloorplanLineParams,
   type SpeakerLoadReportParams,
+  type CreateLuminaireParams,
+  type ListLuminairesParams,
+  type SetLightCalculationParams,
+  type LightReportParams,
   SPEAKER_LINE_MODES_WIRE,
   FLOORPLAN_SHAPES,
   FLOORPLAN_LABEL_POSITIONS,
@@ -127,7 +131,17 @@ import {
 } from "./floorplan";
 import { amplifiersOnSchematic, channelShortLabel, computeAmplifierLoads, computeLineLoads, planLines, speakerLevelOutputs, type LineLoadRow } from "./speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, type AmplifierLoadResult, type ChannelLoadResult } from "./speakerLoad";
-import type { FloorplanLine, SpeakerLineMode } from "./types";
+import type { FloorplanLine, LuminairePhotometry, SignalType, SpeakerLineMode } from "./types";
+import { DEFAULT_LIGHT_CALC } from "./types";
+import {
+  collectLuminaires,
+  computeLuxGrid,
+  connectedLoadW,
+  cosExponent,
+  gridStats,
+  luminaireBoundsMm,
+  peakIntensityCd,
+} from "./lightSim";
 
 export type BridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -364,9 +378,28 @@ function validateOrientation(o: unknown): "landscape" | "portrait" {
   return o;
 }
 
-function validateKind(k: unknown): "generic" | "loudspeaker" {
-  if (k !== "generic" && k !== "loudspeaker") throw new CommandError('kind must be "generic" or "loudspeaker".');
+function validateKind(k: unknown): "generic" | "loudspeaker" | "light" {
+  if (k !== "generic" && k !== "loudspeaker" && k !== "light") {
+    throw new CommandError('kind must be "generic", "loudspeaker" or "light".');
+  }
   return k;
+}
+
+/** Eine Montagehöhe ist eine reale Länge in Millimetern und hat keinen Maßstabsbezug.
+ *  Die Obergrenze ist großzügig (eine Hallendecke), die Untergrenze fängt den Fall ab,
+ *  dass jemand Meter statt Millimeter geschickt hat. */
+function validateMountHeightMm(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 100 || v > 30000) {
+    throw new CommandError("mountHeightMm must be a height above finished floor in MILLIMETRES, between 100 and 30000 (2.9 m is 2900).");
+  }
+  return v;
+}
+
+function validateDimming(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) {
+    throw new CommandError("dimming must be between 0 and 1 (1 = full output).");
+  }
+  return v;
 }
 
 function validateLabelPosition(p: unknown): (typeof FLOORPLAN_LABEL_POSITIONS)[number] {
@@ -502,6 +535,8 @@ function placeSymbolCore(page: FloorplanPage, spec: FloorplanSymbolSpec) {
     seq: spec.seq,
     ...placement,
     labelRotationDeg: spec.labelRotationDeg !== undefined ? validateRotation(spec.labelRotationDeg) : undefined,
+    mountHeightMm: spec.mountHeightMm !== undefined ? validateMountHeightMm(spec.mountHeightMm) : undefined,
+    dimming: spec.dimming !== undefined ? validateDimming(spec.dimming) : undefined,
     notes: spec.notes ? String(spec.notes) : undefined,
   });
   const placed = requireFloorplan(page.id).symbols.find((sym) => sym.id === symbolId);
@@ -1329,6 +1364,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     }
     if (p.labelPosition !== undefined) Object.assign(patch, labelPlacementFor(validateLabelPosition(p.labelPosition), page.symbolSizeMm, page.labelSizeMm));
     if (p.labelRotationDeg !== undefined) patch.labelRotationDeg = validateRotation(p.labelRotationDeg);
+    if (p.mountHeightMm !== undefined) patch.mountHeightMm = validateMountHeightMm(p.mountHeightMm);
+    if (p.dimming !== undefined) patch.dimming = validateDimming(p.dimming);
     if (p.notes !== undefined) patch.notes = String(p.notes) || undefined;
     if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one symbol property.");
     st().updateFloorplanSymbol(page.id, symbol.id, patch);
@@ -1575,6 +1612,193 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       amplifierCount: amps.length,
       amplifiers: amplifierSummaries(results),
       hint: amps.length === 0 ? "No amplifier with speaker-level outputs on the schematic." : undefined,
+    };
+  },
+
+  // ── Lichtplanung (Ship L) ────────────────────────────────────────
+
+  create_luminaire: (params) => {
+    const p = (params ?? {}) as unknown as CreateLuminaireParams;
+    const label = requireText(p.label, "label");
+    if (typeof p.fluxLm !== "number" || !Number.isFinite(p.fluxLm) || p.fluxLm <= 0 || p.fluxLm > 200000) {
+      throw new CommandError("fluxLm must be the luminaire's luminous flux in lumens, between 1 and 200000.");
+    }
+    if (typeof p.beamAngleDeg !== "number" || !Number.isFinite(p.beamAngleDeg) || p.beamAngleDeg < 2 || p.beamAngleDeg > 180) {
+      throw new CommandError("beamAngleDeg must be the FULL beam angle at 50% intensity, in degrees, between 2 and 180 (a datasheet's \"36°\", not the half angle).");
+    }
+    if (p.powerW !== undefined && (typeof p.powerW !== "number" || !Number.isFinite(p.powerW) || p.powerW < 0 || p.powerW > 5000)) {
+      throw new CommandError("powerW must be the input power in watts, between 0 and 5000.");
+    }
+    if (p.cctK !== undefined && (typeof p.cctK !== "number" || p.cctK < 1000 || p.cctK > 10000)) {
+      throw new CommandError("cctK must be a colour temperature in kelvin, between 1000 and 10000.");
+    }
+    if (p.origin !== undefined && p.origin !== "datasheet" && p.origin !== "manufacturer") {
+      throw new CommandError('origin must be "datasheet" or "manufacturer" — a measured curve comes in through its own evaluation, not through typed datasheet values.');
+    }
+    const control = p.control ?? "mains";
+    if (control !== "mains" && control !== "dali" && control !== "dmx") {
+      throw new CommandError('control must be "mains", "dali" or "dmx".');
+    }
+
+    const photometry: LuminairePhotometry = {
+      fluxLm: p.fluxLm,
+      beamAngleDeg: p.beamAngleDeg,
+      powerW: p.powerW,
+      cctK: p.cctK,
+      origin: p.origin ?? "datasheet",
+    };
+    const signalType: SignalType = control === "mains" ? "power" : (control as SignalType);
+    const port: Port = {
+      id: "in",
+      label: control === "mains" ? "Netz" : control.toUpperCase(),
+      signalType,
+      direction: "input",
+    };
+    // Dieselbe Id-Form wie die Templates aus dem Editor; der Zähler hängt an, falls in
+    // derselben Millisekunde zwei Leuchten angelegt werden (Claude legt sie im Block an).
+    const existing = new Set(st().customTemplates.map((t) => t.id));
+    let id = `custom-${Date.now()}`;
+    for (let i = 2; existing.has(id); i++) id = `custom-${Date.now()}-${i}`;
+
+    const template: DeviceTemplate = {
+      id,
+      deviceType: "luminaire",
+      category: "Lighting",
+      label,
+      manufacturer: p.manufacturer ? String(p.manufacturer) : undefined,
+      modelNumber: p.modelNumber ? String(p.modelNumber) : undefined,
+      referenceUrl: p.referenceUrl ? String(p.referenceUrl) : undefined,
+      searchTerms: [p.system ? String(p.system) : "", "leuchte", "luminaire", "licht"].filter(Boolean),
+      ports: [port],
+      powerDrawW: p.powerW,
+      luminaire: photometry,
+    };
+    st().addCustomTemplate(template);
+
+    // Die Plausibilitätsprüfung: Claude zieht diese Zahlen aus einem PDF und kann sich
+    // verlesen. I₀ und ein Rechenbeispiel machen einen Faktor 10 sofort sichtbar.
+    const n = cosExponent(photometry.beamAngleDeg);
+    const i0 = peakIntensityCd(photometry.fluxLm, n);
+    const cfg = DEFAULT_LIGHT_CALC;
+    const h = (cfg.defaultMountHeightMm - cfg.workPlaneMm) / 1000;
+    return {
+      templateId: id,
+      label,
+      photometry,
+      derived: {
+        cosExponent: Math.round(n * 100) / 100,
+        peakIntensityCd: Math.round(i0),
+        /** Beleuchtungsstärke direkt unter der Leuchte, ungedimmt und ohne Wartungsfaktor. */
+        exampleLuxBelow: Math.round(i0 / (h * h)),
+        exampleMountHeightMm: cfg.defaultMountHeightMm,
+        exampleWorkPlaneMm: cfg.workPlaneMm,
+      },
+      hint: "Check exampleLuxBelow against the datasheet before placing many of these — a spot around 500 lx at 2.9 m is plausible, 50000 lx means the flux or the beam angle was misread.",
+    };
+  },
+
+  list_luminaires: async (params) => {
+    const { query } = (params ?? {}) as unknown as ListLuminairesParams;
+    const q = (query ?? "").trim().toLowerCase();
+    const list = await allTemplates();
+    return {
+      luminaires: list
+        .filter((t) => t.luminaire)
+        .filter((t) => {
+          if (!q) return true;
+          return [t.label, t.manufacturer, t.modelNumber, ...(t.searchTerms ?? [])]
+            .filter(Boolean).join(" ").toLowerCase().includes(q);
+        })
+        .map((t) => ({
+          templateId: t.id ?? t.deviceType,
+          label: t.label,
+          manufacturer: t.manufacturer,
+          modelNumber: t.modelNumber,
+          fluxLm: t.luminaire!.fluxLm,
+          beamAngleDeg: t.luminaire!.beamAngleDeg,
+          powerW: t.luminaire!.powerW,
+          cctK: t.luminaire!.cctK,
+          origin: t.luminaire!.origin ?? "datasheet",
+          measuredAt: t.luminaire!.measuredAt,
+        })),
+    };
+  },
+
+  set_light_calculation: (params) => {
+    const p = (params ?? {}) as unknown as SetLightCalculationParams;
+    const page = requireFloorplan(p.pageId);
+    const patch: Partial<typeof DEFAULT_LIGHT_CALC> = {};
+    if (p.visible !== undefined) patch.visible = Boolean(p.visible);
+    if (p.workPlaneMm !== undefined) {
+      if (typeof p.workPlaneMm !== "number" || p.workPlaneMm < 0 || p.workPlaneMm > 3000) {
+        throw new CommandError("workPlaneMm must be the working plane height above finished floor in MILLIMETRES, 0 to 3000 (0.85 m is 850).");
+      }
+      patch.workPlaneMm = p.workPlaneMm;
+    }
+    if (p.defaultMountHeightMm !== undefined) patch.defaultMountHeightMm = validateMountHeightMm(p.defaultMountHeightMm);
+    if (p.maintenanceFactor !== undefined) {
+      if (typeof p.maintenanceFactor !== "number" || p.maintenanceFactor <= 0 || p.maintenanceFactor > 1) {
+        throw new CommandError("maintenanceFactor must be between 0 and 1 (0.8 is the usual allowance for ageing and soiling).");
+      }
+      patch.maintenanceFactor = p.maintenanceFactor;
+    }
+    if (p.opacity !== undefined) {
+      if (typeof p.opacity !== "number" || p.opacity < 0 || p.opacity > 1) throw new CommandError("opacity must be between 0 and 1.");
+      patch.opacity = p.opacity;
+    }
+    if (p.gridMm !== undefined) {
+      if (typeof p.gridMm !== "number" || p.gridMm < 0.5 || p.gridMm > 20) {
+        throw new CommandError("gridMm must be the sample spacing on paper in mm, between 0.5 and 20. Finer is smoother and slower.");
+      }
+      patch.gridMm = p.gridMm;
+    }
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one setting.");
+    st().updateFloorplanLightCalc(page.id, patch);
+    return { pageId: page.id, light: { ...DEFAULT_LIGHT_CALC, ...(requireFloorplan(page.id).light ?? {}) } };
+  },
+
+  light_report: (params) => {
+    const { pageId } = (params ?? {}) as unknown as LightReportParams;
+    const page = requireFloorplan(pageId);
+    const cfg = { ...DEFAULT_LIGHT_CALC, ...(page.light ?? {}) };
+    const lums = collectLuminaires(page, cfg.defaultMountHeightMm, (nodeId) => {
+      const data = st().nodes.find((n) => n.id === nodeId)?.data as DeviceData | undefined;
+      return data?.templateId ? getTemplateById(data.templateId, st().customTemplates)?.luminaire : undefined;
+    });
+    const opts = {
+      scaleDenominator: page.scaleDenominator,
+      workPlaneMm: cfg.workPlaneMm,
+      maintenanceFactor: cfg.maintenanceFactor,
+    };
+    const bounds = luminaireBoundsMm(lums, opts);
+    if (!bounds || lums.length === 0) {
+      return {
+        pageId: page.id,
+        luminaireCount: 0,
+        hint: "No luminaires on this plan yet. Create one with create_luminaire, add it to the schematic, then place its symbol with place_floorplan_symbols.",
+      };
+    }
+    // Gerechnet wird auf der Schrittweite der Seite; über den Auswertebereich, nicht über
+    // das ganze Blatt — sonst wäre E_min immer null.
+    const grid = computeLuxGrid(lums, bounds, { ...opts, pitchMm: cfg.gridMm });
+    const stats = gridStats(grid);
+    const r = (v: number) => Math.round(v);
+    return {
+      pageId: page.id,
+      luminaireCount: lums.length,
+      connectedLoadW: Math.round(connectedLoadW(lums) * 10) / 10,
+      workPlaneMm: cfg.workPlaneMm,
+      maintenanceFactor: cfg.maintenanceFactor,
+      averageLux: r(stats.avgLux),
+      minLux: r(stats.minLux),
+      maxLux: r(stats.maxLux),
+      uniformity: Math.round(stats.uniformity * 100) / 100,
+      evaluatedAreaM: {
+        width: Math.round(paperMmToRealMm(bounds.w, page.scaleDenominator)) / 1000,
+        height: Math.round(paperMmToRealMm(bounds.h, page.scaleDenominator)) / 1000,
+      },
+      basis: "Direct component only, cos-model photometry from datasheet values, no interreflection and no shading. A planning aid, not a DIN EN 12464-1 verification.",
+      hint: "The evaluated area is the luminaires' bounding box widened by one mounting height — a stand-in until rooms carry their own polygon.",
     };
   },
 };

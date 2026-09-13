@@ -46,6 +46,7 @@ import type {
   FloorplanCoverage,
   FloorplanWall,
   FloorplanHeatmap,
+  FloorplanLightCalc,
   WallMaterial,
   WallMaterialSpec,
   CompanyProfile,
@@ -61,6 +62,7 @@ import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, D
 import {
   DEFAULT_FLOORPLAN_SCALE,
   DEFAULT_HEATMAP,
+  DEFAULT_LIGHT_CALC,
   DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM,
   DEFAULT_FLOORPLAN_LABEL_SIZE_MM,
   DEFAULT_FLOORPLAN_NOTE_FONT_MM,
@@ -924,6 +926,7 @@ interface SchematicState {
   updateFloorplanWall: (pageId: string, wallId: string, patch: Partial<Omit<FloorplanWall, "id">>) => void;
   removeFloorplanWall: (pageId: string, wallId: string) => void;
   updateFloorplanHeatmap: (pageId: string, patch: Partial<FloorplanHeatmap>) => void;
+  updateFloorplanLightCalc: (pageId: string, patch: Partial<FloorplanLightCalc>) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -5426,6 +5429,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         heatmap: kind === "wifi"
           ? { ...DEFAULT_HEATMAP, ...(p.heatmap ?? {}), visible: true }
           : p.heatmap,
+        // Dasselbe für den Lichtplan: er existiert, um das Lux-Raster zu zeigen.
+        light: kind === "light"
+          ? { ...DEFAULT_LIGHT_CALC, ...(p.light ?? {}), visible: true }
+          : p.light,
         legend: {
           ...p.legend,
           title: preset.legendTitle,
@@ -6015,6 +6022,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // Clearing an override falls back to the calibrated default rather than to zero.
     if (spec) next[material] = spec; else delete next[material];
     set({ wallMaterials: Object.keys(next).length ? next : undefined });
+    get().saveToLocalStorage();
+  },
+
+  updateFloorplanLightCalc: (pageId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        light: { ...DEFAULT_LIGHT_CALC, ...(p.light ?? {}), ...patch },
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
     get().saveToLocalStorage();
   },
 

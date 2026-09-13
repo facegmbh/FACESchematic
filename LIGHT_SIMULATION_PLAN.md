@@ -1,9 +1,9 @@
 # FACE Schematic — Modul Lichtsimulation
 
-Status: **Planung, Zuschnitt entschieden** · Stand: 2026-09-13 · Owner: JLD
+Status: **Phase A gebaut** · Stand: 2026-09-13 · Owner: JLD
 
 Ersetzt den Entwurf vom 13.09.2026 („face-light" als eigenes Repo mit zwei Python-Services).
-Was sich geändert hat und warum, steht in §11.
+Was sich geändert hat und warum, steht in §12.
 
 ---
 
@@ -337,13 +337,18 @@ dir, ob das Ergebnis zum Datenblatt passt. Aus der Anleitung in §5.3 wird damit
 
 | Tool | Zweck |
 |---|---|
-| `create_light_plan` | Plantyp `light` anlegen (erweitert `create_floorplan` um den `kind`-Wert) |
-| `suggest_rooms` | Aus den importierten Wänden geschlossene Polygone vorschlagen — **Vorschlag, der Nutzer bestätigt** |
-| `define_room` | Raum festlegen: Polygon in Metern, Raumhöhe, Nutzebene, Reflexionsgrade |
-| `place_luminaires` | Batch: Leuchten in realen Metern, mit Montagehöhe, Ausrichtung, Dimmung |
-| `place_luminaires_on_track` | Schiene von A nach B, Abstand **oder** Anzahl → verteilt die Köpfe und legt die Schiene als Linienobjekt an |
-| `run_light_calculation` | Rechnung anstoßen, wartet auf das Ergebnis |
-| `light_report` | E<sub>m</sub>, E<sub>min</sub>, E<sub>max</sub>, Gleichmäßigkeit je Raum, plus die Stückliste |
+| `create_floorplan` / `update_floorplan` mit `kind: "light"` | Plantyp Lichtplan — **erweitert**, kein eigenes `create_light_plan` |
+| `place_floorplan_symbols` mit `mountHeightMm` und `dimming` | Leuchten platzieren — **erweitert**, kein eigenes `place_luminaires` |
+| `set_light_calculation` | Nutzebene, Montagehöhe, Wartungsfaktor, Rasterweite, Sichtbarkeit |
+| `light_report` | E<sub>m</sub>, E<sub>min</sub>, E<sub>max</sub>, U₀, Leuchtenzahl, Anschlussleistung |
+| `suggest_rooms` · `define_room` | Phase B: Polygon aus den Wänden vorschlagen, Raum festlegen |
+| `place_luminaires_on_track` | Phase F: Schiene von A nach B, Abstand **oder** Anzahl |
+
+Die ersten beiden Zeilen weichen bewusst vom ersten Entwurf ab. Ein Lichtplan ist ein
+Floorplan mit anderem Typ, und eine Leuchte ist ein Symbol mit zwei Feldern mehr — dafür
+zwei parallele Werkzeuge zu bauen hieße, die Prüfung von Positionen, Gruppen und
+Beschriftungen ein zweites Mal zu schreiben und beim nächsten Mal an einer Stelle zu
+vergessen.
 
 ### 7.4 Die Schleife ist der eigentliche Gewinn
 
@@ -360,7 +365,7 @@ stehen. Das ist die Arbeit, die am Bildschirm mühsam und für einen Assistenten
 
 **Daraus folgt eine Anforderung an die Rechnung:** Dieser Zyklus braucht Antworten in
 Sekunden, nicht in Minuten. Die Browser-Rechnung aus §4.1 ist dafür der richtige Motor —
-Radiance (§9) ist die Kontrollrechnung am Ende, nicht der Motor der Schleife. Das ist ein
+Radiance (§9, Rechenzeiten in §10) ist die Kontrollrechnung am Ende, nicht der Motor der Schleife. Das ist ein
 weiterer Grund, warum Stufe 1 vor Stufe 2 kommt.
 
 ### 7.5 Playbook
@@ -484,11 +489,95 @@ Ergebnis ± 15 % gegen dieselbe Rechnung in DIALux, Rechenzeit < 10 s je Raum.
 
 ---
 
-## 10. Phasen
+## 10. Rechenpower — was das Ganze an Hardware braucht
+
+Kurz: **nichts zu kaufen.** Die Antwort zerfällt in drei Teile, und nur der dritte kostet
+überhaupt Rechenzeit — der ist aber bewusst aus dem Arbeitsfluss herausgehalten.
+
+### 10.1 Die Rechnung im Browser (Phase A/B) — gemessen
+
+Gemessen am fertigen Code, A1 quer, Rasterweite 2,5 mm, also rund **72.000 Stützstellen**,
+auf einem 4-Kern-Container (langsamer als jeder Arbeitsplatzrechner):
+
+| Leuchten | Rechenzeit |
+|---|---|
+| 8 | 132 ms |
+| 24 | 406 ms |
+| 64 | 1,07 s |
+| 160 | 2,65 s |
+
+Der Aufwand ist Stützstellen × Leuchten, also linear in der Leuchtenzahl. Ein normaler
+Raum mit 8–24 Leuchten rechnet in einer Fünftelsekunde; ein Laptop ist dabei nochmal zwei-
+bis dreimal schneller. Für die Schleife aus §7.4 — platzieren, rechnen, lesen, nachbessern —
+ist das genau die Größenordnung, die sich flüssig anfühlt.
+
+Erst ein ganzes Geschoss mit über hundert Leuchten wird zäh. Zwei Stellschrauben, bevor
+irgendjemand über Hardware nachdenkt: die Rasterweite geht quadratisch ein (5 mm statt
+2,5 mm ist viermal billiger), und eine Entfernungsabschneidung würde den Aufwand nahezu
+unabhängig von der Gesamtzahl machen — ein 36°-Spot trägt jenseits weniger Meter ohnehin
+unter ein Lux bei. Beides ist noch nicht nötig und deshalb nicht gebaut.
+
+### 10.2 Die 3D-Ansicht (Phase D) — läuft auf dem Arbeitsplatzrechner
+
+three.js rastert auf der Grafikkarte, die ohnehin im Rechner steckt. Die Geometrie ist
+dabei nicht das Problem: ein extrudierter Raum sind ein paar tausend Dreiecke, das ist für
+jede GPU der letzten zehn Jahre nichts. Teuer sind **schattenwerfende Lichtquellen** —
+jede kostet eine eigene Schattenberechnung pro Bild, und bei 20 bis 30 Spots fängt ein
+Laptop an zu arbeiten.
+
+Der Ausweg ist schon da: Das Lux-Raster wird ohnehin gerechnet. Es wird als Lichtkarte auf
+Boden und Wände gelegt, und die Leuchten in der Szene müssen dann kaum noch echtes Licht
+werfen — sie sind sichtbare Körper mit einem Schein. Damit bleibt die Bildrate hoch, und
+als Nebenwirkung stimmt die Helligkeitsverteilung in 3D exakt mit der Rechnung überein,
+statt ihr zu widersprechen.
+
+### 10.3 Radiance (Phase E) — hier steckt die Rechenzeit, aber als Stapeljob
+
+Das ist der einzige Teil, der spürbar rechnet:
+
+- **`rtrace` für ein Lux-Raster eines Raums:** Sekunden bis etwa eine Minute. Das
+  Abbruchkriterium des Plans (< 10 s je Raum, §9) ist realistisch.
+- **`rpict` für ein Bild ins Angebot:** Minuten, nicht Stunden — bei 1920 px und
+  maßvollen Interreflexions-Einstellungen.
+
+Entscheidend ist die Architektur, nicht die Maschine: **Radiance sitzt nie in der
+Schleife.** Es ist die Kontrollrechnung am Ende und das eine Bild fürs Angebot. Dass es
+zwei Minuten braucht, stört dort niemanden.
+
+Radiance parallelisiert nahezu linear über Kerne. Damit bleibt genau **eine offene
+Hardwarefrage: wie viele Kerne hat `face-docker1`?** Vier reichen für einen Raum, acht
+machen den Hero-Shot angenehm. Mehr braucht es nicht.
+
+### 10.4 Was ausdrücklich nicht gebraucht wird
+
+Keine Renderfarm, kein GPU-Server, kein Accelerad. Der GPU-Beschleuniger aus dem ersten
+Entwurf lohnt nur, wenn man Radiance interaktiv betreiben will — und genau das vermeidet
+die Architektur, indem Stufe 1 im Browser läuft. Die Entscheidung „eigene Rechnung vor
+Radiance" ist damit auch die Entscheidung, die die Hardwareanforderung auf null hält.
+
+### 10.5 Wie gut wird das Bild am Ende?
+
+Drei Stufen, mit ehrlichen Erwartungen:
+
+| | Was man bekommt |
+|---|---|
+| **Lux-Raster als Falschfarbe** | Die Entscheidungsgrundlage. Kein Bild für den Kunden. |
+| **three.js-Realansicht** | Eine gute Architektur-Visualisierung: Proportion, Stimmung, wo es hell ist und wo nicht. Begehbar. Nicht fotorealistisch. |
+| **Radiance `rpict`** | Ein physikalisch korrektes Bild mit echten Lichtkegeln und Interreflexion. Das Bild, das ins Angebots-PDF geht. |
+
+Was keine der drei Stufen liefert, ist die Bildsprache einer Visualisierungsagentur —
+Möblierung, Materialien, Nachbearbeitung. Das ist ein eigenes Handwerk und eine eigene
+Software (Blender), und genau deshalb ist Phase D in §6 hart gedeckelt: Wände, Boden,
+Decke, Leuchten, Kamerafahrt, Tonemapping. Das ist das Loch, in dem 3D-Projekte
+verschwinden.
+
+---
+
+## 11. Phasen
 
 | | Inhalt | MCP-Werkzeuge, die mitgehen | Dauer |
 |---|---|---|---|
-| **A** | Plantyp `light`, Leuchtensymbole mit Montagehöhe, Lux-Raster aus dem cos-Modell (P1) | `create_luminaire`, `list_luminaires`, `create_light_plan`, `place_luminaires`, `run_light_calculation`, `light_report` | Tage |
+| **A** ✅ | Plantyp `light`, Leuchtensymbole mit Montagehöhe, Lux-Raster aus dem cos-Modell (P1) | `create_luminaire`, `list_luminaires`, `set_light_calculation`, `light_report` | **gebaut** |
 | **B** | `FloorplanRoom` aus den vorhandenen Wänden, Höhe, Reflexionsgrade, indirekter Anteil | `suggest_rooms`, `define_room` | Tage |
 | **C** | Messplatz einrichten, MAG48-Spot und Surf20 vermessen, LDT-Schreiber (P2) | `add_luminaire_measurement`, `import_photometry` | 1 Woche, davon 2 Tage Messen |
 | **D** | 3D-Realansicht: extrudierte Räume, IES-Leuchten aus C, Falschfarbe umschaltbar | — (Ansichtssache, nichts zu steuern) | 1–2 Wochen |
@@ -514,7 +603,7 @@ Ausbau statt Voraussetzung.
 
 ---
 
-## 11. Entscheidungen
+## 12. Entscheidungen
 
 | Datum | Entscheidung | Grund |
 |---|---|---|
@@ -528,12 +617,14 @@ Ausbau statt Voraussetzung.
 | 2026-09-13 | **3D auf Phase D vorgezogen (vorher „später")** | Die Realansicht ist das Verkaufsargument. Der Einwand war nie 3D, sondern zwei konkurrierende Lichtmodelle — das ist über §6 gelöst. |
 | 2026-09-13 | **Leuchten sind Geräte-Templates, kein zweiter Artikelstamm** | Ein Stamm, ein Weg nach Odoo |
 | 2026-09-13 | **MCP-Werkzeuge gehen in jeder Phase mit, nicht als eigene Phase am Ende** | Wer die Funktion nur über die Oberfläche baut und den Bridge-Befehl vertagt, baut sie zweimal |
+| 2026-09-13 | **Auswertebereich ist das Leuchtenrechteck plus ein halber Leuchtenabstand** | Beim Bauen von Phase A aufgefallen: um eine Montagehöhe aufgeweitet, wäre E_min bei engen Spots immer null und U₀ als Kennzahl wertlos. Der halbe Abstand ist zugleich die Regel, nach der eine Lichtplanung von Hand aufgebaut wird. Ersetzt in Phase B durch das Raumpolygon. |
+| 2026-09-13 | **Leuchtenabstand folgt dem Abstrahlwinkel, nicht der Montagehöhe** | Ebenfalls beim Bauen aufgefallen und als Test festgehalten: die übliche Faustregel (1–1,5 × Höhe) gilt für breit strahlende Downlights. Ein 36°-Spot will rund 1,3 m statt 2,5 m — sonst helle Lichtinseln mit Dunkelheit dazwischen, egal wie viele man dazulegt. Das Playbook rechnet die Regel jetzt aus dem Winkel. |
 | 2026-09-13 | **Kein PDF-Parser im MCP-Server; Claude liest Datenblätter selbst** | Über die Bridge gehen Zahlen, keine Dateien. Hält den Server klein und das Protokoll prüfbar. |
 | 2026-09-13 | **Import und Kalibrierung des Grundrisses bleiben beim Nutzer** | Ein falsch kalibrierter Plan macht jede Lux-Zahl wertlos, und der Fehler fiele niemandem auf |
 
 ---
 
-## 12. Offene Punkte
+## 13. Offene Punkte
 
 - [ ] Luxmeter beschaffen — Klasse C genügt (§5.4), Auswahl und Budget offen
 - [ ] Welche Leuchten zuerst vermessen? Vorschlag: MAG48-Spot (rotationssymmetrisch, einfach),
@@ -542,6 +633,8 @@ Ausbau statt Voraussetzung.
       unsere eigene Messung einmal prüfen können
 - [ ] Feature-Flag für Stufe 2: wie verhält sich der öffentliche Build, wenn kein
       `light-sim` erreichbar ist? (Vorschlag: Schalter gar nicht anzeigen)
+- [ ] **Wie viele Kerne hat `face-docker1`?** Die einzige offene Hardwarefrage im ganzen
+      Plan (§10.3). Vier reichen für einen Raum, acht machen den Hero-Shot angenehm.
 - [ ] Referenzprojekt für die Abnahme — Mikulla-Plan (Egbers, E1) liegt vor
 - [ ] Sollen die Lichtwerkzeuge in der Bridge hinter einem eigenen Schalter liegen oder mit
       der bestehenden AI-Beta-Einstellung mitkommen? (Vorschlag: mitkommen — ein Schalter
@@ -553,7 +646,20 @@ Ausbau statt Voraussetzung.
 
 ---
 
-## 13. Nächster Schritt
+## 14. Nächster Schritt
+
+**Phase A ist gebaut.** Plantyp `light`, Leuchten mit Montagehöhe und Dimmung, Lux-Raster
+auf der vorhandenen Heatmap-Maschinerie, Bedienfeld, vier MCP-Werkzeuge und das Playbook
+`lichtplanung`. Der Rechenkern steht in `src/lightSim.ts`, geprüft durch 28 Tests in
+`src/__tests__/lightSim.test.ts` und 18 Handler-Tests in `src/__tests__/mcpLight.test.ts`.
+
+**Als Nächstes: Phase B** — `FloorplanRoom` aus den vorhandenen Wänden, Raumhöhe,
+Reflexionsgrade und damit der indirekte Anteil. Das ersetzt zugleich die Hilfskonstruktion
+des Auswertebereichs (§12) durch den echten Raum.
+
+---
+
+<details><summary>Ursprüngliche Fassung dieses Abschnitts</summary>
 
 **Phase A, mitsamt ihren MCP-Werkzeugen.** Plantyp `light`, ein Leuchtensymbol mit
 Montagehöhe, Lux-Raster aus dem cos-Modell auf der vorhandenen Heatmap-Maschinerie — und die
@@ -562,3 +668,5 @@ Bridge-Befehle dazu, damit die Funktion von Anfang an beides bedient.
 Das Abnahmekriterium ist ein Satz: *„Hier ist das Datenblatt des MAG48-Spots, verteile mir
 davon genug im Abschiedsraum für 300 Lux."* — und Claude legt die Leuchte an, platziert sie,
 rechnet und sagt, was herauskommt. Ohne Container, ohne Messung, ohne Herstelleranfrage.
+
+</details>

@@ -312,6 +312,8 @@ export interface DeviceData {
   speakerLoad?: SpeakerLoadSpec;
   /** Output capability of an amplifier, inherited from the template (see DeviceTemplate.ampLoad). */
   ampLoad?: AmplifierLoadSpec;
+  /** Photometrie der Leuchte, vom Template geerbt (siehe DeviceTemplate.luminaire). */
+  luminaire?: LuminairePhotometry;
   /** Device category (e.g. "video", "audio") — meaningful for custom templates and community submissions */
   category?: string;
   showAllPorts?: boolean;
@@ -656,6 +658,8 @@ export interface DeviceTemplate {
   ampLoad?: AmplifierLoadSpec;
   /** What an access point radiates, per band. Feeds the Wi-Fi heatmap on floorplans. */
   wifi?: WifiRadioSpec;
+  /** Was die Leuchte abstrahlt. Speist die Lichtrechnung auf Lichtplänen (src/lightSim.ts). */
+  luminaire?: LuminairePhotometry;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -1116,6 +1120,12 @@ export interface FloorplanSymbol {
    *  projector, a display or a camera the way it actually faces on the plan. The number
    *  next to it stays upright — only the picture turns. */
   rotationDeg?: number;
+  /** Montagehöhe über OKFF in realen MILLIMETERN — die dritte Dimension, die eine
+   *  Lichtrechnung braucht und die ein Grundriss nicht hergibt. Keine Papier-mm: eine
+   *  Höhe hat keinen Maßstabsbezug. Undefiniert = die Vorgabe der Seite. */
+  mountHeightMm?: number;
+  /** Dimmung 0–1. Undefiniert zählt als 1 (volle Leistung). */
+  dimming?: number;
   /** Per-symbol note, surfaced in the floorplan schedule. */
   notes?: string;
 }
@@ -1340,6 +1350,78 @@ export interface FloorplanWall {
   hidden?: boolean;
   locked?: boolean;
 }
+
+// ── Leuchten: Photometrie und Lichtrechnung ──────────────────────────
+
+/** Woher die Lichtstärkeverteilung einer Leuchte stammt. Die Herkunft entscheidet, wie
+ *  belastbar eine Lux-Zahl ist, und gehört deshalb an die Daten und in jede Ausgabe. */
+export type PhotometryOrigin = "datasheet" | "measured" | "manufacturer";
+
+export const PHOTOMETRY_ORIGINS: PhotometryOrigin[] = ["datasheet", "measured", "manufacturer"];
+
+/**
+ * Was eine Leuchte abstrahlt. Sitzt am Geräte-Template wie `wifi` und `speakerLoad`: das
+ * Modell liefert die Daten, die Installation darf dimmen.
+ *
+ * In Phase A ist das der Datenblatt-Fall — Lichtstrom und Abstrahlwinkel, aus denen
+ * `src/lightSim.ts` die cos-Verteilung bildet. Eine gemessene oder vom Hersteller
+ * gelieferte Kurve tritt später an dieselbe Stelle, ohne dass sich etwas daran ändert,
+ * wer diese Daten liest.
+ */
+export interface LuminairePhotometry {
+  /** Lichtstrom der Leuchte in Lumen, wie das Datenblatt ihn nennt. */
+  fluxLm: number;
+  /** Voller Abstrahlwinkel bei 50 % Lichtstärke, in Grad — die Herstellerangabe ("36°"). */
+  beamAngleDeg: number;
+  /** Leistungsaufnahme in Watt. Für die Anschlussleistung, nicht für die Lichtrechnung. */
+  powerW?: number;
+  /** Farbtemperatur in Kelvin. Dokumentation; die Rechnung ist farbblind. */
+  cctK?: number;
+  /** Woher die Daten stammen. Undefiniert zählt als "datasheet". */
+  origin?: PhotometryOrigin;
+  /** ISO-Datum der Messung, wenn selbst gemessen. */
+  measuredAt?: string;
+  measuredBy?: string;
+}
+
+/** Wie das Lux-Raster auf einem Plan gerechnet und gezeichnet wird. */
+export interface FloorplanLightCalc {
+  visible: boolean;
+  /** Höhe der Nutzebene über OKFF in realen mm. 850 ist die Konvention für Arbeitsflächen. */
+  workPlaneMm: number;
+  /** Montagehöhe, die eine Leuchte ohne eigene Angabe bekommt, in realen mm. */
+  defaultMountHeightMm: number;
+  /** Wartungsfaktor (Alterung, Verschmutzung). 0,8 ist der übliche Ansatz. */
+  maintenanceFactor: number;
+  /** Deckkraft über der Zeichnung des Architekten. */
+  opacity: number;
+  /** Schrittweite des Rasters in Papier-mm. Feiner ist glatter und langsamer. */
+  gridMm: number;
+}
+
+export const DEFAULT_LIGHT_CALC: FloorplanLightCalc = {
+  visible: false,
+  workPlaneMm: 850,
+  defaultMountHeightMm: 2900,
+  maintenanceFactor: 0.8,
+  opacity: 0.55,
+  gridMm: 2.5,
+};
+
+/** Stufen, in denen das Lux-Raster eingefärbt wird, hellste zuerst. Die Reihenfolge folgt
+ *  der Falschfarben-Konvention der Lichttechnik: Blau ist dunkel, Rot ist hell. Die
+ *  Schwellen sind die Größenordnungen, in denen über Innenräume geredet wird — 300 lx für
+ *  Aufenthalt, 500 lx für Arbeit —, ausdrücklich ohne Anspruch auf einen Normnachweis. */
+export const LUX_STEPS: { minLux: number; color: string; label: string }[] = [
+  { minLux: 750, color: "#dc2626", label: "≥ 750 lx" },
+  { minLux: 500, color: "#f97316", label: "500 … 750" },
+  { minLux: 300, color: "#eab308", label: "300 … 500" },
+  { minLux: 200, color: "#65a30d", label: "200 … 300" },
+  { minLux: 100, color: "#15803d", label: "100 … 200" },
+  { minLux: 50, color: "#0e7490", label: "50 … 100" },
+  { minLux: 20, color: "#1d4ed8", label: "20 … 50" },
+  { minLux: -Infinity, color: "#1e1b4b", label: "< 20 lx" },
+];
 
 /** How the Wi-Fi heatmap is drawn on a plan. */
 export interface FloorplanHeatmap {
@@ -1578,6 +1660,8 @@ export interface FloorplanPage {
   walls: FloorplanWall[];
   /** Wi-Fi heatmap settings. Undefined counts as DEFAULT_HEATMAP (off). */
   heatmap?: FloorplanHeatmap;
+  /** Einstellungen der Lichtrechnung. Undefiniert zählt als DEFAULT_LIGHT_CALC (aus). */
+  light?: FloorplanLightCalc;
   /** Show the fixed project title block in the sheet corner as well. Off by default on
    *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;
@@ -1597,8 +1681,8 @@ export interface FloorplanPage {
   lines?: FloorplanLine[];
 }
 
-export type FloorplanKind = "generic" | "loudspeaker" | "wifi";
-export const FLOORPLAN_KINDS: FloorplanKind[] = ["generic", "loudspeaker", "wifi"];
+export type FloorplanKind = "generic" | "loudspeaker" | "wifi" | "light";
+export const FLOORPLAN_KINDS: FloorplanKind[] = ["generic", "loudspeaker", "wifi", "light"];
 
 export const DEFAULT_FLOORPLAN_SCALE = 50;
 export const DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM = 6;

@@ -1473,6 +1473,18 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
     fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
     drawingSubtitle: "WLAN-Ausleuchtung",
   },
+  light: {
+    // Leuchten werden schlicht durchnummeriert und lesen sich als L1, L2 … auf dem Blatt.
+    labelTemplate: "L{{n}}",
+    legendTitle: "LICHTPLANUNG - LEGENDE & MONTAGE",
+    legendNotesTitle: "MONTAGEHINWEISE",
+    // Keine Endstufenlinien auf einem Lichtplan; die Überschrift wird nur der
+    // Vollständigkeit halber mitgeführt (Magnetschienen kommen in Phase F).
+    legendLinesTitle: "LINIEN",
+    revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
+    fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
+    drawingSubtitle: "Lichtplanung",
+  },
   loudspeaker: {
     labelTemplate: "{{line}}.{{n}}",
     legendTitle: "BESCHALLUNG - LEGENDE & MONTAGE",

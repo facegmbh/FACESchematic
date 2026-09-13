@@ -58,6 +58,7 @@ export const DEVICE_TYPE_TO_CATEGORY: Record<string, string> = {
   "media-server": "Media Servers",
   "lighting-console": "Lighting",
   "moving-light": "Lighting",
+  "luminaire": "Lighting",
   "led-fixture": "Lighting",
   "dmx-splitter": "Lighting",
   "dmx-node": "Lighting",

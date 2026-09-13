@@ -270,11 +270,12 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
             setFloorplanKind(page.id, kind);
           }
         }}
-        title={t("Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend.")}
+        title={t("Loudspeaker plans number symbols per amplifier line (4.1, 4.2 …) and carry the Beschallungsplan presets. A Wi-Fi coverage plan numbers access points AP1, AP2 …, switches the heatmap on and prints the signal colour key in the legend. A lighting plan numbers luminaires L1, L2 … and switches the lux grid on.")}
       >
         <option value="generic">{t("Generic plan")}</option>
         <option value="loudspeaker">{t("Loudspeaker plan")}</option>
         <option value="wifi">{t("Wi-Fi coverage plan")}</option>
+        <option value="light">{t("Lighting plan")}</option>
       </select>
 
       <div className="border-l border-[var(--color-border)] h-4" />

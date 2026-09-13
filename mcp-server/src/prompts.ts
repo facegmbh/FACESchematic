@@ -4,7 +4,7 @@
  * Two things ship here, both available to ANY paired MCP client (Claude Desktop,
  * claude.ai, Claude Code) — not just Claude Code:
  *   - SERVER_INSTRUCTIONS: a short always-on overview surfaced at initialize time.
- *   - PROMPTS / getPrompt: three named, parameterized playbooks for the common
+ *   - PROMPTS / getPrompt: five named, parameterized playbooks for the common
  *     multi-step jobs, so the assistant follows the right tool order instead of
  *     rediscovering it each time.
  *
@@ -23,8 +23,10 @@ Golden rules:
 - Re-read get_device after a structural change (e.g. installing a card) before wiring the new Ports.
 
 - Floorplans are scaled plan drawings: positions there are real-world METRES from the drawing area's corner, never canvas pixels. The architect's drawing (underlay) is imported and calibrated by the user in the editor — you fill in groups, symbols, legend text, the drawing block and notes.
+- Heights are the exception to metres: mounting heights and working planes are real-world MILLIMETRES above finished floor (2.9 m is 2900). They carry no drawing scale.
+- Light planning calculates illuminance from the luminaires on a plan. It is a planning aid, never a DIN EN 12464-1 verification — say so whenever you report lux figures.
 
-Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), and "floorplan" (annotate an architect's plan with device symbols, legend and drawing block).`;
+Five prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), "floorplan" (annotate an architect's plan with device symbols, legend and drawing block), and "lichtplanung" (place luminaires and calculate the illuminance).`;
 
 /** Definitions returned by the prompts/list handler. */
 export const PROMPTS: Prompt[] = [
@@ -56,7 +58,26 @@ export const PROMPTS: Prompt[] = [
       { name: "plan", description: "What to draw and for whom (e.g. 'loudspeaker layout ground floor, 12 ceiling speakers and 2 subs, German legend, revision A today').", required: false },
     ],
   },
+  {
+    name: "lichtplanung",
+    description: "Playbook for lighting a room on a calibrated plan (create_luminaire → add_devices → place_floorplan_symbols → light_report → adjust → repeat).",
+    arguments: [
+      { name: "brief", description: "What to light and to what level (e.g. 'Abschiedsraum, 6 x 4 m, 300 lx with the MAG48 spot from this datasheet').", required: false },
+    ],
+  },
 ];
+
+const LICHTPLANUNG = `You are lighting a room on a floorplan in EasySchematic through the live MCP bridge. Work in this order:
+
+1. Call list_floorplans FIRST. The plan must exist AND its underlay must be calibrated — a lux figure from an uncalibrated plan is meaningless. If there is no underlay or it is not calibrated, stop and ask the user to import and calibrate the architect's drawing in the editor; you cannot do it over the bridge.
+2. Make it a light plan: create_floorplan with kind "light", or update_floorplan to switch an existing one. That applies the Lichtplanung presets and switches the lux grid on.
+3. Get the luminaire. Call list_luminaires first — if the model is already there, use its templateId. Only create a new one with create_luminaire, reading the values off the datasheet yourself: luminous flux in lumens, the FULL beam angle at 50% intensity (the datasheet's "36°", never the half angle), power and colour temperature.
+4. CHECK create_luminaire's derived.exampleLuxBelow before you place anything. A spot around 500 lx at 2.9 m is plausible; 50 lx or 50000 lx means you misread the datasheet. Go back and re-read it rather than placing 24 wrong luminaires.
+5. Add the luminaire to the schematic with add_device (or add_devices for several), then add a symbol group for it with add_floorplan_group, then place the symbols with place_floorplan_symbols. Positions are real-world METRES from the drawing area's corner; mountHeightMm is real-world MILLIMETRES above finished floor.
+6. Start from a sensible grid rather than guessing, and take the spacing from the BEAM ANGLE, not from the mounting height alone: two luminaires just meet when they stand about 2 x h x tan(beam/2) apart, where h is the height above the WORKING PLANE (mounting height minus working plane, so 2.9 m over 0.85 m gives h = 2.05 m). A 36 degree spot therefore wants roughly 1.3 m spacing, a 60 degree one about 2.4 m, and a 90 degree downlight about 4 m. Keep half that spacing to the walls. Narrow spots sitting at downlight spacing are the classic mistake: bright pools with darkness between them, and a uniformity near zero however many you add.
+7. Call light_report and read the numbers. Then adjust and call it again — that loop is the work: more luminaires or tighter spacing raise the average, wider beam angles and tighter spacing raise the uniformity. Keep going until the brief's level is met.
+8. Report honestly. Say the figure is a planning aid and not a DIN EN 12464-1 verification, and say that it is the direct component only — no interreflection — so the real room will be somewhat brighter than the number, not darker. If the luminaire's photometry came from datasheet values rather than a measurement, say that too.
+9. Finish the drawing like any other plan: set_floorplan_legend and set_floorplan_drawing_block, so what you calculated is also what the sheet shows.`;
 
 const BUILD_SCHEMATIC = `You are building or extending an AV signal-flow schematic in EasySchematic through the live MCP bridge. Work in this order:
 
@@ -117,6 +138,11 @@ const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: 
     body: FLOORPLAN,
     argName: "plan",
     noArgFallback: "No plan was described — call list_floorplans and ask the user which floor to draw and which devices go where.",
+  },
+  lichtplanung: {
+    body: LICHTPLANUNG,
+    argName: "brief",
+    noArgFallback: "No brief was supplied — call list_floorplans, check whether a calibrated plan is there, and ask the user which room to light and to what level.",
   },
 };
 

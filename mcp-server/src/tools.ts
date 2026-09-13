@@ -7,10 +7,12 @@
  * Ship-7 "racks / rack elevation" tools (list_racks, create_rack, place_device_in_rack,
  * remove_device_from_rack), the Ship-8 "notes" tools (update_note, delete_note;
  * get_schematic also reports rooms + notes), and the Ship-9 "batch structural" tools
- * (install_card_batch, place_device_in_rack_batch), and the Ship-10 "floorplan" tools
+ * (install_card_batch, place_device_in_rack_batch), the Ship-10 "floorplan" tools
  * (list_floorplans … delete_floorplan_note) that fill a scaled plan drawing, and the Ship-11 line tools
  * (list_floorplan_lines, sync_floorplan_lines, update_floorplan_line, speaker_load_report) that bind amplifier
- * channels to plan lines and check their load. Each entry is a plain JSON-Schema tool
+ * channels to plan lines and check their load, and the Ship-L "light" tools
+ * (create_luminaire, list_luminaires, set_light_calculation, light_report) that turn a
+ * calibrated plan into an illuminance calculation. Each entry is a plain JSON-Schema tool
  * definition; the call is relayed verbatim to the editor over the bridge, which validates
  * and executes it against the live store.
  *
@@ -456,7 +458,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["generic", "loudspeaker"], description: "\"loudspeaker\" numbers symbols per amplifier line (4.1, 4.2 …) and applies the Beschallungsplan presets (German legend and drawing block headings). Default generic." },
+        kind: { type: "string", enum: ["generic", "loudspeaker", "light"], description: "\"loudspeaker\" numbers symbols per amplifier line (4.1, 4.2 …) and applies the Beschallungsplan presets (German legend and drawing block headings). \"light\" numbers L1, L2 …, applies the Lichtplanung presets and switches the lux grid on. Default generic." },
         label: { type: "string", description: "Tab name and default drawing title, e.g. \"Erdgeschoss\" / \"Ground floor\"." },
         paperId: { type: "string", description: "Paper id: iso-a0, iso-a1 (default), iso-a2, iso-a3, iso-a4, letter, tabloid, ansi-c … arch-e." },
         orientation: { type: "string", enum: ["landscape", "portrait"], description: "Default landscape." },
@@ -473,7 +475,7 @@ export const TOOLS: ToolDef[] = [
       properties: {
         pageId: { type: "string", description: "Floorplan page id from list_floorplans." },
         label: { type: "string" },
-        kind: { type: "string", enum: ["generic", "loudspeaker"], description: "Switching resets legend title, notes heading, revision headers and drawing block field labels to the type's preset." },
+        kind: { type: "string", enum: ["generic", "loudspeaker", "light"], description: "Switching resets legend title, notes heading, revision headers and drawing block field labels to the type's preset." },
         labelTemplate: { type: "string", description: "How symbol labels are composed: {{line}}, {{n}}, {{group}}, {{device}}. Empty string restores the type's default ({{line}}.{{n}} on loudspeaker plans)." },
         paperId: { type: "string" },
         orientation: { type: "string", enum: ["landscape", "portrait"] },
@@ -561,6 +563,8 @@ export const TOOLS: ToolDef[] = [
               seq: { type: "number", description: "Speaker number within the line; omit for the next free one." },
               labelPosition: { type: "string", enum: ["n", "ne", "e", "se", "s", "sw", "w", "nw"], description: "Side of the symbol the label sits on (default e)." },
               labelRotationDeg: { type: "number", description: "Clockwise label rotation in degrees." },
+              mountHeightMm: { type: "number", description: "Mounting height above finished floor in real-world MILLIMETRES (2.9 m is 2900) — not paper mm and not metres. Luminaires only; omit to take the page default." },
+              dimming: { type: "number", description: "Dimming level 0–1 for a luminaire. Omit for full output." },
               notes: { type: "string", description: "Per-symbol remark, kept in the plan's schedule." },
             },
             required: ["groupId", "xM", "yM"],
@@ -589,6 +593,8 @@ export const TOOLS: ToolDef[] = [
         seq: { type: "number" },
         labelPosition: { type: "string", enum: ["n", "ne", "e", "se", "s", "sw", "w", "nw"] },
         labelRotationDeg: { type: "number" },
+        mountHeightMm: { type: "number", description: "Mounting height above finished floor in real-world MILLIMETRES (2.9 m is 2900) — not paper mm and not metres. Luminaires only; omit to take the page default." },
+        dimming: { type: "number", description: "Dimming level 0–1 for a luminaire. Omit for full output." },
         notes: { type: "string" },
       },
       required: ["pageId", "symbolId"],
@@ -839,6 +845,69 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       type: "object",
       properties: { pageId: { type: "string", description: "Optional floorplan page whose line modes apply." } },
+      additionalProperties: false,
+    },
+  },
+
+  // ── Light planning (Ship L) ──────────────────────────────────────
+  {
+    name: "create_luminaire",
+    description:
+      "Create a luminaire from datasheet values and return it as a device template, ready to add to the schematic with add_device. Read the datasheet yourself and pass the numbers — this tool takes no files. IMPORTANT: check the returned derived.exampleLuxBelow before placing many of these; a spot landing near 500 lx at 2.9 m is plausible, 50000 lx means the flux or the beam angle was misread (a common slip is passing the half angle instead of the full beam angle).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "Display name, e.g. \"Magnetschiene 48 V Spot 10 W 3000 K\"." },
+        fluxLm: { type: "number", description: "Luminous flux of the LUMINAIRE in lumens, as the datasheet states it (not the bare LED's flux)." },
+        beamAngleDeg: { type: "number", description: "FULL beam angle at 50% intensity, in degrees — the datasheet's \"36°\". Not the half angle." },
+        powerW: { type: "number", description: "Input power in watts." },
+        cctK: { type: "number", description: "Colour temperature in kelvin, e.g. 3000." },
+        manufacturer: { type: "string" },
+        modelNumber: { type: "string" },
+        system: { type: "string", description: "Luminaire system as a search term, e.g. \"MAG48\" or \"Surf20\"." },
+        control: { type: "string", enum: ["mains", "dali", "dmx"], description: "How it is driven; decides the symbol's port. Default mains." },
+        referenceUrl: { type: "string", description: "Link to the datasheet." },
+        origin: { type: "string", enum: ["datasheet", "manufacturer"], description: "Where the photometry comes from. Default datasheet." },
+      },
+      required: ["label", "fluxLm", "beamAngleDeg"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_luminaires",
+    description: "List the luminaires available to this schematic — every device template carrying photometry, with flux, beam angle, power and where the data came from. Use the templateId it returns with add_device; never invent one.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Filter over name, manufacturer, model and system. Omit for all." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_light_calculation",
+    description: "Set how a floorplan's illuminance is calculated and drawn: whether the lux grid shows, the working plane height, the default mounting height, the maintenance factor and the sample spacing. Heights are real-world MILLIMETRES above finished floor, never paper mm.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string", description: "Floorplan page id from list_floorplans." },
+        visible: { type: "boolean", description: "Show the lux grid on the sheet." },
+        workPlaneMm: { type: "number", description: "Working plane height above finished floor in mm. 850 (0.85 m) is the convention." },
+        defaultMountHeightMm: { type: "number", description: "Mounting height in mm for luminaires that carry none of their own." },
+        maintenanceFactor: { type: "number", description: "0–1 allowance for ageing and soiling. 0.8 is the usual figure." },
+        opacity: { type: "number", description: "Grid opacity over the architect's drawing, 0–1." },
+        gridMm: { type: "number", description: "Sample spacing on paper in mm. Finer is smoother and slower; 2.5 is the default." },
+      },
+      required: ["pageId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "light_report",
+    description:
+      "Calculate the illuminance on a floorplan and return the numbers: average, minimum and maximum lux, uniformity (Emin/Em), luminaire count and connected load. This is the tool to read after every placement change — place, calculate, read, adjust, calculate again. The result is a planning aid, not a DIN EN 12464-1 verification: it is the direct component only, from cos-model photometry, without interreflection or shading, so it reads darker than reality rather than brighter. Always say so when you report the numbers.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string", description: "Floorplan page id from list_floorplans." } },
+      required: ["pageId"],
       additionalProperties: false,
     },
   },

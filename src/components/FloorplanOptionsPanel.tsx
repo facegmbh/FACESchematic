@@ -4,9 +4,10 @@ import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, CO
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
-  DEFAULT_HEATMAP, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
+  DEFAULT_HEATMAP, DEFAULT_LIGHT_CALC, LUX_STEPS, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
   WALL_MATERIAL_LABELS, WALL_THICKNESS_PRESETS_MM, WIFI_BANDS, WIFI_BAND_LABELS } from "../types";
 import { collectAccessPoints, coveredFraction, computeHeatmap, planningRadiusM, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
+import { collectLuminaires, computeLuxGrid, connectedLoadW, gridStats, luminaireBoundsMm } from "../lightSim";
 import { getTemplateById as lookupTemplate } from "../templateApi";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
@@ -76,6 +77,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const updateFloorplanWall = useSchematicStore((s) => s.updateFloorplanWall);
   const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
   const updateFloorplanHeatmap = useSchematicStore((s) => s.updateFloorplanHeatmap);
+  const updateFloorplanLightCalc = useSchematicStore((s) => s.updateFloorplanLightCalc);
   const wallMaterials = useSchematicStore((s) => s.wallMaterials);
   const setWallMaterial = useSchematicStore((s) => s.setWallMaterial);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
@@ -1634,6 +1636,121 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   {rangeForRssiM(aps[0], -67, cfg.band, cfg.pathLossExponent).toFixed(0)} m
                 </p>
               )}
+            </div>
+          </details>
+        );
+      })()}
+
+
+      {/* ── Lichtrechnung ─────────────────────────────────────────── */}
+      {(() => {
+        const cfg = { ...DEFAULT_LIGHT_CALC, ...(page.light ?? {}) };
+        const patchLight = (p: Parameters<typeof updateFloorplanLightCalc>[1]) => updateFloorplanLightCalc(page.id, p);
+        const lums = collectLuminaires(page, cfg.defaultMountHeightMm, (nodeId) => {
+          const node = nodes.find((n) => n.id === nodeId);
+          const templateId = (node?.data as DeviceData | undefined)?.templateId;
+          return templateId ? lookupTemplate(templateId, customTemplates)?.luminaire : undefined;
+        });
+        const opts = { scaleDenominator: page.scaleDenominator, workPlaneMm: cfg.workPlaneMm, maintenanceFactor: cfg.maintenanceFactor };
+        const bounds = cfg.visible ? luminaireBoundsMm(lums, opts) : null;
+        // Die Kennwerte werden hier gröber gerechnet als das gezeichnete Bild: das Panel
+        // rendert bei jeder Änderung neu und muss billig bleiben.
+        const stats = bounds ? gridStats(computeLuxGrid(lums, bounds, { ...opts, pitchMm: Math.max(6, cfg.gridMm * 3) })) : null;
+        return (
+          <details className="border-t border-[var(--color-border)]" open={cfg.visible}>
+            <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+              {t("Lighting calculation")}
+            </summary>
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                <input type="checkbox" checked={cfg.visible} onChange={(e) => patchLight({ visible: e.target.checked })} />
+                <span>{t("Show the lux grid")}</span>
+              </label>
+
+              {lums.length === 0 ? (
+                <p className="text-[var(--color-text-muted)] leading-snug">
+                  {t("No luminaires on this plan yet. A symbol counts as one as soon as the device behind it points to a model carrying photometry.")}
+                </p>
+              ) : (
+                <p className="text-[var(--color-text-muted)] leading-snug">
+                  {t("{n} luminaire(s)", { n: lums.length })} · {Math.round(connectedLoadW(lums))} W
+                  {stats && <> · <strong>{Math.round(stats.avgLux)} lx</strong> {t("average")}</>}
+                </p>
+              )}
+
+              {stats && (
+                <p className="text-[var(--color-text-muted)] leading-snug tabular-nums" style={{ fontSize: 10 }}>
+                  {t("min")} {Math.round(stats.minLux)} · {t("max")} {Math.round(stats.maxLux)} · U₀ {stats.uniformity.toFixed(2)}
+                </p>
+              )}
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Height of the plane the illuminance is calculated on, above finished floor. 0.85 m is the convention for a working surface.")}>
+                <span className="shrink-0 w-16">{t("Work plane")}</span>
+                <input
+                  type="number" step={50} min={0} max={3000}
+                  className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={cfg.workPlaneMm}
+                  onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 0 && v <= 3000) patchLight({ workPlaneMm: v }); }}
+                />
+                <span className="shrink-0" style={{ fontSize: 10 }}>mm</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Mounting height for luminaires that carry none of their own. Set a height per luminaire in its symbol.")}>
+                <span className="shrink-0 w-16">{t("Mounting")}</span>
+                <input
+                  type="number" step={100} min={100} max={30000}
+                  className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                  value={cfg.defaultMountHeightMm}
+                  onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 100 && v <= 30000) patchLight({ defaultMountHeightMm: v }); }}
+                />
+                <span className="shrink-0" style={{ fontSize: 10 }}>mm</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Allowance for ageing and soiling. 0.8 is the usual figure for a normally maintained interior.")}>
+                <span className="shrink-0 w-16">{t("Maintenance")}</span>
+                <input
+                  type="range" min={0.5} max={1} step={0.05}
+                  value={cfg.maintenanceFactor}
+                  onChange={(e) => patchLight({ maintenanceFactor: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{cfg.maintenanceFactor.toFixed(2)}</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                <span className="shrink-0 w-16">{t("Opacity")}</span>
+                <input
+                  type="range" min={0.15} max={0.9} step={0.05}
+                  value={cfg.opacity}
+                  onChange={(e) => patchLight({ opacity: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{Math.round(cfg.opacity * 100)}%</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Sample spacing on paper. Finer is smoother and slower — the cost is samples × luminaires.")}>
+                <span className="shrink-0 w-16">{t("Detail")}</span>
+                <input
+                  type="range" min={1} max={8} step={0.5}
+                  value={cfg.gridMm}
+                  onChange={(e) => patchLight({ gridMm: Number(e.target.value) })}
+                  className="flex-1 min-w-0"
+                />
+                <span className="shrink-0 tabular-nums" style={{ fontSize: 10 }}>{cfg.gridMm} mm</span>
+              </label>
+
+              <div className="flex flex-col gap-0.5 pt-0.5">
+                {LUX_STEPS.map((step) => (
+                  <div key={step.label} className="flex items-center gap-1.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                    <span className="shrink-0 rounded-sm" style={{ width: 14, height: 10, background: step.color }} />
+                    <span>{step.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[var(--color-text-muted)] leading-snug" style={{ fontSize: 10 }}>
+                {t("Direct light only, without interreflection — the room will be somewhat brighter than this. A planning aid, not a verification to DIN EN 12464-1.")}
+              </p>
             </div>
           </details>
         );
