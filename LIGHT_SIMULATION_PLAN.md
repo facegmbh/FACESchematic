@@ -650,7 +650,7 @@ Ausbau statt Voraussetzung.
 
 **Phase A ist gebaut.** Plantyp `light`, Leuchten mit Montagehöhe und Dimmung, Lux-Raster
 auf der vorhandenen Heatmap-Maschinerie, Bedienfeld, vier MCP-Werkzeuge und das Playbook
-`lichtplanung`. Der Rechenkern steht in `src/lightSim.ts`, geprüft durch 28 Tests in
+`lichtplanung`. Der Rechenkern steht in `src/lightSim.ts`, geprüft durch 27 Tests in
 `src/__tests__/lightSim.test.ts` und 18 Handler-Tests in `src/__tests__/mcpLight.test.ts`.
 
 **Als Nächstes: Phase B** — `FloorplanRoom` aus den vorhandenen Wänden, Raumhöhe,
