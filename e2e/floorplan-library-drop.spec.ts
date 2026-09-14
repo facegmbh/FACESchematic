@@ -89,3 +89,62 @@ test("floorplan: a library model dropped on the plan lands on the schematic too"
 
   expect(errors).toEqual([]);
 });
+
+
+test("floorplan: a dropped device keeps its own symbol, not the active group's", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+
+  await page.addInitScript(() => localStorage.setItem("easyschematic-skip-landing", "1"));
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 30_000 });
+  await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
+
+  // A camera group, active — the situation in which a switch came out as a camera.
+  await page.getByTitle("Add a symbol group").click();
+  await page.getByPlaceholder("Legend title, e.g. Ceiling speakers").fill("Kameras");
+  await page.getByTitle("Symbol shape — abstract or a top-view pictogram").selectOption("camera");
+
+  // Now drop a switch from the library.
+  const search = page.getByPlaceholder(/Search plan and devices/);
+  await search.fill("USW-Flex");
+  const hit = page.getByText("Ubiquiti UniFi Switch Flex 2.5G 8 PoE", { exact: true });
+  await expect(hit).toBeVisible({ timeout: 15_000 });
+  const templateId = await hit.evaluate((el) => {
+    const row = el.closest("[draggable=true]") as HTMLElement;
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent("dragstart", { dataTransfer: dt, bubbles: true }));
+    return dt.getData("application/x-floorplan-template-id");
+  });
+  expect(templateId).not.toBe("");
+
+  const sheet = page.locator("div.bg-white.shadow-xl").first();
+  const box = (await sheet.boundingBox())!;
+  await sheet.evaluate((el, arg) => {
+    const dt = new DataTransfer();
+    dt.setData("application/x-floorplan-template-id", arg.id);
+    const over = new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true, clientX: arg.x, clientY: arg.y });
+    el.dispatchEvent(over);
+    el.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true, clientX: arg.x, clientY: arg.y }));
+  }, { id: templateId, x: box.x + box.width * 0.4, y: box.y + box.height * 0.4 });
+
+  await expect(page.getByText(/On the plan \(1\)/)).toBeVisible({ timeout: 15_000 });
+
+  const groups = await page.evaluate(async () => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const plan = useSchematicStore.getState().pages.find((p) => p.type === "floorplan")! as never as {
+      groups: { id: string; label: string; shape: string }[];
+      symbols: { groupId: string }[];
+    };
+    const used = plan.groups.find((g) => g.id === plan.symbols[0].groupId)!;
+    return { count: plan.groups.length, usedShape: used.shape, usedLabel: used.label };
+  });
+
+  // The switch got a group of its own, with the rack symbol from its template — not the
+  // camera shape of the group that happened to be active.
+  expect(groups.count).toBe(2);
+  expect(groups.usedShape).toBe("rack");
+  expect(groups.usedLabel).not.toBe("Kameras");
+
+  expect(errors).toEqual([]);
+});

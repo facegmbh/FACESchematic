@@ -423,6 +423,8 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Festsetzen, damit das Platzieren von Symbolen darüber sie nicht verschiebt. Bearbeiten geht weiterhin von hier.",
   "Let it be dragged and resized again.": "Wieder verschiebbar und in der Größe änderbar machen.",
   "Duplicate {n} symbols": "{n} Symbole duplizieren",
+  "Click makes this the active group for placing symbols; double-click renames it":
+    "Klick macht sie zur aktiven Gruppe zum Setzen von Symbolen, Doppelklick benennt sie um",
   "Sets a copy down beside it — same group, same turn, next number.":
     "Legt eine Kopie daneben — gleiche Gruppe, gleiche Drehung, nächste Nummer.",
 

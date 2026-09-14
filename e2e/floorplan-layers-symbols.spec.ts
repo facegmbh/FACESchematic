@@ -249,3 +249,58 @@ test("floorplan: the symbol menu closes again, and duplicates a symbol", async (
 
   expect(errors).toEqual([]);
 });
+
+
+test("floorplan: a symbol group can be renamed where its name is", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+
+  await page.addInitScript(() => localStorage.setItem("easyschematic-skip-landing", "1"));
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 30_000 });
+  await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
+  await page.getByTitle("Add a symbol group").click();
+
+  const labels = () => page.evaluate(async () => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const plan = useSchematicStore.getState().pages.find((p) => p.type === "floorplan")! as never as { groups: { label: string }[] };
+    return plan.groups.map((g) => g.label);
+  });
+
+  // Double-clicking the name in the row renames it — the first place anyone reaches for.
+  await page.getByTitle(/double-click renames it/).dblclick();
+  await page.keyboard.type("Kameras Tor", { delay: 15 });
+  await page.keyboard.press("Enter");
+  await expect.poll(labels).toEqual(["Kameras Tor"]);
+
+  // Escape leaves the name as it was.
+  await page.getByTitle(/double-click renames it/).dblclick();
+  await page.keyboard.type("verworfen", { delay: 15 });
+  await page.keyboard.press("Escape");
+  await expect.poll(labels).toEqual(["Kameras Tor"]);
+
+  // And the field in the expanded editor still works, as the long way round.
+  const title = page.getByPlaceholder("Legend title, e.g. Ceiling speakers");
+  await title.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("Kameras Hof", { delay: 15 });
+  await expect.poll(labels).toEqual(["Kameras Hof"]);
+
+  expect(errors).toEqual([]);
+});
+
+test("floorplan: a fresh group's placeholder name is replaced, not typed onto", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("easyschematic-skip-landing", "1"));
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 30_000 });
+  await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
+  await page.getByTitle("Add a symbol group").click();
+
+  // Clicking into the title of a brand-new group selects its auto name, so typing replaces
+  // it. Without that you end up with "Group 1Kameras", which reads as a broken field.
+  const title = page.getByPlaceholder("Legend title, e.g. Ceiling speakers");
+  await expect(title).toHaveValue(/^Group \d+$/);
+  await title.click();
+  await page.keyboard.type("Kameras", { delay: 15 });
+  await expect(title).toHaveValue("Kameras");
+});

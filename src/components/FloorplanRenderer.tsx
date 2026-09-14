@@ -327,15 +327,21 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
 
   // ── Placing symbols ──────────────────────────────────────────────
 
-  /** Group a dropped device belongs in: the one bound to its template, else the active
-   *  group, else a new group seeded from the device itself. */
+  /** Group a dropped device belongs in: the one already bound to its model, else a new one
+   *  seeded from the device itself.
+   *
+   *  The active group is deliberately not consulted here. It used to win, and that is how a
+   *  switch dropped while a camera group happened to be active came out wearing a camera
+   *  symbol. Dragging a specific device says which device it is; the model decides what it
+   *  looks like and which legend row it belongs to. The active group stays what it is for
+   *  the Place tool, where the user picked it on purpose. */
   const resolveGroupForDevice = useCallback((data: DeviceData | undefined): string | null => {
     if (data?.templateId) {
       const byTemplate = page.groups.find((g) => g.templateId === data.templateId);
       if (byTemplate) return byTemplate.id;
     }
-    if (activeGroupId) return activeGroupId;
-    if (!data) return null;
+    // Nothing to go on: the active group beats dropping the symbol nowhere.
+    if (!data) return activeGroupId;
     // The library speaks for the model: manufacturer, model number, the fixed install
     // cable and the standing install note come from the template (device values win when
     // the planner overrode them), and the template's product shot becomes the row's picture.

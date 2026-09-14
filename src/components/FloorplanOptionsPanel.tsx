@@ -114,6 +114,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
 
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imageTargetGroupRef = useRef<string | null>(null);
   const symbolImageInputRef = useRef<HTMLInputElement>(null);
@@ -784,14 +785,36 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               className={`mb-1 rounded border ${isActive ? "border-emerald-400 bg-emerald-500/10" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}
             >
               <div className="flex items-center gap-1.5 px-1.5 py-1">
-                <button
-                  className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
-                  onClick={() => onActiveGroupChange(group.id)}
-                  title={t("Make this the active group for placing symbols")}
-                >
-                  <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} symbolSizeMm={page.symbolSizeMm} className={group.hidden ? "shrink-0 opacity-40" : "shrink-0"} />
-                  <span className={`truncate ${group.hidden ? "text-[var(--color-text-muted)] line-through" : "text-[var(--color-text)]"}`}>{group.label}</span>
-                </button>
+                {renamingGroupId === group.id ? (
+                  <input
+                    autoFocus
+                    className="flex-1 min-w-0 border border-emerald-400 rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none"
+                    defaultValue={group.label}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={(e) => {
+                      const next = e.currentTarget.value.trim();
+                      if (next && next !== group.label) updateFloorplanGroup(page.id, group.id, { label: next });
+                      setRenamingGroupId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") { e.currentTarget.value = group.label; e.currentTarget.blur(); }
+                    }}
+                  />
+                ) : (
+                  <button
+                    className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                    onClick={() => onActiveGroupChange(group.id)}
+                    // Renaming is what people reach for first, and burying it behind the
+                    // ▸ arrow reads as "this cannot be renamed at all".
+                    onDoubleClick={() => setRenamingGroupId(group.id)}
+                    title={t("Click makes this the active group for placing symbols; double-click renames it")}
+                  >
+                    <FloorplanSymbolSvg group={group} sizePx={12} paddingPx={1} symbolSizeMm={page.symbolSizeMm} className={group.hidden ? "shrink-0 opacity-40" : "shrink-0"} />
+                    <span className={`truncate ${group.hidden ? "text-[var(--color-text-muted)] line-through" : "text-[var(--color-text)]"}`}>{group.label}</span>
+                  </button>
+                )}
                 <span className="text-[var(--color-text-muted)] shrink-0" title={t("Symbols on this plan")}>
                   {symbolCounts.get(group.id) ?? 0}
                 </span>
@@ -819,6 +842,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                     className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
                     value={group.label}
                     placeholder={t("Legend title, e.g. Ceiling speakers")}
+                    onFocus={(e) => { if (/^Group \d+$|^Gruppe \d+$/.test(group.label)) e.currentTarget.select(); }}
                     onChange={(e) => updateFloorplanGroup(page.id, group.id, { label: e.target.value })}
                   />
                   <input
