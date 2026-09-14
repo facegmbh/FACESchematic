@@ -52,6 +52,7 @@ import {
   coverageOffersOptics,
   legendShowsRssiScale,
   FLOORPLAN_KIND_PRESETS,
+  floorplanKindPreset,
   LEGEND_RSSI_GAP_MM,
   LEGEND_RSSI_TITLE_MM,
   LEGEND_RSSI_ROW_MM,
@@ -1048,14 +1049,23 @@ describe("camera optics — reach from the lens", () => {
 });
 
 describe("the Wi-Fi coverage plan type", () => {
-  it("numbers access points AP1, AP2 … and carries the German presets", () => {
+  it("numbers access points AP1, AP2 … in either language", () => {
     const preset = FLOORPLAN_KIND_PRESETS.wifi;
     expect(preset.labelTemplate).toBe("AP{{n}}");
     expect(formatSymbolLabel(preset.labelTemplate, { n: 3 })).toBe("AP3");
     expect(effectiveLabelTemplate({ kind: "wifi" })).toBe("AP{{n}}");
-    expect(preset.drawingSubtitle).toBe("WLAN-Ausleuchtung");
-    expect(preset.legendTitle).toMatch(/WLAN-AUSLEUCHTUNG/);
-    expect(preset.revisionHeaders[0]).toBe("INDEX");
+  });
+
+  it("heads a coverage plan in the working language", () => {
+    const de = floorplanKindPreset("wifi", "de");
+    expect(de.drawingSubtitle).toBe("WLAN-Ausleuchtung");
+    expect(de.legendTitle).toMatch(/WLAN-AUSLEUCHTUNG/);
+    expect(de.revisionHeaders[0]).toBe("INDEX");
+
+    const en = floorplanKindPreset("wifi", "en");
+    expect(en.drawingSubtitle).toBe("Wi-Fi coverage");
+    expect(en.legendTitle).toMatch(/WI-FI COVERAGE/);
+    expect(en.revisionHeaders[0]).toBe("Rev");
   });
 
   it("prints the signal colour key on a coverage plan whose heatmap is on", () => {

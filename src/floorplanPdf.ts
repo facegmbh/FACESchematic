@@ -69,7 +69,9 @@ import {
   legendShowsRssiScale,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
-  DEFAULT_LEGEND_LINES_TITLE,
+  legendLinesTitleOf,
+  legendNotesTitleOf,
+  legendTitleOf,
   LEGEND_PAD_MM,
   LEGEND_ROW_MM,
   LEGEND_ROW_WITH_IMAGE_MM,
@@ -256,7 +258,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
   doc.setFont("Inter", "bold");
   doc.setFontSize(4.5 * MM_TO_PT);
   doc.setTextColor(17, 17, 17);
-  doc.text(page.legend.title, innerX, y + 3.4, { baseline: "alphabetic", maxWidth: innerW });
+  doc.text(legendTitleOf(page), innerX, y + 3.4, { baseline: "alphabetic", maxWidth: innerW });
   doc.setDrawColor(200, 0, 0);
   doc.setLineWidth(0.5);
   doc.line(innerX, y + LEGEND_TITLE_RULE_MM, innerX + innerW, y + LEGEND_TITLE_RULE_MM);
@@ -311,7 +313,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     doc.setFont("Inter", "bold");
     doc.setFontSize(3 * MM_TO_PT);
     doc.setTextColor(17, 17, 17);
-    doc.text(page.legend.linesTitle ?? t(DEFAULT_LEGEND_LINES_TITLE), innerX, y + 3.6, { maxWidth: innerW });
+    doc.text(legendLinesTitleOf(page), innerX, y + 3.6, { maxWidth: innerW });
     y += LEGEND_LINES_TITLE_MM;
     const colX = [0, 1, 2, 3].map((i) => innerX + LEGEND_LINE_COLS.slice(0, i).reduce((a, c) => a + c, 0) * innerW);
     const colW = LEGEND_LINE_COLS.map((c) => c * innerW);
@@ -369,7 +371,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     doc.setFont("Inter", "bold");
     doc.setFontSize(3 * MM_TO_PT);
     doc.setTextColor(17, 17, 17);
-    doc.text(page.legend.notesTitle ?? "", innerX, y + 3.6, { maxWidth: innerW });
+    doc.text(legendNotesTitleOf(page), innerX, y + 3.6, { maxWidth: innerW });
     y += LEGEND_NOTES_TITLE_MM;
 
     doc.setFont("Inter", "normal");

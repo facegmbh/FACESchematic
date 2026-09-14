@@ -31,6 +31,8 @@ import {
   COVERAGE_MIN_RANGE_M,
   sheetSizeMm,
   isGroupVisible,
+  legendNotesTitleOf,
+  legendTitleOf,
   symbolLabelAnchor,
   LEGEND_NOTES_GAP_MM,
   LEGEND_NOTES_TITLE_MM,
@@ -62,7 +64,7 @@ import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
-import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
+import { FLOORPLAN_DEVICE_MIME, FLOORPLAN_TEMPLATE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
 import { collectAccessPoints } from "../wifiCoverage";
@@ -162,6 +164,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const schematicName = useSchematicStore((s) => s.schematicName);
   const calibrateFloorplan = useSchematicStore((s) => s.calibrateFloorplan);
   const addToast = useSchematicStore((s) => s.addToast);
+  const addDeviceForFloorplan = useSchematicStore((s) => s.addDeviceForFloorplan);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
@@ -371,11 +374,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     return id;
   }, [page.groups, page.id, page.legend.notes, activeGroupId, addFloorplanGroup, updateFloorplanLegend, onActiveGroupChange, customTemplates]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    const nodeId = e.dataTransfer.getData(FLOORPLAN_DEVICE_MIME);
-    if (!nodeId) return;
-    e.preventDefault();
-    const data = deviceDataMap.get(nodeId);
+  /** Place a symbol for a device that is on the schematic. */
+  const placeDeviceSymbol = useCallback((nodeId: string, data: DeviceData | undefined, e: React.DragEvent) => {
     const groupId = resolveGroupForDevice(data);
     if (!groupId) return;
     const pos = clampToSheet(clientToPaperMm(e.clientX, e.clientY), page);
@@ -386,7 +386,32 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       lineNo: activeLine.trim() || undefined,
     });
     setSelection({ kind: "symbols", ids: [id] });
-  }, [deviceDataMap, resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, activeLine]);
+  }, [resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, activeLine, setSelection]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    const nodeId = e.dataTransfer.getData(FLOORPLAN_DEVICE_MIME);
+    if (nodeId) {
+      e.preventDefault();
+      placeDeviceSymbol(nodeId, deviceDataMap.get(nodeId), e);
+      return;
+    }
+
+    // A model straight from the library: the schematic has no such device yet, so it gets
+    // created there first — in a room named after this plan, so it is findable — and the
+    // symbol links to it exactly like any other.
+    const templateId = e.dataTransfer.getData(FLOORPLAN_TEMPLATE_MIME);
+    if (!templateId) return;
+    e.preventDefault();
+    const template = getTemplateById(templateId, customTemplates);
+    if (!template) {
+      addToast(t("That model is not in the library any more."), "error");
+      return;
+    }
+    const createdId = addDeviceForFloorplan(template, page.label || t("From the plan"));
+    if (!createdId) return;
+    const created = useSchematicStore.getState().nodes.find((n) => n.id === createdId);
+    placeDeviceSymbol(createdId, created?.data as DeviceData | undefined, e);
+  }, [deviceDataMap, placeDeviceSymbol, customTemplates, addDeviceForFloorplan, page.label, addToast, t]);
 
   // Which symbols are access points, for the band the heatmap shows. Recomputed when a
   // symbol moves or the band changes — a stale AP list would draw coverage from nowhere.
@@ -1133,7 +1158,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     marginBottom: mmToPx(2),
                   }}
                 >
-                  {page.legend.title}
+                  {legendTitleOf(page)}
                 </div>
                 {legendRows.map((row) => (
                   <div
@@ -1197,7 +1222,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                 {legendNotes.length > 0 && (
                   <div style={{ marginTop: mmToPx(LEGEND_NOTES_GAP_MM) }}>
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_NOTES_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>
-                      {page.legend.notesTitle}
+                      {legendNotesTitleOf(page)}
                     </div>
                     {legendNotes.map((note, i) => (
                       <div key={i} style={{ fontSize: mmToPx(2.6), height: mmToPx(LEGEND_NOTE_LINE_MM), color: "#222" }} className="truncate">

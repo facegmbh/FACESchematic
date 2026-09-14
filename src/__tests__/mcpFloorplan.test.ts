@@ -5,6 +5,7 @@
  * bootstrap as mcpEditing.test.ts.
  */
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { legendTitleOf } from "../floorplan";
 import type { DeviceData, FloorplanPage, SchematicNode } from "../types";
 
 class MemStorage {
@@ -346,9 +347,17 @@ describe("loudspeaker plans: lines and label placement", () => {
     const res = handlers.create_floorplan({ label: "EG", kind: "loudspeaker" }) as Summary & { kind: string; labelTemplate: string };
     expect(res.kind).toBe("loudspeaker");
     expect(res.labelTemplate).toBe("{{line}}.{{n}}");
-    expect(res.legend.title).toBe("BESCHALLUNG - LEGENDE & MONTAGE");
-    expect(res.drawingBlock.revisionHeaders[2]).toBe("ÄNDERUNGEN");
-    expect(res.drawingBlock.fields[0].label).toBe("Bauvorhaben");
+    // The legend heading is no longer baked in: undefined means "this kind's heading, in
+    // the interface language", which is what the sheet and the export then draw.
+    expect(res.legend.title).toBeUndefined();
+    expect(legendTitleOf({ kind: "loudspeaker", legend: { ...res.legend, title: undefined } } as never, "de"))
+      .toBe("BESCHALLUNG - LEGENDE & MONTAGE");
+    expect(legendTitleOf({ kind: "loudspeaker", legend: { ...res.legend, title: undefined } } as never, "en"))
+      .toBe("SOUND SYSTEM - LEGEND & MOUNTING");
+    // The drawing block's labels are written into the page when it is created, so they do
+    // carry the language of the moment.
+    expect(res.drawingBlock.revisionHeaders).toHaveLength(5);
+    expect(res.drawingBlock.fields[0].label.length).toBeGreaterThan(0);
     const g = handlers.add_floorplan_group({ pageId: res.pageId, label: "LS" }) as { groupId: string };
     const placed = handlers.place_floorplan_symbols({
       pageId: res.pageId,

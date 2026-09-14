@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, DEFAULT_LEGEND_LINES_TITLE, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
@@ -1133,9 +1133,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         </label>
         <input
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-          value={page.legend.title}
-          placeholder={t("Legend title")}
-          onChange={(e) => updateFloorplanLegend(page.id, { title: e.target.value })}
+          value={isOwnLegendHeading(page.legend.title) ? "" : page.legend.title ?? ""}
+          placeholder={legendTitleOf(page)}
+          onChange={(e) => updateFloorplanLegend(page.id, { title: e.target.value || undefined })}
         />
         <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
           <input
@@ -1168,17 +1168,17 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         {legendShowsLines(page) && (
           <input
             className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-            value={page.legend.linesTitle ?? ""}
-            placeholder={t(DEFAULT_LEGEND_LINES_TITLE)}
+            value={isOwnLegendHeading(page.legend.linesTitle) ? "" : page.legend.linesTitle ?? ""}
+            placeholder={legendLinesTitleOf(page)}
             onChange={(e) => updateFloorplanLegend(page.id, { linesTitle: e.target.value || undefined })}
             title={t("Heading of the line table")}
           />
         )}
         <input
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-          value={page.legend.notesTitle ?? ""}
-          placeholder={t("Notes heading")}
-          onChange={(e) => updateFloorplanLegend(page.id, { notesTitle: e.target.value })}
+          value={isOwnLegendHeading(page.legend.notesTitle) ? "" : page.legend.notesTitle ?? ""}
+          placeholder={legendNotesTitleOf(page)}
+          onChange={(e) => updateFloorplanLegend(page.id, { notesTitle: e.target.value || undefined })}
         />
         <textarea
           className="w-full border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 resize-y"

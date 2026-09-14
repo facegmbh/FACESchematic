@@ -12,6 +12,7 @@
  */
 
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
+import { getLocale, type Locale } from "./i18n";
 import type { FloorplanSymbolShape,
   CompanyProfile,
   CoverageOptics,
@@ -373,14 +374,15 @@ export function createDefaultLegend(page: Pick<FloorplanPage, "paperId" | "orien
   const widthMm = Math.min(140, area.w * 0.38);
   return {
     visible: true,
-    title: "LEGEND",
+    // Left to the plan kind and the interface language; see legendTitleOf.
+    title: undefined,
     positionMm: { x: area.x + area.w - widthMm - 4, y: area.y + 4 },
     widthMm,
     showImages: true,
     // Groups are created on purpose — list them even before the first symbol lands, so
     // the legend reads as the plan's key from the first minute.
     onlyUsedGroups: false,
-    notesTitle: "INSTALLATION NOTES",
+    notesTitle: undefined,
     notes: [],
   };
 }
@@ -668,14 +670,16 @@ export function createDefaultDrawingBlock(page: Pick<FloorplanPage, "paperId" | 
   // Architects' title blocks run about 150–160 mm wide on A-series sheets; matching that
   // lets ours cover theirs without a first resize.
   const widthMm = Math.min(160, area.w * 0.32);
-  const fields: FloorplanDrawingField[] = [
-    { id: nextDrawingFieldId(), label: "Project", value: "{{showName}}", wide: true },
-    { id: nextDrawingFieldId(), label: "Client", value: "{{venue}}", wide: true },
-    { id: nextDrawingFieldId(), label: "Scale", value: "{{scale}}" },
-    { id: nextDrawingFieldId(), label: "Sheet", value: "{{sheetSize}}" },
-    { id: nextDrawingFieldId(), label: "Date", value: "{{date}}" },
-    { id: nextDrawingFieldId(), label: "Drawn by", value: "{{designer}}" },
-  ];
+  // The block is drawn on the sheet, so its labels are written in the interface language at
+  // the moment the page is created and then belong to the plan.
+  const preset = floorplanKindPreset("generic");
+  const values = ["{{showName}}", "{{venue}}", "{{scale}}", "{{sheetSize}}", "{{date}}", "{{designer}}"];
+  const fields: FloorplanDrawingField[] = preset.fieldLabels.map((label, i) => ({
+    id: nextDrawingFieldId(),
+    label,
+    value: values[i],
+    ...(i < 2 ? { wide: true } : {}),
+  }));
   const block: FloorplanDrawingBlock = {
     visible: true,
     positionMm: { x: 0, y: 0 },
@@ -684,7 +688,7 @@ export function createDefaultDrawingBlock(page: Pick<FloorplanPage, "paperId" | 
     subtitle: "{{drawingTitle}}",
     fields,
     revisions: [],
-    revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
+    revisionHeaders: [...preset.revisionHeaders] as FloorplanDrawingBlock["revisionHeaders"],
     disclaimer: "",
     showLogo: true,
     showNorthArrow: true,
@@ -1452,7 +1456,13 @@ export interface FloorplanKindPreset {
   drawingSubtitle: string;
 }
 
-export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> = {
+/** What a plan of each kind is headed with, per language.
+ *
+ *  These strings are drawn on the sheet, not in the chrome, so they are data rather than
+ *  t() calls: a plan keeps the wording it was drawn with. What follows the interface
+ *  language is the *default* — an untouched heading reads in the user's language, and the
+ *  moment someone types their own it stays exactly as typed. */
+const PRESETS_EN: Record<FloorplanKind, FloorplanKindPreset> = {
   generic: {
     labelTemplate: "{{n}}",
     legendTitle: "LEGEND",
@@ -1465,9 +1475,41 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
   wifi: {
     // Access points are numbered plainly and read as AP1, AP2 … on the sheet.
     labelTemplate: "AP{{n}}",
+    legendTitle: "WI-FI COVERAGE - LEGEND & MOUNTING",
+    legendNotesTitle: "MOUNTING NOTES",
+    // No amplifier lines on a radio plan; the heading is carried only for completeness.
+    legendLinesTitle: "LINES",
+    revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
+    fieldLabels: ["Project", "Client", "Scale", "Sheet", "Date", "Drawn by"],
+    drawingSubtitle: "Wi-Fi coverage",
+  },
+  loudspeaker: {
+    labelTemplate: "{{line}}.{{n}}",
+    legendTitle: "SOUND SYSTEM - LEGEND & MOUNTING",
+    legendNotesTitle: "MOUNTING NOTES",
+    legendLinesTitle: "LINES / AMPLIFIER CHANNELS",
+    revisionHeaders: ["Rev", "Date", "Change", "By", "Chk"],
+    fieldLabels: ["Project", "Client", "Scale", "Sheet", "Date", "Drawn by"],
+    drawingSubtitle: "Loudspeaker layout",
+  },
+};
+
+/** The German headings follow the FACE Beschallungsplan, which is what these plans are
+ *  issued as here. */
+const PRESETS_DE: Record<FloorplanKind, FloorplanKindPreset> = {
+  generic: {
+    labelTemplate: "{{n}}",
+    legendTitle: "LEGENDE & MONTAGE",
+    legendNotesTitle: "MONTAGEHINWEISE",
+    legendLinesTitle: "LINIEN / ENDSTUFENKANÄLE",
+    revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
+    fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
+    drawingSubtitle: "{{drawingTitle}}",
+  },
+  wifi: {
+    labelTemplate: "AP{{n}}",
     legendTitle: "WLAN-AUSLEUCHTUNG - LEGENDE & MONTAGE",
     legendNotesTitle: "MONTAGEHINWEISE",
-    // No amplifier lines on a radio plan; the heading is carried only for completeness.
     legendLinesTitle: "LINIEN",
     revisionHeaders: ["INDEX", "DATUM", "ÄNDERUNGEN", "BEARB.", "GEPR."],
     fieldLabels: ["Bauvorhaben", "Bauherr", "Maßstab", "Blattgröße", "Datum", "Planersteller:in"],
@@ -1483,6 +1525,52 @@ export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> 
     drawingSubtitle: "Lautsprecherplanung",
   },
 };
+
+/** The English table stays exported under its old name — it is the base every language is
+ *  measured against, and what a plan falls back to. */
+export const FLOORPLAN_KIND_PRESETS: Record<FloorplanKind, FloorplanKindPreset> = PRESETS_EN;
+
+/** The preset for a plan kind in the given language (the interface language by default). */
+export function floorplanKindPreset(kind: FloorplanKind | undefined, locale: Locale = getLocale()): FloorplanKindPreset {
+  const table = locale === "de" ? PRESETS_DE : PRESETS_EN;
+  return table[kind ?? "generic"];
+}
+
+/** Every heading this app has ever written into a legend by itself, in every language.
+ *  A stored heading that is one of these was never typed by a person, so it may follow the
+ *  interface language instead of being frozen in the one it was created in. */
+const OWN_LEGEND_HEADINGS: ReadonlySet<string> = new Set(
+  [PRESETS_EN, PRESETS_DE].flatMap((table) =>
+    Object.values(table).flatMap((p) => [p.legendTitle, p.legendNotesTitle, p.legendLinesTitle]),
+  ),
+);
+
+/** True when this heading is one of ours rather than something a person typed. */
+export function isOwnLegendHeading(text: string | undefined): boolean {
+  return text !== undefined && OWN_LEGEND_HEADINGS.has(text.trim());
+}
+
+/** The legend's headline: what the user typed, else the plan kind's default in the
+ *  interface language. */
+export function legendTitleOf(page: Pick<FloorplanPage, "kind" | "legend">, locale?: Locale): string {
+  const stored = page.legend.title?.trim();
+  if (stored && !isOwnLegendHeading(stored)) return stored;
+  return floorplanKindPreset(page.kind, locale).legendTitle;
+}
+
+/** The heading over the legend's installation notes, same rule. */
+export function legendNotesTitleOf(page: Pick<FloorplanPage, "kind" | "legend">, locale?: Locale): string {
+  const stored = page.legend.notesTitle?.trim();
+  if (stored && !isOwnLegendHeading(stored)) return stored;
+  return floorplanKindPreset(page.kind, locale).legendNotesTitle;
+}
+
+/** The heading over the legend's line table, same rule. */
+export function legendLinesTitleOf(page: Pick<FloorplanPage, "kind" | "legend">, locale?: Locale): string {
+  const stored = page.legend.linesTitle?.trim();
+  if (stored && !isOwnLegendHeading(stored)) return stored;
+  return floorplanKindPreset(page.kind, locale).legendLinesTitle;
+}
 
 /** The label template a page numbers with, falling back to its kind's preset. */
 export function effectiveLabelTemplate(page: Pick<FloorplanPage, "kind" | "labelTemplate">): string {

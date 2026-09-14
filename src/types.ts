@@ -1124,7 +1124,10 @@ export interface FloorplanSymbol {
  *  installation notes. */
 export interface FloorplanLegendBox {
   visible: boolean;
-  title: string;
+  /** Headline over the legend. Undefined — and equally one of our own default headings —
+   *  means "the plan kind's heading in the interface language"; see legendTitleOf. A
+   *  heading someone typed is kept exactly as typed, in whatever language. */
+  title?: string;
   /** Top-left corner on the sheet, in paper mm. */
   positionMm: { x: number; y: number };
   widthMm: number;

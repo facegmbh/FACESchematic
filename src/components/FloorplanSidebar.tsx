@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSchematicStore } from "../store";
+import { fetchTemplates, getBundledTemplates } from "../templateApi";
+import type { DeviceTemplate } from "../types";
 import { resolveDeviceLabel } from "../displayName";
 import type { DeviceData, FloorplanPage } from "../types";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
@@ -8,6 +10,10 @@ import { useT } from "../i18n";
 
 /** MIME type carrying a device node id from this sidebar to the sheet. */
 export const FLOORPLAN_DEVICE_MIME = "application/x-floorplan-device-id";
+
+/** MIME carrying a library template's id from this sidebar to the sheet, for a device the
+ *  schematic does not have yet. */
+export const FLOORPLAN_TEMPLATE_MIME = "application/x-floorplan-template-id";
 
 interface Props {
   page: FloorplanPage;
@@ -46,6 +52,16 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
     return m;
   }, [page.symbols]);
 
+  const customTemplates = useSchematicStore((s) => s.customTemplates);
+  const [apiTemplates, setApiTemplates] = useState<DeviceTemplate[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTemplates()
+      .then((list) => { if (!cancelled) setApiTemplates(list); })
+      .catch(() => { if (!cancelled) setApiTemplates(getBundledTemplates()); });
+    return () => { cancelled = true; };
+  }, []);
+
   const query = search.trim().toLowerCase();
 
   // What is already on this plan, newest last — the plan's own contents.
@@ -75,6 +91,20 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
           || d.deviceType.toLowerCase().includes(query);
       });
   }, [nodes, query]);
+
+  // The library holds thousands of models, so it answers a search rather than listing
+  // itself — the plan's own contents stay the first thing in this panel.
+  const libraryHits = useMemo(() => {
+    if (query.length < 2) return [];
+    const all = [...customTemplates, ...(apiTemplates ?? getBundledTemplates())];
+    const hits: DeviceTemplate[] = [];
+    for (const tpl of all) {
+      const hay = `${tpl.label} ${tpl.manufacturer ?? ""} ${tpl.modelNumber ?? ""} ${tpl.deviceType}`.toLowerCase();
+      if (hay.includes(query)) hits.push(tpl);
+      if (hits.length >= 40) break;
+    }
+    return hits;
+  }, [query, customTemplates, apiTemplates]);
 
   const selectedIds = selection.kind === "symbols" ? selection.ids : [];
 
@@ -214,6 +244,34 @@ export default function FloorplanSidebar({ page, selection, onSelectionChange }:
               </div>
             );
           })}
+        </div>
+
+        {/* ── Library: models the schematic does not have yet ─────────── */}
+        <div className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider border-t border-[var(--color-border)]" style={{ fontSize: 9 }}>
+          {t("Library — search to place a new device")}
+        </div>
+        <div className="px-1 pb-4">
+          {query.length < 2 ? (
+            <p className="px-1 text-[var(--color-text-muted)] leading-snug">
+              {t("Type at least two letters above to search the device library. Dropping a model on the plan creates the device on the schematic too, in a room named after this plan.")}
+            </p>
+          ) : libraryHits.length === 0 ? (
+            <p className="px-1 text-[var(--color-text-muted)]">{t("No model matches the search.")}</p>
+          ) : libraryHits.map((tpl) => (
+            <div
+              key={tpl.id ?? `${tpl.manufacturer}-${tpl.modelNumber}-${tpl.label}`}
+              className="flex items-center justify-between gap-1 px-2 py-1 mb-0.5 rounded border cursor-grab bg-[var(--color-surface)] border-dashed border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:border-emerald-400"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(FLOORPLAN_TEMPLATE_MIME, tpl.id ?? "");
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              title={t("{label} — not on the schematic yet. Dropping it here creates it there too.", { label: [tpl.manufacturer, tpl.modelNumber].filter(Boolean).join(" ") || tpl.label })}
+            >
+              <span className="truncate">{tpl.label}</span>
+              <span className="shrink-0 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{tpl.manufacturer ?? ""}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

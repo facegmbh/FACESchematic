@@ -422,6 +422,16 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Pin it, so placing symbols on top of it cannot nudge it. It stays editable from here.":
     "Festsetzen, damit das Platzieren von Symbolen darüber sie nicht verschiebt. Bearbeiten geht weiterhin von hier.",
   "Let it be dragged and resized again.": "Wieder verschiebbar und in der Größe änderbar machen.",
+
+  // Placing a model straight from the library
+  "Library — search to place a new device": "Bibliothek — suchen, um ein neues Gerät zu setzen",
+  "Type at least two letters above to search the device library. Dropping a model on the plan creates the device on the schematic too, in a room named after this plan.":
+    "Mindestens zwei Buchstaben oben eingeben, um die Gerätebibliothek zu durchsuchen. Ein Modell auf den Plan zu ziehen legt das Gerät auch im Schema an, in einem Raum mit dem Namen dieses Plans.",
+  "No model matches the search.": "Kein Modell passt zur Suche.",
+  "{label} — not on the schematic yet. Dropping it here creates it there too.":
+    "{label} — noch nicht im Schema. Hier abgelegt wird es dort mit angelegt.",
+  "That model is not in the library any more.": "Dieses Modell ist nicht mehr in der Bibliothek.",
+  "From the plan": "Aus dem Plan",
   "Locked — click to let it be dragged again": "Gesperrt — klicken, um sie wieder verschiebbar zu machen",
   "Lock it so placing symbols cannot nudge it": "Sperren, damit das Platzieren von Symbolen sie nicht verschiebt",
 

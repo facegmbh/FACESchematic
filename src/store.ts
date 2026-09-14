@@ -70,7 +70,8 @@ import { pairKey } from "./roomDistance";
 import { t } from "./i18n";
 import {
   FLOORPLAN_GROUP_COLORS,
-  FLOORPLAN_KIND_PRESETS,
+  floorplanKindPreset,
+  isOwnLegendHeading,
   effectiveLabelTemplate,
   formatSymbolLabel,
   nextSeqInLine,
@@ -430,6 +431,10 @@ interface SchematicState {
   setCreatingNodeId: (id: string | null) => void;
   createAndEditDevice: (template: DeviceTemplate, position: { x: number; y: number }) => void;
   addRoom: (label: string, position: { x: number; y: number }, size?: { width: number; height: number }) => void;
+  /** Create a device from a library template for a plan that has no such device yet, and
+   *  file it in a room of its own on the schematic so it is findable there. Returns the new
+   *  node's id. */
+  addDeviceForFloorplan: (template: DeviceTemplate, roomLabel: string) => string | undefined;
   updateRoomLabel: (nodeId: string, label: string) => void;
   updateRoom: (nodeId: string, data: import("./types").RoomData) => void;
   updateAnnotation: (nodeId: string, data: Partial<import("./types").AnnotationData>) => void;
@@ -3474,6 +3479,38 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  addDeviceForFloorplan: (template, roomLabel) => {
+    const roomOf = () => get().nodes.find((n) => n.type === "room" && (n.data as { label?: string }).label === roomLabel);
+
+    // One room collects everything placed from a plan, so the schematic shows where these
+    // devices came from instead of scattering them over the canvas.
+    if (!roomOf()) {
+      const others = get().nodes.filter((n) => !n.parentId);
+      const bottom = others.reduce((y, n) => Math.max(y, n.position.y + (Number(n.style?.height) || 200)), 0);
+      const left = others.reduce((x, n) => Math.min(x, n.position.x), 0);
+      get().addRoom(roomLabel, { x: left, y: bottom + 120 }, { width: 560, height: 380 });
+    }
+    const room = roomOf();
+    if (!room) return undefined;
+
+    // Tile inside the room so several drops do not land on top of each other.
+    const inRoom = get().nodes.filter((n) => n.parentId === room.id).length;
+    const COLS = 3, COL_W = 170, ROW_H = 120;
+    const position = {
+      x: room.position.x + 20 + (inRoom % COLS) * COL_W,
+      y: room.position.y + 40 + Math.floor(inRoom / COLS) * ROW_H,
+    };
+
+    const before = new Set(get().nodes.map((n) => n.id));
+    get().addDevice(template, position);
+    const created = get().nodes.find((n) => n.type === "device" && !before.has(n.id));
+    if (!created) return undefined;
+    // addDevice places in canvas coordinates; reparenting files it under the room.
+    get().reparentNode(created.id, position, { skipUndo: true });
+    get().saveToLocalStorage();
+    return created.id;
+  },
+
   updateRoomLabel: (nodeId, label) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
@@ -5415,7 +5452,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setFloorplanKind: (pageId, kind) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
-    const preset = FLOORPLAN_KIND_PRESETS[kind];
+    const preset = floorplanKindPreset(kind);
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({
         ...p,
@@ -5428,9 +5465,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           : p.heatmap,
         legend: {
           ...p.legend,
-          title: preset.legendTitle,
-          notesTitle: preset.legendNotesTitle,
-          linesTitle: preset.legendLinesTitle,
+          // Undefined means "this kind's heading, in the interface language". Only a
+          // heading a person typed is carried across the switch.
+          title: isOwnLegendHeading(p.legend.title) ? undefined : p.legend.title,
+          notesTitle: isOwnLegendHeading(p.legend.notesTitle) ? undefined : p.legend.notesTitle,
+          linesTitle: isOwnLegendHeading(p.legend.linesTitle) ? undefined : p.legend.linesTitle,
           rssiScaleTitle: kind === "wifi" ? DEFAULT_RSSI_SCALE_TITLE : p.legend.rssiScaleTitle,
           // Let the colour key follow the type rather than a stale explicit choice.
           showRssiScale: undefined,
