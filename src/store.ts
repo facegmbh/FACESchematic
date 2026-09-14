@@ -150,8 +150,32 @@ const CATEGORY_ORDER_KEY = "easyschematic-category-order";
 const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
 const COMPANY_PROFILE_KEY = "easyschematic-company-profile";
 
+/**
+ * The planning company the build ships with, from `VITE_COMPANY_*`. The FACE image carries
+ * FACE's own details so a new workstation prints a correct footer without anyone typing it;
+ * the public build ships none. Address lines are separated by `|`.
+ *
+ * This is only the starting point: the moment someone saves the form under Preferences →
+ * Company, their version is stored and wins from then on — exactly like the language.
+ */
+function buildCompanyProfile(): CompanyProfile {
+  const env = import.meta.env ?? {};
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const name = str(env.VITE_COMPANY_NAME);
+  const addressLines = str(env.VITE_COMPANY_ADDRESS).split("|").map((l) => l.trim()).filter(Boolean);
+  const profile: CompanyProfile = { name, addressLines };
+  const phone = str(env.VITE_COMPANY_PHONE);
+  const email = str(env.VITE_COMPANY_EMAIL);
+  const web = str(env.VITE_COMPANY_WEB);
+  if (phone) profile.phone = phone;
+  if (email) profile.email = email;
+  if (web) profile.web = web;
+  return profile;
+}
+
 /** The planning company's identity is an editor setting: read it once at startup and
- *  whenever a project without its own snapshot is loaded. */
+ *  whenever a project without its own snapshot is loaded. Nothing stored means a fresh
+ *  browser, which starts from what the build ships. */
 function loadCompanyProfile(): CompanyProfile {
   try {
     const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
@@ -160,7 +184,27 @@ function loadCompanyProfile(): CompanyProfile {
       return { name: parsed.name ?? "", addressLines: Array.isArray(parsed.addressLines) ? parsed.addressLines : [], phone: parsed.phone, email: parsed.email, web: parsed.web, logo: parsed.logo };
     }
   } catch { /* ignore */ }
-  return { name: "", addressLines: [] };
+  return buildCompanyProfile();
+}
+
+/** The logo the build ships, fetched once into a data URL so jsPDF can embed it. Kept apart
+ *  from buildCompanyProfile because it needs the network and that one must stay synchronous. */
+export async function loadBuildCompanyLogo(): Promise<string | undefined> {
+  const src = typeof import.meta.env?.VITE_COMPANY_LOGO === "string" ? import.meta.env.VITE_COMPANY_LOGO.trim() : "";
+  if (!src) return undefined;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return undefined;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 function hasProfileContent(p: CompanyProfile): boolean {

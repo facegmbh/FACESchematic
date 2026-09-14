@@ -12,6 +12,8 @@ services:
       BRANCH: master
       # Same German default as the production image (see Dockerfile).
       VITE_DEFAULT_LOCALE: de
+      # Same company defaults as the production image (see Dockerfile).
+      VITE_COMPANY_NAME: FACE GmbH
     env_file:
       - path: .env
         required: false

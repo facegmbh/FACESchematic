@@ -13,6 +13,24 @@ ENV VITE_TEMPLATE_API_URL=${VITE_TEMPLATE_API_URL}
 # choice is kept in localStorage and overrides this default.
 ARG VITE_DEFAULT_LOCALE=de
 ENV VITE_DEFAULT_LOCALE=${VITE_DEFAULT_LOCALE}
+# The planning company printed in the legend's footer and offered to the plan head, so a
+# fresh workstation produces a correct sheet without anyone filling a form first. Address
+# lines are separated by "|". Anyone can still change it under Preferences > Company; a
+# saved profile overrides these, exactly like the language.
+# TODO(FACE): fill in the real address, phone, mail and web before the next release.
+ARG VITE_COMPANY_NAME="FACE GmbH"
+ARG VITE_COMPANY_ADDRESS=""
+ARG VITE_COMPANY_PHONE=""
+ARG VITE_COMPANY_EMAIL=""
+ARG VITE_COMPANY_WEB=""
+# A file served by the image, e.g. /face-logo.png in public/; fetched once into the profile.
+ARG VITE_COMPANY_LOGO=""
+ENV VITE_COMPANY_NAME=${VITE_COMPANY_NAME} \
+    VITE_COMPANY_ADDRESS=${VITE_COMPANY_ADDRESS} \
+    VITE_COMPANY_PHONE=${VITE_COMPANY_PHONE} \
+    VITE_COMPANY_EMAIL=${VITE_COMPANY_EMAIL} \
+    VITE_COMPANY_WEB=${VITE_COMPANY_WEB} \
+    VITE_COMPANY_LOGO=${VITE_COMPANY_LOGO}
 RUN npm run build
 
 # Production stage

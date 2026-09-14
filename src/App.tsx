@@ -19,7 +19,7 @@ import {
   type Edge,
   type Connection,
 } from "@xyflow/react";
-import { useSchematicStore, GRID_SIZE, setReconnectingEdgeId } from "./store";
+import { loadBuildCompanyLogo, useSchematicStore, GRID_SIZE, setReconnectingEdgeId } from "./store";
 import { isEmbedded, listenForEmbeddedSchematic } from "./embed";
 import { normalizeShortcutKey } from "./keyUtils";
 import { warmupRoutingWorker } from "./routing/routingClient";
@@ -1765,6 +1765,21 @@ function DemoBanner() {
 }
 
 export default function App() {
+  // The logo the build ships, attached once to a company profile that has none yet. Kept
+  // out of the synchronous startup path because it has to be fetched.
+  useEffect(() => {
+    const state = useSchematicStore.getState();
+    if (state.companyProfile.logo) return;
+    let cancelled = false;
+    void loadBuildCompanyLogo().then((logo) => {
+      if (cancelled || !logo) return;
+      const current = useSchematicStore.getState().companyProfile;
+      if (current.logo) return;
+      useSchematicStore.setState({ companyProfile: { ...current, logo } });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const printView = useSchematicStore((s) => s.printView);
   const activePage = useSchematicStore((s) => s.activePage);
   const activePgType = useSchematicStore((s) => {
