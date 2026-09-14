@@ -1,6 +1,6 @@
-import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { useDismissMenu } from "../hooks/useDismissMenu";
 import { formatCoverageSpec, coverageApertureDeg, coverageOffersOptics, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
 import { useT } from "../i18n";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, type CoverageShape, type DeviceData, type DoriLevel, type FloorplanPage } from "../types";
@@ -32,20 +32,7 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    const timer = setTimeout(() => {
-      document.addEventListener("click", onClose);
-      document.addEventListener("contextmenu", onClose);
-      document.addEventListener("keydown", onKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("click", onClose);
-      document.removeEventListener("contextmenu", onClose);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useDismissMenu(onClose);
 
   const coverage = (page.coverages ?? []).find((c) => c.id === coverageId);
   if (!coverage) return null;

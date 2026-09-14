@@ -1444,6 +1444,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           y={symbolMenu.y}
           ids={symbolMenu.ids}
           onSelectCoverage={(id) => setSelection({ kind: "coverage", id })}
+          onSelectDuplicates={(ids) => setSelection({ kind: "symbols", ids })}
           onClose={() => setSymbolMenu(null)}
         />
       )}

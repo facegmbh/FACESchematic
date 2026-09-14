@@ -422,6 +422,9 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Pin it, so placing symbols on top of it cannot nudge it. It stays editable from here.":
     "Festsetzen, damit das Platzieren von Symbolen darüber sie nicht verschiebt. Bearbeiten geht weiterhin von hier.",
   "Let it be dragged and resized again.": "Wieder verschiebbar und in der Größe änderbar machen.",
+  "Duplicate {n} symbols": "{n} Symbole duplizieren",
+  "Sets a copy down beside it — same group, same turn, next number.":
+    "Legt eine Kopie daneben — gleiche Gruppe, gleiche Drehung, nächste Nummer.",
 
   // Placing a model straight from the library
   "Library — search to place a new device": "Bibliothek — suchen, um ein neues Gerät zu setzen",

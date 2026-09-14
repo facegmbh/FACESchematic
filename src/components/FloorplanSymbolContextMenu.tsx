@@ -1,7 +1,7 @@
-import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
-import { defaultCoverageForDevice } from "../floorplan";
+import { useDismissMenu } from "../hooks/useDismissMenu";
+import { clampToSheet, defaultCoverageForDevice } from "../floorplan";
 import { planningRadiusM } from "../wifiCoverage";
 import { getTemplateById } from "../templateApi";
 import { DEFAULT_HEATMAP } from "../types";
@@ -18,6 +18,8 @@ interface Props {
   ids: string[];
   /** Open an existing coverage area for editing instead of stacking a new one on it. */
   onSelectCoverage?: (coverageId: string) => void;
+  /** Hand the freshly made copies back, so they become the selection. */
+  onSelectDuplicates?: (symbolIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -30,30 +32,18 @@ interface Props {
  * and out of the legend, while they stay in the project. Switching one back on happens in
  * the panel — a hidden symbol has nothing left to right-click.
  */
-export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCoverage, onClose }: Props) {
+export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCoverage, onSelectDuplicates, onClose }: Props) {
   const t = useT();
   const { ref: menuRef, pos } = useContextMenuPosition(x, y);
   const updateFloorplanSymbols = useSchematicStore((s) => s.updateFloorplanSymbols);
   const updateFloorplanGroup = useSchematicStore((s) => s.updateFloorplanGroup);
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
+  const addFloorplanSymbol = useSchematicStore((s) => s.addFloorplanSymbol);
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const nodes = useSchematicStore((s) => s.nodes);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    const timer = setTimeout(() => {
-      document.addEventListener("click", onClose);
-      document.addEventListener("contextmenu", onClose);
-      document.addEventListener("keydown", onKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("click", onClose);
-      document.removeEventListener("contextmenu", onClose);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useDismissMenu(onClose);
 
   const symbols = page.symbols.filter((s) => ids.includes(s.id));
   if (symbols.length === 0) return null;
@@ -65,6 +55,22 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
 
   const act = (run: () => void) => { run(); onClose(); };
   const turn = (by: number) => act(() => updateFloorplanSymbols(page.id, ids, { rotationDeg: (first.rotationDeg ?? 0) + by }));
+
+  /** A copy of each selected symbol, set down beside the original and numbered onward.
+   *  Everything that makes the symbol what it is comes along — group, turn, line, the
+   *  placement of its number — only the position moves and the number is new. */
+  const duplicate = () => act(() => {
+    const step = page.symbolSizeMm * 0.9;
+    const copies: string[] = [];
+    for (const sym of symbols) {
+      const { id: _id, label: _label, positionMm, ...rest } = sym;
+      copies.push(addFloorplanSymbol(page.id, {
+        ...rest,
+        positionMm: clampToSheet({ x: positionMm.x + step, y: positionMm.y + step }, page),
+      }));
+    }
+    if (copies.length > 0) onSelectDuplicates?.(copies);
+  });
 
   return (
     <div
@@ -181,6 +187,11 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
       )}
 
       <Divider />
+      <Item
+        label={many ? t("Duplicate {n} symbols", { n: symbols.length }) : t("Duplicate")}
+        onClick={duplicate}
+        title={t("Sets a copy down beside it — same group, same turn, next number.")}
+      />
       <Item
         label={many ? t("Remove {n} symbols from the plan", { n: symbols.length }) : t("Remove from the plan")}
         danger

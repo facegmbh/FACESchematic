@@ -1,6 +1,6 @@
-import { useEffect } from "react";
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
+import { useDismissMenu } from "../hooks/useDismissMenu";
 import { useT } from "../i18n";
 import type { FloorplanPage } from "../types";
 
@@ -27,20 +27,7 @@ export default function FloorplanMaskContextMenu({ page, x, y, maskId, onClose }
   const updateFloorplanMask = useSchematicStore((s) => s.updateFloorplanMask);
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    const timer = setTimeout(() => {
-      document.addEventListener("click", onClose);
-      document.addEventListener("contextmenu", onClose);
-      document.addEventListener("keydown", onKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("click", onClose);
-      document.removeEventListener("contextmenu", onClose);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useDismissMenu(onClose);
 
   const mask = page.masks.find((m) => m.id === maskId);
   if (!mask) return null;

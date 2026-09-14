@@ -186,3 +186,66 @@ test("floorplan: right-click a cover to turn, fade and lock it", async ({ page }
 
   expect(errors).toEqual([]);
 });
+
+
+test("floorplan: the symbol menu closes again, and duplicates a symbol", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+
+  const planPath = join(mkdtempSync(join(tmpdir(), "floorplan-")), "plan.png");
+  writeFileSync(planPath, Buffer.from(PNG_BASE64, "base64"));
+
+  await page.addInitScript(() => localStorage.setItem("easyschematic-skip-landing", "1"));
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 30_000 });
+  await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
+  await page.setInputFiles('input[type="file"][accept*="application/pdf"]', planPath);
+  await expect(page.locator('img[alt="plan.png"]')).toBeVisible({ timeout: 30_000 });
+
+  const paper = page.locator("div.bg-white.shadow-xl").first();
+  const box = (await paper.boundingBox())!;
+  await page.getByTitle("Add a symbol group").click();
+  await page.getByPlaceholder("Legend title, e.g. Ceiling speakers").fill("Kamera");
+  await page.getByTitle("Click the plan to drop symbols of the active group").click();
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.4);
+  await page.getByRole("button", { name: /Select/ }).click();
+  await expect(page.getByText(/On the plan \(1\)/)).toBeVisible();
+
+  const menu = page.locator("[data-floorplan-symbol-menu]");
+  const rightClick = () => page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.4, { button: "right" });
+
+  // Closing: a plain click somewhere else has to dismiss it. The listeners used to be
+  // torn down and re-armed on every render, so a click could land in the gap.
+  await rightClick();
+  await expect(menu).toBeVisible();
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.7);
+  await expect(menu).toHaveCount(0);
+
+  // Escape closes it too, even after the renderer has re-rendered in between.
+  await rightClick();
+  await expect(menu).toBeVisible();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
+  await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.52);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  // Duplicating puts a second symbol beside the first and selects the copy.
+  await rightClick();
+  await menu.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByText(/On the plan \(2\)/)).toBeVisible({ timeout: 15_000 });
+
+  const placed = await page.evaluate(async () => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const plan = useSchematicStore.getState().pages.find((p) => p.type === "floorplan")!;
+    return plan.symbols.map((s) => ({ label: s.label, group: s.groupId, x: s.positionMm.x, y: s.positionMm.y }));
+  });
+  expect(placed).toHaveLength(2);
+  // Same group, new number, set down beside the original rather than on top of it.
+  expect(placed[1].group).toBe(placed[0].group);
+  expect(placed[1].label).not.toBe(placed[0].label);
+  expect(placed[1].x).toBeGreaterThan(placed[0].x);
+  expect(placed[1].y).toBeGreaterThan(placed[0].y);
+
+  expect(errors).toEqual([]);
+});
