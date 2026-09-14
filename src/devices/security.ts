@@ -843,22 +843,32 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0ba2-4000-8000-000000000175",
     deviceType: "ip-camera",
-    label: "HM-TD2628-3/G1/T3A (Bi-Spektrum, KI)",
+    label: "HIKMICRO HM-TD2628-3/G1/T3A",
     shortName: "HM-TD2628-3",
+    // Das Datenblatt traegt das HIKMICRO-Logo, Hikvisions Waermebildmarke; vertrieben
+    // wird die Kamera auch ueber Hikvisions HeatPro-Seiten. Deshalb HIKMICRO als
+    // Hersteller und "hikvision" in den Suchbegriffen, damit beide Wege sie finden.
+    manufacturer: "HIKMICRO",
     modelNumber: "HM-TD2628-3/G1/T3A(O-STD)",
-    searchTerms: ["hm-td2628", "kamera", "bullet", "bi-spektrum", "thermisch", "ki", "analytik", "aussen", "poe"],
+    referenceUrl: "https://assets.hikvision.com/prd/normal/all/doc/m000172403/HM-TD2628-3_G1_T3A_Datasheet_20250630.pdf",
+    searchTerms: ["hikmicro", "hikvision", "hm-td2628", "heatpro", "kamera", "bullet", "bi-spektrum", "thermisch", "ki", "analytik", "aussen", "poe"],
     planSymbol: { shape: "camera", glyph: "TK" },
-    // Schwestermodell zur DS-2TD2628-3/QA, zusaetzlich mit KI-Analytik. Hersteller nicht
-    // eingetragen: die HM-Typnummer gehoert nicht zur DS-Reihe, und raten waere hier so
-    // falsch wie ueberall sonst. Leistungsaufnahme ebenfalls offen — die 8,5 W der
-    // Schwesterkamera sind ein Anhalt, kein Datenblattwert fuer dieses Modell.
-    // Der Auftrag nennt keine Leistungsaufnahme. Bis das Datenblatt vorliegt steht hier
-    // die Obergrenze der PoE-Klasse 802.3at (25,5 W) statt einer geratenen Zahl: eine
-    // Aussenkamera mit Bi-Spektrum und Heizung liegt in dieser Klasse, und zu hoch
-    // gerechnet bleibt ein PoE-Budget belastbar, zu niedrig nicht.
-    poeDrawW: 25.5,
+    // Datenblatt 06/2025: PoE nach 802.3at Klasse 4, max. 24 W — fast das Dreifache der
+    // Schwesterkamera DS-2TD2628-3/QA (8,5 W, 802.3af Klasse 3). Fuer die PoE-Bilanz der
+    // Anlage ist das der entscheidende Wert.
+    poeDrawW: 24,
+    heightMm: 113,
+    widthMm: 349,
+    depthMm: 105,
+    weightKg: 1.71,
     ports: [
       port("LAN (PoE)", "ethernet", "bidirectional"),
+      port("RS-485", "rs485", "bidirectional"),
+      ...ports("Alarm In", "gpio", "input", 2),
+      ...ports("Alarm Out", "gpio", "output", 2),
+      port("Audio In", "analog-audio", "input"),
+      port("Audio Out", "analog-audio", "output"),
+      port("12 VDC In", "power", "input"),
     ],
   },
   {
