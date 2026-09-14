@@ -100,6 +100,7 @@ export default function FloorplanCoverageLayer({
                 pointerEvents: interactive ? "auto" : "none",
                 cursor: grabbable ? (coverage.symbolId ? "pointer" : "move") : "default",
               }}
+              data-coverage-id={coverage.id}
               onMouseDown={(e) => {
                 if (!interactive) return;
                 e.stopPropagation();
@@ -143,6 +144,7 @@ export default function FloorplanCoverageLayer({
                 stroke="#3b82f6"
                 strokeWidth={2}
                 style={{ pointerEvents: "auto", cursor: "crosshair" }}
+                data-coverage-aim={coverage.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   onAimStart(e, coverage);

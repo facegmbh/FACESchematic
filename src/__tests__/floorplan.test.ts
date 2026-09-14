@@ -746,6 +746,24 @@ describe("plan symbols from the library", () => {
     expect(isGroupVisible(undefined)).toBe(false);
   });
 
+  it("aims an anchored area by turning its device, offset kept", () => {
+    // What the drag computes: the device is turned by the pointer angle minus the area's
+    // own offset, so the area lands under the pointer and an off-axis lens stays off-axis.
+    const aimDevice = (pointerDeg: number, offsetDeg: number) => pointerDeg - offsetDeg;
+
+    // No offset: the device simply faces where the pointer is.
+    expect(aimDevice(90, 0)).toBe(90);
+    // A lens mounted 20° off-axis: the device turns to 70°, the area still points at 90°.
+    expect(aimDevice(90, 20)).toBe(70);
+    expect(coverageRotationDeg({ symbolId: "s1", rotationDeg: 20 }, [{ id: "s1", rotationDeg: 70 }])).toBe(90);
+    // And the area keeps following the device afterwards.
+    expect(coverageRotationDeg({ symbolId: "s1", rotationDeg: 20 }, [{ id: "s1", rotationDeg: 160 }])).toBe(180);
+    // Free-standing areas have no device; their own rotation is the whole answer.
+    expect(coverageRotationDeg({ rotationDeg: 45 }, [])).toBe(45);
+    // A dangling anchor must not throw away the area's own direction.
+    expect(coverageRotationDeg({ symbolId: "gone", rotationDeg: 45 }, [])).toBe(45);
+  });
+
   it("picks a readable glyph color", () => {
     expect(glyphColorOn("#facc15")).toBe("#000000");
     expect(glyphColorOn("#1d4ed8")).toBe("#ffffff");

@@ -634,17 +634,23 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           if (!coverage.optics) {
             patch.rangeM = Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, free ? rangeM : Math.round(rangeM * 10) / 10));
           }
-          // A ring has no direction to set; for everything else the pointer aims it. On an
-          // anchored area rotationDeg is an offset, so the device's own aim comes back out.
+          // A ring has no direction to set; for everything else the pointer aims it.
           if (coverage.shape !== "circle" && Math.hypot(dx, dy) > 0.5) {
             const absolute = (Math.atan2(dy, dx) * 180) / Math.PI;
-            const deviceAim = coverage.symbolId
-              ? page.symbols.find((sym) => sym.id === coverage.symbolId)?.rotationDeg ?? 0
-              : 0;
-            const own = absolute - deviceAim;
-            patch.rotationDeg = free ? own : Math.round(own / 5) * 5;
+            const round = (deg: number) => (free ? deg : Math.round(deg / 5) * 5);
+            if (coverage.symbolId) {
+              // Anchored: aiming the area aims the device, so the camera on the sheet ends
+              // up pointing where it looks. The area's own rotationDeg stays the offset it
+              // was built to be — a lens mounted off-axis keeps its offset, and the device
+              // is turned by the remainder so the area still lands under the pointer.
+              const offset = coverage.rotationDeg ?? 0;
+              updateFloorplanSymbol(page.id, coverage.symbolId, { rotationDeg: round(absolute - offset) });
+            } else {
+              // Free-standing: the area carries its own direction, there is no device to turn.
+              patch.rotationDeg = round(absolute);
+            }
           }
-          updateFloorplanCoverage(page.id, dragging.coverageId, patch);
+          if (Object.keys(patch).length > 0) updateFloorplanCoverage(page.id, dragging.coverageId, patch);
         }
       }
       return;
