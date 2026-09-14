@@ -13,7 +13,11 @@ services:
       # Same German default as the production image (see Dockerfile).
       VITE_DEFAULT_LOCALE: de
       # Same company defaults as the production image (see Dockerfile).
-      VITE_COMPANY_NAME: FACE GmbH
+      VITE_COMPANY_NAME: FACE Communication Equipment GmbH
+      VITE_COMPANY_ADDRESS: Am Bahnhof 5|48455 Bad Bentheim
+      VITE_COMPANY_PHONE: "02572 93240"
+      VITE_COMPANY_EMAIL: info@face-gmbh.com
+      VITE_COMPANY_WEB: face-gmbh.com
     env_file:
       - path: .env
         required: false

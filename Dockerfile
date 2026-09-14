@@ -17,20 +17,21 @@ ENV VITE_DEFAULT_LOCALE=${VITE_DEFAULT_LOCALE}
 # fresh workstation produces a correct sheet without anyone filling a form first. Address
 # lines are separated by "|". Anyone can still change it under Preferences > Company; a
 # saved profile overrides these, exactly like the language.
-# TODO(FACE): fill in the real address, phone, mail and web before the next release.
-ARG VITE_COMPANY_NAME="FACE GmbH"
-ARG VITE_COMPANY_ADDRESS=""
-ARG VITE_COMPANY_PHONE=""
-ARG VITE_COMPANY_EMAIL=""
-ARG VITE_COMPANY_WEB=""
+ARG VITE_COMPANY_NAME="FACE Communication Equipment GmbH"
+ARG VITE_COMPANY_ADDRESS="Am Bahnhof 5|48455 Bad Bentheim"
+ARG VITE_COMPANY_PHONE="02572 93240"
+ARG VITE_COMPANY_EMAIL="info@face-gmbh.com"
+ARG VITE_COMPANY_WEB="face-gmbh.com"
 # A file served by the image, e.g. /face-logo.png in public/; fetched once into the profile.
 ARG VITE_COMPANY_LOGO=""
-ENV VITE_COMPANY_NAME=${VITE_COMPANY_NAME} \
-    VITE_COMPANY_ADDRESS=${VITE_COMPANY_ADDRESS} \
-    VITE_COMPANY_PHONE=${VITE_COMPANY_PHONE} \
-    VITE_COMPANY_EMAIL=${VITE_COMPANY_EMAIL} \
-    VITE_COMPANY_WEB=${VITE_COMPANY_WEB} \
-    VITE_COMPANY_LOGO=${VITE_COMPANY_LOGO}
+# Quoted: these values carry spaces, and an unquoted ENV would read the second word as the
+# next variable name.
+ENV VITE_COMPANY_NAME="${VITE_COMPANY_NAME}" \
+    VITE_COMPANY_ADDRESS="${VITE_COMPANY_ADDRESS}" \
+    VITE_COMPANY_PHONE="${VITE_COMPANY_PHONE}" \
+    VITE_COMPANY_EMAIL="${VITE_COMPANY_EMAIL}" \
+    VITE_COMPANY_WEB="${VITE_COMPANY_WEB}" \
+    VITE_COMPANY_LOGO="${VITE_COMPANY_LOGO}"
 RUN npm run build
 
 # Production stage
