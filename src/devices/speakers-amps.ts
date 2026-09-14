@@ -858,4 +858,19 @@ export const templates: DeviceTemplate[] = [
       port("AC Power", "power", "input"),
     ],
   },
+
+  // ── Netzwerk-Hornlautsprecher (Auftrag FACE/26/08/446) ──────────
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000177",
+    deviceType: "speaker",
+    label: "Netzwerk-Hornlautsprecher 7 W (PoE, TTS)",
+    shortName: "IP-Horn 7 W",
+    searchTerms: ["hornlautsprecher", "horn", "netzwerklautsprecher", "ip", "poe", "tts", "ansprache", "durchsage"],
+    planSymbol: { shape: "circle", glyph: "HL" },
+    // Speist sich aus PoE; eine eigene Verstaerkerleitung gibt es nicht, deshalb auch
+    // kein speakerLoad — auf einem Beschallungsplan haengt er nicht an einer Endstufe.
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+    ],
+  },
 ];

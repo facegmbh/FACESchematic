@@ -1,4 +1,4 @@
-import { port } from "./_helpers";
+import { port, ports } from "./_helpers";
 import type { DeviceTemplate } from "../types";
 
 export const templates: DeviceTemplate[] = [
@@ -415,5 +415,65 @@ export const templates: DeviceTemplate[] = [
       port("SDI Loop", "sdi", "output"),
       port("Ethernet", "ethernet", "bidirectional"),
     ],
+  },
+
+  // ══ Ubiquiti UniFi — Router/Console und PoE-Switch ═══════════════
+  // Aus Auftrag FACE/26/08/446 (Ems-Panels, Videoalarm mit Zutrittskontrolle Tor).
+  // Portbild nach Ubiquitis Datenblatt; vor einer Bestellung gegen die aktuelle
+  // Revision pruefen.
+  {
+    id: "c0a80101-0106-4000-8000-00000000033a",
+    deviceType: "router",
+    label: "Ubiquiti UniFi Dream Machine SE",
+    shortName: "UDM-SE",
+    manufacturer: "Ubiquiti",
+    modelNumber: "UDM-SE",
+    referenceUrl: "https://techspecs.ui.com/unifi/unifi-cloud-gateways/udm-se",
+    searchTerms: ["ubiquiti", "unifi", "udm-se", "dream machine", "console", "router", "dual wan", "poe", "gateway"],
+    planSymbol: { shape: "rack", glyph: "GW" },
+    powerDrawW: 30,
+    voltage: "110-240V",
+    poeBudgetW: 180,
+    heightMm: 44,
+    widthMm: 442,
+    depthMm: 285,
+    ports: [
+      port("WAN 1 (2.5 GbE)", "ethernet", "bidirectional"),
+      port("WAN 2 (10G SFP+)", "ethernet", "bidirectional", "sfp"),
+      ...ports("LAN", "ethernet", "bidirectional", 8),
+      port("LAN (10G SFP+)", "ethernet", "bidirectional", "sfp"),
+      port("AC In", "power", "input"),
+    ],
+  },
+  {
+    id: "c0a80101-0106-4000-8000-00000000033b",
+    deviceType: "network-switch",
+    label: "Ubiquiti UniFi Switch Flex 2.5G 8 PoE",
+    shortName: "USW-Flex-2.5G-8-PoE",
+    manufacturer: "Ubiquiti",
+    modelNumber: "USW-Flex-2.5G-8-PoE",
+    referenceUrl: "https://techspecs.ui.com/unifi/switching",
+    searchTerms: ["ubiquiti", "unifi", "switch", "flex", "2.5g", "poe", "usw-flex-2.5g-8-poe", "9 port"],
+    planSymbol: { shape: "rack", glyph: "SW" },
+    // Der Auftrag nennt 8x 2,5 GbE PoE+ und einen 10-GbE-Uplink, der den Switch per
+    // PoE-bt speist. Das PoE-Budget steht dort nicht und bleibt deshalb offen — die
+    // Anlagenbeschreibung nennt 120 W, allerdings fuer einen Switch mit 8x GbE.
+    ports: [
+      ...ports("PoE+ 2.5 GbE", "ethernet", "bidirectional", 8),
+      port("Uplink 10 GbE (PoE-bt In)", "ethernet", "bidirectional"),
+    ],
+  },
+  {
+    id: "c0a80101-0106-4000-8000-00000000033c",
+    deviceType: "frame",
+    label: "Rackablage 1 HE (19\", 250 mm)",
+    shortName: "Rackablage 1 HE",
+    manufacturer: "Generic",
+    searchTerms: ["rackablage", "fachboden", "ablage", "shelf", "19 zoll", "1 he", "stahl", "schwarz"],
+    // Passiv: nimmt Geraete ohne Rackohren auf und belegt dabei eine Hoeheneinheit.
+    heightMm: 44,
+    widthMm: 483,
+    depthMm: 250,
+    ports: [],
   },
 ];

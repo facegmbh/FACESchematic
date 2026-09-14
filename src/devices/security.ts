@@ -818,4 +818,81 @@ export const templates: DeviceTemplate[] = [
       ...ports("Meldergruppe", "contact-closure", "input", 4),
     ],
   },
+
+  // ══ Aus Auftrag FACE/26/08/446 — Ems-Panels, Videoalarm Tor ══════
+  // Der Auftrag beschreibt diese Positionen, nennt aber weder Hersteller noch
+  // Typnummer. Beides bleibt deshalb leer statt geraten zu werden — am platzierten
+  // Geraet eintragen, sobald das Datenblatt vorliegt. Zwei Stellen widersprechen
+  // sich zwischen Auftrag und Anlagenbeschreibung und sind unten vermerkt.
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000174",
+    deviceType: "ip-camera",
+    label: "Bullet-Kamera Bi-Spektrum (optische Linse)",
+    shortName: "Bi-Spektrum Bullet",
+    searchTerms: ["kamera", "bullet", "bi-spektrum", "thermisch", "waermebild", "optische linse", "aussen", "poe"],
+    planSymbol: { shape: "camera", glyph: "TK" },
+    // Der Auftrag nennt keine Leistungsaufnahme. Bis das Datenblatt vorliegt steht hier
+    // die Obergrenze der PoE-Klasse 802.3at (25,5 W) statt einer geratenen Zahl: eine
+    // Aussenkamera mit Bi-Spektrum und Heizung liegt in dieser Klasse, und zu hoch
+    // gerechnet bleibt ein PoE-Budget belastbar, zu niedrig nicht.
+    poeDrawW: 25.5,
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000175",
+    deviceType: "ip-camera",
+    label: "Bullet-Kamera Bi-Spektrum (HM)",
+    shortName: "Bi-Spektrum Bullet HM",
+    searchTerms: ["kamera", "bullet", "bi-spektrum", "thermisch", "hm", "varifokus", "aussen", "poe"],
+    planSymbol: { shape: "camera", glyph: "TK" },
+    // Zweite Kameravariante des Auftrags, dort nur durch "(HM)" unterschieden. Die
+    // Anlagenbeschreibung nennt daneben 8-MP-Bullet-Kameras mit motorisiertem
+    // Varifokus-Objektiv — vermutlich diese hier, belegt ist es nicht.
+    // Der Auftrag nennt keine Leistungsaufnahme. Bis das Datenblatt vorliegt steht hier
+    // die Obergrenze der PoE-Klasse 802.3at (25,5 W) statt einer geratenen Zahl: eine
+    // Aussenkamera mit Bi-Spektrum und Heizung liegt in dieser Klasse, und zu hoch
+    // gerechnet bleibt ein PoE-Budget belastbar, zu niedrig nicht.
+    poeDrawW: 25.5,
+    ports: [
+      port("LAN (PoE)", "ethernet", "bidirectional"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000176",
+    deviceType: "nvr",
+    label: "AcuSense NVR 16 Kanal (4K)",
+    shortName: "NVR 16 ch",
+    searchTerms: ["nvr", "recorder", "acusense", "4k", "16 kanal", "aufzeichnung", "video"],
+    planSymbol: { shape: "rack", glyph: "NVR" },
+    // Kanalzahl aus der Auftragsposition. Die Anlagenbeschreibung im selben Dokument
+    // spricht von einem 8-Kanal-AcuSense-NVR — vor der Bestellung klaeren.
+    voltage: "110-240V",
+    heightMm: 44,
+    widthMm: 445,
+    ports: [
+      port("AC In", "power", "input"),
+      port("LAN", "ethernet", "bidirectional"),
+      port("HDMI Out", "hdmi", "output"),
+      port("VGA Out", "vga", "output"),
+    ],
+  },
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000178",
+    deviceType: "alarm-expander",
+    label: "Telenot Tuermodul MT810-C2B K21",
+    shortName: "MT810-C2B",
+    manufacturer: "Telenot",
+    modelNumber: "MT810-C2B K21",
+    referenceUrl: "https://www.telenot.com/de/produkte/zutrittskontrolle",
+    searchTerms: ["telenot", "tuermodul", "mt810", "c2b", "k21", "anschaltung", "leser", "zutritt", "bus-2"],
+    planSymbol: { shape: "square", glyph: "TM" },
+    // Anschaltkomponente zwischen dem Leser am Tor und dem vorhandenen EMA-Kabelnetz.
+    ports: [
+      port("BUS-2 In", "bus-2", "input"),
+      port("BUS-2 Out", "bus-2", "output"),
+      port("Leser (comlock)", "rs485", "bidirectional"),
+    ],
+  },
 ];

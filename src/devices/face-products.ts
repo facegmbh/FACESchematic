@@ -184,4 +184,25 @@ export const templates: DeviceTemplate[] = [
       port("DC Power", "power", "input"),
     ],
   },
+
+  // ── FACE — Ferneinwahl-PC (Remote Service) ──────────────────────
+  // Aus Auftrag FACE/26/08/446. Werkseitig mit der Ferneinwahl-Software und der
+  // App-Verwaltung konfiguriert, damit Support ohne Anfahrt moeglich ist.
+  {
+    id: "c0a80101-0fac-4000-8000-000000000f09",
+    deviceType: "computer",
+    label: "FACE Ferneinwahl PC (Remote Service)",
+    shortName: "Ferneinwahl PC",
+    manufacturer: "FACE",
+    searchTerms: ["face", "ferneinwahl", "remote", "service", "fernwartung", "mini pc", "support"],
+    planSymbol: { shape: "rack", glyph: "PC" },
+    // Mini-24/7-PC, i5, 8 GB RAM, 128 GB SSD.
+    voltage: "110-240V",
+    ports: [
+      port("LAN", "ethernet", "bidirectional"),
+      port("HDMI Out", "hdmi", "output"),
+      port("USB", "usb", "bidirectional"),
+      port("DC In", "power", "input"),
+    ],
+  },
 ];

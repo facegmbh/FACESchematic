@@ -75,4 +75,16 @@ export const templates: DeviceTemplate[] = [
     unitCost: 30,
     ports: [],
   },
+
+  // Aufzeichnungsplatte fuer die Videoueberwachung (Auftrag FACE/26/08/446).
+  {
+    id: "hdd-wd-purple-3tb",
+    deviceType: "storage-media",
+    label: "WD Purple 3 TB (WD30PURZ)",
+    manufacturer: "Western Digital",
+    modelNumber: "WD30PURZ",
+    referenceUrl: "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd",
+    searchTerms: ["wd", "western digital", "purple", "3tb", "wd30purz", "sata", "hdd", "videoueberwachung", "nvr", "surveillance"],
+    ports: [],
+  },
 ];

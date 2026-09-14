@@ -161,4 +161,18 @@ export const templates: DeviceTemplate[] = [
       trunkPort("Trunk In", "custom", "input", 0, "multipin"),
     ],
   },
+
+  // ── Montagezubehoer Zutrittsleser (Auftrag FACE/26/08/446) ──────
+  {
+    id: "c0a80101-0ba2-4000-8000-000000000179",
+    deviceType: "cable-accessory",
+    label: "Telenot Distanzset BLZ11 (RAL 7024)",
+    shortName: "BLZ11",
+    manufacturer: "Telenot",
+    modelNumber: "BLZ11",
+    searchTerms: ["telenot", "distanzset", "blz11", "abstandshalter", "montage", "alu", "metall", "ral 7024"],
+    // Reine Mechanik: setzt den Leser auf Abstand zu Alu oder Metall. Ohne Anschluesse,
+    // aber im Bestand gefuehrt, damit die Packliste vollstaendig ist.
+    ports: [],
+  },
 ];
