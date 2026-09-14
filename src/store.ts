@@ -80,7 +80,9 @@ import {
   createDefaultDrawingBlock,
   createDefaultLegend,
   nextSymbolLabel,
+  relabelAnchoredCoverages,
   renumberGroup,
+  symbolLabelRenames,
   rescaleUnderlayForScale,
   underlayMmPerPx,
 } from "./floorplan";
@@ -5608,10 +5610,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     const ids = new Set(symbolIds);
     set({
-      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
-        ...p,
-        symbols: p.symbols.map((sym) => ids.has(sym.id) ? { ...sym, ...patch } : sym),
-      })),
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        const renamed = symbolLabelRenames(p.symbols.filter((sym) => ids.has(sym.id)), patch.label);
+        return {
+          ...p,
+          symbols: p.symbols.map((sym) => ids.has(sym.id) ? { ...sym, ...patch } : sym),
+          coverages: relabelAnchoredCoverages(p.coverages, renamed),
+        };
+      }),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();
@@ -5870,10 +5876,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
-      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
-        ...p,
-        symbols: p.symbols.map((sym) => sym.id === symbolId ? { ...sym, ...patch } : sym),
-      })),
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        // A renumbered device takes the number on its coverage area with it.
+        const renamed = symbolLabelRenames(p.symbols.filter((sym) => sym.id === symbolId), patch.label);
+        return {
+          ...p,
+          symbols: p.symbols.map((sym) => sym.id === symbolId ? { ...sym, ...patch } : sym),
+          coverages: relabelAnchoredCoverages(p.coverages, renamed),
+        };
+      }),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();
@@ -5903,7 +5914,17 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         const renumbered = new Map(
           renumberGroup(p.symbols.filter((sym) => sym.groupId === groupId), startLabel).map((sym) => [sym.id, sym.label]),
         );
-        return { ...p, symbols: p.symbols.map((sym) => renumbered.has(sym.id) ? { ...sym, label: renumbered.get(sym.id)! } : sym) };
+        // Renumbering a whole group moves every anchored area's number along with it.
+        const renamed = new Map<string, { from: string; to: string }>();
+        for (const sym of p.symbols) {
+          const to = renumbered.get(sym.id);
+          if (to !== undefined && to !== sym.label) renamed.set(sym.id, { from: sym.label, to });
+        }
+        return {
+          ...p,
+          symbols: p.symbols.map((sym) => renumbered.has(sym.id) ? { ...sym, label: renumbered.get(sym.id)! } : sym),
+          coverages: relabelAnchoredCoverages(p.coverages, renamed),
+        };
       }),
       undoSize: undoStack.length, redoSize: 0,
     });

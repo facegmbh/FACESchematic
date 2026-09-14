@@ -1143,7 +1143,7 @@ export interface FloorplanLegendBox {
    *  the architect's legend instead of leaving a strip of it showing. */
   minHeightMm?: number;
   /** Print the company block (logo, name, address, contact) at the foot of the legend.
-   *  Undefined counts as on — the planner's company belongs on every plan. */
+   *  Off unless switched on: the drawing block already names who drew the sheet. */
   showCompany?: boolean;
   /** Print the line table (line → amplifier channel, speaker count, load). Undefined counts
    *  as on for loudspeaker plans with lines. */

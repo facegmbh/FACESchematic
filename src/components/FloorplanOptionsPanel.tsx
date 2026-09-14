@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
@@ -1177,10 +1177,10 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           />
           {t("Only groups used on this plan")}
         </label>
-        <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer" title={t("Logo, name, address and contact from Preferences → Company")}>
+        <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer" title={t("Logo, name, address and contact from Preferences → Company. Off by default — the drawing block already names who drew the sheet.")}>
           <input
             type="checkbox"
-            checked={page.legend.showCompany !== false}
+            checked={legendShowsCompany(page.legend)}
             onChange={(e) => updateFloorplanLegend(page.id, { showCompany: e.target.checked })}
           />
           {t("Company block (logo, address)")}

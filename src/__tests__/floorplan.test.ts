@@ -10,6 +10,9 @@ import {
   fitRectInArea,
   formatScale,
   legendHeightMm,
+  legendShowsCompany,
+  relabelAnchoredCoverages,
+  symbolLabelRenames,
   measureRealDistanceMm,
   nextSymbolLabel,
   paperMmToRealMm,
@@ -607,13 +610,16 @@ describe("company block", () => {
     expect(companyProfileLines(face)).toEqual(["FACE GmbH", "Musterstraße 1", "49074 Osnabrück", "Tel. 0541 123 · info@face-gmbh.com · www.face-gmbh.com"]);
   });
 
-  it("adds its height to the legend unless switched off", () => {
+  it("stays out of the legend until it is switched on \u2014 the drawing block already carries it", () => {
     const page = makePage({ groups: [{ id: "g1", label: "LS", color: "#e11d1d", shape: "circle" }] });
     const rows = buildLegendRows(page);
     const without = legendHeightMm(rows, page.legend);
-    expect(legendHeightMm(rows, page.legend, face)).toBeCloseTo(without + legendCompanyHeightMm(face));
+    expect(legendShowsCompany(page.legend)).toBe(false);
+    expect(legendHeightMm(rows, page.legend, face)).toBeCloseTo(without);
     expect(legendHeightMm(rows, { ...page.legend, showCompany: false }, face)).toBeCloseTo(without);
-    expect(legendHeightMm(rows, page.legend, { name: "", addressLines: [] })).toBeCloseTo(without);
+    expect(legendShowsCompany({ showCompany: true })).toBe(true);
+    expect(legendHeightMm(rows, { ...page.legend, showCompany: true }, face)).toBeCloseTo(without + legendCompanyHeightMm(face));
+    expect(legendHeightMm(rows, { ...page.legend, showCompany: true }, { name: "", addressLines: [] })).toBeCloseTo(without);
   });
 
   it("resolves the company tokens in the drawing block", () => {
@@ -1127,5 +1133,39 @@ describe("which areas offer the camera-optics control", () => {
     // Anchored to an AP yet carrying optics (a leftover): the control must stay so it
     // can be switched off.
     expect(coverageOffersOptics({ optics: defaultCameraOptics() }, "access-point")).toBe(true);
+  });
+});
+
+describe("renumbering carries the coverage area's label", () => {
+  const area = (over: Partial<FloorplanCoverage> = {}): FloorplanCoverage => ({
+    id: "c1", symbolId: "s1", shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 12, label: "K1", ...over,
+  });
+  const renamed = new Map([["s1", { from: "K1", to: "K7" }]]);
+
+  it("moves the number on the area anchored to the renumbered symbol", () => {
+    const [out] = relabelAnchoredCoverages([area()], renamed);
+    expect(out.label).toBe("K7");
+  });
+
+  it("leaves a label the planner typed himself alone", () => {
+    const [out] = relabelAnchoredCoverages([area({ label: "Zufahrt Nord" })], renamed);
+    expect(out.label).toBe("Zufahrt Nord");
+    // And an area deliberately left blank stays blank.
+    expect(relabelAnchoredCoverages([area({ label: undefined })], renamed)[0].label).toBeUndefined();
+  });
+
+  it("touches neither another symbol's area nor a free-standing one", () => {
+    const others = [area({ id: "c2", symbolId: "s2" }), area({ id: "c3", symbolId: undefined })];
+    const out = relabelAnchoredCoverages(others, renamed);
+    expect(out.map((c) => c.label)).toEqual(["K1", "K1"]);
+    expect(out).toBe(others); // nothing changed, so the array is not rebuilt
+  });
+
+  it("names the renames a patch actually makes", () => {
+    const symbols = [{ id: "s1", label: "K1" }, { id: "s2", label: "K7" }];
+    expect(symbolLabelRenames(symbols, "K7").get("s1")).toEqual({ from: "K1", to: "K7" });
+    // s2 already carries that label, and a patch with no label at all renames nothing.
+    expect(symbolLabelRenames(symbols, "K7").has("s2")).toBe(false);
+    expect(symbolLabelRenames(symbols, undefined).size).toBe(0);
   });
 });

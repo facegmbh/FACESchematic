@@ -29,6 +29,7 @@ import {
   layoutDrawingBlock,
   layoutNote,
   legendHeightMm,
+  legendShowsCompany,
   legendRowImage,
   companyProfileLines,
   hasCompanyProfile,
@@ -384,7 +385,7 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
   }
 
   // Company block: logo left, name/address/contact right.
-  if (page.legend.showCompany !== false && hasCompanyProfile(company)) {
+  if (legendShowsCompany(page.legend) && hasCompanyProfile(company)) {
     y += LEGEND_COMPANY_GAP_MM;
     doc.setDrawColor(153, 153, 153);
     doc.setLineWidth(0.15);

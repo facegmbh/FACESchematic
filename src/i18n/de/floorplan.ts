@@ -313,8 +313,8 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Legend title": "Legendentitel",
   "Product images": "Produktbilder",
   "Only groups used on this plan": "Nur Gruppen, die auf diesem Plan vorkommen",
-  "Logo, name, address and contact from Preferences → Company":
-    "Logo, Name, Anschrift und Kontakt aus Einstellungen → Firma",
+  "Logo, name, address and contact from Preferences → Company. Off by default — the drawing block already names who drew the sheet.":
+    "Logo, Name, Anschrift und Kontakt aus Einstellungen → Firma. Standardmäßig aus — im Schriftfeld steht ohnehin, wer den Plan gezeichnet hat.",
   "Company block (logo, address)": "Firmenblock (Logo, Anschrift)",
   "Print the line table (line → amplifier channel, quantity, load) under the legend rows":
     "Die Linientabelle (Linie → Endstufenkanal, Menge, Last) unter den Legendenzeilen drucken",

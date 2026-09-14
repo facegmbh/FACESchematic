@@ -257,6 +257,45 @@ export function nextSymbolLabel(existingLabels: string[], labelPrefix?: string):
   return candidate;
 }
 
+/**
+ * Carry a renamed symbol's number over to the areas anchored to it.
+ *
+ * An area gets its label from the device it is drawn on, so the wedge in front of a camera
+ * prints the same number as the camera. That label is copied once, when the area is made —
+ * so renumbering the camera afterwards left the wedge showing the old number, and the sheet
+ * then carried two numbers for one device without saying which one was current.
+ *
+ * Only an area still carrying the old label follows along. One the planner has typed over —
+ * "Zufahrt Nord" — is theirs and stays untouched, and so does one deliberately left empty.
+ */
+export function relabelAnchoredCoverages(
+  coverages: FloorplanCoverage[] | undefined,
+  renamed: Map<string, { from: string; to: string }>,
+): FloorplanCoverage[] {
+  if (!coverages || coverages.length === 0 || renamed.size === 0) return coverages ?? [];
+  let touched = false;
+  const next = coverages.map((c) => {
+    const rename = c.symbolId ? renamed.get(c.symbolId) : undefined;
+    if (!rename || (c.label ?? "").trim() !== rename.from.trim()) return c;
+    touched = true;
+    return { ...c, label: rename.to };
+  });
+  return touched ? next : coverages;
+}
+
+/** symbolId → old and new label, for the symbols a patch actually renames. */
+export function symbolLabelRenames(
+  symbols: Pick<FloorplanSymbol, "id" | "label">[],
+  nextLabel: string | undefined,
+): Map<string, { from: string; to: string }> {
+  const renamed = new Map<string, { from: string; to: string }>();
+  if (nextLabel === undefined) return renamed;
+  for (const sym of symbols) {
+    if (sym.label !== nextLabel) renamed.set(sym.id, { from: sym.label, to: nextLabel });
+  }
+  return renamed;
+}
+
 /** Renumber a group's symbols sequentially from `startLabel` in placement order. */
 export function renumberGroup(symbols: FloorplanSymbol[], startLabel: string): FloorplanSymbol[] {
   const parsed = splitTrailingNumber(startLabel.trim());
@@ -322,6 +361,17 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
     }));
 }
 
+/**
+ * Does the legend carry the company block (logo, name, address, contact)?
+ *
+ * Off unless switched on. The drawing block already names who drew the sheet; repeating it
+ * under the legend put our address on the plan twice and ate room the legend rows need.
+ * The switch stays, for a sheet that goes out without a drawing block.
+ */
+export function legendShowsCompany(legend: Pick<FloorplanLegendBox, "showCompany">): boolean {
+  return legend.showCompany === true;
+}
+
 /** Legend box height in mm for the given rows — the renderer and the PDF export share
  *  this so the on-screen box and the printed one agree. */
 export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0, rssiStepCount = 0): number {
@@ -331,7 +381,7 @@ export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, co
   if (lineRowCount > 0) h += LEGEND_LINES_GAP_MM + LEGEND_LINES_TITLE_MM + LEGEND_LINE_ROW_MM * (lineRowCount + 1);
   if (rssiStepCount > 0) h += LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM + LEGEND_RSSI_ROW_MM * rssiStepCount;
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
-  if (legend.showCompany !== false && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
+  if (legendShowsCompany(legend) && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
   // A stretched box covers what sits under it — the planner's way of hiding the
   // architect's legend without a separate cover.
   return Math.max(h, legend.minHeightMm ?? 0);

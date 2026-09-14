@@ -16,6 +16,7 @@ import {
   legendInstallNoteFor,
   appendLegendNote,
   companyProfileLines,
+  legendShowsCompany,
   hasCompanyProfile,
   planSymbolFor,
   LEGEND_COMPANY_GAP_MM,
@@ -774,7 +775,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     [page, nodes, edges, customTemplates],
   );
   const legendNotes = (page.legend.notes ?? []).filter((n) => n.trim().length > 0);
-  const showCompany = page.legend.showCompany !== false && hasCompanyProfile(companyProfile);
+  const showCompany = legendShowsCompany(page.legend) && hasCompanyProfile(companyProfile);
   // The signal colour key prints on a coverage plan whose heatmap is on — a heatmap
   // handed over without its scale cannot be read by the customer.
   const legendRssiSteps = legendShowsRssiScale(page) ? RSSI_STEPS : [];

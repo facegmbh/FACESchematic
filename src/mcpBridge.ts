@@ -115,6 +115,7 @@ import {
   formatPlanDate,
   legendDescriptionFor,
   legendInstallNoteFor,
+  legendShowsCompany,
   planSymbolFor,
   labelPlacementFor,
   formatSymbolLabel,
@@ -453,7 +454,7 @@ function floorplanSummary(page: FloorplanPage) {
       visible: page.legend.visible, title: page.legend.title, notesTitle: page.legend.notesTitle,
       notes: page.legend.notes ?? [], showImages: page.legend.showImages, onlyUsedGroups: page.legend.onlyUsedGroups,
       positionMm: page.legend.positionMm, widthMm: page.legend.widthMm, minHeightMm: page.legend.minHeightMm,
-      showCompany: page.legend.showCompany !== false,
+      showCompany: legendShowsCompany(page.legend),
       showLines: page.legend.showLines, linesTitle: page.legend.linesTitle,
     },
     /** The planning company's block (Preferences → Company) prints at the foot of the legend when set. */
