@@ -51,14 +51,25 @@ test("floorplan: a library model dropped on the plan lands on the schematic too"
   });
   expect(templateId).not.toBe("");
 
-  await sheet.evaluate((el, arg) => {
+  // Erst dragover, dann drop — und der dragover muss abgelehnt, also preventDefault
+  // aufgerufen worden sein. Genau das fehlte: ohne es verweigert der Browser den Abwurf,
+  // und ein Test, der nur ein drop-Ereignis abschickt, merkt davon nichts.
+  const accepted = await sheet.evaluate((el, arg) => {
     const dt = new DataTransfer();
     dt.setData("application/x-floorplan-template-id", arg.id);
+    const over = new DragEvent("dragover", {
+      dataTransfer: dt, bubbles: true, cancelable: true,
+      clientX: arg.x, clientY: arg.y,
+    });
+    el.dispatchEvent(over);
+    if (!over.defaultPrevented) return false;
     el.dispatchEvent(new DragEvent("drop", {
       dataTransfer: dt, bubbles: true, cancelable: true,
       clientX: arg.x, clientY: arg.y,
     }));
+    return true;
   }, { id: templateId, x: box.x + box.width * 0.4, y: box.y + box.height * 0.4 });
+  expect(accepted, "the sheet must accept a library payload on dragover").toBe(true);
 
   // A symbol on the plan …
   await expect(page.getByText(/On the plan \(1\)/)).toBeVisible({ timeout: 15_000 });

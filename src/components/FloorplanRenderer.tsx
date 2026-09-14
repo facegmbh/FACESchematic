@@ -792,7 +792,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onDragOver={(e) => { if (e.dataTransfer.types.includes(FLOORPLAN_DEVICE_MIME)) e.preventDefault(); }}
+        // Ohne preventDefault verweigert der Browser den Abwurf — beide Nutzlasten muessen
+        // hier stehen, sonst laesst sich ein Bibliotheksmodell gar nicht erst fallen lassen.
+        onDragOver={(e) => {
+          const t = e.dataTransfer.types;
+          if (t.includes(FLOORPLAN_DEVICE_MIME) || t.includes(FLOORPLAN_TEMPLATE_MIME)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
         onDrop={handleDrop}
       >
         {/* Paper */}
