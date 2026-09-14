@@ -863,12 +863,16 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0ba2-4000-8000-000000000177",
     deviceType: "speaker",
-    label: "Netzwerk-Hornlautsprecher 7 W (PoE, TTS)",
-    shortName: "IP-Horn 7 W",
-    searchTerms: ["hornlautsprecher", "horn", "netzwerklautsprecher", "ip", "poe", "tts", "ansprache", "durchsage"],
+    label: "Hikvision DS-QAZ1307G1-E (IP-Horn 7 W)",
+    shortName: "DS-QAZ1307G1-E",
+    manufacturer: "Hikvision",
+    modelNumber: "DS-QAZ1307G1-E(O-STD)(C)",
+    searchTerms: ["hikvision", "ds-qaz1307g1", "hornlautsprecher", "horn", "netzwerklautsprecher", "ip", "poe", "tts", "ansprache", "durchsage"],
     planSymbol: { shape: "circle", glyph: "HL" },
     // Speist sich aus PoE; eine eigene Verstaerkerleitung gibt es nicht, deshalb auch
     // kein speakerLoad — auf einem Beschallungsplan haengt er nicht an einer Endstufe.
+    // 7 W nach Auftragstext; als PoE-Last angesetzt, damit das Switch-Budget stimmt.
+    poeDrawW: 7,
     ports: [
       port("LAN (PoE)", "ethernet", "bidirectional"),
     ],

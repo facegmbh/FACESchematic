@@ -827,15 +827,15 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0ba2-4000-8000-000000000174",
     deviceType: "ip-camera",
-    label: "Bullet-Kamera Bi-Spektrum (optische Linse)",
-    shortName: "Bi-Spektrum Bullet",
-    searchTerms: ["kamera", "bullet", "bi-spektrum", "thermisch", "waermebild", "optische linse", "aussen", "poe"],
+    label: "Hikvision DS-2TD2628-3/QA",
+    shortName: "DS-2TD2628-3/QA",
+    manufacturer: "Hikvision",
+    modelNumber: "DS-2TD2628-3/QA(O-STD)",
+    referenceUrl: "https://www.hikvision.com/en/products/Thermal-Products/Security-thermal-cameras/heatpro-series/",
+    searchTerms: ["hikvision", "ds-2td2628", "heatpro", "kamera", "bullet", "bi-spektrum", "thermisch", "waermebild", "aussen", "poe"],
     planSymbol: { shape: "camera", glyph: "TK" },
-    // Der Auftrag nennt keine Leistungsaufnahme. Bis das Datenblatt vorliegt steht hier
-    // die Obergrenze der PoE-Klasse 802.3at (25,5 W) statt einer geratenen Zahl: eine
-    // Aussenkamera mit Bi-Spektrum und Heizung liegt in dieser Klasse, und zu hoch
-    // gerechnet bleibt ein PoE-Budget belastbar, zu niedrig nicht.
-    poeDrawW: 25.5,
+    // Datenblatt: PoE nach 802.3af Klasse 3, max. 8,5 W (ebenso 12 VDC / 24 VAC).
+    poeDrawW: 8.5,
     ports: [
       port("LAN (PoE)", "ethernet", "bidirectional"),
     ],
@@ -843,13 +843,15 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0ba2-4000-8000-000000000175",
     deviceType: "ip-camera",
-    label: "Bullet-Kamera Bi-Spektrum (HM)",
-    shortName: "Bi-Spektrum Bullet HM",
-    searchTerms: ["kamera", "bullet", "bi-spektrum", "thermisch", "hm", "varifokus", "aussen", "poe"],
+    label: "HM-TD2628-3/G1/T3A (Bi-Spektrum, KI)",
+    shortName: "HM-TD2628-3",
+    modelNumber: "HM-TD2628-3/G1/T3A(O-STD)",
+    searchTerms: ["hm-td2628", "kamera", "bullet", "bi-spektrum", "thermisch", "ki", "analytik", "aussen", "poe"],
     planSymbol: { shape: "camera", glyph: "TK" },
-    // Zweite Kameravariante des Auftrags, dort nur durch "(HM)" unterschieden. Die
-    // Anlagenbeschreibung nennt daneben 8-MP-Bullet-Kameras mit motorisiertem
-    // Varifokus-Objektiv — vermutlich diese hier, belegt ist es nicht.
+    // Schwestermodell zur DS-2TD2628-3/QA, zusaetzlich mit KI-Analytik. Hersteller nicht
+    // eingetragen: die HM-Typnummer gehoert nicht zur DS-Reihe, und raten waere hier so
+    // falsch wie ueberall sonst. Leistungsaufnahme ebenfalls offen — die 8,5 W der
+    // Schwesterkamera sind ein Anhalt, kein Datenblattwert fuer dieses Modell.
     // Der Auftrag nennt keine Leistungsaufnahme. Bis das Datenblatt vorliegt steht hier
     // die Obergrenze der PoE-Klasse 802.3at (25,5 W) statt einer geratenen Zahl: eine
     // Aussenkamera mit Bi-Spektrum und Heizung liegt in dieser Klasse, und zu hoch
@@ -862,19 +864,25 @@ export const templates: DeviceTemplate[] = [
   {
     id: "c0a80101-0ba2-4000-8000-000000000176",
     deviceType: "nvr",
-    label: "AcuSense NVR 16 Kanal (4K)",
-    shortName: "NVR 16 ch",
-    searchTerms: ["nvr", "recorder", "acusense", "4k", "16 kanal", "aufzeichnung", "video"],
+    label: "Hikvision DS-7716NXI-I4/S",
+    shortName: "DS-7716NXI-I4/S",
+    manufacturer: "Hikvision",
+    modelNumber: "DS-7716NXI-I4/S(STD)(E)",
+    referenceUrl: "https://www.hikvision.com/en/products/IP-Products/Network-Video-Recorders/Pro-Series/ds-7716nxi-i4-s/",
+    searchTerms: ["hikvision", "ds-7716nxi", "nvr", "recorder", "acusense", "4k", "16 kanal", "aufzeichnung", "video"],
     planSymbol: { shape: "rack", glyph: "NVR" },
-    // Kanalzahl aus der Auftragsposition. Die Anlagenbeschreibung im selben Dokument
-    // spricht von einem 8-Kanal-AcuSense-NVR — vor der Bestellung klaeren.
-    voltage: "110-240V",
-    heightMm: 44,
+    // Die Typnummer klaert den Widerspruch im Auftrag: 16 Kanaele, nicht die 8 aus der
+    // Anlagenbeschreibung. Die Variante /S hat keine eigenen PoE-Ports — die Kameras
+    // haengen am Switch, was fuer dessen Budget entscheidend ist. Vier SATA-Plaetze
+    // (je bis 10 TB), Ausgabe ueber 2x HDMI und 1x VGA bis 4K. Bauhoehe 1,5 HE.
+    voltage: "100-240V",
+    heightMm: 66,
     widthMm: 445,
     ports: [
       port("AC In", "power", "input"),
       port("LAN", "ethernet", "bidirectional"),
-      port("HDMI Out", "hdmi", "output"),
+      port("HDMI Out 1", "hdmi", "output"),
+      port("HDMI Out 2", "hdmi", "output"),
       port("VGA Out", "vga", "output"),
     ],
   },

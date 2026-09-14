@@ -431,15 +431,21 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://techspecs.ui.com/unifi/unifi-cloud-gateways/udm-se",
     searchTerms: ["ubiquiti", "unifi", "udm-se", "dream machine", "console", "router", "dual wan", "poe", "gateway"],
     planSymbol: { shape: "rack", glyph: "GW" },
-    powerDrawW: 30,
-    voltage: "110-240V",
-    poeBudgetW: 180,
+    // Zahlen aus dem Ubiquiti-Datenblatt (dl.ui.com/ds/udm_se_ds.pdf, Stand 09/2026):
+    // Netzteil 240 W intern, max. 50 W Eigenverbrauch ohne PoE-Abgabe.
+    powerDrawW: 50,
+    voltage: "100-240V",
+    // Ubiquiti nennt kein Gesamtbudget, sondern Maxima je Port: 2x PoE+ zu 30 W und
+    // 6x PoE zu 15,4 W. Mehr als deren Summe kann das Geraet nicht abgeben, deshalb
+    // steht sie hier — eine belastbare Obergrenze statt einer Marketingzahl.
+    poeBudgetW: 152,
     heightMm: 44,
     widthMm: 442,
-    depthMm: 285,
+    depthMm: 286,
+    weightKg: 4.95,
     ports: [
-      port("WAN 1 (2.5 GbE)", "ethernet", "bidirectional"),
-      port("WAN 2 (10G SFP+)", "ethernet", "bidirectional", "sfp"),
+      port("WAN (2.5 GbE)", "ethernet", "bidirectional"),
+      port("WAN (10G SFP+)", "ethernet", "bidirectional", "sfp"),
       ...ports("LAN", "ethernet", "bidirectional", 8),
       port("LAN (10G SFP+)", "ethernet", "bidirectional", "sfp"),
       port("AC In", "power", "input"),
@@ -455,12 +461,18 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://techspecs.ui.com/unifi/switching",
     searchTerms: ["ubiquiti", "unifi", "switch", "flex", "2.5g", "poe", "usw-flex-2.5g-8-poe", "9 port"],
     planSymbol: { shape: "rack", glyph: "SW" },
-    // Der Auftrag nennt 8x 2,5 GbE PoE+ und einen 10-GbE-Uplink, der den Switch per
-    // PoE-bt speist. Das PoE-Budget steht dort nicht und bleibt deshalb offen — die
-    // Anlagenbeschreibung nennt 120 W, allerdings fuer einen Switch mit 8x GbE.
+    // Zahlen von Ubiquitis Tech-Specs (techspecs.ui.com, Stand 09/2026). Zwei Dinge
+    // weichen vom Auftragstext ab: alle acht Downlinks sind PoE++ (802.3bt), nicht
+    // PoE+, und das PoE-Budget haengt daran, wie der Switch selbst gespeist wird —
+    // 46 W ueber den PoE-Eingang, 196 W am Netzteil. Der Auftrag speist ihn per
+    // PoE-bt, also gelten 46 W fuer alle acht Ports zusammen.
+    poeBudgetW: 46,
+    heightMm: 34,
+    widthMm: 213,
+    depthMm: 99,
     ports: [
-      ...ports("PoE+ 2.5 GbE", "ethernet", "bidirectional", 8),
-      port("Uplink 10 GbE (PoE-bt In)", "ethernet", "bidirectional"),
+      ...ports("PoE++ 2.5 GbE", "ethernet", "bidirectional", 8),
+      port("Uplink 10 GbE (PoE-Speisung)", "ethernet", "bidirectional"),
     ],
   },
   {
