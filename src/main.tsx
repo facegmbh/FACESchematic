@@ -4,8 +4,12 @@ import { ReactFlowProvider } from "@xyflow/react";
 import "./index.css";
 import ErrorBoundary from "./components/ErrorBoundary.tsx";
 import { initServiceWorkerUpdates } from "./sw-register";
+import { loadSymbolLibrary } from "./symbolLibrary";
 
 initServiceWorkerUpdates();
+// The BHE symbols are served, not bundled, so the catalogue is fetched once at startup.
+// A build without them resolves to nothing and the app draws its own shapes.
+void loadSymbolLibrary();
 
 const App = lazy(() => import("./App.tsx"));
 const LandingPage = lazy(() => import("./components/LandingPage.tsx"));

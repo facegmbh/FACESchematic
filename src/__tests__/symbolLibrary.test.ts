@@ -24,6 +24,7 @@ const CATALOG: SymbolLibraryCategory[] = [
       { id: "9-1-kameras/boxkamera", name: "Boxkamera" },
       { id: "9-1-kameras/bullet-kamera", name: "Bullet-Kamera" },
       { id: "9-1-kameras/fix-dome", name: "Fix-Dome" },
+      { id: "9-1-kameras/schwenk-neige-kamera", name: "Schwenk-Neige Kamera" },
       { id: "9-1-kameras/speed-dome", name: "Speed-Dome" },
       { id: "9-1-kameras/thermal-kamera", name: "Thermal-Kamera" },
     ],
@@ -31,16 +32,36 @@ const CATALOG: SymbolLibraryCategory[] = [
   {
     id: "1-einbruchmeldetechnik", no: "1", label: "Einbruchmeldetechnik", section: "Einbruchmeldetechnik",
     symbols: [
-      { id: "1-einbruchmeldetechnik/passiv-infrarot-melder", name: "Passiv-Infrarot-Melder" },
+      // Alphabetical, as the CD is — the traps below depend on it.
+      { id: "1-einbruchmeldetechnik/glasbruchmelder-aktiv", name: "Glasbruchmelder aktiv" },
+      { id: "1-einbruchmeldetechnik/glasbruchmelder-passiv", name: "Glasbruchmelder passiv" },
+      { id: "1-einbruchmeldetechnik/infrarot-bewegungsmelder", name: "Infrarot Bewegungsmelder" },
       { id: "1-einbruchmeldetechnik/magnetkontakt", name: "Magnetkontakt" },
-      { id: "1-einbruchmeldetechnik/glasbruchmelder", name: "Glasbruchmelder" },
+      { id: "1-einbruchmeldetechnik/mikrowellen-bewegungsmelder", name: "Mikrowellen Bewegungsmelder" },
+      { id: "1-einbruchmeldetechnik/ueberfallmelder", name: "Ueberfallmelder" },
     ],
   },
   {
     id: "4-signalgeber", no: "4", label: "Signalgeber", section: "Signalgeber",
     symbols: [
-      { id: "4-signalgeber/sirene-innen", name: "Sirene innen" },
-      { id: "4-signalgeber/blitzleuchte", name: "Blitzleuchte" },
+      { id: "4-signalgeber/klingel", name: "Klingel" },
+      { id: "4-signalgeber/signalgeber-akustisch", name: "Signalgeber akustisch" },
+      { id: "4-signalgeber/signalgeber-optisch", name: "Signalgeber optisch" },
+      { id: "4-signalgeber/sirene", name: "Sirene" },
+    ],
+  },
+  {
+    id: "5-brandmeldetechnik", no: "5", label: "Brandmeldetechnik", section: "Brandmeldetechnik",
+    symbols: [
+      { id: "5-brandmeldetechnik/ansaugrauchmelder", name: "Ansaugrauchmelder" },
+      { id: "5-brandmeldetechnik/rauchmelder-optisch", name: "Rauchmelder, optisch" },
+    ],
+  },
+  {
+    id: "7-zentralen-busmodule-kuerzel", no: "7", label: "Zentralen, Busmodule, Kürzel", section: "Zentralen, Busmodule, Kürzel",
+    symbols: [
+      { id: "7-zentralen-busmodule-kuerzel/brandmelderzentrale", name: "Brandmelderzentrale" },
+      { id: "7-zentralen-busmodule-kuerzel/einbruchmelderzentrale", name: "Einbruchmelderzentrale" },
     ],
   },
 ];
@@ -71,7 +92,7 @@ describe("searching", () => {
 
   it("finds by chapter as well, so 'Signalgeber' offers what is in it", () => {
     expect(searchSymbolLibrary("signalgeber", CATALOG).map((h) => h.name).sort())
-      .toEqual(["Blitzleuchte", "Sirene innen"]);
+      .toEqual(["Klingel", "Signalgeber akustisch", "Signalgeber optisch", "Sirene"]);
   });
 
   it("answers nothing to an empty query rather than the whole CD", () => {
@@ -93,17 +114,33 @@ describe("assigning a symbol to a device type", () => {
   });
 
   it("covers the intrusion side", () => {
-    expect(idFor("motion-detector")).toBe("1-einbruchmeldetechnik/passiv-infrarot-melder");
+    expect(idFor("motion-detector")).toBe("1-einbruchmeldetechnik/infrarot-bewegungsmelder");
     expect(idFor("door-contact")).toBe("1-einbruchmeldetechnik/magnetkontakt");
-    expect(idFor("glass-break")).toBe("1-einbruchmeldetechnik/glasbruchmelder");
-    expect(idFor("siren")).toBe("4-signalgeber/sirene-innen");
+    expect(idFor("panic-button")).toBe("1-einbruchmeldetechnik/ueberfallmelder");
+    expect(idFor("siren")).toBe("4-signalgeber/sirene");
+    expect(idFor("strobe")).toBe("4-signalgeber/signalgeber-optisch");
+  });
+
+  it("takes the narrower name, not the first one that happens to match", () => {
+    // Four assignments went wrong exactly this way against the real CD: "Rauchmelder"
+    // also occurs inside "Ansaugrauchmelder", "zentrale" inside "Brandmelderzentrale",
+    // and the chapter is stored alphabetically, so the wrong one came first.
+    expect(idFor("smoke-detector")).toBe("5-brandmeldetechnik/rauchmelder-optisch");
+    expect(idFor("aspirating-detector")).toBe("5-brandmeldetechnik/ansaugrauchmelder");
+    expect(idFor("alarm-panel")).toBe("7-zentralen-busmodule-kuerzel/einbruchmelderzentrale");
+    expect(idFor("fire-panel")).toBe("7-zentralen-busmodule-kuerzel/brandmelderzentrale");
+    expect(idFor("glass-break")).toBe("1-einbruchmeldetechnik/glasbruchmelder-passiv");
   });
 
   it("says nothing where the CD has nothing, instead of guessing", () => {
-    // Chapter 5 is not in this stub, so a smoke detector finds no symbol and the device
+    // Chapter 10 is not in this stub, so a card reader finds no symbol and the device
     // keeps the shape it always had.
-    expect(idFor("smoke-detector")).toBeUndefined();
+    expect(idFor("card-reader")).toBeUndefined();
     expect(idFor("network-switch")).toBeUndefined();
+    // Abbreviations hide inside ordinary words: "aspirating" carries a pir and
+    // "patch-panel" an atc, and unanchored both used to pull a symbol.
+    expect(idFor("patch-panel")).toBeUndefined();
+    expect(idFor("pir-detector")).toBe("1-einbruchmeldetechnik/infrarot-bewegungsmelder");
     expect(idFor("")).toBeUndefined();
     expect(defaultSymbolLibraryIdFor("ip-camera", [])).toBeUndefined();
   });

@@ -19,6 +19,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Die BHE-Symbolbibliothek liegt bewusst NICHT im Repository: die Zeichnungen sind
+      # Mitgliedsmaterial des BHE, und dieses Repository ist oeffentlich. Sie auf Plaenen
+      # zu verwenden ist etwas anderes, als sie zu veroeffentlichen.
+      #
+      # Sie liegen stattdessen auf face-docker1 neben dem Runner (erzeugt mit
+      # tools/bheSymbols.mjs von der Mitglieder-CD: die SVGs plus catalog.json) und werden
+      # hier in den Checkout kopiert, bevor das Image gebaut wird. Fehlen sie, laeuft der
+      # Build trotzdem durch: die App sagt dann im Symbol-Dialog, dass die Bibliothek nicht
+      # installiert ist, und jedes Geraet behaelt seine gezeichnete Form.
+      - name: BHE-Symbole einsetzen (nicht in git)
+        run: |
+          for src in "$HOME/faceschematic/bhe" /srv/faceschematic/bhe; do
+            [ -f "$src/catalog.json" ] || continue
+            mkdir -p public/symbols
+            rm -rf public/symbols/bhe
+            cp -r "$src" public/symbols/bhe
+            echo "BHE: $(find public/symbols/bhe -name '*.svg' | wc -l) Symbole aus $src"
+            exit 0
+          done
+          echo "BHE: keine Symbolbibliothek auf diesem Host — Build ohne sie"
+
       - name: Build & deploy (docker compose)
         run: docker compose -p faceschematic up -d --build --remove-orphans
 

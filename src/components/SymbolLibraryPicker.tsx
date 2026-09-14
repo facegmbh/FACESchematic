@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  loadSymbolLibrary,
   searchSymbolLibrary,
   symbolLibraryCategories,
   symbolLibraryInstalled,
   symbolLibraryUrl,
+  type SymbolLibraryCategory,
   type SymbolLibraryHit,
 } from "../symbolLibrary";
 import { useT } from "../i18n";
@@ -27,8 +29,11 @@ interface Props {
  */
 export default function SymbolLibraryPicker({ selectedId, onPick, onClose }: Props) {
   const t = useT();
-  const categories = symbolLibraryCategories();
-  const installed = symbolLibraryInstalled();
+  // Startup usually has it by now; asking again costs nothing and covers the case where
+  // the dialog is the first thing that needs it.
+  const [categories, setCategories] = useState<SymbolLibraryCategory[]>(symbolLibraryCategories);
+  useEffect(() => { void loadSymbolLibrary().then(setCategories); }, []);
+  const installed = symbolLibraryInstalled(categories);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const selectedCategory = useMemo(
