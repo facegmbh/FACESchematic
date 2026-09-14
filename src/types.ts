@@ -1384,6 +1384,39 @@ export interface LuminairePhotometry {
   measuredBy?: string;
 }
 
+/**
+ * Ein Raum: das Polygon, seine Höhe und was seine Flächen zurückwerfen.
+ *
+ * Der Raum ist das, was die Lichtrechnung eigentlich braucht und was ein Grundriss nicht
+ * hergibt. Aus den Wänden lässt sich das Polygon vorschlagen (`floorplanRooms.ts`), aber
+ * bestätigt wird es vom Nutzer — Architektenpläne sind nie sauber genug, um das
+ * ungefragt zu übernehmen.
+ */
+export interface FloorplanRoom {
+  id: string;
+  name: string;
+  /** Polygonpunkte in Papier-mm, wie bei den Wänden. Implizit geschlossen. */
+  pointsMm: { x: number; y: number }[];
+  /** Lichte Raumhöhe in realen mm. */
+  heightMm: number;
+  /** Höhe der Nutzebene in realen mm. Undefiniert = die Vorgabe der Seite. */
+  workPlaneMm?: number;
+  /** Was Decke, Wände und Boden zurückwerfen, je 0–1. Undefiniert = DEFAULT_REFLECTANCE. */
+  reflectance?: RoomReflectance;
+  hidden?: boolean;
+  locked?: boolean;
+}
+
+export interface RoomReflectance {
+  ceiling: number;
+  walls: number;
+  floor: number;
+}
+
+/** Die Ansätze, mit denen in der Lichtplanung gerechnet wird, wenn nichts Genaueres
+ *  vorliegt: helle Decke, mittlere Wände, dunkler Boden. */
+export const DEFAULT_REFLECTANCE: RoomReflectance = { ceiling: 0.7, walls: 0.5, floor: 0.2 };
+
 /** Wie das Lux-Raster auf einem Plan gerechnet und gezeichnet wird. */
 export interface FloorplanLightCalc {
   visible: boolean;
@@ -1662,6 +1695,9 @@ export interface FloorplanPage {
   heatmap?: FloorplanHeatmap;
   /** Einstellungen der Lichtrechnung. Undefiniert zählt als DEFAULT_LIGHT_CALC (aus). */
   light?: FloorplanLightCalc;
+  /** Räume mit Polygon, Höhe und Reflexionsgraden. Sie sind der Bezug, über den die
+   *  Kennwerte gebildet werden, und liefern den indirekten Lichtanteil. */
+  rooms?: FloorplanRoom[];
   /** Show the fixed project title block in the sheet corner as well. Off by default on
    *  floorplans — the drawing block carries the same information and can be moved. */
   showTitleBlock: boolean;

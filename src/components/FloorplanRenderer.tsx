@@ -62,12 +62,14 @@ import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
 import FloorplanLuxLayer from "./FloorplanLuxLayer";
+import FloorplanRoomLayer from "./FloorplanRoomLayer";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
 import { DEFAULT_HEATMAP, DEFAULT_LIGHT_CALC, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
 import { collectAccessPoints } from "../wifiCoverage";
 import { collectLuminaires } from "../lightSim";
+import { suggestRoomPolygon, type RoomSuggestion } from "../floorplanRooms";
 import type { WallCandidateSet } from "../pdfWalls";
 import { getTemplateById } from "../templateApi";
 import type { FloorplanTool } from "./FloorplanPage";
@@ -95,6 +97,19 @@ interface Props {
   onWallCandidatesChange?: (set: WallCandidateSet | null) => void;
 }
 
+/** Lichte Raumhöhe, mit der ein neu geklickter Raum startet. Drei Meter ist die Höhe,
+ *  die ein Grundriss nicht verrät und die am häufigsten stimmt. */
+const DEFAULT_ROOM_HEIGHT_MM = 3000;
+
+/** Warum aus einem Klick kein Raum wurde — als Satz, den der Nutzer lesen und befolgen
+ *  kann, nicht als Fehlercode. */
+const ROOM_FAIL_MESSAGES: Record<Extract<RoomSuggestion, { ok: false }>["reason"], (t: (s: string) => string) => string> = {
+  outside: (t) => t("That is outside the drawing area."),
+  "on-wall": (t) => t("That is on a wall — click clearly inside the room."),
+  leaked: (t) => t("No closed room there: the outline runs off the sheet. A wall is missing, or its gap is wider than the plan's tolerance."),
+  "too-small": (t) => t("That encloses almost nothing — probably a gap between two wall runs rather than a room."),
+};
+
 export type Selection =
   | { kind: "none" }
   | { kind: "symbols"; ids: string[] }
@@ -104,7 +119,8 @@ export type Selection =
   | { kind: "note"; id: string }
   | { kind: "mask"; id: string }
   | { kind: "coverage"; id: string }
-  | { kind: "wall"; id: string };
+  | { kind: "wall"; id: string }
+  | { kind: "room"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -157,6 +173,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
   const addFloorplanWall = useSchematicStore((s) => s.addFloorplanWall);
+  const addFloorplanRoom = useSchematicStore((s) => s.addFloorplanRoom);
   const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
   const wallMaterials = useSchematicStore((s) => s.wallMaterials);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
@@ -437,7 +454,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setDidMove(false);
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
-    if (tool === "place" || tool === "note" || tool === "coverage" || tool === "wall") return; // handled on click
+    if (tool === "place" || tool === "note" || tool === "coverage" || tool === "wall" || tool === "room") return; // handled on click
     if (tool === "erase") {
       // Drag out a white cover — the only way to "remove" something from a raster plan.
       setPanning(null);
@@ -461,6 +478,33 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       if (picks.length === 2) {
         setCalibInput((measureRealDistanceMm(picks[0], picks[1], page.scaleDenominator) / 1000).toFixed(2));
       }
+      return;
+    }
+    if (tool === "room") {
+      // Ein Klick ins Rauminnere, und der Umriss kommt aus den Wänden. Fehlschläge sind
+      // hier keine Ausnahmen, sondern Auskünfte: der Nutzer klickt eben nochmal.
+      const walls = page.walls ?? [];
+      if (walls.length === 0) {
+        addToast(t("No walls on this plan yet — read them from the PDF layer first, then a click inside a room finds its outline."), "error");
+        return;
+      }
+      const suggestion = suggestRoomPolygon(walls, pos, {
+        scaleDenominator: page.scaleDenominator,
+        area: drawingAreaMm(page),
+      });
+      if (!suggestion.ok) {
+        addToast(ROOM_FAIL_MESSAGES[suggestion.reason](t), "error");
+        return;
+      }
+      const areaM2 = (suggestion.areaMm2 * page.scaleDenominator * page.scaleDenominator) / 1e6;
+      const id = addFloorplanRoom(page.id, {
+        name: t("Room {n}", { n: (page.rooms ?? []).length + 1 }),
+        pointsMm: suggestion.pointsMm,
+        heightMm: DEFAULT_ROOM_HEIGHT_MM,
+        }
+      );
+      addToast(t("{area} m² — check the outline and set the room height on the right.", { area: areaM2.toFixed(1) }), "success");
+      setSelection({ kind: "room", id });
       return;
     }
     if (tool === "wall") {
@@ -774,7 +818,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" || tool === "wall" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" || tool === "wall" || tool === "room" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -926,6 +970,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               Plan. Auf derselben Ebene wie die WLAN-Heatmap — ein Plan hat einen Typ, und
               beide Bilder sind nie gleichzeitig an. */}
           <FloorplanLuxLayer page={page} mmToPx={mmToPx} luminaires={luminaires} />
+
+          {/* Die Räume: Bezugsfläche der Rechnung und Herkunft des indirekten Anteils. */}
+          <FloorplanRoomLayer page={page} mmToPx={mmToPx} />
 
           {/* The building's walls: their own geometry, and what the heatmap attenuates through. */}
           <FloorplanWallLayer
@@ -1521,6 +1568,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title={t("Click the plan to trace a wall run — click the last point again or press Enter to finish, Esc to abandon. Set the build-up and thickness in the panel on the right.")}
         >
           ▨ {t("Wall")}
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "room" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => onToolChange(tool === "room" ? "select" : "room")}
+          title={t("Click inside a room and its outline is read off the walls. The outline is derived from the architect's drawing — worth a glance before you rely on it.")}
+        >
+          ⌗ {t("Room")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "coverage" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}

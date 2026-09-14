@@ -285,3 +285,225 @@ describe("Lichtplan von Anfang bis Ende", () => {
     expect((handlers.light_report({ pageId: page.pageId }) as Report).luminaireCount).toBe(1);
   });
 });
+
+// ── Phase B: Räume ─────────────────────────────────────────────────
+
+type RoomResult = {
+  roomId: string; name: string; heightMm: number; floorAreaM2: number;
+  reflectance: { ceiling: number; walls: number; floor: number };
+  pointsM: { xM: number; yM: number }[];
+};
+type Suggestions = {
+  wallCount: number;
+  suggestions: ({ ok: true; floorAreaM2: number; pointsM: { xM: number; yM: number }[] } | { ok: false; reason: string; error: string })[];
+};
+type RoomReport = Report & {
+  roomCount?: number;
+  rooms?: { roomId: string; name: string; averageLux: number; minLux: number; indirectLux: number; uniformity: number; floorAreaM2: number; meanReflectance: number }[];
+};
+
+/** Vier Wandzüge um einen Raum — in realen Metern gedacht, in Papier-mm abgelegt.
+ *  Bei 1:50 auf A1 liegt die Zeichenfläche bei etwa x=20, y=20. */
+function walledRoom(pageId: string, xM: number, yM: number, wM: number, hM: number) {
+  const st = useSchematicStore.getState();
+  const page = st.pages.find((p) => p.id === pageId)!;
+  if (page.type !== "floorplan") throw new Error("keine Grundrissseite");
+  // Reale Meter → Papier-mm relativ zur Zeichenfläche. Die Ecke der Zeichenfläche holen
+  // wir uns über ein Symbol-Roundtrip nicht, sondern rechnen sie wie der Bridge-Code.
+  const originMm = { x: 20, y: 20 };
+  const toPaper = (mx: number, my: number) => ({
+    x: originMm.x + (mx * 1000) / page.scaleDenominator,
+    y: originMm.y + (my * 1000) / page.scaleDenominator,
+  });
+  const c = [toPaper(xM, yM), toPaper(xM + wM, yM), toPaper(xM + wM, yM + hM), toPaper(xM, yM + hM)];
+  useSchematicStore.getState().addFloorplanWalls(pageId, [
+    { pointsMm: [c[0], c[1]], material: "brick-solid", thicknessMm: 240 },
+    { pointsMm: [c[1], c[2]], material: "brick-solid", thicknessMm: 240 },
+    { pointsMm: [c[2], c[3]], material: "brick-solid", thicknessMm: 240 },
+    { pointsMm: [c[3], c[0]], material: "brick-solid", thicknessMm: 240 },
+  ]);
+}
+
+describe("suggest_rooms", () => {
+  it("liest den Umriss aus den Wänden und trifft die Fläche", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    walledRoom(page.pageId, 2, 2, 6, 4); // 6 x 4 m = 24 m²
+    const res = handlers.suggest_rooms({ pageId: page.pageId, seeds: [{ xM: 5, yM: 4 }] }) as Suggestions;
+    expect(res.wallCount).toBe(4);
+    const first = res.suggestions[0];
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    // Innenmaß, also etwas unter den 24 m² der Mittellinien.
+    expect(first.floorAreaM2).toBeGreaterThan(20);
+    expect(first.floorAreaM2).toBeLessThan(24);
+  });
+
+  it("sagt je Saatpunkt, was schiefging, statt den ganzen Aufruf zu verwerfen", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    walledRoom(page.pageId, 2, 2, 6, 4);
+    const res = handlers.suggest_rooms({
+      pageId: page.pageId,
+      seeds: [{ xM: 5, yM: 4 }, { xM: 30, yM: 30 }],
+    }) as Suggestions;
+    expect(res.suggestions[0].ok).toBe(true);
+    const second = res.suggestions[1];
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.length).toBeGreaterThan(10);
+  });
+
+  it("verweist auf den Editor, wenn es noch keine Wände gibt", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    expect(() => handlers.suggest_rooms({ pageId: page.pageId, seeds: [{ xM: 5, yM: 4 }] }))
+      .toThrow(/no walls/i);
+  });
+});
+
+describe("define_room", () => {
+  it("legt den Raum aus einem Klickpunkt an", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    walledRoom(page.pageId, 2, 2, 6, 4);
+    const room = handlers.define_room({
+      pageId: page.pageId, name: "Abschiedsraum", heightMm: 3000, seedM: { xM: 5, yM: 4 },
+    }) as RoomResult;
+    expect(room.name).toBe("Abschiedsraum");
+    expect(room.floorAreaM2).toBeGreaterThan(20);
+    expect(room.reflectance).toEqual({ ceiling: 0.7, walls: 0.5, floor: 0.2 });
+  });
+
+  it("nimmt auch ein fertiges Polygon", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    const room = handlers.define_room({
+      pageId: page.pageId, name: "Handgezeichnet", heightMm: 2800,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 6, yM: 0 }, { xM: 6, yM: 4 }, { xM: 0, yM: 4 }],
+    }) as RoomResult;
+    expect(room.floorAreaM2).toBeCloseTo(24, 1);
+  });
+
+  it("verlangt genau eines von Saatpunkt und Polygon", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    expect(() => handlers.define_room({ pageId: page.pageId, name: "X", heightMm: 3000 }))
+      .toThrow(/exactly one/);
+    expect(() => handlers.define_room({
+      pageId: page.pageId, name: "X", heightMm: 3000,
+      seedM: { xM: 1, yM: 1 }, pointsM: [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }, { xM: 1, yM: 1 }],
+    })).toThrow(/exactly one/);
+  });
+
+  it("weist Meter zurück, wo Millimeter verlangt sind", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    expect(() => handlers.define_room({
+      pageId: page.pageId, name: "X", heightMm: 3,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 6, yM: 0 }, { xM: 6, yM: 4 }],
+    })).toThrow(/MILLIMETRES/);
+  });
+
+  it("weist unsinnige Reflexionsgrade zurück", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    expect(() => handlers.define_room({
+      pageId: page.pageId, name: "X", heightMm: 3000,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 6, yM: 0 }, { xM: 6, yM: 4 }],
+      reflectance: { ceiling: 1.4, walls: 0.5, floor: 0.2 },
+    })).toThrow(/reflectance.ceiling/);
+  });
+
+  it("erkennt ein Polygon ohne Fläche", () => {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    expect(() => handlers.define_room({
+      pageId: page.pageId, name: "X", heightMm: 3000,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 3, yM: 0 }, { xM: 6, yM: 0 }],
+    })).toThrow(/enclose no area/);
+  });
+});
+
+describe("light_report mit Räumen", () => {
+  /** Ein fertiger Lichtplan: Raum, Leuchte, n Spots darin. */
+  function litRoom(spotCount: number, spacingM: number) {
+    const spot = handlers.create_luminaire({ label: "MAG48 Spot", fluxLm: 900, beamAngleDeg: 36, powerW: 10 }) as CreateResult;
+    useSchematicStore.setState({
+      nodes: Array.from({ length: spotCount }, (_, i) => luminaireDevice(`d${i}`, spot.templateId)),
+      pages: [],
+    });
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    walledRoom(page.pageId, 2, 2, 6, 4);
+    handlers.define_room({ pageId: page.pageId, name: "Abschiedsraum", heightMm: 3000, seedM: { xM: 5, yM: 4 } });
+    const group = handlers.add_floorplan_group({ pageId: page.pageId, label: "Spots" }) as { groupId: string };
+    handlers.place_floorplan_symbols({
+      pageId: page.pageId,
+      symbols: Array.from({ length: spotCount }, (_, i) => ({
+        groupId: group.groupId,
+        deviceId: `d${i}`,
+        xM: 3 + (i % 4) * spacingM,
+        yM: 3 + Math.floor(i / 4) * spacingM,
+        mountHeightMm: 2900,
+      })),
+    });
+    return handlers.light_report({ pageId: page.pageId }) as RoomReport;
+  }
+
+  it("rechnet je Raum statt über ein Hilfsrechteck", () => {
+    const report = litRoom(8, 1.3);
+    expect(report.rooms).toHaveLength(1);
+    const room = report.rooms![0];
+    expect(room.name).toBe("Abschiedsraum");
+    expect(room.floorAreaM2).toBeGreaterThan(20);
+    expect(room.averageLux).toBeGreaterThan(0);
+    expect(room.meanReflectance).toBeCloseTo(0.48, 1);
+  });
+
+  it("weist den indirekten Anteil aus und zählt ihn mit", () => {
+    const report = litRoom(8, 1.3);
+    const room = report.rooms![0];
+    // 8 Spots à 900 lm in einem 6x4x3-Raum: rund 61 lx indirekt, mal Wartungsfaktor 0,8.
+    expect(room.indirectLux).toBeGreaterThan(40);
+    expect(room.indirectLux).toBeLessThan(60);
+    // Und E_min kann nicht unter dem indirekten Anteil liegen — er liegt überall an.
+    expect(room.minLux).toBeGreaterThanOrEqual(room.indirectLux);
+  });
+
+  it("nennt die Interreflexion in der Herkunftsangabe", () => {
+    expect(litRoom(4, 1.3).basis).toMatch(/interreflected/);
+    expect(litRoom(4, 1.3).basis).toMatch(/not a DIN EN 12464-1 verification/);
+  });
+
+  it("weist ohne Raum darauf hin, dass die Zahl zu dunkel ist", () => {
+    const spot = handlers.create_luminaire({ label: "Spot", fluxLm: 900, beamAngleDeg: 36 }) as CreateResult;
+    useSchematicStore.setState({ nodes: [luminaireDevice("d1", spot.templateId)], pages: [] });
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    const group = handlers.add_floorplan_group({ pageId: page.pageId, label: "S" }) as { groupId: string };
+    handlers.place_floorplan_symbols({ pageId: page.pageId, symbols: [{ groupId: group.groupId, deviceId: "d1", xM: 3, yM: 3 }] });
+    const report = handlers.light_report({ pageId: page.pageId }) as RoomReport;
+    expect(report.rooms).toBeUndefined();
+    expect(report.hint).toMatch(/define_room/);
+  });
+});
+
+describe("update_room / remove_room", () => {
+  function roomOnPage() {
+    const page = handlers.create_floorplan({ kind: "light" }) as Summary;
+    const room = handlers.define_room({
+      pageId: page.pageId, name: "Raum", heightMm: 3000,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 6, yM: 0 }, { xM: 6, yM: 4 }, { xM: 0, yM: 4 }],
+    }) as RoomResult;
+    return { pageId: page.pageId, roomId: room.roomId };
+  }
+
+  it("ändert Höhe und Reflexionsgrade", () => {
+    const { pageId, roomId } = roomOnPage();
+    const updated = handlers.update_room({
+      pageId, roomId, heightMm: 4000, reflectance: { ceiling: 0.5, walls: 0.3, floor: 0.1 },
+    }) as RoomResult;
+    expect(updated.heightMm).toBe(4000);
+    expect(updated.reflectance.walls).toBe(0.3);
+  });
+
+  it("verlangt mindestens eine Änderung", () => {
+    const { pageId, roomId } = roomOnPage();
+    expect(() => handlers.update_room({ pageId, roomId })).toThrow(/at least one/);
+  });
+
+  it("entfernt den Raum", () => {
+    const { pageId, roomId } = roomOnPage();
+    expect(handlers.remove_room({ pageId, roomId })).toEqual({ removed: true, roomId });
+    expect(() => handlers.update_room({ pageId, roomId, heightMm: 3000 })).toThrow(/No room/);
+  });
+});

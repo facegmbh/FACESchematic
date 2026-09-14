@@ -20,10 +20,15 @@
  * haben ist. Gemessene Kurven (Phase C) und Radiance (Phase E) ersetzen später die Zahl,
  * nicht die Darstellung.
  *
+ * Die Interreflexion kommt dazu, sobald ein Raum bekannt ist — als mittlerer indirekter
+ * Anteil über das Verfahren der Ulbrichtschen Kugel (siehe `indirectLux`). Ohne Raum
+ * bleibt es beim Direktanteil, und das Ergebnis liest sich dann eher zu dunkel als zu
+ * hell.
+ *
  * Was Stufe 1 bewusst NICHT rechnet:
- *  - Interreflexion. Ohne Raumpolygon und Reflexionsgrade gibt es keinen indirekten
- *    Anteil; das Ergebnis ist deshalb eher zu dunkel als zu hell. Kommt mit
- *    `FloorplanRoom` in Phase B.
+ *  - Die Verteilung des indirekten Anteils. Er wird als über den Raum gleich verteilt
+ *    angesetzt. Das ist die übliche Näherung und dem wahren Verlauf viel näher als beim
+ *    Direktlicht, weil gestreutes Licht von allen Flächen kommt.
  *  - Verschattung durch Wände. Innerhalb eines Raums fast immer richtig, und über
  *    Raumgrenzen hinweg wird ohnehin nicht geplant.
  *  - Geneigte Leuchten. Phase A rechnet senkrecht nach unten — der Fall, den Spots und
@@ -37,8 +42,9 @@
  * Millimetern — eine Montagehöhe hat keinen Maßstabsbezug.
  */
 
-import { LUX_STEPS, type LuminairePhotometry } from "./types";
+import { DEFAULT_REFLECTANCE, LUX_STEPS, type FloorplanRoom, type LuminairePhotometry, type RoomReflectance } from "./types";
 import { paperMmToRealMm, type Vec2 } from "./floorplan";
+import { pointInPolygon, polygonAreaMm2, polygonPerimeterMm } from "./floorplanRooms";
 
 /** Untergrenze für den Abstrahlwinkel. Darunter wird der cos-Exponent absurd groß und die
  *  Näherung beschreibt einen Laser statt einer Leuchte. */
@@ -217,23 +223,38 @@ export interface LuxGrid {
  *
  * Der Aufwand ist cols × rows × Leuchten. Die Schrittweite entscheidet, ob das sofort
  * oder träge ist, und gehört deshalb dem Aufrufer — genauso wie beim WLAN-Raster.
+ *
+ * Sind Räume bekannt, kommt innerhalb jedes Raums sein indirekter Anteil hinzu. Der wird
+ * je Raum einmal gerechnet und dann nur noch zugeordnet — das Bild zeigt damit dieselbe
+ * Zahl, die `roomStats` berichtet, statt ihr zu widersprechen.
  */
 export function computeLuxGrid(
   lums: readonly LuminairePlacement[],
   area: { x: number; y: number; w: number; h: number },
-  opts: LightCalcOptions & { pitchMm: number },
+  opts: LightCalcOptions & { pitchMm: number; rooms?: readonly FloorplanRoom[] },
 ): LuxGrid {
   const pitch = Math.max(0.5, opts.pitchMm);
   const cols = Math.max(1, Math.ceil(area.w / pitch) + 1);
   const rows = Math.max(1, Math.ceil(area.h / pitch) + 1);
   const lux = new Float32Array(cols * rows);
   const origin = { x: area.x, y: area.y };
+
+  const mf = Math.min(1, Math.max(0, opts.maintenanceFactor));
+  const rooms = (opts.rooms ?? [])
+    .filter((room) => !room.hidden && room.pointsMm.length >= 3)
+    .map((room) => ({ room, indirect: indirectLux(fluxInRoomLm(lums, room), room, opts.scaleDenominator) * mf }));
+
   if (lums.length === 0) return { cols, rows, pitchMm: pitch, originMm: origin, lux };
 
   for (let r = 0; r < rows; r++) {
     const y = origin.y + r * pitch;
     for (let c = 0; c < cols; c++) {
-      lux[r * cols + c] = totalIlluminanceLux(lums, { x: origin.x + c * pitch, y }, opts);
+      const at = { x: origin.x + c * pitch, y };
+      let v = totalIlluminanceLux(lums, at, opts);
+      for (const entry of rooms) {
+        if (entry.indirect > 0 && pointInPolygon(at, entry.room.pointsMm)) { v += entry.indirect; break; }
+      }
+      lux[r * cols + c] = v;
     }
   }
   return { cols, rows, pitchMm: pitch, originMm: origin, lux };
@@ -349,4 +370,129 @@ export function connectedLoadW(lums: readonly LuminairePlacement[]): number {
   let sum = 0;
   for (const lum of lums) sum += (lum.photometry.powerW ?? 0) * Math.min(1, Math.max(0, lum.dimming));
   return sum;
+}
+
+// ── Räume: Bezugsfläche und indirekter Anteil ────────────────────────
+
+/** Die Reflexionsgrade eines Raums, mit den üblichen Ansätzen als Rückfall. */
+export function roomReflectance(room: Pick<FloorplanRoom, "reflectance">): RoomReflectance {
+  return room.reflectance ?? DEFAULT_REFLECTANCE;
+}
+
+/** Die Flächen eines Raums in Quadratmetern: Boden, Decke und die umlaufenden Wände. */
+export function roomSurfacesM2(
+  room: Pick<FloorplanRoom, "pointsMm" | "heightMm">,
+  scaleDenominator: number,
+): { floor: number; ceiling: number; walls: number; total: number } {
+  // Papier-mm² → reale m²: zweimal den Maßstab, dann durch eine Million.
+  const floor = (polygonAreaMm2(room.pointsMm) * scaleDenominator * scaleDenominator) / 1e6;
+  const perimeterM = paperMmToRealMm(polygonPerimeterMm(room.pointsMm), scaleDenominator) / 1000;
+  const walls = perimeterM * (room.heightMm / 1000);
+  return { floor, ceiling: floor, walls, total: floor + floor + walls };
+}
+
+/** Der flächengewichtete mittlere Reflexionsgrad des Raums — die eine Zahl, an der der
+ *  indirekte Anteil hängt. */
+export function meanReflectance(
+  room: Pick<FloorplanRoom, "pointsMm" | "heightMm" | "reflectance">,
+  scaleDenominator: number,
+): number {
+  const a = roomSurfacesM2(room, scaleDenominator);
+  if (a.total <= 0) return 0;
+  const r = roomReflectance(room);
+  return (r.ceiling * a.ceiling + r.walls * a.walls + r.floor * a.floor) / a.total;
+}
+
+/**
+ * Der mittlere indirekte Anteil in Lux.
+ *
+ * Verfahren der Ulbrichtschen Kugel: der gesamte Lichtstrom trifft die Raumflächen, ein
+ * Anteil ρ̄ wird zurückgeworfen, verteilt sich erneut, wird wieder zurückgeworfen. Die
+ * geometrische Reihe über alle Umläufe ergibt
+ *
+ *     E_indirekt = Φ · ρ̄ / (A_gesamt · (1 − ρ̄))
+ *
+ * Für einen 6 × 4 × 3 m großen Raum mit den üblichen Ansätzen (Decke 0,7 / Wände 0,5 /
+ * Boden 0,2) ist ρ̄ ≈ 0,48, und 8 Spots mit zusammen 7200 lm steuern rund 61 lx bei — also
+ * etwa ein Fünftel dessen, was direkt ankommt. Das ist die Größenordnung, die eine
+ * Handrechnung auch liefert, und es ist der Grund, warum eine reine Direktrechnung einen
+ * Raum systematisch zu dunkel zeigt.
+ *
+ * Der Anteil wird über den Raum gleich verteilt angesetzt. Das ist eine Näherung, aber
+ * eine viel gutartigere als beim Direktlicht: gestreutes Licht kommt aus allen
+ * Richtungen, während ein Spot eine scharf begrenzte Insel macht.
+ */
+export function indirectLux(
+  totalFluxLm: number,
+  room: Pick<FloorplanRoom, "pointsMm" | "heightMm" | "reflectance">,
+  scaleDenominator: number,
+): number {
+  const a = roomSurfacesM2(room, scaleDenominator);
+  if (a.total <= 0 || totalFluxLm <= 0) return 0;
+  // Ein Raum, der alles zurückwirft, hätte unendlich viel Licht. Bei realen Oberflächen
+  // kommt das nicht vor; die Schranke fängt getippte Unsinnswerte ab.
+  const rho = Math.min(0.95, Math.max(0, meanReflectance(room, scaleDenominator)));
+  return (totalFluxLm * rho) / (a.total * (1 - rho));
+}
+
+/** Der Lichtstrom, den die Leuchten innerhalb des Raums zusammen abgeben. */
+export function fluxInRoomLm(
+  lums: readonly LuminairePlacement[],
+  room: Pick<FloorplanRoom, "pointsMm">,
+): number {
+  let sum = 0;
+  for (const lum of lums) {
+    if (pointInPolygon(lum.positionMm, room.pointsMm)) sum += effectiveFluxLm(lum.photometry, lum.dimming);
+  }
+  return sum;
+}
+
+/**
+ * Die Kennwerte eines Raums — der Bezug, der in Phase A noch eine Hilfskonstruktion war.
+ *
+ * Gemittelt wird über die Stützstellen INNERHALB des Polygons. Alles außerhalb gehört zu
+ * einem anderen Raum oder zu keinem, und beides hat in E_m und U₀ nichts verloren.
+ */
+export function roomStats(
+  lums: readonly LuminairePlacement[],
+  room: FloorplanRoom,
+  opts: Omit<LightCalcOptions, "workPlaneMm"> & { workPlaneMm: number; pitchMm: number },
+): LuxStats & { indirectLux: number; fluxLm: number; floorAreaM2: number; meanReflectance: number } {
+  const pts = room.pointsMm;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  const flux = fluxInRoomLm(lums, room);
+  const indirect = indirectLux(flux, room, opts.scaleDenominator) * Math.min(1, Math.max(0, opts.maintenanceFactor));
+  const surfaces = roomSurfacesM2(room, opts.scaleDenominator);
+
+  const pitch = Math.max(0.5, opts.pitchMm);
+  let sum = 0, min = Infinity, max = -Infinity, samples = 0;
+  for (let y = minY; y <= maxY; y += pitch) {
+    for (let x = minX; x <= maxX; x += pitch) {
+      if (!pointInPolygon({ x, y }, pts)) continue;
+      const v = totalIlluminanceLux(lums, { x, y }, opts) + indirect;
+      sum += v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+      samples++;
+    }
+  }
+  if (samples === 0) {
+    return { avgLux: 0, minLux: 0, maxLux: 0, uniformity: 0, samples: 0, indirectLux: indirect, fluxLm: flux, floorAreaM2: surfaces.floor, meanReflectance: meanReflectance(room, opts.scaleDenominator) };
+  }
+  const avg = sum / samples;
+  return {
+    avgLux: avg,
+    minLux: min,
+    maxLux: max,
+    uniformity: avg > 0 ? min / avg : 0,
+    samples,
+    indirectLux: indirect,
+    fluxLm: flux,
+    floorAreaM2: surfaces.floor,
+    meanReflectance: meanReflectance(room, opts.scaleDenominator),
+  };
 }

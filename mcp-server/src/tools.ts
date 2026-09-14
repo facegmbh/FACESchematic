@@ -12,7 +12,9 @@
  * (list_floorplan_lines, sync_floorplan_lines, update_floorplan_line, speaker_load_report) that bind amplifier
  * channels to plan lines and check their load, and the Ship-L "light" tools
  * (create_luminaire, list_luminaires, set_light_calculation, light_report) that turn a
- * calibrated plan into an illuminance calculation. Each entry is a plain JSON-Schema tool
+ * calibrated plan into an illuminance calculation, plus the room tools (suggest_rooms,
+ * define_room, update_room, remove_room) that read a room's outline off the walls and
+ * give the calculation its reference surface and its interreflected light. Each entry is a plain JSON-Schema tool
  * definition; the call is relayed verbatim to the editor over the bridge, which validates
  * and executes it against the live store.
  *
@@ -903,11 +905,114 @@ export const TOOLS: ToolDef[] = [
   {
     name: "light_report",
     description:
-      "Calculate the illuminance on a floorplan and return the numbers: average, minimum and maximum lux, uniformity (Emin/Em), luminaire count and connected load. This is the tool to read after every placement change — place, calculate, read, adjust, calculate again. The result is a planning aid, not a DIN EN 12464-1 verification: it is the direct component only, from cos-model photometry, without interreflection or shading, so it reads darker than reality rather than brighter. Always say so when you report the numbers.",
+      "Calculate the illuminance on a floorplan and return the numbers: average, minimum and maximum lux, uniformity (Emin/Em), luminaire count and connected load. This is the tool to read after every placement change — place, calculate, read, adjust, calculate again. With rooms defined it reports PER ROOM, over each room's own floor area and including its interreflected light; without rooms it falls back to the luminaires' own extent, direct light only, which reads darker than reality — define the rooms first if you want a figure worth quoting. Either way the result is a planning aid and not a DIN EN 12464-1 verification. Always say so when you report the numbers.",
     inputSchema: {
       type: "object",
       properties: { pageId: { type: "string", description: "Floorplan page id from list_floorplans." } },
       required: ["pageId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "suggest_rooms",
+    description:
+      "Read room outlines off the walls already on a floorplan. Give one point INSIDE each room you want (real-world metres) and get back a polygon and its floor area. This only reads — nothing is created. Each seed succeeds or fails on its own; a failure says why (on a wall, not enclosed, off the sheet). The outlines are derived from a drawing that was never made for this, so tell the user they are suggestions worth a glance.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string", description: "Floorplan page id from list_floorplans." },
+        seeds: {
+          type: "array",
+          minItems: 1,
+          maxItems: 100,
+          description: "Points inside the rooms, in real-world metres from the drawing area's corner.",
+          items: {
+            type: "object",
+            properties: { xM: { type: "number" }, yM: { type: "number" } },
+            required: ["xM", "yM"],
+            additionalProperties: false,
+          },
+        },
+        bridgeGapsMm: { type: "number", description: "How much thicker the walls are stamped while searching, in real millimetres per side. Closes the hairline gaps an architect's drawing always has. Default 60; raise it if a room comes back \"not closed\"." },
+      },
+      required: ["pageId", "seeds"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "define_room",
+    description:
+      "Create a room on a floorplan: its outline, clear height and what its surfaces reflect. The room is what the lighting calculation is actually about — it sets the area the average and uniformity are taken over, and it supplies the interreflected light, which typically adds 20 to 40 percent on top of the direct component. Give either seedM (a point inside; the outline is read off the walls) or pointsM (the outline itself), never both. Heights are MILLIMETRES.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string", description: "Floorplan page id from list_floorplans." },
+        name: { type: "string", description: "Room name as it should read, e.g. \"Abschiedsraum\"." },
+        heightMm: { type: "number", description: "Clear room height in MILLIMETRES (3 m is 3000)." },
+        seedM: {
+          type: "object",
+          description: "A point inside the room, in real-world metres. The outline is read off the walls.",
+          properties: { xM: { type: "number" }, yM: { type: "number" } },
+          required: ["xM", "yM"],
+          additionalProperties: false,
+        },
+        pointsM: {
+          type: "array",
+          minItems: 3,
+          description: "The outline itself, in real-world metres. Closed for you.",
+          items: {
+            type: "object",
+            properties: { xM: { type: "number" }, yM: { type: "number" } },
+            required: ["xM", "yM"],
+            additionalProperties: false,
+          },
+        },
+        workPlaneMm: { type: "number", description: "Working plane height in mm, if it differs from the page default." },
+        reflectance: {
+          type: "object",
+          description: "What the surfaces reflect, 0–1 each. Omitted means 0.7 ceiling / 0.5 walls / 0.2 floor — the usual planning figures. A dark room can halve the interreflected light, so it is worth asking rather than assuming.",
+          properties: { ceiling: { type: "number" }, walls: { type: "number" }, floor: { type: "number" } },
+          required: ["ceiling", "walls", "floor"],
+          additionalProperties: false,
+        },
+        bridgeGapsMm: { type: "number", description: "As in suggest_rooms. Only read with seedM." },
+      },
+      required: ["pageId", "name", "heightMm"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_room",
+    description: "Change a room's name, clear height, working plane or reflectances. The outline itself is edited in the editor.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        roomId: { type: "string", description: "Room id from define_room or light_report." },
+        name: { type: "string" },
+        heightMm: { type: "number", description: "Clear room height in MILLIMETRES." },
+        workPlaneMm: { type: "number" },
+        reflectance: {
+          type: "object",
+          properties: { ceiling: { type: "number" }, walls: { type: "number" }, floor: { type: "number" } },
+          required: ["ceiling", "walls", "floor"],
+          additionalProperties: false,
+        },
+      },
+      required: ["pageId", "roomId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "remove_room",
+    description: "Remove a room from a floorplan. The luminaires and walls stay.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        roomId: { type: "string" },
+      },
+      required: ["pageId", "roomId"],
       additionalProperties: false,
     },
   },

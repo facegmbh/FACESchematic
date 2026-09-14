@@ -1,6 +1,6 @@
 # FACE Schematic — Modul Lichtsimulation
 
-Status: **Phase A gebaut** · Stand: 2026-09-13 · Owner: JLD
+Status: **Phasen A und B gebaut** · Stand: 2026-09-14 · Owner: JLD
 
 Ersetzt den Entwurf vom 13.09.2026 („face-light" als eigenes Repo mit zwei Python-Services).
 Was sich geändert hat und warum, steht in §12.
@@ -93,9 +93,8 @@ Zwei Stufen hinter derselben Darstellung. Die zweite ersetzt die erste, sie erg�
 
 ### 4.1 Stufe 1 — im Browser, direkt
 
-Punkt-zu-Punkt über die Lichtstärkeverteilung, plus ein pauschaler Anteil für die
-Interreflexion (Wirkungsgradverfahren über die Raumkennzahl und die Reflexionsgrade). Für
-jeden Rasterpunkt P auf der Nutzebene und jede Leuchte L:
+Punkt-zu-Punkt über die Lichtstärkeverteilung, plus ein mittlerer Anteil für die
+Interreflexion. Für jeden Rasterpunkt P auf der Nutzebene und jede Leuchte L:
 
 ```
 γ     = Winkel zwischen Leuchtenachse und dem Strahl L→P
@@ -109,6 +108,25 @@ Das ist dieselbe Mathematik-Schublade wie `wifiCoverage.ts` (Raster über die Ze
 Quellen aufsummieren, Canvas malen) und läuft in Millisekunden. Verdeckung durch Wände wird
 in Stufe 1 **nicht** gerechnet — pro Raum ist das fast immer richtig, und über Raumgrenzen
 hinweg wird ohnehin nicht gerechnet.
+
+**Der indirekte Anteil** (Phase B) kommt über das Verfahren der Ulbrichtschen Kugel dazu,
+sobald ein Raum bekannt ist:
+
+```
+E_indirekt = Φ · ρ̄ / (A_gesamt · (1 − ρ̄))
+```
+
+Φ ist der Lichtstrom der Leuchten im Raum, ρ̄ der flächengewichtete mittlere
+Reflexionsgrad, A_gesamt die Summe aus Boden, Decke und umlaufenden Wänden. Für den
+6 × 4 × 3 m großen Abschiedsraum mit den üblichen Ansätzen (0,7 / 0,5 / 0,2) ist ρ̄ ≈ 0,48,
+und acht Spots mit zusammen 7200 lm steuern rund **61 lx** bei — etwa ein Fünftel dessen,
+was direkt ankommt. Das ist der Grund, warum eine reine Direktrechnung einen Raum
+systematisch zu dunkel zeigt.
+
+Der Anteil wird über den Raum gleich verteilt angesetzt. Das ist eine Näherung, aber eine
+viel gutartigere als beim Direktlicht: gestreutes Licht kommt aus allen Richtungen,
+während ein Spot eine scharf begrenzte Insel macht. Und er wirkt genau dort am stärksten,
+wo über eine Planung entschieden wird — in den dunklen Ecken, also auf U₀.
 
 ### 4.2 Stufe 2 — Radiance im Container
 
@@ -341,7 +359,8 @@ dir, ob das Ergebnis zum Datenblatt passt. Aus der Anleitung in §5.3 wird damit
 | `place_floorplan_symbols` mit `mountHeightMm` und `dimming` | Leuchten platzieren — **erweitert**, kein eigenes `place_luminaires` |
 | `set_light_calculation` | Nutzebene, Montagehöhe, Wartungsfaktor, Rasterweite, Sichtbarkeit |
 | `light_report` | E<sub>m</sub>, E<sub>min</sub>, E<sub>max</sub>, U₀, Leuchtenzahl, Anschlussleistung |
-| `suggest_rooms` · `define_room` | Phase B: Polygon aus den Wänden vorschlagen, Raum festlegen |
+| `suggest_rooms` | Polygon aus den Wänden vorschlagen — liest nur, Ergebnis je Saatpunkt |
+| `define_room` · `update_room` · `remove_room` | Raum festlegen und pflegen: Polygon, Höhe, Nutzebene, Reflexionsgrade |
 | `place_luminaires_on_track` | Phase F: Schiene von A nach B, Abstand **oder** Anzahl |
 
 Die ersten beiden Zeilen weichen bewusst vom ersten Entwurf ab. Ein Lichtplan ist ein
@@ -578,7 +597,7 @@ verschwinden.
 | | Inhalt | MCP-Werkzeuge, die mitgehen | Dauer |
 |---|---|---|---|
 | **A** ✅ | Plantyp `light`, Leuchtensymbole mit Montagehöhe, Lux-Raster aus dem cos-Modell (P1) | `create_luminaire`, `list_luminaires`, `set_light_calculation`, `light_report` | **gebaut** |
-| **B** | `FloorplanRoom` aus den vorhandenen Wänden, Höhe, Reflexionsgrade, indirekter Anteil | `suggest_rooms`, `define_room` | Tage |
+| **B** ✅ | `FloorplanRoom` aus den vorhandenen Wänden, Höhe, Reflexionsgrade, indirekter Anteil | `suggest_rooms`, `define_room`, `update_room`, `remove_room` | **gebaut** |
 | **C** | Messplatz einrichten, MAG48-Spot und Surf20 vermessen, LDT-Schreiber (P2) | `add_luminaire_measurement`, `import_photometry` | 1 Woche, davon 2 Tage Messen |
 | **D** | 3D-Realansicht: extrudierte Räume, IES-Leuchten aus C, Falschfarbe umschaltbar | — (Ansichtssache, nichts zu steuern) | 1–2 Wochen |
 | **E** | `light-sim`-Container mit Radiance, ersetzt die Werte aus A/B | — (`run_light_calculation` bekommt nur eine Genauigkeitsstufe dazu) | 1–2 Wochen |
@@ -617,6 +636,8 @@ Ausbau statt Voraussetzung.
 | 2026-09-13 | **3D auf Phase D vorgezogen (vorher „später")** | Die Realansicht ist das Verkaufsargument. Der Einwand war nie 3D, sondern zwei konkurrierende Lichtmodelle — das ist über §6 gelöst. |
 | 2026-09-13 | **Leuchten sind Geräte-Templates, kein zweiter Artikelstamm** | Ein Stamm, ein Weg nach Odoo |
 | 2026-09-13 | **MCP-Werkzeuge gehen in jeder Phase mit, nicht als eigene Phase am Ende** | Wer die Funktion nur über die Oberfläche baut und den Bridge-Befehl vertagt, baut sie zweimal |
+| 2026-09-14 | **Raumerkennung über Raster und Flutung, nicht über einen planaren Graphen** | Ein exaktes Verfahren scheitert an der 2-mm-Lücke, wo zwei Wandzüge nicht ganz aneinanderstoßen — die gibt es in jedem Architektenplan und sie ist mit bloßem Auge nicht zu sehen. Gerastert und geflutet verzeiht sie, sobald die Wände etwas dicker gestempelt werden (`bridgeGapsMm`). Für eine Lichtrechnung ist ein Polygon auf fünf Zentimeter genau ohnehin reichlich. |
+| 2026-09-14 | **Der indirekte Anteil wird gleich verteilt angesetzt** | Ulbrichtsche Kugel statt Radiosity. Bei gestreutem Licht ist das eine gutartige Näherung, und sie kostet nichts — die genaue Verteilung liefert Radiance in Phase E. |
 | 2026-09-13 | **Auswertebereich ist das Leuchtenrechteck plus ein halber Leuchtenabstand** | Beim Bauen von Phase A aufgefallen: um eine Montagehöhe aufgeweitet, wäre E_min bei engen Spots immer null und U₀ als Kennzahl wertlos. Der halbe Abstand ist zugleich die Regel, nach der eine Lichtplanung von Hand aufgebaut wird. Ersetzt in Phase B durch das Raumpolygon. |
 | 2026-09-13 | **Leuchtenabstand folgt dem Abstrahlwinkel, nicht der Montagehöhe** | Ebenfalls beim Bauen aufgefallen und als Test festgehalten: die übliche Faustregel (1–1,5 × Höhe) gilt für breit strahlende Downlights. Ein 36°-Spot will rund 1,3 m statt 2,5 m — sonst helle Lichtinseln mit Dunkelheit dazwischen, egal wie viele man dazulegt. Das Playbook rechnet die Regel jetzt aus dem Winkel. |
 | 2026-09-13 | **Kein PDF-Parser im MCP-Server; Claude liest Datenblätter selbst** | Über die Bridge gehen Zahlen, keine Dateien. Hält den Server klein und das Protokoll prüfbar. |
@@ -653,9 +674,17 @@ auf der vorhandenen Heatmap-Maschinerie, Bedienfeld, vier MCP-Werkzeuge und das 
 `lichtplanung`. Der Rechenkern steht in `src/lightSim.ts`, geprüft durch 27 Tests in
 `src/__tests__/lightSim.test.ts` und 18 Handler-Tests in `src/__tests__/mcpLight.test.ts`.
 
-**Als Nächstes: Phase B** — `FloorplanRoom` aus den vorhandenen Wänden, Raumhöhe,
-Reflexionsgrade und damit der indirekte Anteil. Das ersetzt zugleich die Hilfskonstruktion
-des Auswertebereichs (§12) durch den echten Raum.
+**Phase B ist gebaut.** `FloorplanRoom` mit Polygon, Höhe, Nutzebene und
+Reflexionsgraden; die Ableitung des Umrisses aus den Wänden in `src/floorplanRooms.ts`
+(19 Tests); der indirekte Anteil in `src/lightSim.ts`; ein Raum-Werkzeug in der
+Werkzeugleiste, das aus einem Klick ins Rauminnere den Umriss liest; die Raumebene im
+Plan; vier weitere MCP-Werkzeuge. `light_report` rechnet jetzt **je Raum**, über dessen
+eigene Grundfläche und mit dessen Interreflexion — die Hilfskonstruktion aus Phase A
+greift nur noch, wenn kein Raum festgelegt ist, und sagt das dann auch.
+
+**Als Nächstes: Phase C** — Messplatz einrichten, MAG48-Spot und Surf20 vermessen,
+LDT-Schreiber. Das ist der Schritt, der die Hersteller-Abhängigkeit auflöst; er braucht
+ein Luxmeter (§13).
 
 ---
 

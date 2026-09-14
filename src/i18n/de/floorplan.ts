@@ -668,4 +668,29 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Abtastweite auf dem Papier. Feiner ist glatter und langsamer — der Aufwand ist Stützstellen × Leuchten.",
   "Direct light only, without interreflection — the room will be somewhat brighter than this. A planning aid, not a verification to DIN EN 12464-1.":
     "Nur Direktlicht, ohne Interreflexion — der Raum wird etwas heller als hier gezeigt. Eine Planungshilfe, kein Nachweis nach DIN EN 12464-1.",
+
+  // ─── Räume (Phase B: Bezugsfläche und indirekter Anteil) ───────
+  "Click inside a room and its outline is read off the walls. The outline is derived from the architect's drawing — worth a glance before you rely on it.":
+    "In einen Raum klicken, und sein Umriss wird aus den Wänden gelesen. Der Umriss ist aus der Zeichnung des Architekten abgeleitet — ein Blick darauf lohnt sich, bevor man sich darauf verlässt.",
+  "Room {n}": "Raum {n}",
+  "{area} m² — check the outline and set the room height on the right.":
+    "{area} m² — Umriss prüfen und rechts die Raumhöhe eintragen.",
+  "No walls on this plan yet — read them from the PDF layer first, then a click inside a room finds its outline.":
+    "Noch keine Wände auf diesem Plan — erst aus der PDF-Ebene einlesen, dann findet ein Klick ins Rauminnere den Umriss.",
+  "That is outside the drawing area.": "Das liegt außerhalb der Zeichenfläche.",
+  "That is on a wall — click clearly inside the room.":
+    "Das liegt auf einer Wand — bitte deutlich ins Rauminnere klicken.",
+  "No closed room there: the outline runs off the sheet. A wall is missing, or its gap is wider than the plan's tolerance.":
+    "Dort ist kein geschlossener Raum: der Umriss läuft vom Blatt. Entweder fehlt eine Wand, oder ihre Lücke ist größer als die Toleranz des Plans.",
+  "That encloses almost nothing — probably a gap between two wall runs rather than a room.":
+    "Das umschließt so gut wie nichts — vermutlich eine Fuge zwischen zwei Wandzügen und kein Raum.",
+  "The outlines are read off the walls and are a suggestion — check them. Height and reflectances are what the calculation needs and what no floor plan tells you.":
+    "Die Umrisse sind aus den Wänden gelesen und ein Vorschlag — bitte prüfen. Höhe und Reflexionsgrade sind das, was die Rechnung braucht und was kein Grundriss verrät.",
+  "Remove this room. Luminaires and walls stay.": "Diesen Raum entfernen. Leuchten und Wände bleiben.",
+  "Reflect.": "Reflexion",
+  "What ceiling, walls and floor throw back. They decide the interreflected light — a dark room can have half as much.":
+    "Was Decke, Wände und Boden zurückwerfen. Sie entscheiden über den indirekten Anteil — ein dunkler Raum hat davon halb so viel.",
+  "of which indirect": "davon indirekt",
+  "No room defined: these figures cover the luminaires' own extent and carry no interreflected light. Use the Room tool — a click inside a room reads its outline off the walls.":
+    "Kein Raum festgelegt: diese Zahlen gelten für die Ausdehnung der Leuchten und enthalten keinen indirekten Anteil. Das Raum-Werkzeug nutzen — ein Klick ins Rauminnere liest den Umriss aus den Wänden.",
 };

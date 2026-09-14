@@ -42,10 +42,13 @@ export default function FloorplanLuxLayer({ page, mmToPx, luminaires }: Props) {
       workPlaneMm: cfg.workPlaneMm,
       maintenanceFactor: cfg.maintenanceFactor,
       pitchMm: cfg.gridMm,
+      // Mit Räumen kommt deren indirekter Anteil hinzu. Ohne sie bleibt es beim
+      // Direktlicht, und das Bild ist dann ehrlich zu dunkel.
+      rooms: page.rooms,
     });
   }, [
     cfg.visible, cfg.workPlaneMm, cfg.maintenanceFactor, cfg.gridMm,
-    luminaires, area, page.scaleDenominator,
+    luminaires, area, page.scaleDenominator, page.rooms,
   ]);
 
   useEffect(() => {

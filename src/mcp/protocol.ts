@@ -80,7 +80,11 @@ export type CommandType =
   | "create_luminaire"
   | "list_luminaires"
   | "set_light_calculation"
-  | "light_report";
+  | "light_report"
+  | "suggest_rooms"
+  | "define_room"
+  | "update_room"
+  | "remove_room";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -705,3 +709,47 @@ export interface SetLightCalculationParams extends FloorplanPageRef {
 }
 
 export type LightReportParams = FloorplanPageRef;
+
+/**
+ * Aus Punkten im Rauminneren Polygonvorschläge machen — liest nur, ändert nichts.
+ *
+ * Die Wände müssen im Editor importiert sein. Jeder Saatpunkt liefert entweder ein
+ * Polygon oder den Grund, warum keines zustande kam; ein Fehlschlag betrifft nur seinen
+ * eigenen Punkt.
+ */
+export interface SuggestRoomsParams extends FloorplanPageRef {
+  /** Punkte im Rauminneren, in realen Metern ab der Ecke der Zeichenfläche. */
+  seeds: { xM: number; yM: number }[];
+  /** Wie viel dicker die Wände beim Suchen gestempelt werden, in realen mm je Seite.
+   *  Schließt Lücken in unsauberen Plänen. Default 60. */
+  bridgeGapsMm?: number;
+}
+
+/** Einen Raum anlegen — entweder aus einem Punkt im Inneren oder aus einem fertigen
+ *  Polygon. Genau eines von beidem. */
+export interface DefineRoomParams extends FloorplanPageRef {
+  name: string;
+  /** Lichte Raumhöhe in realen MILLIMETERN (3 m sind 3000). */
+  heightMm: number;
+  /** Punkt im Rauminneren, in realen Metern — das Polygon wird aus den Wänden abgeleitet. */
+  seedM?: { xM: number; yM: number };
+  /** Fertiges Polygon in realen Metern, mindestens drei Punkte. Implizit geschlossen. */
+  pointsM?: { xM: number; yM: number }[];
+  /** Nutzebene in realen mm, wenn sie von der Seitenvorgabe abweicht. */
+  workPlaneMm?: number;
+  /** Was die Flächen zurückwerfen, je 0–1. Ohne Angabe 0,7 / 0,5 / 0,2. */
+  reflectance?: { ceiling: number; walls: number; floor: number };
+  bridgeGapsMm?: number;
+}
+
+export interface UpdateRoomParams extends FloorplanPageRef {
+  roomId: string;
+  name?: string;
+  heightMm?: number;
+  workPlaneMm?: number;
+  reflectance?: { ceiling: number; walls: number; floor: number };
+}
+
+export interface RemoveRoomParams extends FloorplanPageRef {
+  roomId: string;
+}

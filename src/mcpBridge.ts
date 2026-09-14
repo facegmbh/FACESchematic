@@ -72,6 +72,10 @@ import {
   type ListLuminairesParams,
   type SetLightCalculationParams,
   type LightReportParams,
+  type SuggestRoomsParams,
+  type DefineRoomParams,
+  type UpdateRoomParams,
+  type RemoveRoomParams,
   SPEAKER_LINE_MODES_WIRE,
   FLOORPLAN_SHAPES,
   FLOORPLAN_LABEL_POSITIONS,
@@ -132,7 +136,8 @@ import {
 import { amplifiersOnSchematic, channelShortLabel, computeAmplifierLoads, computeLineLoads, planLines, speakerLevelOutputs, type LineLoadRow } from "./speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, type AmplifierLoadResult, type ChannelLoadResult } from "./speakerLoad";
 import type { FloorplanLine, LuminairePhotometry, SignalType, SpeakerLineMode } from "./types";
-import { DEFAULT_LIGHT_CALC } from "./types";
+import { DEFAULT_LIGHT_CALC, DEFAULT_REFLECTANCE } from "./types";
+import type { FloorplanRoom, RoomReflectance } from "./types";
 import {
   collectLuminaires,
   computeLuxGrid,
@@ -141,7 +146,10 @@ import {
   gridStats,
   luminaireBoundsMm,
   peakIntensityCd,
+  roomStats,
+  roomSurfacesM2,
 } from "./lightSim";
+import { polygonAreaMm2, suggestRoomPolygon } from "./floorplanRooms";
 
 export type BridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -395,6 +403,55 @@ function validateMountHeightMm(v: unknown): number {
   return v;
 }
 
+/** Warum aus einem Saatpunkt kein Raum wurde — in Worten, mit denen der Nutzer etwas
+ *  anfangen kann, statt in Fehlercodes. */
+const ROOM_FAIL_HINTS: Record<"outside" | "on-wall" | "leaked" | "too-small", string> = {
+  outside: "That point is off the drawing area.",
+  "on-wall": "That point sits on a wall. Pick one clearly inside the room.",
+  leaked: "The room is not closed — the fill ran out to the edge of the sheet. Either a wall is genuinely missing (a doorway drawn open), or the gap is bigger than the bridging allowance; try a larger bridgeGapsMm, or pass the outline yourself with pointsM.",
+  "too-small": "That encloses almost no area — the point is probably in a gap between two wall runs rather than in a room.",
+};
+
+function requireRoom(page: FloorplanPage, roomId: unknown): FloorplanRoom {
+  if (typeof roomId !== "string" || !roomId) throw new CommandError("roomId is required. Call light_report or list_floorplans first.");
+  const room = (page.rooms ?? []).find((r) => r.id === roomId);
+  if (!room) throw new CommandError(`No room "${roomId}" on floorplan "${page.id}".`);
+  return room;
+}
+
+function validateRoomHeightMm(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 1000 || v > 30000) {
+    throw new CommandError("heightMm must be the clear room height in MILLIMETRES, between 1000 and 30000 (3 m is 3000).");
+  }
+  return v;
+}
+
+function validateWorkPlaneMm(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 3000) {
+    throw new CommandError("workPlaneMm must be the working plane height above finished floor in MILLIMETRES, 0 to 3000 (0.85 m is 850).");
+  }
+  return v;
+}
+
+function validateBridgeGaps(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1000) {
+    throw new CommandError("bridgeGapsMm must be between 0 and 1000 real millimetres. It is how much thicker the walls are stamped while searching, to close gaps in a sloppy drawing.");
+  }
+  return v;
+}
+
+function validateReflectance(v: unknown): RoomReflectance {
+  const r = v as Partial<RoomReflectance> | undefined;
+  const one = (key: keyof RoomReflectance): number => {
+    const n = r?.[key];
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1) {
+      throw new CommandError(`reflectance.${key} must be between 0 and 1 (a white ceiling is about 0.7, a dark floor about 0.2).`);
+    }
+    return n;
+  };
+  return { ceiling: one("ceiling"), walls: one("walls"), floor: one("floor") };
+}
+
 function validateDimming(v: unknown): number {
   if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) {
     throw new CommandError("dimming must be between 0 and 1 (1 = full output).");
@@ -513,6 +570,24 @@ function floorplanSummary(page: FloorplanPage) {
       positionMm: page.drawingBlock.positionMm, widthMm: page.drawingBlock.widthMm, minHeightMm: page.drawingBlock.minHeightMm,
     },
     notes: page.notes.map((n) => ({ noteId: n.id, text: n.text, ...paperToRealM(page, n.positionMm), widthMm: n.widthMm, fontSizeMm: n.fontSizeMm, boxed: n.boxed ?? false })),
+  };
+}
+
+/** Ein Raum des Grundrisses — nicht zu verwechseln mit roomSummary(), das die
+ *  Gruppierungsbehälter der Zeichenfläche beschreibt. */
+function floorplanRoomSummary(page: FloorplanPage, roomId: string) {
+  const room = requireRoom(page, roomId);
+  const surfaces = roomSurfacesM2(room, page.scaleDenominator);
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    roomId: room.id,
+    name: room.name,
+    pointsM: room.pointsMm.map((pt) => paperToRealM(page, pt)),
+    heightMm: room.heightMm,
+    workPlaneMm: room.workPlaneMm,
+    reflectance: room.reflectance ?? DEFAULT_REFLECTANCE,
+    floorAreaM2: r1(surfaces.floor),
+    wallAreaM2: r1(surfaces.walls),
   };
 }
 
@@ -1757,6 +1832,123 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     return { pageId: page.id, light: { ...DEFAULT_LIGHT_CALC, ...(requireFloorplan(page.id).light ?? {}) } };
   },
 
+  suggest_rooms: (params) => {
+    const p = (params ?? {}) as unknown as SuggestRoomsParams;
+    const page = requireFloorplan(p.pageId);
+    if (!Array.isArray(p.seeds) || p.seeds.length === 0) {
+      throw new CommandError("seeds is required: one or more points INSIDE the rooms you want, in real-world metres from the drawing area's corner.");
+    }
+    if (p.seeds.length > MAX_BATCH_ITEMS) throw new CommandError(`At most ${MAX_BATCH_ITEMS} seeds per call.`);
+    const walls = page.walls ?? [];
+    if (walls.length === 0) {
+      throw new CommandError("This plan carries no walls yet. Walls are read from the architect's PDF layer in the editor — ask the user to import them first.");
+    }
+    const bridgeGapsMm = p.bridgeGapsMm !== undefined ? validateBridgeGaps(p.bridgeGapsMm) : undefined;
+    return {
+      pageId: page.id,
+      wallCount: walls.length,
+      // Je Saatpunkt ein eigenes Ergebnis, wie bei den anderen Stapelbefehlen: ein Punkt
+      // daneben darf die übrigen nicht mitreißen. realMToPaper wirft bei Positionen
+      // außerhalb des Blattes — hier ist das eine Auskunft und kein Abbruch.
+      suggestions: p.seeds.map((seed) => {
+        try {
+          const pos = validateRealPosition(seed?.xM, seed?.yM);
+          if (!pos.ok) return { ok: false as const, xM: seed?.xM, yM: seed?.yM, reason: "outside" as const, error: pos.error };
+          const res = suggestRoomPolygon(walls, realMToPaper(page, pos.xM, pos.yM), {
+            scaleDenominator: page.scaleDenominator,
+            area: drawingAreaMm(page),
+            bridgeGapsMm,
+          });
+          if (!res.ok) return { ok: false as const, xM: pos.xM, yM: pos.yM, reason: res.reason, error: ROOM_FAIL_HINTS[res.reason] };
+          return {
+            ok: true as const,
+            xM: pos.xM,
+            yM: pos.yM,
+            pointsM: res.pointsMm.map((pt) => paperToRealM(page, pt)),
+            floorAreaM2: Math.round(((res.areaMm2 * page.scaleDenominator * page.scaleDenominator) / 1e6) * 10) / 10,
+          };
+        } catch (err) {
+          return {
+            ok: false as const,
+            xM: seed?.xM,
+            yM: seed?.yM,
+            reason: "outside" as const,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }),
+      hint: "These are suggestions read off the walls, not rooms yet. Create one with define_room, and tell the user the outline is derived and worth a glance.",
+    };
+  },
+
+  define_room: (params) => {
+    const p = (params ?? {}) as unknown as DefineRoomParams;
+    const page = requireFloorplan(p.pageId);
+    const name = requireText(p.name, "name");
+    const heightMm = validateRoomHeightMm(p.heightMm);
+    const hasSeed = p.seedM !== undefined;
+    const hasPoints = p.pointsM !== undefined;
+    if (hasSeed === hasPoints) {
+      throw new CommandError("Pass exactly one of seedM (a point inside the room, the outline is read off the walls) or pointsM (the outline itself).");
+    }
+
+    let pointsMm: { x: number; y: number }[];
+    if (hasSeed) {
+      const pos = validateRealPosition(p.seedM!.xM, p.seedM!.yM);
+      if (!pos.ok) throw new CommandError(pos.error);
+      const walls = page.walls ?? [];
+      if (walls.length === 0) throw new CommandError("This plan carries no walls, so an outline cannot be read off them. Pass pointsM instead, or ask the user to import the walls.");
+      const res = suggestRoomPolygon(walls, realMToPaper(page, pos.xM, pos.yM), {
+        scaleDenominator: page.scaleDenominator,
+        area: drawingAreaMm(page),
+        bridgeGapsMm: p.bridgeGapsMm !== undefined ? validateBridgeGaps(p.bridgeGapsMm) : undefined,
+      });
+      if (!res.ok) throw new CommandError(ROOM_FAIL_HINTS[res.reason]);
+      pointsMm = res.pointsMm;
+    } else {
+      const pts = p.pointsM!;
+      if (!Array.isArray(pts) || pts.length < 3) throw new CommandError("pointsM needs at least three points; the outline is closed for you.");
+      pointsMm = pts.map((pt) => {
+        const pos = validateRealPosition(pt?.xM, pt?.yM);
+        if (!pos.ok) throw new CommandError(pos.error);
+        return realMToPaper(page, pos.xM, pos.yM);
+      });
+      if (polygonAreaMm2(pointsMm) <= 0) throw new CommandError("Those points enclose no area — check the order they are given in.");
+    }
+
+    const room: Omit<FloorplanRoom, "id"> = {
+      name,
+      pointsMm,
+      heightMm,
+      workPlaneMm: p.workPlaneMm !== undefined ? validateWorkPlaneMm(p.workPlaneMm) : undefined,
+      reflectance: p.reflectance !== undefined ? validateReflectance(p.reflectance) : undefined,
+    };
+    const roomId = st().addFloorplanRoom(page.id, room);
+    return floorplanRoomSummary(requireFloorplan(page.id), roomId);
+  },
+
+  update_room: (params) => {
+    const p = (params ?? {}) as unknown as UpdateRoomParams;
+    const page = requireFloorplan(p.pageId);
+    requireRoom(page, p.roomId);
+    const patch: Partial<Omit<FloorplanRoom, "id">> = {};
+    if (p.name !== undefined) patch.name = requireText(p.name, "name");
+    if (p.heightMm !== undefined) patch.heightMm = validateRoomHeightMm(p.heightMm);
+    if (p.workPlaneMm !== undefined) patch.workPlaneMm = validateWorkPlaneMm(p.workPlaneMm);
+    if (p.reflectance !== undefined) patch.reflectance = validateReflectance(p.reflectance);
+    if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one room property.");
+    st().updateFloorplanRoom(page.id, p.roomId, patch);
+    return floorplanRoomSummary(requireFloorplan(page.id), p.roomId);
+  },
+
+  remove_room: (params) => {
+    const { pageId, roomId } = (params ?? {}) as unknown as RemoveRoomParams;
+    const page = requireFloorplan(pageId);
+    requireRoom(page, roomId);
+    st().removeFloorplanRoom(page.id, roomId);
+    return { removed: true, roomId };
+  },
+
   light_report: (params) => {
     const { pageId } = (params ?? {}) as unknown as LightReportParams;
     const page = requireFloorplan(pageId);
@@ -1770,13 +1962,50 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       workPlaneMm: cfg.workPlaneMm,
       maintenanceFactor: cfg.maintenanceFactor,
     };
+    const rooms = (page.rooms ?? []).filter((r) => !r.hidden);
     const bounds = luminaireBoundsMm(lums, opts);
-    if (!bounds || lums.length === 0) {
+    if (lums.length === 0) {
       return {
         pageId: page.id,
         luminaireCount: 0,
+        roomCount: rooms.length,
         hint: "No luminaires on this plan yet. Create one with create_luminaire, add it to the schematic, then place its symbol with place_floorplan_symbols.",
       };
+    }
+
+    // Mit Räumen wird je Raum gerechnet: innerhalb seines Polygons, mit seiner Nutzebene
+    // und seinem indirekten Anteil. Das ist der Bezug, den eine Lichtplanung meint.
+    if (rooms.length > 0) {
+      const r0 = (v: number) => Math.round(v);
+      return {
+        pageId: page.id,
+        luminaireCount: lums.length,
+        connectedLoadW: Math.round(connectedLoadW(lums) * 10) / 10,
+        maintenanceFactor: cfg.maintenanceFactor,
+        rooms: rooms.map((room) => {
+          const workPlaneMm = room.workPlaneMm ?? cfg.workPlaneMm;
+          const stats = roomStats(lums, room, { ...opts, workPlaneMm, pitchMm: cfg.gridMm });
+          return {
+            roomId: room.id,
+            name: room.name,
+            floorAreaM2: Math.round(stats.floorAreaM2 * 10) / 10,
+            heightMm: room.heightMm,
+            workPlaneMm,
+            luminaireFluxLm: Math.round(stats.fluxLm),
+            averageLux: r0(stats.avgLux),
+            minLux: r0(stats.minLux),
+            maxLux: r0(stats.maxLux),
+            uniformity: Math.round(stats.uniformity * 100) / 100,
+            indirectLux: r0(stats.indirectLux),
+            meanReflectance: Math.round(stats.meanReflectance * 100) / 100,
+          };
+        }),
+        basis: "Direct component from cos-model photometry plus a uniform interreflected component per room (integrating-sphere method). No shading between rooms. A planning aid, not a DIN EN 12464-1 verification.",
+      };
+    }
+
+    if (!bounds) {
+      return { pageId: page.id, luminaireCount: 0, roomCount: 0, hint: "No luminaires on this plan yet." };
     }
     // Gerechnet wird auf der Schrittweite der Seite; über den Auswertebereich, nicht über
     // das ganze Blatt — sonst wäre E_min immer null.
@@ -1797,8 +2026,9 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
         width: Math.round(paperMmToRealMm(bounds.w, page.scaleDenominator)) / 1000,
         height: Math.round(paperMmToRealMm(bounds.h, page.scaleDenominator)) / 1000,
       },
+      roomCount: 0,
       basis: "Direct component only, cos-model photometry from datasheet values, no interreflection and no shading. A planning aid, not a DIN EN 12464-1 verification.",
-      hint: "The evaluated area is the luminaires' bounding box widened by one mounting height — a stand-in until rooms carry their own polygon.",
+      hint: "No rooms defined on this plan, so the evaluated area is the luminaires' own extent and there is no interreflected light in the figures — the real room is brighter. Define the room with suggest_rooms and define_room to get a meaningful average.",
     };
   },
 };

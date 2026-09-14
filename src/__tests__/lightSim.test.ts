@@ -14,7 +14,14 @@ import {
   type LuminairePlacement,
   type LightCalcOptions,
 } from "../lightSim";
-import type { LuminairePhotometry } from "../types";
+import {
+  roomSurfacesM2,
+  meanReflectance,
+  indirectLux,
+  fluxInRoomLm,
+  roomStats,
+} from "../lightSim";
+import { DEFAULT_REFLECTANCE, type FloorplanRoom, type LuminairePhotometry } from "../types";
 
 /** Der MAG48-Spot aus dem Plan: 900 lm, 36°, 10 W. */
 const SPOT: LuminairePhotometry = { fluxLm: 900, beamAngleDeg: 36, powerW: 10, cctK: 3000 };
@@ -243,5 +250,156 @@ describe("connectedLoadW", () => {
       photometry: { fluxLm: 500, beamAngleDeg: 60 },
     };
     expect(connectedLoadW([noPower])).toBe(0);
+  });
+});
+
+// ── Phase B: Räume, Interreflexion, raumbezogene Kennwerte ──────────
+
+/** Der Testraum aus dem Plan: 6 x 4 m bei 1:50 sind 120 x 80 Papier-mm. */
+function room6x4(overrides: Partial<FloorplanRoom> = {}): FloorplanRoom {
+  return {
+    id: "R01",
+    name: "Abschiedsraum",
+    pointsMm: [{ x: 100, y: 100 }, { x: 220, y: 100 }, { x: 220, y: 180 }, { x: 100, y: 180 }],
+    heightMm: 3000,
+    ...overrides,
+  };
+}
+
+describe("roomSurfacesM2", () => {
+  it("misst Boden, Decke und Wände des 6 x 4 x 3 m Raums", () => {
+    const a = roomSurfacesM2(room6x4(), 50);
+    expect(a.floor).toBeCloseTo(24, 5);
+    expect(a.ceiling).toBeCloseTo(24, 5);
+    expect(a.walls).toBeCloseTo(2 * (6 + 4) * 3, 5); // 60 m²
+    expect(a.total).toBeCloseTo(108, 5);
+  });
+
+  it("wächst mit der Raumhöhe nur über die Wände", () => {
+    const low = roomSurfacesM2(room6x4({ heightMm: 2500 }), 50);
+    const high = roomSurfacesM2(room6x4({ heightMm: 4000 }), 50);
+    expect(high.floor).toBeCloseTo(low.floor, 5);
+    expect(high.walls).toBeGreaterThan(low.walls);
+  });
+});
+
+describe("meanReflectance", () => {
+  it("gewichtet die Flächen, nicht die drei Zahlen", () => {
+    // (0,7·24 + 0,5·60 + 0,2·24) / 108 = 51,6 / 108 = 0,478
+    expect(meanReflectance(room6x4(), 50)).toBeCloseTo(0.478, 3);
+  });
+
+  it("nimmt ohne Angabe die üblichen Ansätze", () => {
+    const explicit = meanReflectance(room6x4({ reflectance: DEFAULT_REFLECTANCE }), 50);
+    expect(meanReflectance(room6x4(), 50)).toBeCloseTo(explicit, 10);
+  });
+
+  it("folgt den eingetragenen Werten", () => {
+    const dark = meanReflectance(room6x4({ reflectance: { ceiling: 0.2, walls: 0.1, floor: 0.1 } }), 50);
+    expect(dark).toBeLessThan(meanReflectance(room6x4(), 50));
+  });
+});
+
+describe("indirectLux", () => {
+  it("trifft die Handrechnung für 8 Spots im Abschiedsraum", () => {
+    // Φ·ρ̄ / (A·(1−ρ̄)) = 7200 · 0,478 / (108 · 0,522) ≈ 61 lx
+    expect(indirectLux(8 * 900, room6x4(), 50)).toBeCloseTo(61, 0);
+  });
+
+  it("ist linear im Lichtstrom", () => {
+    const one = indirectLux(900, room6x4(), 50);
+    expect(indirectLux(3600, room6x4(), 50)).toBeCloseTo(4 * one, 6);
+  });
+
+  it("fällt in einem dunklen Raum deutlich ab", () => {
+    const bright = indirectLux(7200, room6x4(), 50);
+    const dark = indirectLux(7200, room6x4({ reflectance: { ceiling: 0.3, walls: 0.2, floor: 0.1 } }), 50);
+    expect(dark).toBeLessThan(bright / 2);
+  });
+
+  it("bleibt endlich, auch wenn jemand Reflexionsgrade von 1 einträgt", () => {
+    const absurd = indirectLux(7200, room6x4({ reflectance: { ceiling: 1, walls: 1, floor: 1 } }), 50);
+    expect(Number.isFinite(absurd)).toBe(true);
+  });
+
+  it("ist ohne Licht und ohne Fläche null", () => {
+    expect(indirectLux(0, room6x4(), 50)).toBe(0);
+    expect(indirectLux(7200, room6x4({ pointsMm: [] }), 50)).toBe(0);
+  });
+});
+
+describe("fluxInRoomLm", () => {
+  it("zählt nur die Leuchten innerhalb des Polygons", () => {
+    const inside = spotAt(160, 140);
+    const outside = spotAt(300, 140);
+    expect(fluxInRoomLm([inside, outside], room6x4())).toBe(900);
+  });
+
+  it("rechnet die Dimmung mit", () => {
+    expect(fluxInRoomLm([{ ...spotAt(160, 140), dimming: 0.5 }], room6x4())).toBe(450);
+  });
+});
+
+describe("roomStats", () => {
+  const statOpts = { scaleDenominator: 50, workPlaneMm: 850, maintenanceFactor: 1, pitchMm: 4 };
+
+  it("mittelt nur über das Rauminnere", () => {
+    // Eine Leuchte im Raum, eine weit außerhalb: die außen liegende darf den Mittelwert
+    // nicht mit ihrer eigenen Umgebung verwässern.
+    const stats = roomStats([spotAt(160, 140)], room6x4(), statOpts);
+    expect(stats.samples).toBeGreaterThan(100);
+    expect(stats.avgLux).toBeGreaterThan(0);
+    expect(stats.floorAreaM2).toBeCloseTo(24, 5);
+  });
+
+  it("hebt den indirekte Anteil den ganzen Raum an", () => {
+    const withRoom = roomStats([spotAt(160, 140)], room6x4(), statOpts);
+    const dark = roomStats([spotAt(160, 140)], room6x4({ reflectance: { ceiling: 0, walls: 0, floor: 0 } }), statOpts);
+    expect(withRoom.indirectLux).toBeGreaterThan(0);
+    expect(dark.indirectLux).toBe(0);
+    // Der Unterschied ist genau der indirekte Anteil — er liegt überall gleich an.
+    expect(withRoom.avgLux - dark.avgLux).toBeCloseTo(withRoom.indirectLux, 4);
+    expect(withRoom.minLux - dark.minLux).toBeCloseTo(withRoom.indirectLux, 4);
+  });
+
+  it("macht die Gleichmäßigkeit besser, nicht schlechter", () => {
+    // Das ist der eigentliche Gewinn von Phase B: der indirekte Anteil hebt die dunklen
+    // Ecken an und ist damit genau dort am wirksamsten, wo U₀ entschieden wird.
+    const lit = roomStats([spotAt(160, 140)], room6x4(), statOpts);
+    const noBounce = roomStats([spotAt(160, 140)], room6x4({ reflectance: { ceiling: 0, walls: 0, floor: 0 } }), statOpts);
+    expect(lit.uniformity).toBeGreaterThan(noBounce.uniformity);
+  });
+
+  it("meldet einen Raum ohne Licht als null statt als Fehler", () => {
+    const stats = roomStats([], room6x4(), statOpts);
+    expect(stats.avgLux).toBe(0);
+    expect(stats.indirectLux).toBe(0);
+  });
+});
+
+describe("computeLuxGrid mit Räumen", () => {
+  const area = { x: 90, y: 90, w: 140, h: 100 };
+  const opts = { scaleDenominator: 50, workPlaneMm: 850, maintenanceFactor: 1, pitchMm: 4 };
+
+  it("legt den indirekten Anteil innerhalb des Raums auf, außerhalb nicht", () => {
+    const lums = [spotAt(160, 140)];
+    const plain = computeLuxGrid(lums, area, opts);
+    const withRoom = computeLuxGrid(lums, area, { ...opts, rooms: [room6x4()] });
+    const idx = (x: number, y: number) => {
+      const c = Math.round((x - area.x) / opts.pitchMm);
+      const r = Math.round((y - area.y) / opts.pitchMm);
+      return r * withRoom.cols + c;
+    };
+    const inside = idx(160, 140);
+    const outside = idx(95, 95); // Ecke der Zeichenfläche, außerhalb des Raums
+    expect(withRoom.lux[inside]).toBeGreaterThan(plain.lux[inside]);
+    expect(withRoom.lux[outside]).toBeCloseTo(plain.lux[outside], 4);
+  });
+
+  it("überspringt ausgeblendete Räume", () => {
+    const lums = [spotAt(160, 140)];
+    const hidden = computeLuxGrid(lums, area, { ...opts, rooms: [room6x4({ hidden: true })] });
+    const plain = computeLuxGrid(lums, area, opts);
+    expect(hidden.lux[0]).toBeCloseTo(plain.lux[0], 6);
   });
 });

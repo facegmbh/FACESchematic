@@ -4,10 +4,10 @@ import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, CO
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
-  DEFAULT_HEATMAP, DEFAULT_LIGHT_CALC, LUX_STEPS, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
+  DEFAULT_HEATMAP, DEFAULT_LIGHT_CALC, DEFAULT_REFLECTANCE, LUX_STEPS, RSSI_STEPS, WALL_MATERIALS, WALL_MATERIAL_COLORS, WALL_MATERIAL_DEFAULTS,
   WALL_MATERIAL_LABELS, WALL_THICKNESS_PRESETS_MM, WIFI_BANDS, WIFI_BAND_LABELS } from "../types";
 import { collectAccessPoints, coveredFraction, computeHeatmap, planningRadiusM, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
-import { collectLuminaires, computeLuxGrid, connectedLoadW, gridStats, luminaireBoundsMm } from "../lightSim";
+import { collectLuminaires, computeLuxGrid, connectedLoadW, gridStats, luminaireBoundsMm, roomStats } from "../lightSim";
 import { getTemplateById as lookupTemplate } from "../templateApi";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
@@ -78,6 +78,8 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
   const updateFloorplanHeatmap = useSchematicStore((s) => s.updateFloorplanHeatmap);
   const updateFloorplanLightCalc = useSchematicStore((s) => s.updateFloorplanLightCalc);
+  const updateFloorplanRoom = useSchematicStore((s) => s.updateFloorplanRoom);
+  const removeFloorplanRoom = useSchematicStore((s) => s.removeFloorplanRoom);
   const wallMaterials = useSchematicStore((s) => s.wallMaterials);
   const setWallMaterial = useSchematicStore((s) => s.setWallMaterial);
   const addFloorplanGroup = useSchematicStore((s) => s.addFloorplanGroup);
@@ -1642,6 +1644,68 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       })()}
 
 
+      {/* ── Räume ─────────────────────────────────────────────────── */}
+      {(page.rooms ?? []).length > 0 && (
+        <details className="border-t border-[var(--color-border)]" open>
+          <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
+            {t("Rooms")}
+          </summary>
+          <div className="px-2 pb-3 flex flex-col gap-1.5">
+            <p className="text-[var(--color-text-muted)] leading-snug">
+              {t("The outlines are read off the walls and are a suggestion — check them. Height and reflectances are what the calculation needs and what no floor plan tells you.")}
+            </p>
+            {(page.rooms ?? []).map((room) => {
+              const refl = room.reflectance ?? DEFAULT_REFLECTANCE;
+              return (
+                <div key={room.id} className="border border-[var(--color-border)] rounded px-1.5 py-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      className="min-w-0 flex-1 border border-transparent hover:border-[var(--color-border)] rounded px-1 py-0.5 bg-transparent text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={room.name}
+                      onChange={(e) => updateFloorplanRoom(page.id, room.id, { name: e.target.value })}
+                    />
+                    <button
+                      className="px-1 shrink-0 text-[var(--color-text-muted)] hover:text-red-500"
+                      onClick={() => removeFloorplanRoom(page.id, room.id)}
+                      title={t("Remove this room. Luminaires and walls stay.")}
+                      style={{ fontSize: 10 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+                    <span className="shrink-0 w-14">{t("Height")}</span>
+                    <input
+                      type="number" step={100} min={1000} max={30000}
+                      className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                      value={room.heightMm}
+                      onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 1000 && v <= 30000) updateFloorplanRoom(page.id, room.id, { heightMm: v }); }}
+                    />
+                    <span className="shrink-0">mm</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }} title={t("What ceiling, walls and floor throw back. They decide the interreflected light — a dark room can have half as much.")}>
+                    <span className="shrink-0 w-14">{t("Reflect.")}</span>
+                    {(["ceiling", "walls", "floor"] as const).map((key) => (
+                      <input
+                        key={key}
+                        type="number" step={0.05} min={0} max={1}
+                        className="w-12 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={refl[key]}
+                        title={t(key === "ceiling" ? "Ceiling" : key === "walls" ? "Walls" : "Floor")}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v) && v >= 0 && v <= 1) updateFloorplanRoom(page.id, room.id, { reflectance: { ...refl, [key]: v } });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
       {/* ── Lichtrechnung ─────────────────────────────────────────── */}
       {(() => {
         const cfg = { ...DEFAULT_LIGHT_CALC, ...(page.light ?? {}) };
@@ -1652,10 +1716,19 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           return templateId ? lookupTemplate(templateId, customTemplates)?.luminaire : undefined;
         });
         const opts = { scaleDenominator: page.scaleDenominator, workPlaneMm: cfg.workPlaneMm, maintenanceFactor: cfg.maintenanceFactor };
-        const bounds = cfg.visible ? luminaireBoundsMm(lums, opts) : null;
-        // Die Kennwerte werden hier gröber gerechnet als das gezeichnete Bild: das Panel
-        // rendert bei jeder Änderung neu und muss billig bleiben.
-        const stats = bounds ? gridStats(computeLuxGrid(lums, bounds, { ...opts, pitchMm: Math.max(6, cfg.gridMm * 3) })) : null;
+        const rooms = (page.rooms ?? []).filter((r) => !r.hidden);
+        // Gröber gerechnet als das gezeichnete Bild: das Panel rendert bei jeder Änderung
+        // neu und muss billig bleiben.
+        const coarse = Math.max(6, cfg.gridMm * 3);
+        const perRoom = cfg.visible && lums.length > 0
+          ? rooms.map((room) => ({
+              room,
+              stats: roomStats(lums, room, { ...opts, workPlaneMm: room.workPlaneMm ?? cfg.workPlaneMm, pitchMm: coarse }),
+            }))
+          : [];
+        // Ohne Räume bleibt das Hilfsrechteck aus Phase A — mit dem Hinweis, dass es eines ist.
+        const bounds = cfg.visible && rooms.length === 0 ? luminaireBoundsMm(lums, opts) : null;
+        const stats = bounds ? gridStats(computeLuxGrid(lums, bounds, { ...opts, pitchMm: coarse })) : null;
         return (
           <details className="border-t border-[var(--color-border)]" open={cfg.visible}>
             <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -1681,6 +1754,31 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               {stats && (
                 <p className="text-[var(--color-text-muted)] leading-snug tabular-nums" style={{ fontSize: 10 }}>
                   {t("min")} {Math.round(stats.minLux)} · {t("max")} {Math.round(stats.maxLux)} · U₀ {stats.uniformity.toFixed(2)}
+                </p>
+              )}
+
+              {perRoom.length > 0 && (
+                <div className="flex flex-col gap-1 pt-0.5">
+                  {perRoom.map(({ room, stats: rs }) => (
+                    <div key={room.id} className="border border-[var(--color-border)] rounded px-1.5 py-1 flex flex-col gap-0.5">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">{room.name}</span>
+                        <strong className="shrink-0 tabular-nums">{Math.round(rs.avgLux)} lx</strong>
+                      </div>
+                      <div className="text-[var(--color-text-muted)] tabular-nums" style={{ fontSize: 10 }}>
+                        {rs.floorAreaM2.toFixed(1)} m² · {t("min")} {Math.round(rs.minLux)} · U₀ {rs.uniformity.toFixed(2)}
+                      </div>
+                      <div className="text-[var(--color-text-muted)] tabular-nums" style={{ fontSize: 10 }}>
+                        {t("of which indirect")} {Math.round(rs.indirectLux)} lx · ρ̄ {rs.meanReflectance.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {cfg.visible && lums.length > 0 && rooms.length === 0 && (
+                <p className="text-amber-600 dark:text-amber-400 leading-snug" style={{ fontSize: 10 }}>
+                  {t("No room defined: these figures cover the luminaires' own extent and carry no interreflected light. Use the Room tool — a click inside a room reads its outline off the walls.")}
                 </p>
               )}
 

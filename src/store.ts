@@ -47,6 +47,7 @@ import type {
   FloorplanWall,
   FloorplanHeatmap,
   FloorplanLightCalc,
+  FloorplanRoom,
   WallMaterial,
   WallMaterialSpec,
   CompanyProfile,
@@ -927,6 +928,9 @@ interface SchematicState {
   removeFloorplanWall: (pageId: string, wallId: string) => void;
   updateFloorplanHeatmap: (pageId: string, patch: Partial<FloorplanHeatmap>) => void;
   updateFloorplanLightCalc: (pageId: string, patch: Partial<FloorplanLightCalc>) => void;
+  addFloorplanRoom: (pageId: string, room: Omit<FloorplanRoom, "id">) => string;
+  updateFloorplanRoom: (pageId: string, roomId: string, patch: Partial<Omit<FloorplanRoom, "id">>) => void;
+  removeFloorplanRoom: (pageId: string, roomId: string) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
 
@@ -1043,6 +1047,11 @@ function nextFloorplanCoverageId(): string {
 let floorplanWallIdCounter = 0;
 function nextFloorplanWallId(): string {
   return `fpwall-${++floorplanWallIdCounter}`;
+}
+
+let floorplanRoomIdCounter = 0;
+function nextFloorplanRoomId(): string {
+  return `fproom-${++floorplanRoomIdCounter}`;
 }
 
 let rackIdCounter = 0;
@@ -6022,6 +6031,44 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // Clearing an override falls back to the calibrated default rather than to zero.
     if (spec) next[material] = spec; else delete next[material];
     set({ wallMaterials: Object.keys(next).length ? next : undefined });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanRoom: (pageId, room) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanRoomId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, rooms: [...(p.rooms ?? []), { ...room, id }] })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanRoom: (pageId, roomId, patch) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        rooms: (p.rooms ?? []).map((r) => (r.id === roomId ? { ...r, ...patch } : r)),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanRoom: (pageId, roomId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        rooms: (p.rooms ?? []).filter((r) => r.id !== roomId),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
     get().saveToLocalStorage();
   },
 
