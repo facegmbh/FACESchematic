@@ -441,7 +441,7 @@ function floorplanSummary(page: FloorplanPage) {
       groupId: g.id, label: g.label, color: g.color, shape: g.shape, description: g.description,
       labelPrefix: g.labelPrefix, templateId: g.templateId, hiddenInLegend: g.hiddenInLegend ?? false,
       imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption, glyph: g.glyph,
-      hasUploadedSymbol: Boolean(g.symbolImageSrc), rotationDeg: g.rotationDeg, hidden: g.hidden ?? false,
+      hasUploadedSymbol: Boolean(g.symbolImageSrc), symbolLibraryId: g.symbolLibraryId, rotationDeg: g.rotationDeg, hidden: g.hidden ?? false,
       outlineColor: g.outlineColor, outlineWidthMm: g.outlineWidthMm,
       symbolCount: counts.get(g.id) ?? 0,
     })),
@@ -1271,6 +1271,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       if (patch.color === undefined) patch.color = symbol.color;
       if (patch.glyph === undefined && symbol.glyph) patch.glyph = symbol.glyph;
       if (patch.symbolImageSrc === undefined && symbol.imageSrc) patch.symbolImageSrc = symbol.imageSrc;
+      if (patch.symbolLibraryId === undefined && symbol.libraryId) patch.symbolLibraryId = symbol.libraryId;
       if (patch.outlineColor === undefined && symbol.outlineColor) patch.outlineColor = symbol.outlineColor;
       if (patch.outlineWidthMm === undefined && symbol.outlineWidthMm !== undefined) patch.outlineWidthMm = symbol.outlineWidthMm;
     }

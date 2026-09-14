@@ -16,7 +16,8 @@ import { t } from "./i18n";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
-import { fetchImageAsDataUrl, rotatedImageDataUrl } from "./floorplanUnderlay";
+import { fetchImageAsDataUrl, rasterizeLibrarySymbol, rotatedImageDataUrl } from "./floorplanUnderlay";
+import { symbolLibraryUrl } from "./symbolLibrary";
 import {
   buildLegendRows,
   realMmToPaperMm,
@@ -158,14 +159,15 @@ function imageFormat(dataUrl: string): "PNG" | "JPEG" {
  *  paper is the pictogram on screen. */
 function drawSymbol(
   doc: jsPDF,
-  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "outlineColor" | "outlineWidthMm">,
+  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "outlineColor" | "outlineWidthMm">,
   cx: number,
   cy: number,
   sizeMm: number,
   rotationDeg = 0,
-  /** The group's picture already turned by rotationDeg — jsPDF cannot rotate a raster the
-   *  way an SVG transform does, so the caller rasterizes it beforehand. */
-  rotatedImage?: string,
+  /** The picture to draw instead of the shape — the group's upload, or a BHE symbol
+   *  rasterized for print. `turned` says it already carries rotationDeg: jsPDF cannot
+   *  rotate a raster the way an SVG transform does, so the caller does it beforehand. */
+  picture?: { src: string; turned: boolean },
 ) {
   const [r, g, b] = hexToRgb(group.color);
   const [cr, cg, cb] = hexToRgb(glyphColorOn(group.color));
@@ -174,13 +176,13 @@ function drawSymbol(
   const outlineMm = symbolOutlineWidth(group, sizeMm, sizeMm);
   const turn = (v: { x: number; y: number }) => rotateVec(v, rotationDeg);
 
-  // An uploaded picture is the symbol: it replaces shape, color and glyph. A turned raster
-  // grew by rotatedSquareFactor, so it is placed that much larger to keep its scale.
-  const picture = rotatedImage ?? group.symbolImageSrc;
-  if (picture) {
-    const side = sizeMm * (rotatedImage ? rotatedSquareFactor(rotationDeg) : 1);
+  // A picture is the symbol: it replaces shape, color and glyph. A turned raster grew by
+  // rotatedSquareFactor, so it is placed that much larger to keep its scale.
+  const src = picture?.src ?? group.symbolImageSrc;
+  if (src) {
+    const side = sizeMm * (picture?.turned ? rotatedSquareFactor(rotationDeg) : 1);
     try {
-      doc.addImage(picture, imageFormat(picture), cx - side / 2, cy - side / 2, side, side, undefined, "MEDIUM");
+      doc.addImage(src, imageFormat(src), cx - side / 2, cy - side / 2, side, side, undefined, "MEDIUM");
     } catch {
       doc.setDrawColor(cr, cg, cb);
       doc.setLineWidth(0.2);
@@ -240,8 +242,22 @@ function drawSymbol(
   }
 }
 
+/** Which picture a symbol prints with, and whether it is already turned: the turned raster
+ *  when there is one, else the flat picture drawn square to the sheet. */
+function pictureForSymbol(
+  group: FloorplanSymbolGroup,
+  rotationDeg: number,
+  base: string | undefined,
+  turned: Map<string, string>,
+): { src: string; turned: boolean } | undefined {
+  if (!base) return undefined;
+  const rot = (((rotationDeg % 360) + 360) % 360);
+  const spun = rot ? turned.get(`${group.id}|${rot}`) : undefined;
+  return spun ? { src: spun, turned: true } : { src: base, turned: false };
+}
+
 /** Legend box: one row per symbol group, then the free-text installation notes. */
-function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined, lineRows: LegendLineRow[] = []) {
+function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined, lineRows: LegendLineRow[] = [], librarySymbols: Map<string, string> = new Map()) {
   const rssiSteps = legendShowsRssiScale(page) ? RSSI_STEPS : [];
   const { positionMm: pos, widthMm } = page.legend;
   const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length, rssiSteps.length);
@@ -268,7 +284,9 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
   const rowH = page.legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   for (const row of rows) {
     const centerY = y + rowH / 2;
-    drawSymbol(doc, row, innerX + page.symbolSizeMm / 2, centerY, page.symbolSizeMm);
+    const rowSymbol = librarySymbols.get(row.groupId);
+    drawSymbol(doc, row, innerX + page.symbolSizeMm / 2, centerY, page.symbolSizeMm, 0,
+      rowSymbol ? { src: rowSymbol, turned: false } : undefined);
 
     const textX = innerX + page.symbolSizeMm + 2;
     const rowImage = images.get(row.groupId);
@@ -722,16 +740,30 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     // Symbols. Turned pictures are rasterized once per group + angle, not per symbol —
     // a plan with fifty rotated speakers would otherwise redraw the same canvas fifty times.
     const groupById = new Map(page.groups.map((g) => [g.id, g]));
+    // A BHE symbol is an SVG on screen and has to become pixels for jsPDF — once per group,
+    // whatever it costs, because the same symbol repeats all over the sheet.
+    const librarySymbols = new Map<string, string>();
+    for (const group of page.groups) {
+      if (group.symbolImageSrc || !group.symbolLibraryId || !isGroupVisible(group)) continue;
+      try {
+        librarySymbols.set(group.id, await rasterizeLibrarySymbol(symbolLibraryUrl(group.symbolLibraryId)));
+      } catch {
+        // Library not installed on this build: the group falls back to its drawn shape.
+      }
+    }
+    const symbolPicture = (group: FloorplanSymbolGroup): string | undefined =>
+      group.symbolImageSrc || librarySymbols.get(group.id);
     const turnedSymbolImages = new Map<string, string>();
     for (const symbol of page.symbols) {
       const group = groupById.get(symbol.groupId);
-      if (!isGroupVisible(group)) continue;
+      if (!group || !isGroupVisible(group)) continue;
       const rot = ((((symbol.rotationDeg ?? 0) % 360) + 360) % 360);
-      if (!group?.symbolImageSrc || !rot) continue;
+      const base = symbolPicture(group);
+      if (!base || !rot) continue;
       const key = `${group.id}|${rot}`;
       if (turnedSymbolImages.has(key)) continue;
       try {
-        turnedSymbolImages.set(key, await rotatedImageDataUrl(group.symbolImageSrc, rot));
+        turnedSymbolImages.set(key, await rotatedImageDataUrl(base, rot));
       } catch {
         // A picture that will not rotate is drawn unturned rather than dropped.
       }
@@ -748,7 +780,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         symbol.positionMm.y,
         page.symbolSizeMm,
         rot,
-        group.symbolImageSrc && rot ? turnedSymbolImages.get(`${group.id}|${((rot % 360) + 360) % 360}`) : undefined,
+        pictureForSymbol(group, rot, symbolPicture(group), turnedSymbolImages),
       );
 
       const anchor = symbolLabelAnchor(symbol, page.symbolSizeMm);
@@ -786,7 +818,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           if (data) images.set(row.groupId, data);
         }));
       }
-      drawLegend(doc, page, rows, notes, images, opts.companyProfile, lineRows);
+      drawLegend(doc, page, rows, notes, images, opts.companyProfile, lineRows, librarySymbols);
     }
 
     if (page.drawingBlock.visible) {

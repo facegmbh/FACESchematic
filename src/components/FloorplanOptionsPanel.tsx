@@ -8,6 +8,8 @@ import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, S
   WALL_MATERIAL_LABELS, WALL_THICKNESS_PRESETS_MM, WIFI_BANDS, WIFI_BAND_LABELS } from "../types";
 import { collectAccessPoints, coveredFraction, computeHeatmap, planningRadiusM, rangeForRssiM, wallAttenuationDb } from "../wifiCoverage";
 import { getTemplateById as lookupTemplate } from "../templateApi";
+import { symbolLibraryName } from "../symbolLibrary";
+import SymbolLibraryPicker from "./SymbolLibraryPicker";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
@@ -142,6 +144,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       addToast(e instanceof Error ? e.message : t("Could not load that image."), "error");
     }
   };
+
+  /** Group whose BHE symbol is being picked, or null while the dialog is closed. */
+  const [libraryPickerGroupId, setLibraryPickerGroupId] = useState<string | null>(null);
 
   const handleSymbolImagePicked = async (file: File | undefined) => {
     const groupId = symbolImageTargetRef.current;
@@ -920,6 +925,22 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       <button
                         className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
                         onClick={() => updateFloorplanGroup(page.id, group.id, { symbolImageSrc: undefined })}
+                        title={t("Back to the drawn shape")}
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <button
+                      className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400 hover:text-emerald-700"
+                      onClick={() => setLibraryPickerGroupId(group.id)}
+                      title={t("Pick the BHE symbol for this group — the drawn standard for German security engineering. An uploaded picture wins over it.")}
+                    >
+                      {group.symbolLibraryId ? symbolLibraryName(group.symbolLibraryId) : t("BHE symbol…")}
+                    </button>
+                    {group.symbolLibraryId && (
+                      <button
+                        className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                        onClick={() => updateFloorplanGroup(page.id, group.id, { symbolLibraryId: undefined })}
                         title={t("Back to the drawn shape")}
                       >
                         ✕
@@ -1816,6 +1837,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         </div>
       </details>
       </div>
+
+      {libraryPickerGroupId && (
+        <SymbolLibraryPicker
+          selectedId={page.groups.find((g) => g.id === libraryPickerGroupId)?.symbolLibraryId}
+          onPick={(id) => updateFloorplanGroup(page.id, libraryPickerGroupId, { symbolLibraryId: id })}
+          onClose={() => setLibraryPickerGroupId(null)}
+        />
+      )}
     </div>
   );
 }

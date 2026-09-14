@@ -657,4 +657,19 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Stop offering the remaining candidates on the sheet (Esc does the same).":
     "Die restlichen Kandidaten nicht mehr anbieten (Esc tut dasselbe).",
   "Take as wall": "Als Wand übernehmen",
+
+  // ── BHE-Symbolbibliothek ──
+  "BHE symbol": "BHE-Symbol",
+  "BHE symbol…": "BHE-Symbol…",
+  "No library symbol — use the drawn shape": "Kein Bibliothekssymbol — gezeichnete Form verwenden",
+  "Nothing matches that.": "Dazu passt nichts.",
+  "Pick the BHE symbol for this group — the drawn standard for German security engineering. An uploaded picture wins over it.":
+    "Das BHE-Symbol dieser Gruppe wählen — der gezeichnete Standard der Sicherheitstechnik. Ein hochgeladenes Bild sticht es.",
+  "Pick the BHE symbol for this model — the drawn standard for German security engineering. An uploaded picture wins over it.":
+    "Das BHE-Symbol dieses Modells wählen — der gezeichnete Standard der Sicherheitstechnik. Ein hochgeladenes Bild sticht es.",
+  "Search all {n} symbols…": "In allen {n} Symbolen suchen…",
+  "The BHE symbol library is not installed on this build.":
+    "Die BHE-Symbolbibliothek ist in dieser Installation nicht enthalten.",
+  "The drawings are BHE member material and are not part of the source. Generate them with tools/bheSymbols.mjs and the symbol CD at hand.":
+    "Die Zeichnungen sind BHE-Mitgliedsmaterial und liegen nicht im Quellcode. Mit tools/bheSymbols.mjs und der Symbol-CD erzeugen.",
 };

@@ -980,6 +980,9 @@ export interface PlanSymbolSpec {
   /** An uploaded picture for this model, as a data URL. A group created from the model
    *  inherits it, and it wins over shape, color and glyph. */
   imageSrc?: string;
+  /** BHE library symbol for this model, by id. A group created from the model inherits it,
+   *  so a camera comes out as the BHE camera without anyone picking one. */
+  libraryId?: string;
   /** Outline around the symbol body, #rrggbb. */
   outlineColor?: string;
   /** Outline thickness in paper mm; 0 = none. */
@@ -1070,6 +1073,10 @@ export interface FloorplanSymbolGroup {
    *  so screen and PDF show the same pixels). Replaces shape, color and glyph — the
    *  picture is the symbol. */
   symbolImageSrc?: string;
+  /** A symbol from the BHE library, by id (see src/symbolLibrary.ts). Drawn instead of the
+   *  shape, the same way an uploaded picture is, but only the id travels in the project —
+   *  the drawing is fetched from the build. An uploaded picture wins over it. */
+  symbolLibraryId?: string;
   /** Outline around the symbol body, #rrggbb. Undefined = the default dark ink. */
   outlineColor?: string;
   /** Outline thickness in paper mm. 0 = no outline at all; undefined = a line that scales

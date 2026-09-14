@@ -1,9 +1,10 @@
 import type { CSSProperties } from "react";
 import { SYMBOL_INK, glyphColorOn, symbolGlyphOffset, symbolGlyphScale, symbolOutlineColor, symbolOutlineWidth, symbolPrimitives } from "../floorplan";
+import { symbolLibraryUrl } from "../symbolLibrary";
 import type { FloorplanSymbolGroup } from "../types";
 
 interface Props {
-  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "outlineColor" | "outlineWidthMm">;
+  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "outlineColor" | "outlineWidthMm">;
   /** Side of the symbol square in CSS px. */
   sizePx: number;
   /** Clockwise rotation of the picture about its center, in degrees. The glyph stays
@@ -32,9 +33,11 @@ export default function FloorplanSymbolSvg({ group, sizePx, rotationDeg = 0, pad
   const glyphAt = symbolGlyphOffset(group.shape, sizePx);
   const total = sizePx + paddingPx * 2;
 
-  // An uploaded picture is the symbol: it replaces shape, color and glyph.
-  const picture = group.symbolImageSrc ? (
-    <image href={group.symbolImageSrc} x={0} y={0} width={sizePx} height={sizePx} preserveAspectRatio="xMidYMid meet" />
+  // A picture is the symbol: it replaces shape, color and glyph. An uploaded one first —
+  // somebody chose it for this very group — then the BHE symbol the model asks for.
+  const pictureSrc = group.symbolImageSrc || (group.symbolLibraryId ? symbolLibraryUrl(group.symbolLibraryId) : undefined);
+  const picture = pictureSrc ? (
+    <image href={pictureSrc} x={0} y={0} width={sizePx} height={sizePx} preserveAspectRatio="xMidYMid meet" />
   ) : (
     symbolPrimitives(group.shape, sizePx).map((p, i) => {
       if (p.kind === "line") {
@@ -70,7 +73,7 @@ export default function FloorplanSymbolSvg({ group, sizePx, rotationDeg = 0, pad
       style={{ display: "block", overflow: "visible", ...style }}
     >
       <g transform={rotationDeg ? `rotate(${rotationDeg} ${half} ${half})` : undefined}>{picture}</g>
-      {glyph && !group.symbolImageSrc && (
+      {glyph && !pictureSrc && (
         <text
           x={half + glyphAt.x}
           y={half + glyphAt.y}

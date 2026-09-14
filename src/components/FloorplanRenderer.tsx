@@ -128,7 +128,7 @@ type DragState =
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
-function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
+function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
   return <FloorplanSymbolSvg group={group} sizePx={sizePx} rotationDeg={rotationDeg} symbolSizeMm={symbolSizeMm} />;
 }
 
@@ -369,6 +369,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       color: symbol.color,
       glyph: symbol.glyph,
       symbolImageSrc: symbol.imageSrc,
+      symbolLibraryId: symbol.libraryId,
       label: data.model ?? data.label,
       description: legendDescriptionFor(source),
       templateId: data.templateId,

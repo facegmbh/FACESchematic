@@ -13,6 +13,7 @@
 
 import { getPaperSize, PAGE_MARGIN_IN, PAPER_SIZES } from "./printConfig";
 import { getLocale, type Locale } from "./i18n";
+import { defaultSymbolLibraryIdFor } from "./symbolLibrary";
 import type { FloorplanSymbolShape,
   CompanyProfile,
   CoverageOptics,
@@ -320,6 +321,8 @@ export interface LegendRow {
   glyph?: string;
   /** The group's uploaded symbol picture, so the legend shows what the plan shows. */
   symbolImageSrc?: string;
+  /** The group's BHE symbol, same reason. */
+  symbolLibraryId?: string;
   /** How many symbols of this group sit on the plan. */
   count: number;
 }
@@ -357,6 +360,7 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
       imageCaption: g.imageCaption,
       glyph: g.glyph,
       symbolImageSrc: g.symbolImageSrc,
+      symbolLibraryId: g.symbolLibraryId,
       count: counts.get(g.id) ?? 0,
     }));
 }
@@ -1451,13 +1455,16 @@ export function defaultSymbolColorFor(seed: string): string {
 
 /** The symbol a group for this model should start with: the library's own, completed
  *  with derived defaults where it says nothing. */
-export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph" | "imageSrc" | "outlineColor" | "outlineWidthMm"> {
+export function planSymbolFor(src: { planSymbol?: PlanSymbolSpec; deviceType?: string; templateId?: string; id?: string; modelNumber?: string; label?: string }): Required<Pick<PlanSymbolSpec, "shape" | "color">> & Pick<PlanSymbolSpec, "glyph" | "imageSrc" | "libraryId" | "outlineColor" | "outlineWidthMm"> {
   const seed = src.templateId ?? src.id ?? src.modelNumber ?? src.label ?? "";
   return {
     shape: src.planSymbol?.shape ?? defaultSymbolShapeFor(src.deviceType),
     color: src.planSymbol?.color ?? defaultSymbolColorFor(seed),
     glyph: src.planSymbol?.glyph?.trim().slice(0, 2) || undefined,
     imageSrc: src.planSymbol?.imageSrc || undefined,
+    // The model's own choice first, else what the BHE draws for this kind of device. Both
+    // may be nothing, and then the shape above is what gets drawn.
+    libraryId: src.planSymbol?.libraryId || defaultSymbolLibraryIdFor(src.deviceType),
     outlineColor: src.planSymbol?.outlineColor || undefined,
     outlineWidthMm: src.planSymbol?.outlineWidthMm,
   };

@@ -310,6 +310,30 @@ export async function importSymbolImage(file: File, maxEdgePx = 256): Promise<st
 }
 
 
+/**
+ * A library symbol as pixels: the SVG at `url` drawn onto a square transparent canvas.
+ *
+ * The screen draws the SVG directly, but jsPDF only takes rasters, so the export turns each
+ * symbol used on the sheet into one PNG. 512 px over a symbol printed at 8 mm is about
+ * 1600 dpi — far past what a plotter resolves, and still only a few KB of line art.
+ */
+export async function rasterizeLibrarySymbol(url: string, edgePx = 512): Promise<string> {
+  const img = await loadImageElement(url);
+  // An SVG with only a viewBox reports no intrinsic size in Chromium; it fills the square.
+  const naturalW = img.naturalWidth || img.width || edgePx;
+  const naturalH = img.naturalHeight || img.height || edgePx;
+  const scale = Math.min(edgePx / naturalW, edgePx / naturalH);
+  const w = Math.max(1, Math.round(naturalW * scale));
+  const h = Math.max(1, Math.round(naturalH * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = edgePx;
+  canvas.height = edgePx;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
+  ctx.drawImage(img, (edgePx - w) / 2, (edgePx - h) / 2, w, h);
+  return canvas.toDataURL("image/png");
+}
+
 /** The same picture turned by `deg` clockwise, on a square canvas that fits the turned
  *  image. The PDF export needs real rotated pixels — jsPDF cannot rotate an image the way
  *  an SVG transform does on screen. */

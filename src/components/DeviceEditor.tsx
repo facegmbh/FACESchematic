@@ -43,6 +43,8 @@ import type { FacePlateLayout, OdooDeviceLink, ProtectionClass } from "../types"
 import { AUX_FIELD_GROUPS, normalizeAuxRows, resolveAuxiliaryLine, trimTrailingEmpty } from "../auxiliaryData";
 import { deriveThermalBtuh } from "../thermal";
 import { useT } from "../i18n";
+import { symbolLibraryName, symbolLibraryUrl } from "../symbolLibrary";
+import SymbolLibraryPicker from "./SymbolLibraryPicker";
 
 const ALL_SIGNAL_TYPES = (Object.keys(SIGNAL_LABELS) as SignalType[]).sort(
   (a, b) => SIGNAL_LABELS[a].localeCompare(SIGNAL_LABELS[b]),
@@ -180,6 +182,8 @@ export default function DeviceEditor() {
   const [planColor, setPlanColor] = useState("");
   const [planGlyph, setPlanGlyph] = useState("");
   const [planImage, setPlanImage] = useState("");
+  const [planLibraryId, setPlanLibraryId] = useState("");
+  const [planLibraryOpen, setPlanLibraryOpen] = useState(false);
   const [planOutline, setPlanOutline] = useState("");
   const [planOutlineWidth, setPlanOutlineWidth] = useState("");
   const planSymbolInputRef = useRef<HTMLInputElement>(null);
@@ -188,17 +192,18 @@ export default function DeviceEditor() {
   // enough — the shape then only matters as what the symbol falls back to if the picture
   // is ever removed.
   const planSymbolSpec = useMemo<PlanSymbolSpec | undefined>(() => {
-    if (!planShape && !planImage) return undefined;
+    if (!planShape && !planImage && !planLibraryId) return undefined;
     const width = planOutlineWidth.trim() === "" ? undefined : Math.max(0, Number(planOutlineWidth));
     return {
       shape: planShape || "circle",
       ...(planColor ? { color: planColor } : {}),
       ...(planGlyph.trim() ? { glyph: planGlyph.trim().slice(0, 2) } : {}),
       ...(planImage ? { imageSrc: planImage } : {}),
+      ...(planLibraryId ? { libraryId: planLibraryId } : {}),
       ...(planOutline ? { outlineColor: planOutline } : {}),
       ...(width !== undefined && Number.isFinite(width) ? { outlineWidthMm: width } : {}),
     };
-  }, [planShape, planColor, planGlyph, planImage, planOutline, planOutlineWidth]);
+  }, [planShape, planColor, planGlyph, planImage, planLibraryId, planOutline, planOutlineWidth]);
 
   const handlePlanSymbolPicked = async (file: File | undefined) => {
     if (!file) return;
@@ -317,6 +322,7 @@ export default function DeviceEditor() {
     setPlanColor(ps?.color ?? "");
     setPlanGlyph(ps?.glyph ?? "");
     setPlanImage(ps?.imageSrc ?? "");
+    setPlanLibraryId(ps?.libraryId ?? "");
     setPlanOutline(ps?.outlineColor ?? "");
     setPlanOutlineWidth(ps?.outlineWidthMm === undefined ? "" : String(ps.outlineWidthMm));
     setCategory(node.data.category ?? tpl?.category ?? "");
@@ -1341,6 +1347,40 @@ export default function DeviceEditor() {
                   onChange={(e) => { void handlePlanSymbolPicked(e.target.files?.[0]); e.target.value = ""; }}
                 />
               </div>
+              {/* The BHE symbol is what a German security plan is read against, so it is
+                  chosen on the model: every plan that uses this device then draws it. */}
+              <div className="flex items-center gap-1.5 mt-1.5">
+                {planLibraryId && (
+                  <span className="flex w-7 h-7 items-center justify-center border border-[var(--color-border)] rounded bg-white">
+                    <img src={symbolLibraryUrl(planLibraryId)} alt="" className="w-6 h-6 object-contain" />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border border-[var(--color-border)] text-xs text-[var(--color-text)] hover:border-blue-500"
+                  onClick={() => setPlanLibraryOpen(true)}
+                  title={t("Pick the BHE symbol for this model — the drawn standard for German security engineering. An uploaded picture wins over it.")}
+                >
+                  {planLibraryId ? symbolLibraryName(planLibraryId) : t("BHE symbol…")}
+                </button>
+                {planLibraryId && (
+                  <button
+                    type="button"
+                    className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                    onClick={() => setPlanLibraryId("")}
+                    title={t("Back to the drawn shape")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {planLibraryOpen && (
+                <SymbolLibraryPicker
+                  selectedId={planLibraryId || undefined}
+                  onPick={(id) => setPlanLibraryId(id ?? "")}
+                  onClose={() => setPlanLibraryOpen(false)}
+                />
+              )}
             </Field>
             <Field label={t("Install notes")}>
               <input
