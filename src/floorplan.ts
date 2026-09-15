@@ -306,6 +306,9 @@ export interface LegendRow {
   symbolImageSrc?: string;
   /** The group's BHE symbol, same reason. */
   symbolLibraryId?: string;
+  /** And whether it is drawn in the group's colour — a legend that explains a red symbol
+   *  with a black one explains nothing. */
+  tintSymbol?: boolean;
   /** How many symbols of this group sit on the plan. */
   count: number;
 }
@@ -344,6 +347,7 @@ export function buildLegendRows(page: Pick<FloorplanPage, "groups" | "symbols" |
       glyph: g.glyph,
       symbolImageSrc: g.symbolImageSrc,
       symbolLibraryId: g.symbolLibraryId,
+      tintSymbol: g.tintSymbol,
       count: counts.get(g.id) ?? 0,
     }));
 }

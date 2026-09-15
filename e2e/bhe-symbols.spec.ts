@@ -77,6 +77,11 @@ test("floorplan: a BHE symbol can be picked for a group and is what gets drawn",
   const href = decodeURIComponent((await tinted.getAttribute("href"))!);
   expect(href).toContain("#e11d1d");
   expect(href).not.toContain("rgb(0%, 0%, 0%)");
+  // The legend explains the symbol on the sheet, so it has to be the same symbol. Every
+  // place that draws this group — sheet, legend row, the panel's own chips — switches
+  // together, so the count is "more than the one on the sheet" rather than a fixed number.
+  expect(await page.locator('image[href^="data:image/svg+xml"]').count()).toBeGreaterThan(1);
+  await expect(page.locator(`image[href="/symbols/bhe/${picked}.svg"]`)).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });
