@@ -1,12 +1,14 @@
 /**
  * The number on a coverage area follows the device it is drawn on.
  *
- * The helper itself is covered in floorplan.test.ts; what is proved here is the wiring —
- * that the three store actions which can change a symbol's label all carry the anchored
- * area along. Renumbering a camera and finding the old number still printed in front of it
- * is exactly the kind of mistake that survives into a handover.
+ * It is not copied any more but read (coverageLabelOf), and these tests go through the
+ * store on purpose: whichever way a symbol gets renamed — one at a time, a whole
+ * selection, a group renumbered — what the wedge in front of the camera says has to change
+ * with it. Renumbering a camera and finding the old number still printed in front of it is
+ * exactly the kind of mistake that survives into a handover.
  */
 import { it, expect, beforeAll, beforeEach } from "vitest";
+import { coverageLabelOf } from "../floorplan";
 import type { FloorplanPage } from "../types";
 
 class MemStorage {
@@ -32,16 +34,21 @@ const plan = (): FloorplanPage => st().pages.find((p): p is FloorplanPage => p.t
 let pageId = "";
 let groupId = "";
 
-/** A camera with its wedge, both numbered "K1". */
+/** A camera with its wedge — the wedge carries no caption of its own. */
 function camera(label: string): { symbolId: string; coverageId: string } {
   const symbolId = st().addFloorplanSymbol(pageId, { groupId, positionMm: { x: 100, y: 100 }, label });
   const coverageId = st().addFloorplanCoverage(pageId, {
-    symbolId, groupId, shape: "sector", positionMm: { x: 100, y: 100 }, rangeM: 12, label,
+    symbolId, groupId, shape: "sector", positionMm: { x: 100, y: 100 }, rangeM: 12,
   });
   return { symbolId, coverageId };
 }
 
-const areaLabel = (id: string) => plan().coverages.find((c) => c.id === id)?.label;
+/** What the sheet, the export and the panel all print for that area. */
+const areaLabel = (id: string) => {
+  const p = plan();
+  const coverage = p.coverages.find((c) => c.id === id);
+  return coverage ? coverageLabelOf(coverage, p.symbols) : undefined;
+};
 
 beforeEach(() => {
   useSchematicStore.setState({ nodes: [], edges: [], pages: [] });
@@ -79,8 +86,19 @@ it("renumbering the group takes every area with it", () => {
 it("an area the planner named himself keeps that name through a renumber", () => {
   const { symbolId } = camera("K1");
   const own = st().addFloorplanCoverage(pageId, {
-    symbolId, groupId, shape: "sector", positionMm: { x: 100, y: 100 }, rangeM: 8, label: "Zufahrt Nord",
+    symbolId, groupId, shape: "sector", positionMm: { x: 100, y: 100 }, rangeM: 8,
+    label: "Zufahrt Nord", ownLabel: true,
   });
   st().updateFloorplanSymbol(pageId, symbolId, { label: "K7" });
   expect(areaLabel(own)).toBe("Zufahrt Nord");
+});
+
+it("a second area on the same camera says the same number, not the number it was born with", () => {
+  // Two wedges on one dome — a corridor lens beside a wide one. Both are that camera.
+  const { symbolId, coverageId } = camera("K1");
+  const second = st().addFloorplanCoverage(pageId, {
+    symbolId, groupId, shape: "sector", positionMm: { x: 100, y: 100 }, rangeM: 6,
+  });
+  st().updateFloorplanSymbol(pageId, symbolId, { label: "K7" });
+  expect([areaLabel(coverageId), areaLabel(second)]).toEqual(["K7", "K7"]);
 });

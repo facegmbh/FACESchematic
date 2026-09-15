@@ -68,5 +68,15 @@ test("floorplan: a BHE symbol can be picked for a group and is what gets drawn",
   // And the sheet draws it: the symbol on the plan references the same file.
   await expect(page.locator(`image[href="/symbols/bhe/${picked}.svg"]`).first()).toBeVisible();
 
+  // Switched to colour, the sheet draws a recoloured copy instead: the black ink carries
+  // the group's colour. (That the white knockouts survive is in symbolTint.test.ts — not
+  // every symbol has one, and this one does not.)
+  await page.getByText("in colour", { exact: true }).click();
+  const tinted = page.locator('image[href^="data:image/svg+xml"]').first();
+  await expect(tinted).toBeVisible();
+  const href = decodeURIComponent((await tinted.getAttribute("href"))!);
+  expect(href).toContain("#e11d1d");
+  expect(href).not.toContain("rgb(0%, 0%, 0%)");
+
   expect(errors).toEqual([]);
 });

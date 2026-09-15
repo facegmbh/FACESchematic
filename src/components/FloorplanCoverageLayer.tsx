@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import {
+  coverageLabelOf,
   coverageAnchorMm,
   coverageColor,
   coverageLabelAnchorMm,
@@ -54,13 +55,15 @@ export default function FloorplanCoverageLayer({
 }: Props) {
   const t = useT();
   const visible = useMemo(() => {
+    // One switch takes them all off — for an export that is about mounting points.
+    if (page.hideCoverages) return [];
     const areas = (page.coverages ?? []).filter((c) => isCoverageVisible(c, page.groups));
     // Sort by drawn extent, biggest at the back. Ties keep their document order.
     return areas
       .map((c, i) => ({ c, i, reach: effectiveRangeM(c) }))
       .sort((a, b) => b.reach - a.reach || a.i - b.i)
       .map((e) => e.c);
-  }, [page.coverages, page.groups]);
+  }, [page.coverages, page.groups, page.hideCoverages]);
 
   if (visible.length === 0) return null;
 
@@ -84,6 +87,8 @@ export default function FloorplanCoverageLayer({
         const rPaper = realMmToPaperMm(effectiveRangeM(coverage) * 1000, page.scaleDenominator);
         const handle = handlePosMm(anchor, rPaper, turn);
         const labelAt = coverageLabelAnchorMm(coverage, page);
+        // Read from the device, not copied at creation — see coverageLabelOf.
+        const labelText = coverageLabelOf(coverage, page.symbols);
         const grabbable = interactive && !coverage.locked;
 
         return (
@@ -115,11 +120,11 @@ export default function FloorplanCoverageLayer({
                 onContextMenu(e, coverage.id);
               }}
             >
-              <title>{[coverage.label, formatCoverageSpec(coverage)].filter(Boolean).join(" · ")}</title>
+              <title>{[labelText, formatCoverageSpec(coverage)].filter(Boolean).join(" · ")}</title>
             </path>
 
             {/* The caption sits outside the fill, upright — a plan is read from one side. */}
-            {coverage.label && (
+            {labelText && (
               <text
                 x={mmToPx(labelAt.x)}
                 y={mmToPx(labelAt.y)}
@@ -129,7 +134,7 @@ export default function FloorplanCoverageLayer({
                 dominantBaseline="middle"
                 style={{ pointerEvents: "none", fontWeight: 600 }}
               >
-                {coverage.label}
+                {labelText}
               </text>
             )}
 

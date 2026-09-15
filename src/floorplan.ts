@@ -259,42 +259,25 @@ export function nextSymbolLabel(existingLabels: string[], labelPrefix?: string):
 }
 
 /**
- * Carry a renamed symbol's number over to the areas anchored to it.
+ * What a coverage area is captioned with.
  *
- * An area gets its label from the device it is drawn on, so the wedge in front of a camera
- * prints the same number as the camera. That label is copied once, when the area is made —
- * so renumbering the camera afterwards left the wedge showing the old number, and the sheet
- * then carried two numbers for one device without saying which one was current.
+ * An anchored area carries the device's number — the wedge in front of camera K7 says K7.
+ * That used to be copied when the area was made, and then everything that renumbers a
+ * symbol had to remember to carry the copy along; miss one path and the sheet shows two
+ * numbers for one device, with nothing saying which is current. So it is not copied any
+ * more: it is read from the symbol, every time it is drawn.
  *
- * Only an area still carrying the old label follows along. One the planner has typed over —
- * "Zufahrt Nord" — is theirs and stays untouched, and so does one deliberately left empty.
+ * `ownLabel` is the way out for the planner who writes their own words ("Zufahrt Nord"),
+ * and for a free-standing area, which has no device to read from.
  */
-export function relabelAnchoredCoverages(
-  coverages: FloorplanCoverage[] | undefined,
-  renamed: Map<string, { from: string; to: string }>,
-): FloorplanCoverage[] {
-  if (!coverages || coverages.length === 0 || renamed.size === 0) return coverages ?? [];
-  let touched = false;
-  const next = coverages.map((c) => {
-    const rename = c.symbolId ? renamed.get(c.symbolId) : undefined;
-    if (!rename || (c.label ?? "").trim() !== rename.from.trim()) return c;
-    touched = true;
-    return { ...c, label: rename.to };
-  });
-  return touched ? next : coverages;
-}
-
-/** symbolId → old and new label, for the symbols a patch actually renames. */
-export function symbolLabelRenames(
+export function coverageLabelOf(
+  coverage: Pick<FloorplanCoverage, "label" | "ownLabel" | "symbolId">,
   symbols: Pick<FloorplanSymbol, "id" | "label">[],
-  nextLabel: string | undefined,
-): Map<string, { from: string; to: string }> {
-  const renamed = new Map<string, { from: string; to: string }>();
-  if (nextLabel === undefined) return renamed;
-  for (const sym of symbols) {
-    if (sym.label !== nextLabel) renamed.set(sym.id, { from: sym.label, to: nextLabel });
-  }
-  return renamed;
+): string {
+  if (coverage.ownLabel) return coverage.label ?? "";
+  const symbol = coverage.symbolId ? symbols.find((s) => s.id === coverage.symbolId) : undefined;
+  // A dangling symbol id (the device was deleted) falls back to whatever text is there.
+  return symbol ? symbol.label : coverage.label ?? "";
 }
 
 /** Renumber a group's symbols sequentially from `startLabel` in placement order. */

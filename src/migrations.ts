@@ -17,7 +17,7 @@ import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 47;
+export const CURRENT_SCHEMA_VERSION = 48;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -673,6 +673,45 @@ const migrations: Record<number, Migration> = {
       );
     }
     data.version = 47;
+    return data;
+  },
+  47: (data) => {
+    // v47 → v48: a coverage area's caption is no longer a copy of the device's number but
+    // is read from the device every time it is drawn. Existing plans carry copies made
+    // when the area was created, and every renumbering since has left them behind — which
+    // is exactly the complaint: the camera says K7 and the wedge in front of it says K1.
+    //
+    // A stored caption that looks like a plan number ("K1", "4.12", "BM 3") is such a copy
+    // and is dropped, so the area starts following its device. Anything else is the
+    // planner's own words ("Zufahrt Nord") and is kept, marked as their own.
+    const looksLikeANumber = (text: string) => /^[A-Za-zÄÖÜäöü]{0,4}[\s.\-_/]?\d+([.\-/]\d+)*$/.test(text.trim());
+    if (Array.isArray(data.pages)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration page
+      data.pages = data.pages.map((page: any) => {
+        if (page?.type !== "floorplan" || !Array.isArray(page.coverages)) return page;
+        let touched = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration area
+        const coverages = page.coverages.map((c: any) => {
+          const label = typeof c?.label === "string" ? c.label : "";
+          // Free-standing areas have no device to read from: their text is all they have.
+          if (!c?.symbolId) {
+            if (!label) return c;
+            touched = true;
+            return { ...c, ownLabel: true };
+          }
+          if (!label) return c;
+          touched = true;
+          if (looksLikeANumber(label)) {
+            const { label: _dropped, ...rest } = c;
+            return rest;
+          }
+          return { ...c, ownLabel: true };
+        });
+        // A plan with nothing to repair comes back untouched, arrays included.
+        return touched ? { ...page, coverages } : page;
+      });
+    }
+    data.version = 48;
     return data;
   },
 };

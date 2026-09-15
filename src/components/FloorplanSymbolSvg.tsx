@@ -1,10 +1,12 @@
 import type { CSSProperties } from "react";
 import { SYMBOL_INK, glyphColorOn, symbolGlyphOffset, symbolGlyphScale, symbolOutlineColor, symbolOutlineWidth, symbolPrimitives } from "../floorplan";
+import { useEffect, useState } from "react";
 import { symbolLibraryUrl } from "../symbolLibrary";
+import { tintSymbol, tintedSymbolCached } from "../symbolTint";
 import type { FloorplanSymbolGroup } from "../types";
 
 interface Props {
-  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "outlineColor" | "outlineWidthMm">;
+  group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "tintSymbol" | "outlineColor" | "outlineWidthMm">;
   /** Side of the symbol square in CSS px. */
   sizePx: number;
   /** Clockwise rotation of the picture about its center, in degrees. The glyph stays
@@ -34,8 +36,11 @@ export default function FloorplanSymbolSvg({ group, sizePx, rotationDeg = 0, pad
   const total = sizePx + paddingPx * 2;
 
   // A picture is the symbol: it replaces shape, color and glyph. An uploaded one first —
-  // somebody chose it for this very group — then the BHE symbol the model asks for.
-  const pictureSrc = group.symbolImageSrc || (group.symbolLibraryId ? symbolLibraryUrl(group.symbolLibraryId) : undefined);
+  // somebody chose it for this very group — then the BHE symbol the model asks for,
+  // recoloured when the group asks for that.
+  const librarySrc = group.symbolLibraryId ? symbolLibraryUrl(group.symbolLibraryId) : undefined;
+  const tinted = useTintedSymbol(librarySrc, group.color, Boolean(group.tintSymbol) && !group.symbolImageSrc);
+  const pictureSrc = group.symbolImageSrc || tinted || librarySrc;
   const picture = pictureSrc ? (
     <image href={pictureSrc} x={0} y={0} width={sizePx} height={sizePx} preserveAspectRatio="xMidYMid meet" />
   ) : (
@@ -89,4 +94,28 @@ export default function FloorplanSymbolSvg({ group, sizePx, rotationDeg = 0, pad
       )}
     </svg>
   );
+}
+
+/**
+ * The tinted copy of a library symbol, once it has been fetched.
+ *
+ * It renders black on the first frame and swaps to the colour when the file arrives; after
+ * that the cache answers straight away, so scrolling a plan with fifty symbols does not
+ * flash. Returns undefined whenever there is nothing to tint, and the caller falls back to
+ * the plain symbol.
+ */
+function useTintedSymbol(url: string | undefined, color: string, enabled: boolean): string | undefined {
+  const cached = url && enabled ? tintedSymbolCached(url, color) : undefined;
+  const [tinted, setTinted] = useState(cached);
+
+  useEffect(() => {
+    if (!url || !enabled) { setTinted(undefined); return; }
+    const ready = tintedSymbolCached(url, color);
+    if (ready) { setTinted(ready); return; }
+    let live = true;
+    void tintSymbol(url, color).then((src) => { if (live) setTinted(src); });
+    return () => { live = false; };
+  }, [url, color, enabled]);
+
+  return enabled ? tinted : undefined;
 }

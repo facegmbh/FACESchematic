@@ -109,6 +109,7 @@ import type {
 } from "./types";
 import { PAPER_SIZES } from "./printConfig";
 import {
+  coverageLabelOf,
   appendLegendNote,
   drawingAreaMm,
   effectiveRangeM,
@@ -469,7 +470,7 @@ function floorplanSummary(page: FloorplanPage) {
       // rangeM is what is drawn: computed from the lens for a camera, else the typed reach.
       coverageId: c.id, shape: c.shape, rangeM: Number(effectiveRangeM(c).toFixed(2)), apertureDeg: c.apertureDeg, widthM: c.widthM,
       optics: c.optics ? { megapixels: c.optics.megapixels, dori: c.optics.dori, aspectRatio: c.optics.aspectRatio } : undefined,
-      rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: c.label,
+      rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: coverageLabelOf(c, page.symbols),
       xMm: c.positionMm.x, yMm: c.positionMm.y, hidden: c.hidden ?? false,
     })),
     drawingBlock: {

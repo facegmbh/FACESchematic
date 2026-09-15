@@ -1,7 +1,8 @@
 import { useSchematicStore } from "../store";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { useDismissMenu } from "../hooks/useDismissMenu";
-import { formatCoverageSpec, coverageApertureDeg, coverageOffersOptics, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
+import { formatCoverageSpec, coverageApertureDeg,
+  coverageLabelOf, coverageOffersOptics, defaultCameraOptics, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_OPACITY } from "../floorplan";
 import { useT } from "../i18n";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, type CoverageShape, type DeviceData, type DoriLevel, type FloorplanPage } from "../types";
 
@@ -76,7 +77,7 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
       data-floorplan-coverage-menu
     >
       <div className="px-3 py-1 text-[var(--color-text-muted)] border-b border-[var(--color-border)] mb-1 truncate">
-        {coverage.label || t("Coverage")} · {formatCoverageSpec(coverage)}
+        {coverageLabelOf(coverage, page.symbols) || t("Coverage")} · {formatCoverageSpec(coverage)}
         {anchoredTo ? ` · ${t("on")} ${anchoredTo.label}` : ""}
       </div>
 

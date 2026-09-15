@@ -152,3 +152,46 @@ describe("v45→v46 floorplan coverage migration", () => {
     expect(out.pages[0].coverages).toBe(areas);
   });
 });
+
+describe("v47→v48: coverage captions stop being copies", () => {
+  /** One floorplan page at v47 whose areas carry captions copied when they were made. */
+  const plan = (coverages: Record<string, unknown>[]) => ({
+    version: 47,
+    nodes: [],
+    edges: [],
+    pages: [{
+      type: "floorplan",
+      id: "p1",
+      symbols: [{ id: "s1", label: "K7" }],
+      coverages,
+    }],
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reading a migrated file
+  const areas = (out: any) => out.pages[0].coverages;
+
+  it("drops a caption that is a copy of the device's number", () => {
+    const out = migrateSchematic(plan([
+      { id: "c1", symbolId: "s1", label: "K1" },   // stale: the device is K7 by now
+      { id: "c2", symbolId: "s1", label: "4.12" },
+      { id: "c3", symbolId: "s1", label: "BM 3" },
+    ]));
+    expect(areas(out).map((c: { label?: string }) => c.label)).toEqual([undefined, undefined, undefined]);
+    expect(areas(out).every((c: { ownLabel?: boolean }) => !c.ownLabel)).toBe(true);
+  });
+
+  it("keeps the planner's own words, and marks them as theirs", () => {
+    const out = migrateSchematic(plan([{ id: "c1", symbolId: "s1", label: "Zufahrt Nord" }]));
+    expect(areas(out)[0]).toMatchObject({ label: "Zufahrt Nord", ownLabel: true });
+  });
+
+  it("leaves a free-standing area its text — it has no device to read from", () => {
+    const out = migrateSchematic(plan([
+      { id: "c1", label: "Hof" },
+      { id: "c2", label: "1.2" },
+      { id: "c3" },
+    ]));
+    expect(areas(out)[0]).toMatchObject({ label: "Hof", ownLabel: true });
+    expect(areas(out)[1]).toMatchObject({ label: "1.2", ownLabel: true });
+    expect(areas(out)[2].ownLabel).toBeUndefined();
+  });
+});

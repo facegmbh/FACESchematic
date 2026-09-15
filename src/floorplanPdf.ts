@@ -18,7 +18,9 @@ import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
 import { fetchImageAsDataUrl, rasterizeLibrarySymbol, rotatedImageDataUrl } from "./floorplanUnderlay";
 import { symbolLibraryUrl } from "./symbolLibrary";
+import { tintSymbol } from "./symbolTint";
 import {
+  coverageLabelOf,
   buildLegendRows,
   realMmToPaperMm,
   drawingAreaMm,
@@ -700,7 +702,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
 
     // Detection and surveillance areas, over the plan but under the symbols — the same
     // order the screen draws them in, so the print is what was judged on screen.
-    for (const coverage of page.coverages ?? []) {
+    for (const coverage of page.hideCoverages ? [] : page.coverages ?? []) {
       if (!isCoverageVisible(coverage, page.groups)) continue;
       const points = coveragePointsOnSheet(coverage, page);
       if (points.length < 3) continue;
@@ -723,12 +725,13 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       // drawn at full strength rather than through the fill's alpha.
       if (outline) doc.lines(deltas, points[0].x, points[0].y, [1, 1], "S", true);
 
-      if (coverage.label) {
+      const coverageLabel = coverageLabelOf(coverage, page.symbols);
+      if (coverageLabel) {
         const at = coverageLabelAnchorMm(coverage, page);
         doc.setFont("Inter", "bold");
         doc.setFontSize(page.labelSizeMm * 0.85 * MM_TO_PT);
         doc.setTextColor(17, 17, 17);
-        doc.text(coverage.label, at.x, at.y, { baseline: "middle", align: "center" });
+        doc.text(coverageLabel, at.x, at.y, { baseline: "middle", align: "center" });
       }
     }
 
@@ -746,7 +749,10 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     for (const group of page.groups) {
       if (group.symbolImageSrc || !group.symbolLibraryId || !isGroupVisible(group)) continue;
       try {
-        librarySymbols.set(group.id, await rasterizeLibrarySymbol(symbolLibraryUrl(group.symbolLibraryId)));
+        const plain = symbolLibraryUrl(group.symbolLibraryId);
+        // Recoloured first, then rasterized — the print gets what the screen shows.
+        const src = group.tintSymbol ? await tintSymbol(plain, group.color) : plain;
+        librarySymbols.set(group.id, await rasterizeLibrarySymbol(src));
       } catch {
         // Library not installed on this build: the group falls back to its drawn shape.
       }

@@ -658,8 +658,17 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Die restlichen Kandidaten nicht mehr anbieten (Esc tut dasselbe).",
   "Take as wall": "Als Wand übernehmen",
 
+  "Hide every coverage area on this plan": "Alle Abdeckungen auf diesem Plan ausblenden",
+  "Takes them off the sheet and the export in one go — the areas stay in the project. A single group's areas switch off with that group's layer, and one area alone from its right-click menu.":
+    "Nimmt sie in einem Zug vom Blatt und aus dem Export — im Projekt bleiben sie. Die Abdeckungen einer einzelnen Gruppe gehen mit deren Ebene aus, eine einzelne über ihr Rechtsklick-Menü.",
+  "Printed just past the area's far edge. Empty means it takes the device's number and keeps taking it — renumber the device and this follows.":
+    "Steht knapp hinter der äußeren Kante. Leer heißt: sie übernimmt die Nummer des Geräts und behält sie bei — nummerierst du das Gerät um, geht sie mit.",
+
   // ── BHE-Symbolbibliothek ──
   "BHE symbol": "BHE-Symbol",
+  "in colour": "farbig",
+  "Draw the BHE symbol in this group's colour instead of black. A plan handed over is read in black — this is for the screen and for telling trades apart.":
+    "Das BHE-Symbol in der Farbe dieser Gruppe zeichnen statt in Schwarz. Ein abgegebener Plan wird in Schwarz gelesen — das hier ist für den Bildschirm und zum Auseinanderhalten der Gewerke.",
   "BHE symbol…": "BHE-Symbol…",
   "No library symbol — use the drawn shape": "Kein Bibliothekssymbol — gezeichnete Form verwenden",
   "Nothing matches that.": "Dazu passt nichts.",

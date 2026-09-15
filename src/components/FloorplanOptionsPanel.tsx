@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg,
+  coverageLabelOf, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
@@ -418,7 +419,6 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                             symbolId: sym.id,
                             groupId: sym.groupId,
                             positionMm: { ...sym.positionMm },
-                            label: sym.label,
                           });
                         }
                         if (last && !many) onSelectionChange({ kind: "coverage", id: last });
@@ -476,7 +476,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   style={{ width: 18, height: 18, background: coverageColor(coverage, page.groups), opacity: coverage.opacity ?? DEFAULT_COVERAGE_OPACITY }}
                 />
                 <div className="min-w-0">
-                  <div className="font-semibold text-[var(--color-text)] truncate">{coverage.label || t("Coverage")}</div>
+                  <div className="font-semibold text-[var(--color-text)] truncate">{coverageLabelOf(coverage, page.symbols) || t("Coverage")}</div>
                   <div className="text-[var(--color-text-muted)] truncate" style={{ fontSize: 10 }}>
                     {formatCoverageSpec(coverage)}
                     {anchoredTo ? ` · ${t("follows")} ${anchoredTo.label}` : ` · ${t("free-standing")}`}
@@ -488,10 +488,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 <span className="shrink-0 w-12">{t("Caption")}</span>
                 <input
                   className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1.5 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-                  value={coverage.label ?? ""}
-                  placeholder={t("e.g. BM 1")}
-                  onChange={(e) => patch({ label: e.target.value || undefined })}
-                  title={t("Printed just past the area's far edge. Leave empty for an unlabelled area.")}
+                  value={coverage.ownLabel ? coverage.label ?? "" : ""}
+                  placeholder={anchoredTo ? anchoredTo.label : t("e.g. BM 1")}
+                  onChange={(e) => patch(e.target.value
+                    ? { label: e.target.value, ownLabel: true }
+                    : { label: undefined, ownLabel: undefined })}
+                  title={anchoredTo
+                    ? t("Printed just past the area's far edge. Empty means it takes the device's number and keeps taking it — renumber the device and this follows.")
+                    : t("Printed just past the area's far edge. Leave empty for an unlabelled area.")}
                 />
               </label>
 
@@ -938,13 +942,26 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       {group.symbolLibraryId ? symbolLibraryName(group.symbolLibraryId) : t("BHE symbol…")}
                     </button>
                     {group.symbolLibraryId && (
-                      <button
-                        className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
-                        onClick={() => updateFloorplanGroup(page.id, group.id, { symbolLibraryId: undefined })}
-                        title={t("Back to the drawn shape")}
-                      >
-                        ✕
-                      </button>
+                      <>
+                        <label
+                          className="flex items-center gap-1 text-[var(--color-text-muted)] cursor-pointer"
+                          title={t("Draw the BHE symbol in this group's colour instead of black. A plan handed over is read in black — this is for the screen and for telling trades apart.")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(group.tintSymbol)}
+                            onChange={(e) => updateFloorplanGroup(page.id, group.id, { tintSymbol: e.target.checked || undefined })}
+                          />
+                          <span style={{ fontSize: 10 }}>{t("in colour")}</span>
+                        </label>
+                        <button
+                          className="px-1 py-0.5 text-[var(--color-text-muted)] hover:text-red-600"
+                          onClick={() => updateFloorplanGroup(page.id, group.id, { symbolLibraryId: undefined, tintSymbol: undefined })}
+                          title={t("Back to the drawn shape")}
+                        >
+                          ✕
+                        </button>
+                      </>
                     )}
                     <div className="flex-1" />
                     <label className="flex items-center gap-1 text-[var(--color-text-muted)]" title={t("Direction new symbols of this group start at, in degrees clockwise. Turn a placed symbol with the Symbol control on the sheet.")}>
@@ -1751,6 +1768,23 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           {t("Coverage areas ({n})", { n: (page.coverages ?? []).length })}
         </summary>
         <div className="px-2 pb-3 flex flex-col gap-1">
+          {/* One plan, two readings: the customer wants to see what is covered, the
+              electrician wants the mounting points without the wedges over them. */}
+          {(page.coverages ?? []).length > 0 && (
+            <>
+              <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(page.hideCoverages)}
+                  onChange={(e) => updateFloorplanPage(page.id, { hideCoverages: e.target.checked || undefined })}
+                />
+                {t("Hide every coverage area on this plan")}
+              </label>
+              <p className="text-[var(--color-text-muted)] leading-snug mb-1">
+                {t("Takes them off the sheet and the export in one go — the areas stay in the project. A single group's areas switch off with that group's layer, and one area alone from its right-click menu.")}
+              </p>
+            </>
+          )}
           <p className="text-[var(--color-text-muted)] leading-snug">
             {t("What the cameras see and the detectors reach. Select a device above and hit")} <strong>◔ {t("Coverage")}</strong>{" "}
             {t("to give it an area that follows and turns with it, or use")} <strong>◔ {t("Coverage")}</strong>{" "}
@@ -1770,7 +1804,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   style={{ width: 12, height: 12, background: coverageColor(c, page.groups), opacity: c.opacity ?? DEFAULT_COVERAGE_OPACITY }}
                 />
                 <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">
-                  {c.label || t("Coverage")}
+                  {coverageLabelOf(c, page.symbols) || t("Coverage")}
                   <span className="text-[var(--color-text-muted)]"> · {formatCoverageSpec(c)}</span>
                   {anchoredTo && <span className="text-[var(--color-text-muted)]"> · {anchoredTo.label}</span>}
                 </span>

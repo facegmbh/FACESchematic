@@ -128,7 +128,6 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
               symbolId: sym.id,
               groupId: sym.groupId,
               positionMm: { ...sym.positionMm },
-              label: sym.label,
             });
           }
         })}

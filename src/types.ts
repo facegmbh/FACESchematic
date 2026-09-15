@@ -1077,6 +1077,10 @@ export interface FloorplanSymbolGroup {
    *  shape, the same way an uploaded picture is, but only the id travels in the project —
    *  the drawing is fetched from the build. An uploaded picture wins over it. */
   symbolLibraryId?: string;
+  /** Draw that library symbol in this group's colour instead of black. Off by default: a
+   *  BHE symbol is defined as a black drawing, and that is how a plan handed over is read.
+   *  Colour is for the screen and for telling trades apart. */
+  tintSymbol?: boolean;
   /** Outline around the symbol body, #rrggbb. Undefined = the default dark ink. */
   outlineColor?: string;
   /** Outline thickness in paper mm. 0 = no outline at all; undefined = a line that scales
@@ -1471,8 +1475,14 @@ export interface FloorplanCoverage {
   /** Draw the boundary line as well as the fill. Undefined counts as on — the edge is
    *  where the detector stops, and that is the line being documented. */
   showOutline?: boolean;
-  /** Caption drawn at the area's far edge, e.g. "BM 1 · 12 m / 90°". */
+  /** Caption drawn at the area's far edge. On an area anchored to a symbol this is
+   *  normally NOT set: the caption is read from the device, so renumbering the camera
+   *  renumbers what is written in front of it. Set together with `ownLabel` when the
+   *  planner writes their own text ("Zufahrt Nord"), and on a free-standing area. */
   label?: string;
+  /** The caption above is the planner's own words, not the device's number. Without it an
+   *  anchored area follows its symbol. */
+  ownLabel?: boolean;
   /** A locked area ignores drag and resize on the sheet, the way a locked cover does. */
   locked?: boolean;
   /** Hidden on its own, independent of its group's layer. */
@@ -1583,6 +1593,10 @@ export interface FloorplanPage {
   /** Detection and surveillance areas — what the cameras see, what the detectors reach.
    *  Drawn under the symbols so a device never disappears behind its own area. */
   coverages: FloorplanCoverage[];
+  /** Take every coverage area off this plan at once — screen, sheet and export. The areas
+   *  stay in the project: this is the switch for the sheet that goes to the electrician,
+   *  who is looking for mounting points, not for fields of view. */
+  hideCoverages?: boolean;
   /** Walls with their build-up and thickness. They document the building and they are
    *  what the Wi-Fi heatmap attenuates through. */
   walls: FloorplanWall[];

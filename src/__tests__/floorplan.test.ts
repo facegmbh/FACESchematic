@@ -11,8 +11,7 @@ import {
   formatScale,
   legendHeightMm,
   legendShowsCompany,
-  relabelAnchoredCoverages,
-  symbolLabelRenames,
+  coverageLabelOf,
   measureRealDistanceMm,
   nextSymbolLabel,
   paperMmToRealMm,
@@ -1136,36 +1135,32 @@ describe("which areas offer the camera-optics control", () => {
   });
 });
 
-describe("renumbering carries the coverage area's label", () => {
+describe("what a coverage area is captioned with", () => {
+  const symbols = [
+    { id: "s1", label: "K7" },
+    { id: "s2", label: "BM 3" },
+  ];
   const area = (over: Partial<FloorplanCoverage> = {}): FloorplanCoverage => ({
-    id: "c1", symbolId: "s1", shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 12, label: "K1", ...over,
-  });
-  const renamed = new Map([["s1", { from: "K1", to: "K7" }]]);
-
-  it("moves the number on the area anchored to the renumbered symbol", () => {
-    const [out] = relabelAnchoredCoverages([area()], renamed);
-    expect(out.label).toBe("K7");
+    id: "c1", symbolId: "s1", shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 12, ...over,
   });
 
-  it("leaves a label the planner typed himself alone", () => {
-    const [out] = relabelAnchoredCoverages([area({ label: "Zufahrt Nord" })], renamed);
-    expect(out.label).toBe("Zufahrt Nord");
-    // And an area deliberately left blank stays blank.
-    expect(relabelAnchoredCoverages([area({ label: undefined })], renamed)[0].label).toBeUndefined();
+  it("reads the device's number, so a renumbered camera renumbers its wedge", () => {
+    expect(coverageLabelOf(area(), symbols)).toBe("K7");
+    expect(coverageLabelOf(area({ symbolId: "s2" }), symbols)).toBe("BM 3");
+    // Even with a stale copy stored from before: the device wins.
+    expect(coverageLabelOf(area({ label: "K1" }), symbols)).toBe("K7");
   });
 
-  it("touches neither another symbol's area nor a free-standing one", () => {
-    const others = [area({ id: "c2", symbolId: "s2" }), area({ id: "c3", symbolId: undefined })];
-    const out = relabelAnchoredCoverages(others, renamed);
-    expect(out.map((c) => c.label)).toEqual(["K1", "K1"]);
-    expect(out).toBe(others); // nothing changed, so the array is not rebuilt
+  it("leaves the planner's own words alone", () => {
+    expect(coverageLabelOf(area({ label: "Zufahrt Nord", ownLabel: true }), symbols)).toBe("Zufahrt Nord");
+    // Own and empty: an area deliberately without a caption.
+    expect(coverageLabelOf(area({ ownLabel: true }), symbols)).toBe("");
   });
 
-  it("names the renames a patch actually makes", () => {
-    const symbols = [{ id: "s1", label: "K1" }, { id: "s2", label: "K7" }];
-    expect(symbolLabelRenames(symbols, "K7").get("s1")).toEqual({ from: "K1", to: "K7" });
-    // s2 already carries that label, and a patch with no label at all renames nothing.
-    expect(symbolLabelRenames(symbols, "K7").has("s2")).toBe(false);
-    expect(symbolLabelRenames(symbols, undefined).size).toBe(0);
+  it("falls back to its own text where there is no device to read", () => {
+    expect(coverageLabelOf(area({ symbolId: undefined, label: "Hof" }), symbols)).toBe("Hof");
+    // A deleted device leaves a dangling id — better the old text than nothing.
+    expect(coverageLabelOf(area({ symbolId: "gone", label: "K1" }), symbols)).toBe("K1");
+    expect(coverageLabelOf(area({ symbolId: undefined }), symbols)).toBe("");
   });
 });
