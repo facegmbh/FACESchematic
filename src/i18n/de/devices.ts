@@ -9,6 +9,9 @@ export const DE_DEVICES: Record<string, string> = {
     "Die vollständige Gerätebibliothek konnte nicht geladen werden — einzelne Community-Geräte fehlen womöglich.",
   "Retrying…": "Erneuter Versuch…",
   "Owned Gear": "Eigener Bestand",
+  "On a plan, not in the schematic ({n})": "Auf einem Plan, nicht im Schema ({n})",
+  "{label} on {plan} \u2014 drag onto the canvas to create the device and link it to the symbol":
+    "{label} auf {plan} \u2014 auf die Fl\u00e4che ziehen, dann wird das Ger\u00e4t angelegt und mit dem Symbol verbunden",
   "Search devices...": "Geräte suchen...",
   "Search owned gear...": "Bestand durchsuchen...",
   "1 result": "1 Treffer",

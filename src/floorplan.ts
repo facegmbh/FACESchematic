@@ -1346,6 +1346,45 @@ export function defaultCoverage(shape: CoverageShape = "sector"): Omit<Floorplan
   };
 }
 
+// ── What is drawn but not yet wired ─────────────────────────────────
+
+/** A symbol that stands on a plan while the schematic knows nothing about it. */
+export interface PlanOnlySymbol {
+  pageId: string;
+  pageLabel: string;
+  symbolId: string;
+  /** The number as it reads on the plan, e.g. "K7". */
+  label: string;
+  group: FloorplanSymbolGroup;
+}
+
+/**
+ * Symbols on a plan with no device behind them.
+ *
+ * Planning runs both ways round. Sometimes the schematic exists and the devices get placed
+ * on the drawing; just as often somebody walks the building, drops cameras where they have
+ * to hang, and only then works out what they are plugged into. The second way used to be a
+ * dead end: the symbols stood on the sheet and nothing offered to make them real.
+ *
+ * A dangling link counts as missing too — the device was deleted from the schematic, the
+ * symbol stayed on the plan.
+ */
+export function planSymbolsWithoutDevice(
+  pages: Pick<FloorplanPage, "id" | "label" | "symbols" | "groups">[],
+  deviceIds: ReadonlySet<string>,
+): PlanOnlySymbol[] {
+  const out: PlanOnlySymbol[] = [];
+  for (const page of pages) {
+    for (const symbol of page.symbols) {
+      if (symbol.deviceNodeId && deviceIds.has(symbol.deviceNodeId)) continue;
+      const group = page.groups.find((g) => g.id === symbol.groupId);
+      if (!group) continue;
+      out.push({ pageId: page.id, pageLabel: page.label, symbolId: symbol.id, label: symbol.label, group });
+    }
+  }
+  return out;
+}
+
 // ── Legend text from the device library ─────────────────────────────
 
 /** The fields a legend row can be derived from — a device template or a placed device. */

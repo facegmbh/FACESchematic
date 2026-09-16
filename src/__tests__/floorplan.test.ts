@@ -12,6 +12,7 @@ import {
   legendHeightMm,
   legendShowsCompany,
   coverageLabelOf,
+  planSymbolsWithoutDevice,
   measureRealDistanceMm,
   nextSymbolLabel,
   paperMmToRealMm,
@@ -1162,5 +1163,44 @@ describe("what a coverage area is captioned with", () => {
     // A deleted device leaves a dangling id — better the old text than nothing.
     expect(coverageLabelOf(area({ symbolId: "gone", label: "K1" }), symbols)).toBe("K1");
     expect(coverageLabelOf(area({ symbolId: undefined }), symbols)).toBe("");
+  });
+});
+
+describe("symbols drawn but not yet wired", () => {
+  const page = (over: Partial<FloorplanPage> = {}) => makePage({
+    groups: [
+      { id: "g1", label: "Kameras", color: "#e11d1d", shape: "camera", templateId: "hik-dome" },
+      { id: "g2", label: "Handskizze", color: "#1d4ed8", shape: "circle" },
+    ],
+    symbols: [
+      { id: "s1", groupId: "g1", positionMm: { x: 10, y: 10 }, label: "K1" },
+      { id: "s2", groupId: "g1", positionMm: { x: 20, y: 10 }, label: "K2", deviceNodeId: "device-1" },
+      { id: "s3", groupId: "g2", positionMm: { x: 30, y: 10 }, label: "3" },
+    ],
+    ...over,
+  });
+
+  it("lists the ones with no device behind them", () => {
+    const out = planSymbolsWithoutDevice([page()], new Set(["device-1"]));
+    expect(out.map((o) => o.label)).toEqual(["K1", "3"]);
+    expect(out[0].group.label).toBe("Kameras");
+    expect(out[0].pageLabel).toBe(page().label);
+  });
+
+  it("counts a dangling link as missing — the device was deleted, the symbol stayed", () => {
+    const out = planSymbolsWithoutDevice([page()], new Set());
+    expect(out.map((o) => o.label)).toEqual(["K1", "K2", "3"]);
+  });
+
+  it("says nothing about a plan whose symbols are all wired", () => {
+    const wired = page({
+      symbols: [{ id: "s1", groupId: "g1", positionMm: { x: 1, y: 1 }, label: "K1", deviceNodeId: "device-1" }],
+    });
+    expect(planSymbolsWithoutDevice([wired], new Set(["device-1"]))).toEqual([]);
+  });
+
+  it("skips a symbol whose group is gone rather than inventing one", () => {
+    const orphan = page({ symbols: [{ id: "s9", groupId: "gone", positionMm: { x: 1, y: 1 }, label: "X" }] });
+    expect(planSymbolsWithoutDevice([orphan], new Set())).toEqual([]);
   });
 });

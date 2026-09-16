@@ -479,6 +479,9 @@ interface SchematicState {
    *  file it in a room of its own on the schematic so it is findable there. Returns the new
    *  node's id. */
   addDeviceForFloorplan: (template: DeviceTemplate, roomLabel: string) => string | undefined;
+  /** Create the device a plan symbol stands for and link the two. The other direction of
+   *  addDeviceForFloorplan: there the schematic came first, here the drawing did. */
+  addDeviceForPlanSymbol: (pageId: string, symbolId: string, position: { x: number; y: number }) => string | undefined;
   updateRoomLabel: (nodeId: string, label: string) => void;
   updateRoom: (nodeId: string, data: import("./types").RoomData) => void;
   updateAnnotation: (nodeId: string, data: Partial<import("./types").AnnotationData>) => void;
@@ -3553,6 +3556,29 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().reparentNode(created.id, position, { skipUndo: true });
     get().saveToLocalStorage();
     return created.id;
+  },
+
+  addDeviceForPlanSymbol: (pageId, symbolId, position) => {
+    const page = get().pages.find((p): p is FloorplanPage => p.id === pageId && p.type === "floorplan");
+    const symbol = page?.symbols.find((sym) => sym.id === symbolId);
+    const group = page?.groups.find((g) => g.id === symbol?.groupId);
+    // Without a model behind the group there is nothing to create — the library offers
+    // only symbols whose group is bound to one.
+    const template = group?.templateId ? getTemplateById(group.templateId, get().customTemplates) : undefined;
+    if (!page || !symbol || !template) return undefined;
+
+    let createdId: string | undefined;
+    // Creating the device and linking the symbol is one action to the planner, so it is
+    // one step to undo.
+    get().runAsSingleUndoStep(() => {
+      const before = new Set(get().nodes.map((n) => n.id));
+      get().addDevice(template, position);
+      const created = get().nodes.find((n) => n.type === "device" && !before.has(n.id));
+      if (!created) return;
+      createdId = created.id;
+      get().updateFloorplanSymbol(pageId, symbolId, { deviceNodeId: created.id });
+    });
+    return createdId;
   },
 
   updateRoomLabel: (nodeId, label) => {

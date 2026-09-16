@@ -3,6 +3,9 @@ import { getBundledTemplates, fetchTemplates, isLibraryDegraded } from "../templ
 import { SIGNAL_LABELS } from "../types";
 import type { DeviceTemplate, CustomTemplateGroup, OwnedGearFile, OwnedGearItem, SchematicNode, DeviceData } from "../types";
 import { useSchematicStore, CATEGORY_ORDER_DEFAULT } from "../store";
+import { planSymbolsWithoutDevice } from "../floorplan";
+import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
+import type { FloorplanPage } from "../types";
 import { scoreTemplate } from "../templateSearch";
 import { inventoryKeyFromDeviceData, inventoryKeyFromTemplate } from "../inventoryKey";
 import DeviceCreatorPicker from "./DeviceCreatorPicker";
@@ -1154,6 +1157,7 @@ export default function DeviceLibrary() {
 
   const hasFilter = selectedCategories.size > 0 || selectedBrands.size > 0 || selectedSignalTypes.size > 0;
 
+
   // Degraded = the library couldn't be fetched fresh and we're on cache/bundled.
   // Surfaced as a banner so a fresh machine that can't reach the API isn't
   // silently missing community devices. (#181)
@@ -1184,6 +1188,19 @@ export default function DeviceLibrary() {
   }, [addOwnedGear]);
 
   const query = search.trim();
+  // Symbols standing on a plan with no device behind them. Only those whose group is bound
+  // to a model are offered: without one there is nothing to create, and a made-up device
+  // would be worse than none. A search narrows this list the same way it narrows the rest.
+  const allNodes = useSchematicStore((s) => s.nodes);
+  const allPages = useSchematicStore((s) => s.pages);
+  const planOnly = useMemo(() => {
+    const floorplans = allPages.filter((p): p is FloorplanPage => p.type === "floorplan");
+    if (floorplans.length === 0) return [];
+    const deviceIds = new Set(allNodes.filter((n) => n.type === "device").map((n) => n.id));
+    return planSymbolsWithoutDevice(floorplans, deviceIds)
+      .filter((item) => Boolean(item.group.templateId))
+      .filter((item) => !query || `${item.label} ${item.group.label} ${item.pageLabel}`.toLowerCase().includes(query.toLowerCase()));
+  }, [allPages, allNodes, query]);
 
   const filteredCustom = useMemo(() => {
     let result = customTemplates;
@@ -1526,6 +1543,38 @@ export default function DeviceLibrary() {
         <OwnedGearTab query={query} />
       ) : (
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {/* Drawn on a plan, not yet in the schematic. Planning runs both ways round, and
+            this is the way back: drag the symbol in and its device is created and linked. */}
+        {!hasFilter && planOnly.length > 0 && (
+          <div className="rounded border border-emerald-500/30 bg-emerald-500/5">
+            <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
+              {t("On a plan, not in the schematic ({n})", { n: planOnly.length })}
+            </div>
+            {planOnly.map((item) => (
+              <div
+                key={`${item.pageId}:${item.symbolId}`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    "application/x-floorplan-symbol",
+                    JSON.stringify({ pageId: item.pageId, symbolId: item.symbolId }),
+                  );
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                className="flex items-center gap-2 px-2 py-1.5 cursor-grab active:cursor-grabbing hover:bg-[var(--color-surface-hover)]"
+                title={t("{label} on {plan} — drag onto the canvas to create the device and link it to the symbol", { label: item.label, plan: item.pageLabel })}
+              >
+                <FloorplanSymbolSvg group={item.group} sizePx={14} paddingPx={1} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text)]">
+                  {item.label}
+                  <span className="text-[var(--color-text-muted)]"> · {item.group.label}</span>
+                </span>
+                <span className="shrink-0 text-[10px] text-[var(--color-text-muted)]">{item.pageLabel}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Note draggable */}
         {!hasFilter && (!query || "note".includes(query.toLowerCase())) && (
           <div

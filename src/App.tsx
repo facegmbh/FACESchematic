@@ -818,6 +818,17 @@ function SchematicCanvas() {
         return;
       }
 
+      // A symbol drawn on a plan that has no device yet: creating it here is what links
+      // the two, so the drawing and the schematic stop drifting apart.
+      const planSymbol = event.dataTransfer.getData("application/x-floorplan-symbol");
+      if (planSymbol) {
+        const { pageId, symbolId } = JSON.parse(planSymbol) as { pageId: string; symbolId: string };
+        const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const created = useSchematicStore.getState().addDeviceForPlanSymbol(pageId, symbolId, position);
+        if (created) reparentNode(created, position, { skipUndo: true });
+        return;
+      }
+
       // Handle device drops
       const raw = event.dataTransfer.getData("application/easyschematic-device");
       if (!raw) return;
