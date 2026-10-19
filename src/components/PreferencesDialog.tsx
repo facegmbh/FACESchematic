@@ -679,7 +679,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   </span>
                 </div>
                 {mcpStatusDetail && (
-                  <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{mcpStatusDetail}</p>
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{t(mcpStatusDetail)}</p>
                 )}
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
                   {t("Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.")}

@@ -142,6 +142,19 @@ export const DE_SETTINGS: Record<string, string> = {
   "Connecting…": "Verbindung wird aufgebaut…",
   "Connected": "Verbunden",
   "Not connected": "Nicht verbunden",
+  // Status details from the bridge (src/mcpBridge.ts) and reasons sent by the MCP server
+  "Waiting for the browser’s permission to reach this computer…":
+    "Wartet auf die Erlaubnis des Browsers, den eigenen Rechner zu erreichen…",
+  "The browser blocks this page from reaching your computer. Allow “Local network access” in the site settings (icon left of the address), then reload.":
+    "Der Browser lässt diese Seite nicht an den eigenen Rechner. In den Website-Einstellungen (Symbol links neben der Adresse) „Lokales Netzwerk“ erlauben und die Seite neu laden.",
+  "Could not open a connection.": "Verbindung ließ sich nicht öffnen.",
+  "Connection error — is the MCP server running?": "Verbindungsfehler — läuft der MCP-Server (Claude Desktop gestartet)?",
+  "Reconnecting…": "Neuer Verbindungsversuch…",
+  "Pairing refused.": "Kopplung abgelehnt.",
+  "Invalid pairing token.": "Kopplungs-Token passt nicht.",
+  "Protocol version mismatch — update the MCP server.": "Protokollversion passt nicht — MCP-Server aktualisieren.",
+  "Another tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
+  "Another EasySchematic tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
   "Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.":
     "Die Einrichtung steht in der Dokumentation unter „AI Assistant (MCP)“. Das ist eine frühe Beta — bisher wird nur ein Grundstock an Aktionen unterstützt.",
 

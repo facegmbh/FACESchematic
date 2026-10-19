@@ -1652,6 +1652,54 @@ function amplifierSummaries(results: Map<string, { amplifier: { nodeId: string; 
 // ---------------------------------------------------------------------------
 // Connection controller — a singleton driven by the useMcpBridge() hook.
 // ---------------------------------------------------------------------------
+
+const LOOPBACK_BLOCKED =
+  "The browser blocks this page from reaching your computer. Allow “Local network access” in the site settings (icon left of the address), then reload.";
+
+/** The names Chrome has used for its Local Network Access permission. */
+const LOOPBACK_PERMISSIONS = ["loopback-network", "local-network-access"];
+
+async function loopbackPermission(): Promise<PermissionState | null> {
+  for (const name of LOOPBACK_PERMISSIONS) {
+    try {
+      return (await navigator.permissions.query({ name: name as PermissionName })).state;
+    } catch {
+      /* not a permission this browser knows — try the next name */
+    }
+  }
+  return null;
+}
+
+/**
+ * Chrome's Local Network Access check stops a page served from a real host from
+ * opening a WebSocket to 127.0.0.1 — silently, without asking the user. A plain
+ * fetch to the same address does raise the permission prompt, and once the site
+ * is allowed the socket goes through. So ask with a fetch first: the MCP server
+ * answers it with 426 (no upgrade), which is all the request is for. The promise
+ * stays open while the prompt waits for an answer.
+ *
+ * "denied" only when the browser refuses; a server that isn't running is left to
+ * the socket attempt, which reports it the usual way.
+ */
+async function requestLoopbackAccess(port: number): Promise<"granted" | "denied"> {
+  if (typeof navigator === "undefined" || !navigator.permissions) return "granted";
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return "granted";
+  const before = await loopbackPermission();
+  if (before === null || before === "granted") return "granted";
+  if (before === "prompt") setStatus("connecting", "Waiting for the browser’s permission to reach this computer…");
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, {
+      mode: "no-cors",
+      cache: "no-store",
+      targetAddressSpace: "loopback",
+    } as RequestInit);
+  } catch {
+    /* refused, or nothing listening — the permission state tells which */
+  }
+  return (await loopbackPermission()) === "granted" ? "granted" : "denied";
+}
+
 class BridgeController {
   private ws: WebSocket | null = null;
   private enabled = false;
@@ -1663,10 +1711,14 @@ class BridgeController {
   private backoffMs = 1000;
   /** Set when pairing was refused (bad token / superseded) so we stop retrying. */
   private halted = false;
+  /** Bumped by stop(), so a permission request still waiting for the user can
+   *  tell that the bridge was switched off or restarted meanwhile. */
+  private generation = 0;
+  private askingAccess = false;
 
   /** (Re)start with the latest settings. Idempotent for unchanged inputs. */
   start(token: string, port: number) {
-    if (this.enabled && this.token === token && this.port === port && (this.ws || this.reconnectTimer)) {
+    if (this.enabled && this.token === token && this.port === port && (this.ws || this.reconnectTimer || this.askingAccess)) {
       return; // already running with the same config (StrictMode-safe)
     }
     this.stop();
@@ -1680,6 +1732,8 @@ class BridgeController {
 
   stop() {
     this.enabled = false;
+    this.generation++;
+    this.askingAccess = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -1705,6 +1759,21 @@ class BridgeController {
   private connect() {
     if (!this.enabled || this.halted) return;
     setStatus("connecting");
+    const generation = this.generation;
+    this.askingAccess = true;
+    void requestLoopbackAccess(this.port).then((access) => {
+      if (generation !== this.generation) return;
+      this.askingAccess = false;
+      if (access === "denied") {
+        setStatus("error", LOOPBACK_BLOCKED);
+        this.scheduleReconnect();
+        return;
+      }
+      this.openSocket();
+    });
+  }
+
+  private openSocket() {
     let ws: WebSocket;
     try {
       ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
