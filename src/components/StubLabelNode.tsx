@@ -1,30 +1,19 @@
 import { memo, useMemo, useEffect } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { StubLabelNode as StubLabelNodeType, StubLabelData, ConnectionEdge, SchematicNode } from "../types";
-import { SIGNAL_COLORS } from "../types";
+import { DEFAULT_STUB_LABEL_MODE, SIGNAL_COLORS } from "../types";
 import { useSchematicStore, GRID_SIZE } from "../store";
-import { resolvePortLabel } from "../packList";
-import { computePageGrid } from "../printPageGrid";
-import { getPaperSize } from "../printConfig";
 import { STUB_GAP } from "../stubPlacement";
 import { getPortAbsolutePositions } from "../snapUtils";
-import { buildStubLabelText } from "../stubLabelText";
+import { buildStubLabelText, UNRESOLVED_STUB_LABEL_TEXT } from "../stubLabelText";
+import { buildPrintPageLookup, resolveStubLabelPartsForMode } from "../stubLabelResolve";
+import { useDisplayLabel } from "../labelCaseUtils";
 
 /** Find the connecting edge: source-side stub is the TARGET of an edge from a device;
  *  target-side stub is the SOURCE of an edge to a device. */
 function findOwnEdge(stubId: string, side: "source" | "target", edges: ConnectionEdge[]): ConnectionEdge | undefined {
   return edges.find((e) =>
     side === "source" ? e.target === stubId : e.source === stubId,
-  );
-}
-
-/** Find the partner stub label node (same linkedConnectionId, opposite side). */
-function findPartnerStub(linkedConnectionId: string, mySide: "source" | "target", nodes: SchematicNode[]): SchematicNode | undefined {
-  const otherSide = mySide === "source" ? "target" : "source";
-  return nodes.find((n) =>
-    n.type === "stub-label" &&
-    (n.data as StubLabelData).linkedConnectionId === linkedConnectionId &&
-    (n.data as StubLabelData).side === otherSide,
   );
 }
 
@@ -46,69 +35,39 @@ function absolutePos(node: SchematicNode | undefined, nodeMap: Map<string, Schem
 
 function StubLabelNodeComponent({ id, data, selected }: NodeProps<StubLabelNodeType>) {
   // Single combined selector returning a serialized string — minimizes re-renders.
+  // The resolution itself lives in stubLabelResolve so the DXF export emits the same
+  // text this box shows (#319); only the serialization is local.
   const labelStr = useSchematicStore((s) => {
-    const ownEdge = findOwnEdge(id, data.side, s.edges);
-    if (!ownEdge) return "";
-    // The "far device" for this stub is at the OTHER end of the partner leg, not our own.
-    const partnerEdge = s.edges.find(
-      (e) => e.data?.linkedConnectionId === data.linkedConnectionId && e.id !== ownEdge.id,
-    );
-    if (!partnerEdge) return "";
-    const farDeviceId = data.side === "source" ? partnerEdge.target : partnerEdge.source;
-    const farHandleId = data.side === "source" ? partnerEdge.targetHandle : partnerEdge.sourceHandle;
-    const farDevice = s.nodes.find((n) => n.id === farDeviceId);
-    if (!farDevice) return "";
-
-    const farLabel = (farDevice.data as Record<string, unknown>)?.label as string ?? "";
-    const farRoom = farDevice.parentId
-      ? s.nodes.find((n) => n.id === farDevice.parentId)
-      : null;
-    const farRoomLabel = (farRoom?.data as Record<string, unknown>)?.label as string ?? "";
-    const farPort = resolvePortLabel(farDevice, farHandleId ?? null);
-
-    // Partner stub's geographical X relative to ours — drives arrow direction.
-    const partnerStub = findPartnerStub(data.linkedConnectionId, data.side, s.nodes);
-    const nodeMap = new Map(s.nodes.map((n) => [n.id, n] as const));
-    const myAbs = absolutePos(s.nodes.find((n) => n.id === id), nodeMap);
-    const partnerAbs = partnerStub ? absolutePos(partnerStub, nodeMap) : myAbs;
-    const dx = partnerAbs.x - myAbs.x;
-    const dy = partnerAbs.y - myAbs.y;
-    let arrow: string;
-    if (Math.abs(dx) >= Math.abs(dy)) arrow = dx >= 0 ? "→" : "←";
-    else arrow = dy >= 0 ? "↓" : "↑";
-
-    // Page numbers in print view (matches OffsetEdge.tsx legacy behavior)
-    let myPage = "";
-    let farPage = "";
-    if (s.printView) {
-      const paperSize = getPaperSize(s.printPaperId, s.printCustomWidthIn, s.printCustomHeightIn);
-      const pages = computePageGrid(
-        paperSize, s.printOrientation, s.printScale, s.nodes,
-        s.titleBlockLayout?.heightIn ?? 1, s.printOriginOffsetX, s.printOriginOffsetY,
-      );
-      if (pages.length > 1) {
-        const findPage = (x: number, y: number) => {
-          for (const p of pages) {
-            if (x >= p.x && x < p.x + p.widthPx && y >= p.y && y < p.y + p.heightPx) return p.index + 1;
-          }
-          return 0;
-        };
-        const farAbs = absolutePos(farDevice, nodeMap);
-        const mp = findPage(myAbs.x, myAbs.y);
-        const fp = findPage(farAbs.x, farAbs.y);
-        if (mp > 0) myPage = String(mp);
-        if (fp > 0) farPage = String(fp);
-      }
-    }
-    return `${arrow}\0${farLabel}\0${farPort}\0${farRoomLabel}\0${myPage}\0${farPage}`;
+    // Mode-aware: a cable-ID-only tag whose partner leg is gone still prints the ID off
+    // its own leg, rather than the "?" the destination-naming modes fall back to (#364).
+    const parts = resolveStubLabelPartsForMode(id, data, {
+      nodes: s.nodes,
+      edges: s.edges,
+      // Page tags only appear in print view (matches OffsetEdge.tsx legacy behavior).
+      pageAt: buildPrintPageLookup(s),
+      // With the inline adapter hidden the leg visibly runs on to the device beyond it,
+      // so that is the device the tag names (#348).
+      hiddenAdapterIds: s.hiddenAdapterNodeIds,
+      // Same map the leg prints its cable ID from, so a cable-ID tag (#270) always
+      // agrees with the wire it terminates.
+      cableIdMap: s.cableIdMap,
+    });
+    if (!parts) return "";
+    return [parts.arrow, parts.farLabel, parts.farPort, parts.farRoom, parts.myPage, parts.farPage, parts.cableId, parts.sameRoom ? "1" : ""].join("\0");
   });
 
+  const showArrowGlobal = useSchematicStore((s) => s.stubLabelShowArrow);
   const showPortGlobal = useSchematicStore((s) => s.stubLabelShowPort);
   const showRoomGlobal = useSchematicStore((s) => s.stubLabelShowRoom);
   const pageModeGlobal = useSchematicStore((s) => s.stubLabelPageMode);
+  const effectiveShowArrow = data.showArrow ?? showArrowGlobal;
   const effectiveShowPort = data.showPort ?? showPortGlobal;
   const effectiveShowRoom = data.showRoom ?? showRoomGlobal;
+  const forceRoom = data.showRoom === true;
   const effectivePageMode = data.pageMode ?? pageModeGlobal;
+  // Per-stub. The default stub tag mode setting (#377) is stamped onto the tag when the
+  // connection is stubbed, so an unset mode here is always "full".
+  const effectiveLabelMode = data.labelMode ?? DEFAULT_STUB_LABEL_MODE;
 
   // Auto-place: once per stub (lifetime, not per mount), align Y with the connected
   // device's actual port Y and ensure the box edge clears the device. Result is sticky
@@ -219,16 +178,36 @@ function StubLabelNodeComponent({ id, data, selected }: NodeProps<StubLabelNodeT
     };
   }, [id, data.side, data.placed]);
 
+  const displayLabel = useDisplayLabel();
   const text = useMemo(() => {
-    if (!labelStr) return "?";
-    const [arrow, farLabel, farPort, farRoom, myPage, farPage] = labelStr.split("\0");
+    if (!labelStr) return UNRESOLVED_STUB_LABEL_TEXT;
+    const [arrow, farLabel, farPort, farRoom, myPage, farPage, cableId, sameRoom] = labelStr.split("\0");
     return buildStubLabelText(
-      { arrow, farLabel, farPort, farRoom, myPage, farPage },
-      { showPort: effectiveShowPort, showRoom: effectiveShowRoom, pageMode: effectivePageMode },
+      // The far device's name and its room are labels like any other, so the auto-case
+      // preference applies to them here too (#294). Applied to the parts rather than the
+      // assembled string so the arrow and the "Pg" tag stay untouched.
+      //
+      // farPort is deliberately NOT wrapped: resolvePortLabel already runs the transform
+      // (see packList.ts), so wrapping it here would be a redundant second pass.
+      //
+      // cableId is likewise left alone: it is an identifier the user prints on a physical
+      // label, not a device name, so the auto-case preference must not rewrite it.
+      { arrow, farLabel: displayLabel(farLabel), farPort, farRoom: displayLabel(farRoom), myPage, farPage, cableId, sameRoom: sameRoom === "1" },
+      {
+        showArrow: effectiveShowArrow, showPort: effectiveShowPort, showRoom: effectiveShowRoom,
+        // Only an explicit "Show room: On" names the tag's own room (#297).
+        roomInSameRoom: forceRoom,
+        pageMode: effectivePageMode, labelMode: effectiveLabelMode,
+      },
     );
-  }, [labelStr, effectiveShowPort, effectiveShowRoom, effectivePageMode]);
+  }, [labelStr, effectiveShowArrow, effectiveShowPort, effectiveShowRoom, forceRoom, effectivePageMode, effectiveLabelMode, displayLabel]);
 
-  const color = SIGNAL_COLORS[data.signalType] ?? "#999";
+  // Per-signal color overrides apply here as they do to the connection itself — a
+  // recolored signal type used to leave the stub box on the stock color while its own
+  // leg drew in the custom one (and the DXF pill, which honors the override, disagreed
+  // with the canvas).
+  const colorOverride = useSchematicStore((s) => s.signalColors?.[data.signalType]);
+  const color = colorOverride ?? SIGNAL_COLORS[data.signalType] ?? "#999";
   // Source-side stubs receive an incoming line (they're the TARGET of the edge);
   // target-side stubs originate the line (they're the SOURCE).
   const handleType = data.side === "source" ? "target" : "source";

@@ -538,4 +538,24 @@ export const DE_DEVICES: Record<string, string> = {
   "V, auto": "V, auto",
   "Peak output voltage per channel": "Spitzen-Ausgangsspannung je Kanal",
   "Peak current (A)": "Spitzenstrom (A)",
+
+  // Upstream-Merge 2026-10
+  // ─── Device editor: header color hint, split save button, bulk add, port row ───
+  "from this preset": "aus diesem Preset",
+  "from this template": "aus dieser Vorlage",
+  "default for new devices": "Standard für neue Geräte",
+  "More save and revert actions": "Weitere Speicher- und Zurücksetzen-Aktionen",
+  "Update Other Instances?": "Weitere Exemplare aktualisieren?",
+  "Signal type": "Signalart",
+  "(default)": "(Standard)",
+  "Space before number": "Leerzeichen vor der Nummer",
+  "Prefix ends in a digit — consider the space option":
+    "Präfix endet auf eine Ziffer — besser mit Leerzeichen",
+  "A device can have at most {max} ports.": "Ein Gerät kann höchstens {max} Ports haben.",
+  "Only 1 more port fits (max {max}); the count will be capped.":
+    "Nur noch 1 Port passt (max. {max}); die Anzahl wird gekürzt.",
+  "Only {n} more ports fit (max {max}); the count will be capped.":
+    "Nur noch {n} Ports passen (max. {max}); die Anzahl wird gekürzt.",
+  "Multi-connect — allow multiple connections on this port (1:many), e.g. one Dante flow feeding many destinations":
+    "Multi-Connect — mehrere Verbindungen an diesem Port zulassen (1:n), z. B. ein Dante-Flow für viele Ziele",
 };

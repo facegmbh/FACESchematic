@@ -6,6 +6,8 @@ import {
   CONNECTOR_TO_CABLE,
   CONNECTOR_GENDER,
   CONNECTORS_WITH_GENDER_VARIATION,
+  shouldDefaultMultiConnect,
+  migrateLegacyConnectorTypes,
 } from "../connectorTypes";
 import { CONNECTOR_LABELS, CONNECTOR_GROUPS } from "../types";
 
@@ -42,31 +44,51 @@ describe("1/4\" TS connector (#208)", () => {
   });
 });
 
-describe("CEE 7/7 (Schuko) connector", () => {
+describe("Schuko connector (FACE, now upstream's \"schuko\")", () => {
   it("has a dropdown label and a cable name", () => {
-    expect(CONNECTOR_LABELS["cee-7-7"]).toBe("CEE 7/7 (Schuko)");
-    expect(CONNECTOR_TO_CABLE["cee-7-7"]).toBe("Schuko");
+    expect(CONNECTOR_LABELS["schuko"]).toBe("CEE Schuko (7/3/4)");
+    expect(CONNECTOR_TO_CABLE["schuko"]).toBe("Schuko");
   });
 
   it("appears in the Power connector group", () => {
-    expect(CONNECTOR_GROUPS["Power"]).toContain("cee-7-7");
+    expect(CONNECTOR_GROUPS["Power"]).toContain("schuko");
   });
 
   it("reaches the IEC family and Edison only via an adapter — in both directions", () => {
-    expect(areConnectorsCompatible("cee-7-7", "iec")).toBe(true);
-    expect(needsAdapter("cee-7-7", "iec")).toBe(true);
-    expect(needsAdapter("iec", "cee-7-7")).toBe(true);
-    expect(needsAdapter("edison", "cee-7-7")).toBe(true);
+    expect(areConnectorsCompatible("schuko", "iec")).toBe(true);
+    expect(needsAdapter("schuko", "iec")).toBe(true);
+    expect(needsAdapter("iec", "schuko")).toBe(true);
+    expect(needsAdapter("edison", "schuko")).toBe(true);
   });
 
   it("mates with itself without an adapter", () => {
-    expect(areConnectorsCompatible("cee-7-7", "cee-7-7")).toBe(true);
-    expect(needsAdapter("cee-7-7", "cee-7-7")).toBe(false);
+    expect(areConnectorsCompatible("schuko", "schuko")).toBe(true);
+    expect(needsAdapter("schuko", "schuko")).toBe(false);
   });
 
   it("is a socket on outputs and a plug on inputs, with a manual override", () => {
-    expect(CONNECTOR_GENDER["cee-7-7"]).toEqual({ input: "male", output: "female" });
-    expect(CONNECTORS_WITH_GENDER_VARIATION.has("cee-7-7")).toBe(true);
+    expect(CONNECTOR_GENDER["schuko"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("schuko")).toBe(true);
+  });
+
+  it("keeps the powerCON TRUE1 adapter path FACE's own cee-7-7 had", () => {
+    expect(areConnectorsCompatible("schuko", "powercon-true1")).toBe(true);
+    expect(needsAdapter("schuko", "powercon-true1")).toBe(true);
+  });
+
+  it("rewrites FACE's legacy cee-7-7 wherever a port carries it", () => {
+    const file = {
+      nodes: [
+        { data: { ports: [{ connectorType: "cee-7-7" }, { connectorType: "iec" }] } },
+        { data: { slots: [{ card: { ports: [{ rearConnectorType: "cee-7-7", frontConnectorType: "cee-7-7" }] } }] } },
+      ],
+      note: "cee-7-7 in free text stays",
+    };
+    expect(migrateLegacyConnectorTypes(file)).toBe(3);
+    expect(file.nodes[0].data.ports![0].connectorType).toBe("schuko");
+    expect(file.nodes[0].data.ports![1].connectorType).toBe("iec");
+    expect(file.nodes[1].data.slots![0].card.ports[0]).toEqual({ rearConnectorType: "schuko", frontConnectorType: "schuko" });
+    expect(file.note).toBe("cee-7-7 in free text stays");
   });
 });
 
@@ -137,5 +159,90 @@ describe("USB-C Power Delivery shortfall (#204)", () => {
     const b = { usbcPowerSourceW: 10, usbcPowerDrawW: 5 };
     // a→b: b draws 5, a delivers 20 → fine; b→a: a draws 100, b delivers 10 → 90 short
     expect(usbcPowerShortfallW(a, b)).toBe(90);
+  });
+});
+
+describe("multi-connect defaults (#273)", () => {
+  it("defaults SRT and Custom signal ports to multi-connect", () => {
+    expect(shouldDefaultMultiConnect("srt")).toBe(true);
+    expect(shouldDefaultMultiConnect("custom")).toBe(true);
+  });
+
+  it("defaults wireless-connector ports to multi-connect regardless of signal", () => {
+    expect(shouldDefaultMultiConnect("analog-audio", "wireless")).toBe(true);
+  });
+
+  it("leaves Dante ports single-connection by default — 1:many flows need the M toggle", () => {
+    expect(shouldDefaultMultiConnect("dante")).toBe(false);
+    expect(shouldDefaultMultiConnect("dante", "rj45")).toBe(false);
+  });
+
+  it("leaves ordinary wired ports single-connection by default", () => {
+    expect(shouldDefaultMultiConnect("sdi", "bnc")).toBe(false);
+    expect(shouldDefaultMultiConnect("hdmi", "hdmi")).toBe(false);
+  });
+});
+
+describe("CEE 7 European power connectors", () => {
+  it("has dropdown labels and pack-list cable names", () => {
+    expect(CONNECTOR_LABELS["schuko"]).toBe("CEE Schuko (7/3/4)");
+    expect(CONNECTOR_LABELS["french-power"]).toBe("CEE French Power (7/5/7)");
+    expect(CONNECTOR_LABELS["europlug"]).toBe("CEE Europlug (7/16)");
+    expect(CONNECTOR_TO_CABLE["schuko"]).toBe("Schuko");
+    expect(CONNECTOR_TO_CABLE["french-power"]).toBe("French Power");
+    expect(CONNECTOR_TO_CABLE["europlug"]).toBe("Europlug");
+  });
+
+  it("follows the IEC-style direction-conditional gender, with an override exposed", () => {
+    expect(CONNECTOR_GENDER["schuko"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTOR_GENDER["french-power"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("schuko")).toBe(true);
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("french-power")).toBe(true);
+  });
+
+  it("follows the same direction-conditional gender as the rest of the power family — europlug sockets exist on power strips", () => {
+    expect(CONNECTOR_GENDER["europlug"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("europlug")).toBe(true);
+  });
+
+  it("mates a europlug into either socket shape with no adapter", () => {
+    expect(areConnectorsCompatible("europlug", "schuko")).toBe(true);
+    expect(needsAdapter("europlug", "schuko")).toBe(false);
+    expect(areConnectorsCompatible("europlug", "french-power")).toBe(true);
+    expect(needsAdapter("europlug", "french-power")).toBe(false);
+  });
+
+  it("requires an adapter between Schuko and the French system, and to reach IEC/Edison", () => {
+    expect(needsAdapter("schuko", "french-power")).toBe(true);
+    expect(needsAdapter("schuko", "iec")).toBe(true);
+    expect(needsAdapter("french-power", "edison")).toBe(true);
+  });
+});
+
+describe("BS 1363 UK power connector", () => {
+  it("has a dropdown label and pack-list cable name", () => {
+    expect(CONNECTOR_LABELS["uk-power"]).toBe("UK Power (BS 1363)");
+    expect(CONNECTOR_TO_CABLE["uk-power"]).toBe("UK Power");
+  });
+
+  it("appears in the Power connector group", () => {
+    expect(CONNECTOR_GROUPS["Power"]).toContain("uk-power");
+  });
+
+  it("follows the IEC-style direction-conditional gender, with an override exposed", () => {
+    expect(CONNECTOR_GENDER["uk-power"]).toEqual({ input: "male", output: "female" });
+    expect(CONNECTORS_WITH_GENDER_VARIATION.has("uk-power")).toBe(true);
+  });
+
+  it("has no native mate — shuttered sockets need the earth pin to unlock, so even a Europlug needs an adapter", () => {
+    expect(needsAdapter("uk-power", "europlug")).toBe(true);
+    expect(needsAdapter("uk-power", "schuko")).toBe(true);
+    expect(needsAdapter("uk-power", "french-power")).toBe(true);
+    expect(needsAdapter("uk-power", "iec")).toBe(true);
+    expect(needsAdapter("uk-power", "edison")).toBe(true);
+  });
+
+  it("is still flagged compatible (via adapter), not rejected outright", () => {
+    expect(areConnectorsCompatible("uk-power", "iec")).toBe(true);
   });
 });

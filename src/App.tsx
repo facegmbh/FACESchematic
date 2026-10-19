@@ -14,13 +14,14 @@ import {
   useStoreApi,
   useUpdateNodeInternals,
   useViewport,
-  reconnectEdge,
   type Node,
   type Edge,
   type Connection,
+  type HandleType,
 } from "@xyflow/react";
 import { loadBuildCompanyLogo, useSchematicStore, GRID_SIZE, setReconnectingEdgeId } from "./store";
 import { isEmbedded, listenForEmbeddedSchematic } from "./embed";
+import { useShallow } from "zustand/react/shallow";
 import { normalizeShortcutKey } from "./keyUtils";
 import { warmupRoutingWorker } from "./routing/routingClient";
 import { useMcpBridge } from "./mcpBridge";
@@ -36,6 +37,7 @@ import ViewOptionsPanel from "./components/ViewOptionsPanel";
 import MenuBar from "./components/MenuBar";
 import EdgeContextMenu from "./components/EdgeContextMenu";
 import IncompatibleConnectionDialog from "./components/IncompatibleConnectionDialog";
+import PortEditConflictDialog from "./components/PortEditConflictDialog";
 import DeviceSwapDialog from "./components/DeviceSwapDialog";
 import MobileGate from "./components/MobileGate";
 import ToastContainer from "./components/ToastContainer";
@@ -59,12 +61,22 @@ import RackPage from "./components/RackPage";
 import PatchPanelPage from "./components/PatchPanelPage";
 import PrintSheetPage from "./components/PrintSheetPage";
 import FloorplanPage from "./components/FloorplanPage";
-import { computeSnap, enforceMinSpacing, detectOverlap, speculativeReparent, type GuideLine } from "./snapUtils";
+import { computeSnap, enforceMinSpacing, detectOverlap, speculativeReparent, parentOffsetFromMap, snapParentedRestPosition, snapGroupRestPositions, settleTagsAfterMove, type GuideLine } from "./snapUtils";
 import type { ConnectionEdge, DeviceData, DeviceTemplate, SchematicFile, SchematicNode, StubLabelData, TextStubData } from "./types";
 import { findAdaptersForSignalBridge, findAdaptersForConnectorBridge, areConnectorsCompatible } from "./connectorTypes";
+import { findPortByHandle } from "./portHandles";
+import {
+  CONNECT_SNAP_RADIUS,
+  isConnectableDevice,
+  resolveClickRelease,
+  resolveConnectTarget,
+  resolveRelease,
+  type SnapHandle,
+} from "./connectSnap";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { type TrackpadGesture, createTrackpadGesture, nextWheelViewport } from "./wheelViewport";
 import { loadSharedSchematic, checkSession } from "./templateApi";
+import { loadTestSchematicFromUrl } from "./testSchematic/load";
 import { refreshCloudCache } from "./cloudSync";
 import { useTheme } from "./hooks/useTheme";
 import { getLocale, t, useT } from "./i18n";
@@ -235,8 +247,14 @@ function AutoRouteConfirmDialog() {
   );
 }
 
+/** A stub tag isn't a connection end — both re-route paths refuse a drag holding one. */
+const STUB_TAG_END_MSG = "A stub label isn't a connection end — re-route the device end instead";
+
 function SchematicCanvas() {
   const t = useT();
+  // Select only the fields this component uses (shallow-compared) so it re-renders on changes to
+  // these — not on every unrelated store set(). The actions are stable references; in practice this
+  // narrows re-renders to nodes/edges changes, which the canvas needs anyway.
   const {
     nodes,
     edges,
@@ -250,13 +268,32 @@ function SchematicCanvas() {
     removeSelected,
     copySelected,
     pasteClipboard,
-    pushSnapshot,
     setPendingUndoSnapshot,
     flushPendingSnapshot,
     reparentNode,
     reparentAllDevices,
     loadFromLocalStorage,
-  } = useSchematicStore();
+  } = useSchematicStore(
+    useShallow((s) => ({
+      nodes: s.nodes,
+      edges: s.edges,
+      onNodesChange: s.onNodesChange,
+      onEdgesChange: s.onEdgesChange,
+      onConnect: s.onConnect,
+      isValidConnection: s.isValidConnection,
+      addDevice: s.addDevice,
+      addRoom: s.addRoom,
+      addNote: s.addNote,
+      removeSelected: s.removeSelected,
+      copySelected: s.copySelected,
+      pasteClipboard: s.pasteClipboard,
+      setPendingUndoSnapshot: s.setPendingUndoSnapshot,
+      flushPendingSnapshot: s.flushPendingSnapshot,
+      reparentNode: s.reparentNode,
+      reparentAllDevices: s.reparentAllDevices,
+      loadFromLocalStorage: s.loadFromLocalStorage,
+    })),
+  );
 
   const rfInstance = useReactFlow();
   const rfStore = useStoreApi();
@@ -494,6 +531,11 @@ function SchematicCanvas() {
 
   // Edge reconnection state (React Flow's reconnection path)
   const reconnectingRef = useRef(false);
+  // True for the whole span of a re-route drag, start to end. reconnectingRef can't
+  // stand in for this: onReconnect clears it as soon as the re-wire lands, which is
+  // before React Flow calls onConnectEnd, and the release backstop needs to know it is
+  // looking at a re-route even then (#366).
+  const reconnectDragRef = useRef(false);
 
   // Click-to-connect preview line state
   const clickConnectFromRef = useRef<{
@@ -502,6 +544,14 @@ function SchematicCanvas() {
   } | null>(null);
   const clickConnectCleanupRef = useRef<(() => void) | null>(null);
   const isClickConnectMode = useRef(false);
+  // The rendered twin of isClickConnectMode: it puts `click-connecting` on the flow
+  // wrapper for the whole gesture, which is what stops the cable layer from swallowing
+  // the second click (see the rule in index.css). A ref can't do it — the class has to
+  // survive re-renders, so it has to be state (#366).
+  const [clickConnecting, setClickConnecting] = useState(false);
+  // Set when React Flow accepted the connection itself, so the drag/click end
+  // handlers don't hand the same connection to onConnect a second time.
+  const connectHandledRef = useRef(false);
   const [connectPreview, setConnectPreview] = useState<{
     fromX: number; fromY: number; toX: number; toY: number; fromSource: boolean;
     snapped: boolean; valid: boolean; adaptable: boolean;
@@ -519,8 +569,13 @@ function SchematicCanvas() {
   // Snap guide lines shown during drag
   const [snapGuides, setSnapGuides] = useState<GuideLine[]>([]);
 
-  // Load saved state on mount
+  // Load saved state on mount. Ref-guarded because StrictMode double-invokes mount
+  // effects in dev, which loaded twice — harmless while the load succeeded, but once
+  // a failed load surfaced a toast (#240) it showed the error twice, stacked.
+  const didHydrateRef = useRef(false);
   useEffect(() => {
+    if (didHydrateRef.current) return;
+    didHydrateRef.current = true;
     loadFromLocalStorage();
   }, [loadFromLocalStorage]);
 
@@ -728,6 +783,7 @@ function SchematicCanvas() {
     clickConnectCleanupRef.current = null;
     // eslint-disable-next-line react-hooks/immutability -- intentional mutable ref flag
     isClickConnectMode.current = false;
+    setClickConnecting(false);
     setConnectPreview(null);
   }, []);
 
@@ -886,37 +942,104 @@ function SchematicCanvas() {
   );
 
   // Reconnection via React Flow's reconnection path (connected handle drags)
+  // No snapshot here: a re-route can end without changing anything (a stub tag dragged
+  // nowhere, or a cancelled drag), and pushUndo doesn't dedupe — an identical snapshot
+  // would cost the user an extra Ctrl+Z to reach their previous real edit. The store
+  // actions below take the snapshot on the paths that actually write.
   const onReconnectStart = useCallback((_event: React.MouseEvent, edge: Edge) => {
     reconnectingRef.current = true;
+    reconnectDragRef.current = true;
     setReconnectingEdgeId(edge.id);
-    pushSnapshot();
-  }, [pushSnapshot]);
+  }, []);
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       reconnectingRef.current = false;
       const state = useSchematicStore.getState();
-      const updated = reconnectEdge(oldEdge, newConnection, state.edges);
-      useSchematicStore.setState({ edges: updated as typeof state.edges });
-      useSchematicStore.getState().saveToLocalStorage();
+      if (state.reconnectConnectionEnd(oldEdge, newConnection) === "stub-label-end") {
+        state.addToast(t(STUB_TAG_END_MSG), "info");
+      }
     },
-    [],
+    [t],
   );
 
   const onReconnectEnd = useCallback(
-    (_event: MouseEvent | TouchEvent, edge: Edge) => {
+    (_event: MouseEvent | TouchEvent, edge: Edge, handleType: HandleType) => {
       setReconnectingEdgeId(null);
+      // The drag is over — React Flow calls this last, after onConnectEnd.
+      reconnectDragRef.current = false;
       // If the edge wasn't reconnected, delete it (disconnect)
       if (reconnectingRef.current) {
         reconnectingRef.current = false;
+        // React Flow reports the handle that stayed PUT (the anchor opposite the one
+        // being dragged), so the end the user is holding is the other one. A stub leg's
+        // device end is a true source/target and disconnects like any other connection —
+        // the store cascades the partner leg and both tags with it (#318).
+        const draggedEndNodeId = handleType === "source" ? edge.target : edge.source;
         const state = useSchematicStore.getState();
-        useSchematicStore.setState({
-          edges: state.edges.filter((e) => e.id !== edge.id),
-        });
-        useSchematicStore.getState().saveToLocalStorage();
+        if (state.disconnectConnectionEnd(edge.id, draggedEndNodeId) === "stub-label-end") {
+          state.addToast(t(STUB_TAG_END_MSG), "info");
+        }
       }
     },
-    [],
+    [t],
+  );
+
+  /** Every device port handle a drag could land on, centred in flow space. The ghost
+   *  preview and the release both search this one list so they can't disagree (#366).
+   *
+   *  Devices that aren't drawn are left out even though React Flow still holds their
+   *  handle bounds. A virtual patch panel keeps the position and handles it had when it
+   *  was last on canvas, so a search over raw internals would snap to phantom ports in
+   *  an empty patch of canvas — and wiring one would break the invariant setPanelOffCanvas
+   *  enforces ("a physically wired panel must stay on canvas"), besides being dropped from
+   *  the router's node set so the connection would have nowhere to render. An auto-inserted
+   *  adapter renders as a 1x1 invisible placeholder mid-connection for the same reason. */
+  const connectableHandles = useCallback((): SnapHandle[] => {
+    const state = useSchematicStore.getState();
+    const out: SnapHandle[] = [];
+    for (const node of state.nodes) {
+      if (!isConnectableDevice(node, state.hiddenAdapterNodeIds)) continue;
+      const intNode = rfInstance.getInternalNode(node.id);
+      if (!intNode) continue;
+      const hBounds = intNode.internals.handleBounds;
+      const handles = [...(hBounds?.source ?? []), ...(hBounds?.target ?? [])];
+      if (!handles.length) continue;
+      const absX = intNode.internals.positionAbsolute.x;
+      const absY = intNode.internals.positionAbsolute.y;
+      for (const h of handles) {
+        if (!h.id) continue;
+        out.push({
+          nodeId: node.id,
+          handleId: h.id,
+          x: absX + h.x + h.width / 2,
+          y: absY + h.y + h.height / 2,
+        });
+      }
+    }
+    return out;
+  }, [rfInstance]);
+
+  /** The port handle sitting directly under these client coords, if any. */
+  const handleElementAt = useCallback((clientX: number, clientY: number) => {
+    const el = document.elementFromPoint(clientX, clientY);
+    const handleEl = el?.closest(".react-flow__handle") as HTMLElement | null;
+    if (!handleEl) return null;
+    const nodeId = handleEl.closest(".react-flow__node")?.getAttribute("data-id");
+    const handleId = handleEl.getAttribute("data-handleid");
+    return nodeId && handleId ? { nodeId, handleId } : null;
+  }, []);
+
+  /** Where a pointer is, in the two terms both the ghost and the release need: the flow
+   *  position, and the port handle (if any) literally under the cursor.
+   *  `snapToGrid: false` matters — the flow's snap grid is on, and letting the pointer
+   *  round to the 16-px grid would move it up to 11 units away from where it really is. */
+  const pointerConnectContext = useCallback(
+    (clientX: number, clientY: number) => ({
+      flow: screenToFlowPosition({ x: clientX, y: clientY }, { snapToGrid: false }),
+      handleUnderCursor: handleElementAt(clientX, clientY),
+    }),
+    [handleElementAt, screenToFlowPosition],
   );
 
   // Shared helper: start preview line tracking from a handle
@@ -937,12 +1060,16 @@ function SchematicCanvas() {
       } else {
         const el = event.target as HTMLElement;
         const rect = el.getBoundingClientRect();
-        pos = screenToFlowPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        });
+        // snapToGrid: false for the same reason connectTargetAt passes it — the flow's
+        // 16-px snap grid is on, and rounding the ghost's own origin to it would start
+        // the line up to 11 units off the port it left.
+        pos = screenToFlowPosition(
+          { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+          { snapToGrid: false },
+        );
       }
       clickConnectFromRef.current = { ...pos, fromSource, nodeId, handleId };
+      connectHandledRef.current = false;
 
       // Convert screen mouse coords to flow space using the ReactFlow container's position
       const containerRect = document.querySelector('.react-flow')?.getBoundingClientRect();
@@ -965,37 +1092,13 @@ function SchematicCanvas() {
 
       // Snap detection
       const from = { ...pos, fromSource };
-      const SNAP_RADIUS = 30;
       const sourceNodeId = nodeId;
       const sourceHandleId = handleId;
+      const origin = { nodeId: sourceNodeId, handleId: sourceHandleId };
 
-      const findSnapTarget = (mouseX: number, mouseY: number) => {
-        const state = useSchematicStore.getState();
-        let best: { x: number; y: number; dist: number; nodeId: string; handleId: string } | null = null;
-
-        for (const node of state.nodes) {
-          if (node.type !== "device") continue;
-          const intNode = rfInstance.getInternalNode(node.id);
-          if (!intNode) continue;
-          const hBounds = intNode.internals.handleBounds;
-          const handles = [...(hBounds?.source ?? []), ...(hBounds?.target ?? [])];
-          if (!handles.length) continue;
-          const absX = intNode.internals.positionAbsolute.x;
-          const absY = intNode.internals.positionAbsolute.y;
-
-          for (const h of handles) {
-            if (!h.id) continue;
-            if (node.id === sourceNodeId && h.id === sourceHandleId) continue;
-            const hx = absX + h.x + h.width / 2;
-            const hy = absY + h.y + h.height / 2;
-            const dx = hx - mouseX;
-            const dy = hy - mouseY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < SNAP_RADIUS && (!best || dist < best.dist)) {
-              best = { x: hx, y: hy, dist, nodeId: node.id, handleId: h.id };
-            }
-          }
-        }
+      const findSnapTarget = (clientX: number, clientY: number) => {
+        const { flow, handleUnderCursor } = pointerConnectContext(clientX, clientY);
+        const best = resolveConnectTarget(flow.x, flow.y, handleUnderCursor, connectableHandles(), origin);
         if (!best) return null;
 
         const connection = fromSource
@@ -1003,6 +1106,16 @@ function SchematicCanvas() {
           : { source: best.nodeId, sourceHandle: best.handleId, target: sourceNodeId, targetHandle: sourceHandleId };
         const state2 = useSchematicStore.getState();
         const valid = state2.isValidConnection(connection as Connection);
+
+        // Two ports the release won't act on, so the ghost mustn't colour them (#366):
+        //  - a port on the drag's own device. React Flow connects a valid one itself
+        //    (patch-panel front-to-front), but nothing acts on an invalid one, and
+        //    without this the ghost lit up the port 16 units below the one being dragged.
+        //  - during a re-route, a port the cursor isn't actually on. React Flow re-wires
+        //    a valid one from anywhere in the radius, but the release backstop stays out
+        //    of that gesture unless the cursor is on the port — see resolveRelease.
+        if (!valid && best.nodeId === sourceNodeId) return null;
+        if (!valid && reconnectDragRef.current && !handleUnderCursor) return null;
 
         // Check if an adapter exists for this mismatch (yellow indicator)
         let adaptable = false;
@@ -1014,16 +1127,18 @@ function SchematicCanvas() {
           const srcNode = state2.nodes.find((n) => n.id === srcNodeId);
           const tgtNode = state2.nodes.find((n) => n.id === tgtNodeId);
           if (srcNode?.type === "device" && tgtNode?.type === "device") {
-            const srcPortId = srcHandleId?.replace(/-(in|out|rear|front)$/, "");
-            const tgtPortId = tgtHandleId?.replace(/-(in|out|rear|front)$/, "");
-            const srcPort = (srcNode.data as DeviceData).ports.find((p) => p.id === srcPortId);
-            const tgtPort = (tgtNode.data as DeviceData).ports.find((p) => p.id === tgtPortId);
+            const srcPort = srcHandleId ? findPortByHandle(srcNode.data as DeviceData, srcHandleId) : undefined;
+            const tgtPort = tgtHandleId ? findPortByHandle(tgtNode.data as DeviceData, tgtHandleId) : undefined;
             if (srcPort && tgtPort) {
               const allTemplates = [...DEVICE_TEMPLATES, ...state2.customTemplates];
+              // Same endpoint filter onConnect's auto-insert uses, so the yellow
+              // preview and the drop outcome can't disagree (#310): an adapter that
+              // exists but can't be wired between these port directions is not offered.
+              const endpoints = { sourcePort: srcPort, targetPort: tgtPort };
               if (srcPort.signalType !== tgtPort.signalType) {
-                adaptable = findAdaptersForSignalBridge(srcPort.signalType, tgtPort.signalType, allTemplates).length > 0;
+                adaptable = findAdaptersForSignalBridge(srcPort.signalType, tgtPort.signalType, allTemplates, endpoints).length > 0;
               } else if (srcPort.connectorType && tgtPort.connectorType && srcPort.connectorType !== tgtPort.connectorType) {
-                adaptable = findAdaptersForConnectorBridge(srcPort.connectorType, tgtPort.connectorType, srcPort.signalType, allTemplates).length > 0
+                adaptable = findAdaptersForConnectorBridge(srcPort.connectorType, tgtPort.connectorType, srcPort.signalType, allTemplates, endpoints).length > 0
                   || !areConnectorsCompatible(srcPort.connectorType, tgtPort.connectorType);
               }
             }
@@ -1035,7 +1150,7 @@ function SchematicCanvas() {
 
       const onMove = (e: MouseEvent) => {
         const mouse = toFlowCoords(e.clientX, e.clientY);
-        const snap = findSnapTarget(mouse.x, mouse.y);
+        const snap = findSnapTarget(e.clientX, e.clientY);
         setConnectPreview({
           fromX: from.x, fromY: from.y,
           toX: snap ? snap.x : mouse.x, toY: snap ? snap.y : mouse.y,
@@ -1050,7 +1165,7 @@ function SchematicCanvas() {
         window.removeEventListener("mousemove", onMove);
       };
     },
-    [rfInstance, screenToFlowPosition],
+    [connectableHandles, pointerConnectContext, rfInstance, screenToFlowPosition],
   );
 
   // Click-to-connect: first click on a handle
@@ -1059,17 +1174,158 @@ function SchematicCanvas() {
       if (!params.nodeId || !params.handleType) return;
       // eslint-disable-next-line react-hooks/immutability -- intentional mutable ref flag
       isClickConnectMode.current = true;
+      setClickConnecting(true);
       startPreviewTracking(event, params.nodeId, params.handleId, params.handleType);
     },
     [startPreviewTracking],
   );
 
+  /** The connection a gesture that started at `from` makes when it lands on `target`.
+   *  The end it started from keeps the role it started with, so a drag out of an output
+   *  sources the connection and a drag out of an input receives it. */
+  const connectionBetween = useCallback(
+    (
+      from: { nodeId: string; handleId: string | null; fromSource: boolean },
+      target: { nodeId: string; handleId: string | null },
+    ): Connection =>
+      (from.fromSource
+        ? { source: from.nodeId, sourceHandle: from.handleId, target: target.nodeId, targetHandle: target.handleId }
+        : { source: target.nodeId, sourceHandle: target.handleId, target: from.nodeId, targetHandle: from.handleId }) as Connection,
+    [],
+  );
+
+  /**
+   * The backstop that makes the ghost preview binding (#366): whatever port the ghost
+   * snapped to, the release acts on it. Runs only when React Flow declined the drop
+   * itself (connectHandledRef is still clear), which happens in two ways —
+   *
+   *  - the connection needs an adapter, so it fails isValidConnection and React Flow
+   *    never fires onConnect. The store's onConnect raises the signal/connector
+   *    mismatch and auto-inserts the adapter. Used by the click path too, which had no
+   *    equivalent at all — clicking two ports that need an adapter did nothing.
+   *  - the connection is perfectly valid but React Flow resolved the release against a
+   *    different handle than the ghost did. It picks the closest handle on the whole
+   *    canvas, stub-tag handles included, and refuses when that one isn't connectable.
+   *
+   * Either way the port comes from the same CONNECT_SNAP_RADIUS search the ghost used,
+   * instead of the old "cursor must be literally on the ~10-unit handle" rule, which is
+   * what made a coloured ghost fizzle unless the user crept closer.
+   *
+   * A re-route drag is the exception, and resolveRelease holds the reasoning: React Flow
+   * fires the connect callbacks for those too, so the backstop keeps the narrow pre-#366
+   * rule there rather than duplicating a re-wire or inventing a connection out of a
+   * release meant to disconnect.
+   */
+  const completeConnectAt = useCallback((clientX: number, clientY: number) => {
+    const from = clickConnectFromRef.current;
+    if (!from) return;
+    const connectionFor = (target: { nodeId: string; handleId: string }): Connection =>
+      connectionBetween(from, target);
+    const { flow, handleUnderCursor } = pointerConnectContext(clientX, clientY);
+    const target = resolveRelease(
+      {
+        origin: from,
+        // React Flow already made the connection — don't re-run it against the
+        // now-occupied port.
+        flowHandledConnect: connectHandledRef.current,
+        reconnecting: reconnectDragRef.current,
+        pointerX: flow.x,
+        pointerY: flow.y,
+        handleUnderCursor,
+        candidates: connectableHandles(),
+      },
+      (t) => useSchematicStore.getState().isValidConnection(connectionFor(t)),
+    );
+    if (!target) return;
+    useSchematicStore.getState().onConnect(connectionFor(target));
+  }, [connectableHandles, connectionBetween, pointerConnectContext]);
+
+  /** Click-to-connect landing on a device's body rather than on one of its ports: wire
+   *  the first port that takes the connection, and failing that hand the first port that
+   *  doesn't to the store, which raises the mismatch and offers the adapter.
+   *
+   *  Every handle is searched, not just the target- or source-side ones, because
+   *  bidirectional ports register both of their faces as type="source" for React Flow. */
+  const connectToDeviceBody = useCallback(
+    (from: { nodeId: string; handleId: string | null; fromSource: boolean }, nodeId: string) => {
+      const state = useSchematicStore.getState();
+      const hBounds = rfInstance.getInternalNode(nodeId)?.internals.handleBounds;
+      const handles = [...(hBounds?.source ?? []), ...(hBounds?.target ?? [])];
+      for (const h of handles) {
+        if (!h.id) continue;
+        const connection = connectionBetween(from, { nodeId, handleId: h.id });
+        if (state.isValidConnection(connection)) {
+          state.onConnect(connection);
+          return;
+        }
+      }
+      for (const h of handles) {
+        if (!h.id) continue;
+        state.onConnect(connectionBetween(from, { nodeId, handleId: h.id }));
+        if (useSchematicStore.getState().pendingIncompatibleConnection) break;
+      }
+    },
+    [connectionBetween, rfInstance],
+  );
+
+  /**
+   * The second click of click-to-connect, wherever it lands other than squarely on a
+   * port — the pane, a device body, a room (#366).
+   *
+   * A click straight on a port is React Flow's own handle click, and that one already
+   * finishes through onClickConnectEnd. Every other click used a rule of its own: the
+   * pane cancelled outright, and a device body scanned that whole device for some port
+   * that fit. Neither looked at the ghost, so a click a few units short of a port did
+   * nothing while the ghost sat snapped and coloured on it — Dylan's "if we see a ghost,
+   * a click should create the connection". resolveClickRelease puts the snapped port
+   * first, resolved by the same search the drag release uses, with the device-body scan
+   * left underneath it for a click on a device with no port inside the radius.
+   *
+   * A third landing spot has to be taken out of play rather than handled here: an
+   * existing cable. Every one carries an invisible 20-px interaction stroke, and a click
+   * on it reaches neither the pane nor a device — React Flow just selects the cable. The
+   * `click-connecting` class on the flow wrapper makes the cable layer transparent for
+   * the length of the gesture, so those clicks arrive here through the pane instead.
+   */
+  const completeClickConnectAt = useCallback(
+    (clientX: number, clientY: number, clickedDeviceId: string | null) => {
+      const from = clickConnectFromRef.current;
+      if (!from) return;
+      const connectionFor = (target: { nodeId: string; handleId: string }): Connection =>
+        connectionBetween(from, target);
+      const { flow, handleUnderCursor } = pointerConnectContext(clientX, clientY);
+      const decision = resolveClickRelease(
+        {
+          origin: from,
+          flowHandledConnect: connectHandledRef.current,
+          pointerX: flow.x,
+          pointerY: flow.y,
+          handleUnderCursor,
+          candidates: connectableHandles(),
+        },
+        (t) => useSchematicStore.getState().isValidConnection(connectionFor(t)),
+        clickedDeviceId,
+      );
+      if (decision.kind === "port") {
+        useSchematicStore.getState().onConnect(connectionFor(decision.target));
+      } else if (decision.kind === "device") {
+        connectToDeviceBody(from, decision.nodeId);
+      }
+    },
+    [connectToDeviceBody, connectableHandles, connectionBetween, pointerConnectContext],
+  );
+
   // Click-to-connect: second click completes or cancels
   const onClickConnectEnd = useCallback(
-    (_event?: MouseEvent | TouchEvent) => {
+    (event?: MouseEvent | TouchEvent) => {
+      const clientX = !event ? undefined : "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX;
+      const clientY = !event ? undefined : "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY;
+      if (clientX !== undefined && clientY !== undefined) {
+        completeConnectAt(clientX, clientY);
+      }
       clearClickConnect();
     },
-    [clearClickConnect],
+    [clearClickConnect, completeConnectAt],
   );
 
   // Drag-to-connect: show preview on drag start
@@ -1082,42 +1338,25 @@ function SchematicCanvas() {
   );
 
   // Drag-to-connect: clear preview on drag end (but not if in click-connect mode)
-  // Also detect drops on incompatible handles → show adapter dialog
+  // Also honours the release on whatever port the ghost had snapped to (#366)
   const onConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isClickConnectMode.current) {
-      // Before clearing, check if user dropped on an incompatible handle
-      const from = clickConnectFromRef.current;
-      if (from) {
-        const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX;
-        const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY;
-        if (clientX !== undefined && clientY !== undefined) {
-          const el = document.elementFromPoint(clientX, clientY);
-          const handleEl = el?.closest(".react-flow__handle") as HTMLElement | null;
-          if (handleEl) {
-            const targetNodeEl = handleEl.closest(".react-flow__node");
-            const targetNodeId = targetNodeEl?.getAttribute("data-id");
-            const targetHandleId = handleEl.getAttribute("data-handleid");
-            if (targetNodeId && targetHandleId && targetNodeId !== from.nodeId) {
-              const connection = from.fromSource
-                ? { source: from.nodeId, sourceHandle: from.handleId, target: targetNodeId, targetHandle: targetHandleId }
-                : { source: targetNodeId, sourceHandle: targetHandleId, target: from.nodeId, targetHandle: from.handleId };
-              const state = useSchematicStore.getState();
-              if (!state.isValidConnection(connection as Connection)) {
-                // Trigger the signal-type mismatch check in onConnect
-                state.onConnect(connection as Connection);
-              }
-            }
-          }
-        }
+      // Before clearing, act on the port the drop landed on if React Flow didn't
+      const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX;
+      const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY;
+      if (clientX !== undefined && clientY !== undefined) {
+        completeConnectAt(clientX, clientY);
       }
       clearClickConnect();
     }
-  }, [clearClickConnect]);
+  }, [clearClickConnect, completeConnectAt]);
 
-  // Clicking empty space cancels click-to-connect; double-click opens quick-add
+  // Clicking empty space ends click-to-connect — on the port the ghost is snapped to if
+  // there is one, otherwise cancelling (#366); double-click opens quick-add
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (isClickConnectMode.current) {
+        completeClickConnectAt(event.clientX, event.clientY, null);
         clearClickConnect();
         rfStore.setState({ connectionClickStartHandle: null });
         return;
@@ -1138,7 +1377,7 @@ function SchematicCanvas() {
       }
       lastPaneClickRef.current = { time: now, x: event.clientX, y: event.clientY };
     },
-    [clearClickConnect, rfStore, screenToFlowPosition],
+    [clearClickConnect, completeClickConnectAt, rfStore, screenToFlowPosition],
   );
 
   const onNodeDragStart = useCallback(() => {
@@ -1168,7 +1407,7 @@ function SchematicCanvas() {
       const snap = computeSnap(draggedNode as SchematicNode, state.nodes, {
         useShortNames: state.useShortNames,
         wrapDeviceLabels: state.wrapDeviceLabels,
-      });
+      }, state.edges);
       setSnapGuides(snap.guides);
 
       // Group drag (#134): snap the anchor and apply that delta uniformly to
@@ -1254,16 +1493,26 @@ function SchematicCanvas() {
         const snap = computeSnap(draggedNode as SchematicNode, state.nodes, {
           useShortNames: state.useShortNames,
           wrapDeviceLabels: state.wrapDeviceLabels,
-        });
+        }, state.edges);
         const dx = snap.x - draggedNode.position.x;
         const dy = snap.y - draggedNode.position.y;
         const draggedIds = new Set(draggedNodes.map((n) => n.id));
+        // The anchor delta plus the absolute-grid rest correction (#327): React
+        // Flow lands a group by rounding one reference node onto the grid and
+        // shifting the rest by that offset, which leaves members with a
+        // different sub-grid residue — devices inside an off-grid room — off the
+        // absolute routing grid. The correction re-hangs the group off the
+        // anchor we just snapped, so the reference's residue does not survive.
+        // Edges are passed so a co-dragged stub tag rides with the device its leg
+        // ends at instead of being left behind by that correction (#334).
+        const moves = snapGroupRestPositions(
+          state.nodes, draggedIds, { dx, dy }, draggedNode.id, state.edges, state.hiddenAdapterNodeIds,
+        );
         let updatedNodes: SchematicNode[] = state.nodes;
-        if (dx !== 0 || dy !== 0) {
+        if (moves.size > 0) {
           updatedNodes = state.nodes.map((n) => {
-            if (!draggedIds.has(n.id)) return n;
-            if (n.parentId && draggedIds.has(n.parentId)) return n;
-            return { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } };
+            const pos = moves.get(n.id);
+            return pos ? { ...n, position: pos } : n;
           }) as SchematicNode[];
           useSchematicStore.setState({ nodes: updatedNodes, isDragging: false, overlapNodeId: null });
           useSchematicStore.getState().saveToLocalStorage();
@@ -1279,20 +1528,41 @@ function SchematicCanvas() {
           if (dn.parentId && draggedIds.has(dn.parentId as string)) continue;
           const node = nodeById.get(dn.id);
           if (!node) continue;
-          let absX = node.position.x;
-          let absY = node.position.y;
-          let parentId: string | undefined = node.parentId as string | undefined;
-          while (parentId) {
-            const parent = nodeById.get(parentId);
-            if (!parent) break;
-            absX += parent.position.x;
-            absY += parent.position.y;
-            parentId = parent.parentId as string | undefined;
-          }
-          reparentNode(dn.id, { x: absX, y: absY }, { skipUndo: true });
+          const off = parentOffsetFromMap(node, nodeById);
+          reparentNode(
+            dn.id,
+            { x: node.position.x + off.dx, y: node.position.y + off.dy },
+            { skipUndo: true },
+          );
           if (dn.type === "room") anyRoomMoved = true;
         }
-        if (anyRoomMoved) reparentAllDevices({ skipUndo: true });
+        if (anyRoomMoved) {
+          reparentAllDevices({ skipUndo: true });
+          // Moving a room shifts its children by the origin delta; if the origin
+          // sat off-grid, that delta knocks every child off the absolute grid.
+          const snapChildren = useSchematicStore.getState().snapRoomChildrenToGrid;
+          for (const dn of draggedNodes) {
+            if (dn.type === "room") snapChildren(dn.id);
+          }
+        }
+
+        // #346: the tag bookkeeping below runs on the single-device path only, and
+        // nothing this branch calls stands in for it — reparentNode early-returns
+        // on an unchanged parent, so the store's copy never fires either. Without
+        // this, a tag whose device was dragged but which was not itself selected
+        // stays where it was, with a dogleg the length of the whole drag. Run it
+        // once the group has settled so it sees final positions, and save: the
+        // `userMoved` it stamps on a tag dragged clear of its device is a user
+        // placement that has to survive a reload.
+        const st = useSchematicStore.getState();
+        const settledNodes = settleTagsAfterMove(
+          st.nodes, st.edges, draggedIds, st.hiddenAdapterNodeIds,
+        );
+        if (settledNodes) {
+          useSchematicStore.setState({ nodes: settledNodes });
+          useSchematicStore.getState().saveToLocalStorage();
+        }
+
         flushPendingSnapshot();
         return;
       }
@@ -1302,7 +1572,7 @@ function SchematicCanvas() {
       const snap = computeSnap(draggedNode as SchematicNode, state.nodes, {
         useShortNames: state.useShortNames,
         wrapDeviceLabels: state.wrapDeviceLabels,
-      });
+      }, state.edges);
       let finalX = snap.x;
       let finalY = snap.y;
 
@@ -1325,6 +1595,18 @@ function SchematicCanvas() {
         }
       }
 
+      // A device that merely rested inside its room got grid-rounded in room-
+      // RELATIVE coords by React Flow's snapGrid — off the absolute routing grid
+      // when the room origin sits off-grid. Round the untouched axes in absolute
+      // space so its ports meet cables from unsectioned devices cleanly (#322).
+      const nodeById = new Map<string, SchematicNode>();
+      for (const n of state.nodes) nodeById.set(n.id, n);
+      ({ x: finalX, y: finalY } = snapParentedRestPosition(
+        draggedNode as SchematicNode,
+        { x: finalX, y: finalY },
+        nodeById,
+      ));
+
       if (finalX !== draggedNode.position.x || finalY !== draggedNode.position.y) {
         const updated = state.nodes.map((n) =>
           n.id === draggedNode.id ? { ...n, position: { x: finalX, y: finalY } } : n,
@@ -1341,17 +1623,12 @@ function SchematicCanvas() {
       }
 
       // Compute absolute position by walking the full parent chain
-      let absX = finalX;
-      let absY = finalY;
-      let parentId: string | undefined = draggedNode.parentId as string | undefined;
-      while (parentId) {
-        const parent = state.nodes.find((n) => n.id === parentId);
-        if (!parent) break;
-        absX += parent.position.x;
-        absY += parent.position.y;
-        parentId = parent.parentId as string | undefined;
-      }
-      reparentNode(draggedNode.id, { x: absX, y: absY }, { skipUndo: true });
+      const dragOff = parentOffsetFromMap(draggedNode as SchematicNode, nodeById);
+      reparentNode(
+        draggedNode.id,
+        { x: finalX + dragOff.dx, y: finalY + dragOff.dy },
+        { skipUndo: true },
+      );
       // When a room is moved, re-evaluate every device: ones that now fall
       // inside the moved room become its children, ones that fell out get
       // unparented. Children of the moved room itself already travelled with
@@ -1359,47 +1636,20 @@ function SchematicCanvas() {
       // smallest enclosing room so nested layouts still resolve correctly.
       if (draggedNode.type === "room") {
         reparentAllDevices({ skipUndo: true });
+        // Moving a room shifts its children by the origin delta; if the origin
+        // sat off-grid, that delta knocks every child off the absolute grid.
+        useSchematicStore.getState().snapRoomChildrenToGrid(draggedNode.id);
       }
 
-      // #182: keep stub labels glued to their device. When a device moves, re-anchor its
-      // connected (non-user-positioned) stubs to the moved port by clearing `placed` —
+      // #182: keep tags glued to their device. When a device moves, re-anchor its
+      // connected (non-user-positioned) tags to the moved port by clearing `placed` —
       // StubLabelNode.tryPlace then re-runs and follows the device instead of leaving the
-      // stub stranded with a dogleg. When a stub itself is dragged, mark it `userMoved` so
+      // tag stranded with a dogleg. When a tag itself is dragged, mark it `userMoved` so
       // later device moves leave the user's placement alone.
       if (draggedNode.type === "device") {
         const st = useSchematicStore.getState();
-        const stubIds = new Set(st.nodes.filter((n) => n.type === "stub-label").map((n) => n.id));
-        const followStubs = new Set<string>();
-        for (const e of st.edges) {
-          const srcStub = stubIds.has(e.source);
-          const tgtStub = stubIds.has(e.target);
-          if (srcStub === tgtStub) continue; // not a stub leg
-          const devEnd = srcStub ? e.target : e.source;
-          if (devEnd === draggedNode.id) followStubs.add(srcStub ? e.source : e.target);
-        }
-        // Text stubs (#196) anchor by data.anchorNodeId, not an edge — re-anchor those too.
-        const followTextStubs = new Set(
-          st.nodes
-            .filter((n) => n.type === "text-stub" && (n.data as TextStubData).anchorNodeId === draggedNode.id)
-            .map((n) => n.id),
-        );
-        if (followStubs.size > 0 || followTextStubs.size > 0) {
-          useSchematicStore.setState((prev) => ({
-            nodes: prev.nodes.map((n) => {
-              if (followStubs.has(n.id) && n.type === "stub-label") {
-                const d = n.data as StubLabelData;
-                if (d.userMoved || d.placed !== true) return n; // respect manual placement / pending
-                return { ...n, data: { ...d, placed: false } };
-              }
-              if (followTextStubs.has(n.id) && n.type === "text-stub") {
-                const d = n.data as TextStubData;
-                if (d.userMoved || d.placed !== true) return n;
-                return { ...n, data: { ...d, placed: false } };
-              }
-              return n;
-            }),
-          }));
-        }
+        const settledNodes = settleTagsAfterMove(st.nodes, st.edges, new Set([draggedNode.id]));
+        if (settledNodes) useSchematicStore.setState({ nodes: settledNodes });
       } else if (draggedNode.type === "stub-label") {
         useSchematicStore.setState((prev) => ({
           nodes: prev.nodes.map((n) =>
@@ -1454,6 +1704,7 @@ function SchematicCanvas() {
       ref={rfContainerRef}
       className={[
         debugEdges ? "debug-active" : "",
+        clickConnecting ? "click-connecting" : "",
         selectionDirection ? `selection-${selectionDirection}` : "",
         panMode === "pan-first" && !shiftHeld && !isMobile ? "pan-mode" : "",
       ].filter(Boolean).join(" ") || undefined}
@@ -1465,6 +1716,9 @@ function SchematicCanvas() {
       onNodeDragStop={onNodeDragStop}
       onEdgesChange={onEdgesChange}
       onConnect={(connection) => {
+        // React Flow validated and accepted this one; the end handlers must not
+        // re-check it once the port is occupied and re-enter the mismatch branch.
+        connectHandledRef.current = true;
         onConnect(connection);
         clearClickConnect();
       }}
@@ -1477,50 +1731,14 @@ function SchematicCanvas() {
 
       onNodeClick={(event, node) => {
         if (!isClickConnectMode.current) return;
-        // If clicking a handle, let the normal click-connect flow handle it
+        // A click on a port is React Flow's own — onClickConnectEnd finishes that one.
         const target = event.target as HTMLElement;
         if (target.closest('.react-flow__handle')) return;
 
-        const from = clickConnectFromRef.current;
-        if (!from || node.type !== 'device') {
-          onPaneClick(event);
-          return;
-        }
-
-        // Find first available compatible handle on the clicked device.
-        // Search all handles (not just target/source) because bidirectional port
-        // handles are all registered as type="source" for React Flow compatibility.
-        const state = useSchematicStore.getState();
-        const intNode = rfInstance.getInternalNode(node.id);
-        const hBounds = intNode?.internals.handleBounds;
-        const targetHandles = [...(hBounds?.source ?? []), ...(hBounds?.target ?? [])];
-
-        let connected = false;
-        for (const h of targetHandles ?? []) {
-          if (!h.id) continue;
-          const connection = from.fromSource
-            ? { source: from.nodeId, sourceHandle: from.handleId, target: node.id, targetHandle: h.id }
-            : { source: node.id, sourceHandle: h.id, target: from.nodeId, targetHandle: from.handleId };
-          if (state.isValidConnection(connection as Connection)) {
-            onConnect(connection as Connection);
-            connected = true;
-            break;
-          }
-        }
-
-        if (!connected) {
-          // No compatible handle — try triggering incompatible dialog on first signal-type mismatch
-          for (const h of targetHandles ?? []) {
-            if (!h.id) continue;
-            const conn = from.fromSource
-              ? { source: from.nodeId, sourceHandle: from.handleId, target: node.id, targetHandle: h.id }
-              : { source: node.id, sourceHandle: h.id, target: from.nodeId, targetHandle: from.handleId };
-            // onConnect will detect signal-type mismatch and show dialog
-            state.onConnect(conn as Connection);
-            if (useSchematicStore.getState().pendingIncompatibleConnection) break;
-          }
-        }
-
+        // Anything else — a device body, a room, a note — goes through the one snap
+        // rule: the port the ghost is showing wins, and only a click with no port in
+        // range falls back to scanning the clicked device (#366).
+        completeClickConnectAt(event.clientX, event.clientY, node.type === "device" ? node.id : null);
         clearClickConnect();
         rfStore.setState({ connectionClickStartHandle: null });
       }}
@@ -1581,7 +1799,8 @@ function SchematicCanvas() {
       connectOnClick
       edgesReconnectable
       reconnectRadius={12}
-      connectionRadius={30}
+      // Same number the ghost preview snaps at — see connectSnap.ts (#366).
+      connectionRadius={CONNECT_SNAP_RADIUS}
       defaultEdgeOptions={{ type: "smoothstep", interactionWidth: edgeHitboxSize }}
       connectionLineType={ConnectionLineType.SmoothStep}
       connectionLineStyle={{ opacity: 0 }}
@@ -1837,6 +2056,12 @@ export default function App() {
     }
   }, []);
 
+  // Seed the test fixture from ?fixture=test (#307), so a test pass can start
+  // from a known scene on a deployed build as well as in dev.
+  useEffect(() => {
+    loadTestSchematicFromUrl();
+  }, []);
+
   // Global keyboard shortcuts that should work on every page (schematic, rack, print sheet).
   // Page-specific shortcuts (Delete, Copy/Paste, Ctrl+A) live in their respective renderers.
   useEffect(() => {
@@ -1846,6 +2071,13 @@ export default function App() {
 
       // Normalize letter keys so shortcuts still fire with Caps Lock on (#179).
       const k = normalizeShortcutKey(e.key);
+      // While the port-edit conflict dialog is open, undo/redo would swap the state
+      // out from under the staged conflicts — resolve or close the dialog first (#306).
+      if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y") &&
+          useSchematicStore.getState().pendingPortEditConflicts) {
+        e.preventDefault();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === "z") {
         e.preventDefault();
         redo();
@@ -1926,6 +2158,7 @@ export default function App() {
       <TextStubContextMenu />
       <PortContextMenu />
       <IncompatibleConnectionDialog />
+      <PortEditConflictDialog />
       <DeviceSwapDialog />
       <MobileGate />
       <ToastContainer />

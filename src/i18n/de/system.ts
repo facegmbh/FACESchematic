@@ -270,4 +270,37 @@ export const DE_SYSTEM: Record<string, string> = {
     "Reihenfolge, in der Verbindungen in Phase 1 geroutet werden. 0 = nach Signalart gruppiert, dann kürzeste zuerst; 1 = längste zuerst (sie belegen früh Platz); 2 = Geräte mit den meisten Verbindungen zuerst. Frühere Verbindungen bekommen sauberere Wege.",
   "Minimum pixel distance between two parallel segments before they're considered 'shared' (a violation). Used in Phase 2 violation detection to flag edges that are too close together.":
     "Mindestabstand in Pixeln zwischen zwei parallelen Abschnitten, bevor sie als „geteilt“ (Verstoß) gelten. Dient in Phase 2 dazu, zu dicht liegende Verbindungen zu melden.",
+
+  // ─── Upstream-Merge 2026-10 ───
+  // Port edit made live connections incompatible (PortEditConflictDialog)
+  "Connection No Longer Compatible": "Verbindung nicht mehr verträglich",
+  "{n} Connections No Longer Compatible": "{n} Verbindungen nicht mehr verträglich",
+  "The port change made this connection incompatible.": "Durch die Port-Änderung ist diese Verbindung unverträglich geworden.",
+  "The port change made these connections incompatible.": "Durch die Port-Änderung sind diese Verbindungen unverträglich geworden.",
+  "Disconnect, insert an adapter, or keep the cable flagged as a known mismatch.":
+    "Trennen, einen Adapter einfügen oder das Kabel behalten und als bekannte Abweichung markieren.",
+  "{signal} — the edited port's direction or connection rules no longer allow this cable":
+    "{signal} — Richtung oder Verbindungsregeln des geänderten Ports lassen dieses Kabel nicht mehr zu",
+  "The adapter could not bridge this cable — choose another resolution.":
+    "Der Adapter konnte dieses Kabel nicht überbrücken — eine andere Lösung wählen.",
+  "Disconnect": "Trennen",
+  "Disconnect All": "Alle trennen",
+  "Keep (flag mismatch)": "Behalten (als Abweichung markieren)",
+  "Keep All (flag mismatch)": "Alle behalten (als Abweichung markieren)",
+
+  // Store / canvas messages
+  "Removed {n} connections from their bundle (stubbed)": "{n} Verbindungen aus ihrem Bündel entfernt (abgesetzt)",
+  "Couldn't open your last saved schematic. Autosave is paused so your saved copy isn't overwritten — starting a new schematic, opening a file, or importing one resumes it.":
+    "Der zuletzt gespeicherte Schaltplan ließ sich nicht öffnen. Das automatische Speichern ist pausiert, damit die gespeicherte Kopie nicht überschrieben wird — ein neuer Schaltplan, eine geöffnete oder eine importierte Datei setzt es wieder in Gang.",
+  "A stub label isn't a connection end — re-route the device end instead":
+    "Eine Stub-Beschriftung ist kein Verbindungsende — stattdessen das Geräteende umstecken",
+
+  // Image / PDF export failures
+  "PDF export failed — couldn't load the embedded font.": "PDF-Export fehlgeschlagen — die eingebettete Schrift ließ sich nicht laden.",
+  "PDF export failed — {reason}": "PDF-Export fehlgeschlagen — {reason}",
+  "{format} export failed — {reason}": "{format}-Export fehlgeschlagen — {reason}",
+  "Export failed — the schematic is too large for this browser to render as an image.":
+    "Export fehlgeschlagen — der Schaltplan ist zu groß, als dass dieser Browser ihn als Bild rendern könnte.",
+  "the browser couldn't render the schematic as an image": "der Browser konnte den Schaltplan nicht als Bild rendern",
+  "unexpected error": "unerwarteter Fehler",
 };

@@ -5,7 +5,8 @@ import type {
 } from "./types";
 import { SIGNAL_LABELS, CONNECTOR_LABELS } from "./types";
 import { computeCableSchedule, type CableScheduleDistanceContext } from "./cableSchedule";
-import { resolvePort, resolvePortLabel, getRoomLabel, escapeCsv, csvRow, groupBy } from "./packList";
+import { resolvePort, resolvePortLabel, getRoomLabel, escapeCsv, csvRow } from "./packList";
+import { PATCH_PANEL_SCHEDULE_COLUMNS } from "./patchPanelColumns";
 import { effectiveSignalType, resolvePortGender } from "./connectorTypes";
 import { getPanelOccupancy, segmentsForEdge } from "./patchCircuits";
 import { getCableType } from "./cableTypes";
@@ -72,6 +73,38 @@ export interface PatchPanelScheduleRow {
 }
 
 const EMPTY = "—";
+
+/** Column ids for the single-face fields (Connector, M/F, Remote Device, Remote Port,
+ *  Remote Room, and the bare cable columns Cable ID / Cable Type / Length / Est. Length /
+ *  Snake). These are always empty on passthrough rows (see below) and only populate via
+ *  the legacy paired input/output back-compat path — passthrough rows report through the
+ *  rear-/front-face columns instead — so a report made entirely of passthrough panels can
+ *  never fill them (#311). */
+export const PATCH_PANEL_LEGACY_COLUMN_IDS = [
+  "connector", "gender", "remoteDevice", "remotePort", "remoteRoom",
+  "cableId", "cableType", "cableLength", "computedLength", "multicableLabel",
+] as const;
+
+export type PatchPanelLegacyColumnId = (typeof PATCH_PANEL_LEGACY_COLUMN_IDS)[number];
+
+/** True when at least one row is a legacy paired-port row (face !== "Passthrough"), i.e.
+ *  when the single-face columns above can actually hold data. */
+function hasLegacyPatchPanelRow(rows: Pick<PatchPanelScheduleRow, "face">[]): boolean {
+  return rows.some((r) => r.face !== "Passthrough");
+}
+
+/** Which Patch Panel Schedule columns the table should hide, given the rows currently in
+ *  view and the document's stored per-table preference. `stored` is undefined when the
+ *  user has never touched the column picker, in which case the single-face columns hide
+ *  themselves unless a legacy row is in view. Any stored array — including an empty one,
+ *  meaning "show everything" — is an explicit choice and wins (#311). */
+export function resolvePatchPanelHiddenColumns(
+  rows: Pick<PatchPanelScheduleRow, "face">[],
+  stored: string[] | undefined,
+): Set<string> {
+  if (stored) return new Set(stored);
+  return hasLegacyPatchPanelRow(rows) ? new Set<string>() : new Set<string>(PATCH_PANEL_LEGACY_COLUMN_IDS);
+}
 
 interface SideInfo {
   edgeId: string;
@@ -142,15 +175,18 @@ export function computePatchPanelSchedule(
   // Metadata patch-hop occupancy (panels routed via edge.data.patchHops, incl. off-canvas panels).
   const hopOccupancy = getPanelOccupancy(nodes, edges);
 
-  // Index edges by (nodeId, portId). Strip -in/-out suffixes so bidirectional handles
-  // match the underlying port. Each port id maps to at most one edge in practice
-  // (the canvas can create only one connection per handle), but we store an array in
-  // case of future-proofing.
+  // Index edges by (nodeId, portId). The legacy paired input/output branch below reads
+  // this index with the port's own id, so the key has to be the id of the port the handle
+  // really names — resolve it rather than blind-stripping the -in/-out/-rear/-front
+  // suffix, which missed every port whose real id ends in one of those tokens (#355).
+  // Each port id maps to at most one edge in practice (the canvas can create only one
+  // connection per handle), but we store an array in case of future-proofing.
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const edgeByPort = new Map<string, ConnectionEdge[]>();
   const key = (nodeId: string, handleId: string | null | undefined) => {
     if (!handleId) return undefined;
-    const portId = handleId.replace(/-(in|out|rear|front)$/, "");
-    return `${nodeId}:${portId}`;
+    const port = resolvePort(nodeById.get(nodeId), handleId);
+    return `${nodeId}:${port?.id ?? handleId}`;
   };
   for (const e of edges) {
     if (e.data?.directAttach) continue;
@@ -381,7 +417,15 @@ export function computePatchPanelSchedule(
   return rows;
 }
 
-/** Build the patch-panel-schedule CSV file contents (including the UTF-8 BOM). */
+/**
+ * Build the patch-panel-schedule CSV file contents (including the UTF-8 BOM).
+ *
+ * The CSV is deliberately the MAXIMAL export: every one of the 34 columns, every row, in a
+ * fixed order, whatever the Patch Panels tab is filtered or sorted to and whichever columns
+ * it has hidden. It is the machine-readable copy — a spreadsheet can hide and sort columns
+ * itself, and a stable header row keeps downstream importers working. The PDF is the
+ * WYSIWYG copy and mirrors the on-screen table instead (#362).
+ */
 export function buildPatchPanelScheduleCsv(
   rows: PatchPanelScheduleRow[],
   schematicName: string,
@@ -447,60 +491,123 @@ export function exportPatchPanelScheduleCsv(
   URL.revokeObjectURL(url);
 }
 
+// ─── On-screen view helpers ───────────────────────────────────────────────────
+// The Patch Panels tab and the PDF table data below both run rows through these, so the
+// printed report can't drift from the table the user is looking at (#362).
+
+/** The row-level half of the tab's view state: the filter box and the "Hide empty" box. */
+export interface PatchPanelRowFilter {
+  filter?: string;
+  hideUnconnected?: boolean;
+}
+
+/** Text of one cell, matching the table exactly — an em dash stands in for an empty. */
+export function patchPanelCellText(row: PatchPanelScheduleRow, key: string): string {
+  const value = (row as unknown as Record<string, unknown>)[key];
+  return (typeof value === "string" ? value : "") || EMPTY;
+}
+
+/** The fields the tab's filter box searches. Deliberately narrower than the column list:
+ *  the descriptive columns, not the M/F, estimated-length or normalling ones. */
+const PATCH_PANEL_FILTER_FIELDS = [
+  "panel", "panelRoom", "face", "position", "signalType",
+  "connector", "remoteDevice", "remotePort", "remoteRoom",
+  "cableId", "cableType", "cableLength", "computedLength", "multicableLabel",
+  "rearConnector", "rearRemoteDevice", "rearRemotePort", "rearRemoteRoom", "rearCableId",
+  "frontConnector", "frontRemoteDevice", "frontRemotePort", "frontRemoteRoom", "frontCableId",
+] as const;
+
+/** Rows left after the tab's filter box and its "Hide empty" checkbox. */
+export function filterPatchPanelScheduleRows(
+  rows: PatchPanelScheduleRow[],
+  { filter = "", hideUnconnected = false }: PatchPanelRowFilter,
+): PatchPanelScheduleRow[] {
+  const list = hideUnconnected ? rows.filter((r) => r.edgeId !== "") : rows;
+  const q = filter.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((r) =>
+    PATCH_PANEL_FILTER_FIELDS.some((f) => (r[f] ?? "").toLowerCase().includes(q)),
+  );
+}
+
+/** Rows in the tab's clicked sort order. "position" (or no sort) is the natural
+ *  rear-then-front-by-index order from compute(), reversed for descending. */
+export function sortPatchPanelScheduleRows(
+  rows: PatchPanelScheduleRow[],
+  sortBy: string | null | undefined,
+  ascending: boolean,
+): PatchPanelScheduleRow[] {
+  const copy = [...rows];
+  if (!sortBy || sortBy === "position") {
+    if (!ascending) copy.reverse();
+    return copy;
+  }
+  // sortBy is a plain string (a column key), so guard the read: the row also carries a
+  // numeric _sortKey, and a non-string field would otherwise blow up in localeCompare.
+  const cell = (r: PatchPanelScheduleRow): string => {
+    const v = (r as unknown as Record<string, unknown>)[sortBy];
+    return typeof v === "string" ? v : "";
+  };
+  copy.sort((a, b) => {
+    const cmp = cell(a).localeCompare(cell(b));
+    return ascending ? cmp : -cmp;
+  });
+  return copy;
+}
+
+/** Rows bucketed by the tab's Group by dropdown, in first-seen order. Undefined when the
+ *  table isn't grouped. */
+export function groupPatchPanelScheduleRows(
+  rows: PatchPanelScheduleRow[],
+  groupBy: string | null | undefined,
+): Map<string, PatchPanelScheduleRow[]> | undefined {
+  if (!groupBy) return undefined;
+  const map = new Map<string, PatchPanelScheduleRow[]>();
+  for (const r of rows) {
+    const label = groupBy === "signalType"
+      ? (r.signalType || "Unconnected")
+      : patchPanelCellText(r, groupBy);
+    const arr = map.get(label);
+    if (arr) arr.push(r); else map.set(label, [r]);
+  }
+  return map;
+}
+
+/**
+ * Table data for the Patch Panel Schedule PDF.
+ *
+ * WYSIWYG with the on-screen table (#362): the layout carries the tab's visible columns in
+ * the tab's order (hidden ones, including the #311 auto-hidden single-face set, are simply
+ * absent), its group-by and its clicked sort; `view` carries the tab's filter box and
+ * "Hide empty" checkbox. Empty cells print the same em dash the table shows.
+ */
 export function getPatchPanelScheduleTableData(
   rows: PatchPanelScheduleRow[],
   layout: ReportLayout,
+  view: PatchPanelRowFilter = {},
 ): ReportTableData[] {
   const tableDef = layout.tables.find((t) => t.id === "patchPanelSchedule");
+  const visibleKeys = tableDef
+    ? tableDef.columns.filter((c) => c.visible).map((c) => c.key)
+    : PATCH_PANEL_SCHEDULE_COLUMNS.map((c) => c.key);
 
-  const tableRows = rows.map((r) => ({
-    panel: r.panel,
-    panelRoom: r.panelRoom,
-    face: r.face,
-    position: r.position,
-    connector: r.connector,
-    gender: r.gender,
-    remoteDevice: r.remoteDevice,
-    remotePort: r.remotePort,
-    remoteRoom: r.remoteRoom,
-    cableId: r.cableId,
-    cableType: r.cableType,
-    signalType: r.signalType,
-    cableLength: r.cableLength,
-    computedLength: r.computedLength,
-    multicableLabel: r.multicableLabel,
-  }));
+  const inView = filterPatchPanelScheduleRows(rows, view);
+  const sorted = sortPatchPanelScheduleRows(inView, tableDef?.sortBy, tableDef?.sortDir !== "desc");
+  const grouped = groupPatchPanelScheduleRows(sorted, tableDef?.groupBy);
 
-  const sortBy = tableDef?.sortBy;
-  const sortDir = tableDef?.sortDir;
-  let sorted = tableRows;
-  if (sortBy && sortBy !== "position") {
-    const dir = sortDir === "desc" ? -1 : 1;
-    sorted = [...tableRows].sort((a, b) => {
-      const va = a[sortBy as keyof typeof a] ?? "";
-      const vb = b[sortBy as keyof typeof b] ?? "";
-      return va.localeCompare(vb) * dir;
-    });
-  }
-  // "position" sort uses the natural rear-then-front-by-index order from compute().
-
-  const groupByKey = tableDef?.groupBy;
-  let groupedRows: Map<string, Record<string, string>[]> | undefined;
-  if (groupByKey === "panel") {
-    groupedRows = groupBy(sorted, (r) => r.panel);
-  } else if (groupByKey === "panelRoom") {
-    groupedRows = groupBy(sorted, (r) => r.panelRoom);
-  } else if (groupByKey === "signalType") {
-    groupedRows = groupBy(sorted, (r) => r.signalType || "Unconnected");
-  } else if (groupByKey === "face") {
-    groupedRows = groupBy(sorted, (r) => r.face);
-  }
+  const project = (r: PatchPanelScheduleRow): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const key of visibleKeys) out[key] = patchPanelCellText(r, key);
+    return out;
+  };
 
   return [
     {
       id: "patchPanelSchedule",
-      rows: sorted,
-      groupedRows,
+      rows: sorted.map(project),
+      groupedRows: grouped
+        ? new Map([...grouped].map(([label, list]) => [label, list.map(project)]))
+        : undefined,
     },
   ];
 }

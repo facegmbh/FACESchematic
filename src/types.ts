@@ -4,9 +4,10 @@ import type { SerializedUnderlaySource } from "./underlaySource";
 export type ConnectorType =
   | "bnc" | "hdmi" | "displayport" | "vga"
   | "xlr-3" | "xlr-4" | "xlr-5" | "trs-quarter" | "ts-quarter" | "trs-eighth" | "combo-xlr-trs"
-  | "rj45" | "ethercon" | "sfp" | "lc" | "sc"
+  | "rj45" | "ethercon" | "sfp" | "lc" | "sc" | "st"
   | "usb-a" | "usb-b" | "usb-c"
-  | "db7w2" | "db9" | "db15" | "db25" | "din-5" | "phoenix" | "terminal-block" | "powercon" | "edison" | "cee-7-7" | "iec" | "iec-c5" | "iec-c7" | "iec-c15" | "iec-c20"
+  | "db7w2" | "db9" | "db15" | "db25" | "din-5" | "phoenix" | "terminal-block" | "powercon" | "edison" | "iec" | "iec-c5" | "iec-c7" | "iec-c15" | "iec-c20"
+  | "schuko" | "french-power" | "europlug" | "uk-power"
   | "speakon" | "socapex" | "multipin" | "rca" | "toslink" | "barrel"
   | "banana" | "binding-post" | "binding-post-banana" | "dvi" | "mini-xlr" | "opticalcon"
   | "l5-20" | "l6-20" | "l6-30" | "l21-30" | "cam-lok" | "powercon-true1"
@@ -327,6 +328,7 @@ export interface DeviceData {
   integratedWithCable?: boolean;
   slots?: InstalledSlot[];
   powerDrawW?: number;
+  /** Total supply/output capacity in watts — power distribution, company switches, power supplies */
   powerCapacityW?: number;
   voltage?: string;
   /** Electrical protection class per IEC 61140. Deliberately left undefined where
@@ -449,12 +451,17 @@ export interface StubLabelData {
   linkedConnectionId: string;
   /** Which end of the logical connection this stub represents */
   side: "source" | "target";
+  /** When true, prefix the label text with the direction arrow (per-stub override; falls back to global setting) */
+  showArrow?: boolean;
   /** When true, append [PortName] to the label text (per-stub override; falls back to global setting) */
   showPort?: boolean;
   /** When true, append (RoomName) to the label text (per-stub override; falls back to global setting) */
   showRoom?: boolean;
   /** When/whether to append page number (per-stub override; falls back to global setting) */
   pageMode?: StubLabelPageMode;
+  /** What this tag prints — the full destination description, or the cable ID alone.
+   *  Undefined = "full", so every schematic saved before #270 reads back unchanged. */
+  labelMode?: StubLabelMode;
   /** True once one-shot auto-placement has aligned this stub with its port. Skips the
    *  align-Y / clear-overlap pass on every subsequent mount so user-dragged positions
    *  survive page refresh. New stubs from convertEdgeToStubs get auto-placed once and
@@ -631,6 +638,9 @@ export interface DeviceTemplate {
   hostname?: string;
   ports: Port[];
   color?: string;
+  /** Header bar color saved with the template. A device placed from this template takes it
+   *  ahead of the project override and the app preference (#354). Absent means "no opinion",
+   *  so the default settings decide as before. */
   headerColor?: string;
   searchTerms?: string[];
   manufacturer?: string;
@@ -659,7 +669,7 @@ export interface DeviceTemplate {
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
-  powerCapacityW?: number;       // Total supply capacity in watts (distros only)
+  powerCapacityW?: number;       // Total supply/output capacity in watts (power distribution, company switches, power supplies)
   voltage?: string;              // Informational: "100-240V", "208V", "120V"
   protectionClass?: ProtectionClass; // IEC 61140 class; preset per template so it isn't typed per device
   thermalBtuh?: number;          // Thermal load in BTU/h for HVAC sizing; auto-derived from powerDrawW × 3.412 if omitted
@@ -692,6 +702,8 @@ export interface TemplatePreset {
   ports: Port[];
   hiddenPorts?: string[];
   color?: string;
+  /** Header bar color saved with the preset — the most specific saved color there is, so it
+   *  outranks the template's own and both default settings (#354). */
   headerColor?: string;
 }
 
@@ -1718,6 +1730,8 @@ export interface SchematicFile {
   showOwnedGearPane?: boolean;
   /** Active tab in the left library panel */
   libraryActiveTab?: "devices" | "owned";
+  /** Print view title block. Absent = shown; written only as `false` (#388). */
+  printTitleBlockEnabled?: boolean;
   /** Color key / signal legend for print view (#70) */
   colorKeyEnabled?: boolean;
   colorKeyCorner?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -1743,6 +1757,8 @@ export interface SchematicFile {
   currency?: string;
   /** Left-drag canvas behavior — select box (default) or pan viewport */
   panMode?: PanMode;
+  /** Show the direction arrow at the head of a stub label (e.g. "→ Projector") */
+  stubLabelShowArrow?: boolean;
   /** Show the destination port name on stub labels (e.g. "→ Projector [HDMI In 1]") */
   stubLabelShowPort?: boolean;
   /** Show the destination room name on stub labels (e.g. "→ Projector (Room A)") */
@@ -1755,6 +1771,16 @@ export interface SchematicFile {
   /** Wrap long device labels across two lines instead of truncating with ellipsis.
    *  New files default true; undefined on loaded files = legacy single-line truncate. */
   wrapDeviceLabels?: boolean;
+  /** How a freshly drawn connection is rendered — a routed wire, or stubbed at both ends (#353) */
+  defaultConnectionType?: DefaultConnectionType;
+  /** Header background color stamped onto devices placed in THIS project (#354). Overrides
+   *  the app-level preference; unset = fall back to it, then to the built-in surface color.
+   *  Applies at placement only — devices already on the canvas keep their own colors. */
+  defaultDeviceHeaderColor?: string;
+  /** What both tags of a connection stubbed in THIS project start as (#377). Overrides the
+   *  app-level preference; unset = fall back to it, then to "full". Applies when a
+   *  connection is stubbed only — tags already on the canvas keep their own mode. */
+  defaultStubLabelMode?: StubLabelMode;
   /** Project lifecycle status, surfaced in project metadata / file lists (#P2-007) */
   status?: ProjectStatus;
   /** The planning company's identity block, snapshotted from the editor setting. */
@@ -1788,6 +1814,25 @@ export type StubLabelPageMode = "always" | "cross-page" | "never";
 export const DEFAULT_STUB_LABEL_SHOW_PORT = true;
 export const DEFAULT_STUB_LABEL_SHOW_ROOM = true;
 export const DEFAULT_STUB_LABEL_PAGE_MODE: StubLabelPageMode = "cross-page";
+// The direction arrow says nothing the label text doesn't already say — where the other
+// end is, is the destination name — and it eats width on a box that is already tight.
+// Off by default (#350), still available globally (Preferences) and per-stub.
+export const DEFAULT_STUB_LABEL_SHOW_ARROW = false;
+
+/**
+ * What a stub tag prints (#270). "full" is the destination description — device, and
+ * optionally arrow, port, room and page. "cableId" is the cable ID and nothing else, for
+ * users who want a plain cable tag at the port and no far-end information on the drawing.
+ *
+ * A string union rather than a boolean so further content modes (#297) slot in here
+ * without another field or a migration.
+ */
+export type StubLabelMode = "full" | "cableId";
+export const DEFAULT_STUB_LABEL_MODE: StubLabelMode = "full";
+
+/** What a newly drawn connection becomes: a routed wire, or a pair of stub legs (#353). */
+export type DefaultConnectionType = "wire" | "stub";
+export const DEFAULT_CONNECTION_TYPE: DefaultConnectionType = "wire";
 
 export interface DistanceSettings {
   unit: "m" | "ft";
@@ -1927,6 +1972,7 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   sfp: "SFP/SFP+",
   lc: "Fiber - LC",
   sc: "Fiber - SC",
+  st: "Fiber - ST",
   "usb-a": "USB-A",
   "usb-b": "USB-B",
   "usb-c": "USB-C",
@@ -1939,12 +1985,15 @@ export const CONNECTOR_LABELS: Record<ConnectorType, string> = {
   "terminal-block": "Terminal Block",
   powercon: "powerCON",
   edison: "Edison",
-  "cee-7-7": "CEE 7/7 (Schuko)",
   iec: "IEC C13/C14",
   "iec-c5": "IEC C5",
   "iec-c7": "IEC C7",
   "iec-c15": "IEC C15",
   "iec-c20": "IEC C20",
+  schuko: "CEE Schuko (7/3/4)",
+  "french-power": "CEE French Power (7/5/7)",
+  europlug: "CEE Europlug (7/16)",
+  "uk-power": "UK Power (BS 1363)",
   speakon: "speakON",
   socapex: "Socapex",
   multipin: "Multi-pin",
@@ -2107,10 +2156,10 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
 export const CONNECTOR_GROUPS: Record<string, ConnectorType[]> = {
   "Video": ["bnc", "hdmi", "mini-hdmi", "micro-hdmi", "displayport", "mini-displayport", "dvi", "vga"],
   "Audio": ["xlr-3", "xlr-4", "xlr-5", "mini-xlr", "combo-xlr-trs", "trs-quarter", "ts-quarter", "trs-eighth", "trs-2.5mm", "rca", "din-5", "mini-din-4", "mini-din-7", "mini-din-8", "toslink"],
-  "Network / Data": ["rj45", "ethercon", "sfp", "lc", "sc", "opticalcon", "qsfp", "qsfp28", "mpo", "rj11", "rj12"],
+  "Network / Data": ["rj45", "ethercon", "sfp", "lc", "sc", "st", "opticalcon", "qsfp", "qsfp28", "mpo", "rj11", "rj12"],
   "USB": ["usb-a", "usb-b", "usb-c", "usb-mini", "usb-micro"],
   "D-Sub / Serial": ["db9", "db15", "db25", "db37", "db7w2", "lemo-5pin"],
-  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "cee-7-7", "edison", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "kycon-4pin", "d-tap", "v-mount"],
+  "Power": ["iec", "iec-c5", "iec-c7", "iec-c15", "iec-c20", "powercon", "powercon-true1", "edison", "schuko", "french-power", "europlug", "uk-power", "barrel", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok", "socapex", "pcie-6pin", "lemo-2pin", "lemo-4pin", "kycon-4pin", "d-tap", "v-mount"],
   "Speaker": ["speakon", "banana", "binding-post", "binding-post-banana"],
   "Terminal": ["phoenix", "terminal-block", "multipin", "solder-cup", "punch-down-110", "punch-down-66", "krone-idc"],
   "RF": ["reverse-tnc", "sma", "f-connector"],

@@ -5,6 +5,7 @@ import { normalizeShortcutKey } from "../keyUtils";
 import { ConnectorIcon, getConnectorSpec } from "./connectorIcons";
 import { SIGNAL_COLORS } from "../types";
 import { useT } from "../i18n";
+import { contrastingTextColor, CONTRAST_BLACK } from "../colorContrast";
 
 interface FacePlateEditorProps {
   deviceData: DeviceData;
@@ -37,6 +38,8 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
   const availableHeight = canonH - 14;
   const showPortLabels = availableHeight >= 30;
   const deviceColor = deviceData.headerColor ?? deviceData.color ?? "#4a90d9";
+  const textColor = contrastingTextColor(deviceColor);
+  const textAlpha = (a: number) => textColor === CONTRAST_BLACK ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`;
 
   // Zoom & pan state — start zoomed to fit
   const [zoom, setZoom] = useState(1);
@@ -608,11 +611,11 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                 <g>
                   {Array.from({ length: vLines }, (_, i) => {
                     const gx = PAD + cellPx * (i + 1);
-                    return <line key={`v${i}`} x1={gx} y1={PAD} x2={gx} y2={PAD + canonH} stroke="rgba(255,255,255,0.15)" strokeWidth={0.25} />;
+                    return <line key={`v${i}`} x1={gx} y1={PAD} x2={gx} y2={PAD + canonH} stroke={textAlpha(0.15)} strokeWidth={0.25} />;
                   })}
                   {Array.from({ length: hLines }, (_, i) => {
                     const gy = PAD + cellPx * (i + 1);
-                    return <line key={`h${i}`} x1={PAD} y1={gy} x2={PAD + canonW} y2={gy} stroke="rgba(255,255,255,0.15)" strokeWidth={0.25} />;
+                    return <line key={`h${i}`} x1={PAD} y1={gy} x2={PAD + canonW} y2={gy} stroke={textAlpha(0.15)} strokeWidth={0.25} />;
                   })}
                 </g>
               );
@@ -646,7 +649,7 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                     dominantBaseline="central"
                     fontSize={dlFontSize}
                     fontWeight={600}
-                    fill="#fff"
+                    fill={textColor}
                     style={{ cursor: "grab" }}
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => handleMouseDown(e, DEVICE_LABEL_ID, "device-label")}
@@ -684,7 +687,7 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                     dominantBaseline="central"
                     fontSize={3.5}
                     fontWeight={700}
-                    fill="rgba(255,255,255,0.6)"
+                    fill={textAlpha(0.6)}
                     letterSpacing={0.5}
                     style={{ cursor: "grab", textTransform: "uppercase" }}
                     onClick={(e) => e.stopPropagation()}
@@ -738,7 +741,7 @@ export default function FacePlateEditor({ deviceData, onSave, onClose }: FacePla
                       y={cy + (getConnectorSpec(lp.connectorType).heightMm * PX_PER_MM) / 2 + 3}
                       textAnchor="middle"
                       fontSize={4}
-                      fill="rgba(255,255,255,0.8)"
+                      fill={textAlpha(0.8)}
                     >
                       {port.label.length > 8 ? port.label.slice(0, 7) + "…" : port.label}
                     </text>

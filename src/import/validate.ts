@@ -1,6 +1,6 @@
 import type { DeviceTemplate, Port } from "../types";
 import { SIGNAL_LABELS, CONNECTOR_LABELS } from "../types";
-import { DEVICE_TYPE_TO_CATEGORY } from "../deviceTypeCategories";
+import { DEVICE_TYPE_TO_CATEGORY, DEVICE_TYPE_ALIASES } from "../deviceTypeCategories";
 
 const VALID_SIGNAL_TYPES = new Set(Object.keys(SIGNAL_LABELS));
 const VALID_CONNECTOR_TYPES = new Set(Object.keys(CONNECTOR_LABELS));
@@ -8,7 +8,8 @@ const VALID_DEVICE_TYPES = new Set(Object.keys(DEVICE_TYPE_TO_CATEGORY));
 const VALID_DIRECTIONS = new Set(["input", "output", "bidirectional"]);
 
 const MAX_STRING = 200;
-const MAX_PORTS = 500;
+/** Mirrors MAX_PORTS in api/src/validate.ts. */
+export const MAX_PORTS = 500;
 
 export interface TemplateValidationResult {
   /** True if the template can be saved as-is. */
@@ -35,7 +36,12 @@ export function validateTemplate(t: Partial<DeviceTemplate>): TemplateValidation
   if (!isStr(t.deviceType)) {
     errors.push("deviceType is required");
   } else if (!VALID_DEVICE_TYPES.has(t.deviceType)) {
-    errors.push(`Unknown deviceType "${t.deviceType}"`);
+    const canonical = DEVICE_TYPE_ALIASES[t.deviceType];
+    errors.push(
+      canonical
+        ? `Unknown deviceType "${t.deviceType}" — use "${canonical}"`
+        : `Unknown deviceType "${t.deviceType}"`,
+    );
   }
 
   const isGeneric = isStr(t.manufacturer) && t.manufacturer.trim().toLowerCase() === "generic";
@@ -53,6 +59,10 @@ export function validateTemplate(t: Partial<DeviceTemplate>): TemplateValidation
 
   if (t.color != null && (typeof t.color !== "string" || !/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(t.color))) {
     errors.push("color must be a valid hex (e.g. #3b82f6)");
+  }
+
+  if (t.headerColor != null && (typeof t.headerColor !== "string" || !/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(t.headerColor))) {
+    errors.push("headerColor must be a valid hex (e.g. #3b82f6)");
   }
 
   // Numeric fields

@@ -298,4 +298,25 @@ export const DE_CANVAS: Record<string, string> = {
   "waypoints": "Stützpunkte",
   "connection": "Verbindung",
   "connections": "Verbindungen",
+
+  // ─── Upstream-Merge 2026-10 ───
+  // Stub-label context menu: tag text mode, arrow, bulk unstub
+  "Tag text: {mode}": "Beschriftung: {mode}",
+  "Destination": "Ziel",
+  "Cable ID only": "Nur Kabel-ID",
+  "Show arrow": "Pfeil zeigen",
+  "other rooms": "andere Räume",
+  "Show {n} Selected Connections in Full": "{n} ausgewählte Verbindungen voll zeigen",
+  "Show 1 Selected Connection in Full": "1 ausgewählte Verbindung voll zeigen",
+  // Connection context menu: bulk stub
+  "Stub {n} Selected Connections": "{n} ausgewählte Verbindungen als Stub darstellen",
+  "Stub 1 Selected Connection": "1 ausgewählte Verbindung als Stub darstellen",
+  // Bulk connection edit panel
+  "Stubs": "Stubs",
+  "Stub {n} connections": "{n} Verbindungen als Stub darstellen",
+  "Stub 1 connection": "1 Verbindung als Stub darstellen",
+  "Show {n} connections in full": "{n} Verbindungen voll zeigen",
+  "Show 1 connection in full": "1 Verbindung voll zeigen",
+  // Path-edit hint on a lone selected cable (OffsetEdge)
+  "Right-click cable to add a path handle": "Rechtsklick auf das Kabel, um einen Stützpunkt hinzuzufügen",
 };

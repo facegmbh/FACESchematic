@@ -1270,7 +1270,7 @@
         "label": "Schuko Out 1",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1278,7 +1278,7 @@
         "label": "Schuko Out 2",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1286,7 +1286,7 @@
         "label": "Schuko Out 3",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1294,7 +1294,7 @@
         "label": "Schuko Out 4",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1394,7 +1394,7 @@
         "label": "Schuko Out 1",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1402,7 +1402,7 @@
         "label": "Schuko Out 2",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1410,7 +1410,7 @@
         "label": "Schuko Out 3",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1418,7 +1418,7 @@
         "label": "Schuko Out 4",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1510,7 +1510,7 @@
         "label": "Schuko Out 1",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1518,7 +1518,7 @@
         "label": "Schuko Out 2",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1526,7 +1526,7 @@
         "label": "Schuko Out 3",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {
@@ -1534,7 +1534,7 @@
         "label": "Schuko Out 4",
         "signalType": "power",
         "direction": "output",
-        "connectorType": "cee-7-7",
+        "connectorType": "schuko",
         "section": "Power"
       },
       {

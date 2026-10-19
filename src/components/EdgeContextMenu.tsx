@@ -3,6 +3,8 @@ import { useReactFlow } from "@xyflow/react";
 import { useSchematicStore } from "../store";
 import { resolvePort } from "../packList";
 import { LINE_STYLE_LABELS, LINE_STYLE_DASHARRAY, type DeviceData, type LineStyle } from "../types";
+import { isAdapterHidden, toggleAdapterVisibility as nextAdapterVisibility } from "../adapterVisibility";
+import { selectedConnectionEdges, stubbedLinkIdsOf } from "../stubSelection";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import MenuSubmenu from "./MenuSubmenu";
 import { useT } from "../i18n";
@@ -222,6 +224,22 @@ export default function EdgeContextMenu() {
     useSchematicStore.setState({ edgeContextMenu: null });
   }, [menu]);
 
+  const stubSelection = useCallback(() => {
+    const store = useSchematicStore.getState();
+    store.convertEdgesToStubs(
+      selectedConnectionEdges(store.nodes, store.edges).map((e) => e.id),
+    );
+    useSchematicStore.setState({ edgeContextMenu: null });
+  }, []);
+
+  const collapseSelection = useCallback(() => {
+    const store = useSchematicStore.getState();
+    store.collapseStubsForEdges(
+      selectedConnectionEdges(store.nodes, store.edges).map((e) => e.id),
+    );
+    useSchematicStore.setState({ edgeContextMenu: null });
+  }, []);
+
   const toggleHideCableId = useCallback(() => {
     if (!menu) return;
     const store = useSchematicStore.getState();
@@ -260,9 +278,7 @@ export default function EdgeContextMenu() {
     if (!adapterId) return;
 
     const adapterData = store.nodes.find((n) => n.id === adapterId)?.data as DeviceData | undefined;
-    const current = adapterData?.adapterVisibility ?? "default";
-    const isCurrentlyHidden = current === "force-hide" || (current === "default" && store.hideAdapters);
-    const newVisibility = isCurrentlyHidden ? "force-show" : "force-hide";
+    const newVisibility = nextAdapterVisibility(adapterData?.adapterVisibility, store.hideAdapters);
 
     store.patchDeviceData(adapterId, { adapterVisibility: newVisibility });
     useSchematicStore.setState({ edgeContextMenu: null });
@@ -375,6 +391,17 @@ export default function EdgeContextMenu() {
     selectedEdgeObjs.length >= 2 && selectedEdgeObjs.some((e) => e.id === menu.edgeId);
   const canBundleSelection = isMultiSelection && !selectionIsOneBundle;
 
+  // Bulk stub/unstub (#349): same "≥2 selected and the right-clicked one is among them"
+  // gate as bundling, but counted in logical connections — a stubbed connection is two
+  // selected legs and must not read as two connections. Unlike bundling it reads the
+  // selection through the stub tags too, so a stubs-only selection still offers unstub.
+  const stubSelectionEdges = selectedConnectionEdges(store.nodes, store.edges);
+  const unstubbedSelected = stubSelectionEdges.filter((e) => !e.data?.linkedConnectionId);
+  const stubbedSelectedLinkIds = stubbedLinkIdsOf(stubSelectionEdges);
+  const selectedConnectionCount = unstubbedSelected.length + stubbedSelectedLinkIds.length;
+  const canBulkStub =
+    selectedConnectionCount >= 2 && stubSelectionEdges.some((e) => e.id === menu.edgeId);
+
   // Check if this is a trunk (multicable) edge
   const srcNode = store.nodes.find((n) => n.id === edge?.source);
   const tgtNode = store.nodes.find((n) => n.id === edge?.target);
@@ -389,8 +416,7 @@ export default function EdgeContextMenu() {
   const connectsToAdapter = srcIsAdapter || tgtIsAdapter || hiddenAdapterTarget;
   const adapterId = srcIsAdapter ? edge?.source : tgtIsAdapter ? edge?.target : hiddenAdapterTarget ? edge?.target : null;
   const adapterData = adapterId ? store.nodes.find((n) => n.id === adapterId)?.data as DeviceData | undefined : undefined;
-  const adapterVisibility = adapterData?.adapterVisibility ?? "default";
-  const adapterIsHidden = adapterVisibility === "force-hide" || (adapterVisibility === "default" && store.hideAdapters);
+  const adapterIsHidden = isAdapterHidden(adapterData?.adapterVisibility, store.hideAdapters);
 
   let nearWaypoint = false;
   const checkNear = (wps: { x: number; y: number }[]) => {
@@ -524,6 +550,33 @@ export default function EdgeContextMenu() {
         label={isStubbed ? t("Show Full Connection") : t("Stub Connection")}
         onClick={toggleStubbed}
       />
+      {canBulkStub && (
+        // Separated from the single-connection item above: with a mixed selection both
+        // items show, and without the rule they read as duplicates of "Stub Connection".
+        <>
+          <div className="h-px bg-gray-200 my-1" />
+          {unstubbedSelected.length > 0 && (
+            <MenuItem
+              label={
+                unstubbedSelected.length === 1
+                  ? t("Stub 1 Selected Connection")
+                  : t("Stub {n} Selected Connections", { n: unstubbedSelected.length })
+              }
+              onClick={stubSelection}
+            />
+          )}
+          {stubbedSelectedLinkIds.length > 0 && (
+            <MenuItem
+              label={
+                stubbedSelectedLinkIds.length === 1
+                  ? t("Show 1 Selected Connection in Full")
+                  : t("Show {n} Selected Connections in Full", { n: stubbedSelectedLinkIds.length })
+              }
+              onClick={collapseSelection}
+            />
+          )}
+        </>
+      )}
       {!isDirectAttach && (
         <>
           <MenuItem

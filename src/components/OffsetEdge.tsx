@@ -6,11 +6,13 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { useSchematicStore } from "../store";
-import { LINE_STYLE_DASHARRAY, type ConnectionEdge, type LineStyle, type DeviceData } from "../types";
+import { LINE_STYLE_DASHARRAY, type ConnectionEdge, type LineStyle } from "../types";
 import { usbcPowerShortfallW } from "../connectorTypes";
+import { resolvePort } from "../packList";
 import { midCustomLabelPlacement } from "../stubPlacement";
 import { computeEdgeLengthEstimate, resolveCableLengthLabel } from "../cableLengthLabel";
 import { useT } from "../i18n";
+import { showPathEditHint, soleSelectedCableId } from "../pathEditHint";
 
 function OffsetEdgeComponent({
   id,
@@ -130,15 +132,11 @@ function OffsetEdgeComponent({
   const usbcShortfall = useSchematicStore((s) => {
     const edge = s.edges.find((e) => e.id === id);
     if (!edge) return null;
-    const resolvePort = (nodeId: string, handle: string | null | undefined) => {
-      const node = s.nodes.find((n) => n.id === nodeId);
-      if (!node || node.type !== "device") return undefined;
-      const portId = (handle ?? "").replace(/-(in|out|rear|front)$/, "");
-      return (node.data as DeviceData).ports?.find((p) => p.id === portId);
-    };
+    const portFor = (nodeId: string, handle: string | null | undefined) =>
+      resolvePort(s.nodes.find((n) => n.id === nodeId), handle);
     return usbcPowerShortfallW(
-      resolvePort(edge.source, edge.sourceHandle),
-      resolvePort(edge.target, edge.targetHandle),
+      portFor(edge.source, edge.sourceHandle),
+      portFor(edge.target, edge.targetHandle),
     );
   });
 
@@ -272,6 +270,26 @@ function OffsetEdgeComponent({
   });
 
   const isManual = manualWpStr.length > 0;
+
+  // Whether this cable is the sole selection (for the path-edit hint, #275).
+  // soleSelectedCableId scans nodes+edges once per store commit (shared cache),
+  // so each edge instance only compares its own id.
+  const isSoleSelectedCable = useSchematicStore(
+    (s) => soleSelectedCableId(s.nodes, s.edges) === id,
+  );
+
+  // User-placed handles of any kind — manual waypoints or stub-leg waypoints.
+  // Hint-scoped: false for every cable except the sole selection, so only the
+  // one hint-eligible cable pays for the lookup.
+  const hintCableHasOwnWaypoints = useSchematicStore((s) => {
+    if (soleSelectedCableId(s.nodes, s.edges) !== id) return false;
+    const edge = s.edges.find((e) => e.id === id);
+    return !!(
+      edge?.data?.manualWaypoints?.length ||
+      edge?.data?.stubSourceWaypoints?.length ||
+      edge?.data?.stubTargetWaypoints?.length
+    );
+  });
 
   let edgePath: string;
   let lx: number;
@@ -777,8 +795,24 @@ function OffsetEdgeComponent({
     </>
   ) : null;
 
+  // Path-edit discoverability hint (#275) — a lone selected cable with no handles yet
+  // points at the right-click menu where Add Handle lives.
+  const pathEditHint = showPathEditHint({
+    soleSelected: !!selected && isSoleSelectedCable,
+    hasRoute: !!routeStr,
+    hasOwnWaypoints: hintCableHasOwnWaypoints,
+    directAttach,
+  }) ? (
+    <div
+      className="reconnect-tooltip"
+      style={{ transform: `translate(-50%, -100%) translate(${customMidPt.x}px, ${customMidPt.y - 12}px)` }}
+    >
+      {t("Right-click cable to add a path handle")}
+    </div>
+  ) : null;
+
   // All labels + reconnect visuals rendered via EdgeLabelRenderer (HTML layer above all SVG edges)
-  const hasPortalContent = customLabels || cableIdLabels || reconnectVisuals || usbcWarningBadge || cableLengthBadge;
+  const hasPortalContent = customLabels || cableIdLabels || reconnectVisuals || usbcWarningBadge || cableLengthBadge || pathEditHint;
   const edgeLabelsPortal = hasPortalContent ? (
     <EdgeLabelRenderer>
       {cableIdLabels}
@@ -786,6 +820,7 @@ function OffsetEdgeComponent({
       {cableLengthBadge}
       {usbcWarningBadge}
       {reconnectVisuals}
+      {pathEditHint}
     </EdgeLabelRenderer>
   ) : null;
 

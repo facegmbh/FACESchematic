@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useSchematicStore } from "../store";
+import { selectedConnectionEdges } from "../stubSelection";
 import type { SchematicNode, ConnectionEdge } from "../types";
 import BulkConnectionEditPanel from "./BulkConnectionEditPanel";
 import BulkDeviceEditPanel from "./BulkDeviceEditPanel";
@@ -59,8 +60,16 @@ export default function SelectionFilterBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey]);
 
-  const edgeCount = counts.edge ?? 0;
   const deviceCount = counts.device ?? 0;
+  // The chips count what is literally selected; the edit panel works on a slightly wider
+  // set, because a stub is selected through its tag rather than its legs (#349). Without
+  // this, filtering down to "stubs" hides the panel that could unstub them.
+  const editableEdgeCount = useMemo(() => {
+    const state = useSchematicStore.getState();
+    return selectedConnectionEdges(state.nodes, state.edges).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey]);
+
   const presentKinds = KIND_ORDER.filter((k) => (counts[k] ?? 0) > 0);
   const totalSelected = presentKinds.reduce((sum, k) => sum + (counts[k] ?? 0), 0);
 
@@ -157,7 +166,7 @@ export default function SelectionFilterBar() {
             {deviceCount >= 2 ? t("Edit {n} devices…", { n: deviceCount }) : t("Edit devices…")}
           </button>
         )}
-        {(edgeCount >= 2 || panelOpen) && (
+        {(editableEdgeCount >= 2 || panelOpen) && (
           <button
             title={t("Edit properties of selected connections")}
             className={`px-2 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
@@ -167,7 +176,7 @@ export default function SelectionFilterBar() {
             }`}
             onClick={() => openConnectionPanel(!panelOpen)}
           >
-            {edgeCount >= 2 ? t("Edit {n} connections…", { n: edgeCount }) : t("Edit connections…")}
+            {editableEdgeCount >= 2 ? t("Edit {n} connections…", { n: editableEdgeCount }) : t("Edit connections…")}
           </button>
         )}
         {totalSelected > 0 && (

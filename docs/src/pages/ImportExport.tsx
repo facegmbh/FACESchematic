@@ -87,6 +87,11 @@ export default function ImportExportPage() {
         Import a cable schedule spreadsheet to auto-generate a schematic with devices, rooms, and connections.
         Access it via <strong>File</strong> menu → <strong>Import Cable Schedule...</strong>
       </p>
+      <p>
+        <a href="/examples/cable-schedule-sample.csv" download>cable-schedule-sample.csv</a> —
+        a small schedule with a handful of realistic rows, including the <code>Room &gt; Subroom</code> path
+        syntax described below. Download it, or open the link to inspect the column layout.
+      </p>
       <p>The import wizard has two steps:</p>
       <ol>
         <li>
@@ -106,6 +111,31 @@ export default function ImportExportPage() {
         connections drawn. This is useful for converting existing cable schedules from Excel, Google Sheets, or
         any other tool that can export CSV into a visual schematic.
       </p>
+
+      <h3>Nested subrooms via room paths</h3>
+      <p>
+        Room columns accept a <strong>room path</strong> using <code>&gt;</code> as a separator, so a cable
+        schedule can create <a href="/rooms-and-grouping">subrooms</a> in bulk:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Room column value</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Sanctuary</code></td><td>Device is placed in a top-level room "Sanctuary"</td></tr>
+          <tr><td><code>Sanctuary &gt; FOH</code></td><td>Device is placed in a subroom "FOH" nested inside "Sanctuary"</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>Whitespace around the <code>&gt;</code> is ignored — <code>Sanctuary&gt;FOH</code> and <code>Sanctuary &gt; FOH</code> are the same subroom — and empty path segments are skipped</li>
+        <li>Paths can nest to any depth, e.g. <code>Campus &gt; Sanctuary &gt; FOH</code></li>
+        <li>Every room along the path is created automatically, even if no device sits directly in it</li>
+        <li>The cable schedule CSV export writes its Src Room / Tgt Room columns in this same path syntax, so an exported schedule re-imports with its subroom nesting intact</li>
+        <li>The separator cannot be escaped: a room whose name literally contains <code>&gt;</code> (e.g. <code>A &gt; B</code>) re-imports as a subroom "B" nested inside "A"</li>
+      </ul>
 
       <h2>PNG / SVG (image export)</h2>
       <ul>

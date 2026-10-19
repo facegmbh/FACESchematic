@@ -2,14 +2,15 @@ import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } fro
 import { SPEAKER_LOAD_PROFILES } from "../types";
 import { PROFILE_LABELS } from "../speakerLoad";
 import { useSchematicStore } from "../store";
-import { buildBulkSlots } from "../slotBulk";
+import { buildBulkSlots, bulkLabel } from "../slotBulk";
+import { buildBulkPorts, type BulkPortSpec } from "../portBulk";
+import { MAX_PORTS } from "../import/validate";
 import { autoNamePorts, duplicatePortLabel } from "../portNaming";
 import {
   SIGNAL_LABELS,
   SIGNAL_COLORS,
   CONNECTOR_LABELS,
   CONNECTOR_GROUPS,
-  DEFAULT_HEADER_COLOR,
   type SignalType,
   type ConnectorType,
   type Gender,
@@ -32,6 +33,7 @@ import { templateIdentityPatch } from "../inventoryKey";
 import LoginDialog from "./LoginDialog";
 import CardCreatorDialog from "./CardCreatorDialog";
 import TemplateSyncDialog from "./TemplateSyncDialog";
+import ConfirmDialog from "./ConfirmDialog";
 import { isValidIpv4, isValidSubnetMask, isValidVlan, findDuplicateIps } from "../networkValidation";
 import IpInput from "./IpInput";
 import FacePlateEditor from "./FacePlateEditor";
@@ -45,6 +47,11 @@ import { deriveThermalBtuh } from "../thermal";
 import { useT } from "../i18n";
 import { symbolLibraryName, symbolLibraryUrl } from "../symbolLibrary";
 import SymbolLibraryPicker from "./SymbolLibraryPicker";
+import { HEADER_COLOR_SWATCH_FALLBACK, headerColorAfterRevert, normalizeHeaderColor, resolveDeviceHeaderColor, type HeaderColorCapture } from "../deviceHeaderColor";
+import { buildDeviceTemplate, buildTemplatePreset, type PortDraft } from "../deviceTemplateBuild";
+import { carriesPowerCapacity } from "../deviceTypeCategories";
+import { visibleSaveActions, SAVE_ACTION_LABELS, SAVE_ACTION_TITLES, type SaveActionId } from "../deviceEditorActions";
+import { visiblePortRowControls, PORT_ROW_CONTROL_TITLES, type PortRowControlId } from "../portRowControls";
 
 const ALL_SIGNAL_TYPES = (Object.keys(SIGNAL_LABELS) as SignalType[]).sort(
   (a, b) => SIGNAL_LABELS[a].localeCompare(SIGNAL_LABELS[b]),
@@ -75,35 +82,6 @@ const CONNECTOR_GROUP_ENTRIES: Array<[string, ConnectorType[]]> = (() => {
   }
   return groups;
 })();
-
-interface PortDraft {
-  id: string;
-  label: string;
-  signalType: SignalType;
-  direction: PortDirection;
-  section?: string;
-  connectorType?: ConnectorType;
-  gender?: Gender;
-  networkConfig?: PortNetworkConfig;
-  addressable?: boolean;
-  capabilities?: PortCapabilities;
-  isMulticable?: boolean;
-  channelCount?: number;
-  multiConnect?: boolean;
-  directAttach?: boolean;
-  notes?: string;
-  poeDrawW?: number;
-  usbcPowerSourceW?: number;
-  usbcPowerDrawW?: number;
-  linkSpeed?: string;
-  flipped?: boolean;
-  // Passthrough-only fields
-  rearConnectorType?: ConnectorType;
-  rearGender?: Gender;
-  frontConnectorType?: ConnectorType;
-  frontGender?: Gender;
-  inheritsSignal?: boolean;
-}
 
 function newPortDraft(direction: PortDirection): PortDraft {
   const signalType: SignalType = "sdi";
@@ -147,6 +125,8 @@ export default function DeviceEditor() {
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const templateHiddenSignals = useSchematicStore((s) => s.templateHiddenSignals);
   const currency = useSchematicStore((s) => s.currency);
+  const projectHeaderColor = useSchematicStore((s) => s.defaultDeviceHeaderColor);
+  const appHeaderColor = useSchematicStore((s) => s.appDefaultDeviceHeaderColor);
   const setTemplateHiddenSignals = useSchematicStore((s) => s.setTemplateHiddenSignals);
   const templatePresets = useSchematicStore((s) => s.templatePresets);
   const setTemplatePreset = useSchematicStore((s) => s.setTemplatePreset);
@@ -222,12 +202,37 @@ export default function DeviceEditor() {
   const [assetCode, setAssetCode] = useState("");
   // Preserves import-managed Odoo fields (productRef, orderRef, …) across an edit.
   const [odooLink, setOdooLink] = useState<OdooDeviceLink | undefined>(undefined);
+  // True once the user has worked the header-color picker on this device. Placement stamps the
+  // resolved default header color onto every device (#354), so a device showing a color is not
+  // by itself evidence anyone chose that color for it — without this flag a template or preset
+  // saved from such a device would bake the default in, and the project override would then be
+  // dead for that template with nothing on screen to say why.
+  const [headerColorEdited, setHeaderColorEdited] = useState(false);
   const [ports, setPorts] = useState<PortDraft[]>([]);
 
   // Port visibility local state
   const [showAllPorts, setShowAllPorts] = useState(false);
   const [hiddenPorts, setHiddenPorts] = useState<string[]>([]);
   const [portVisOpen, setPortVisOpen] = useState(false);
+
+  // Footer save/revert split-button menu
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false);
+  const saveMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!saveMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target as Node)) setSaveMenuOpen(false);
+    };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSaveMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", keyHandler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", keyHandler);
+    };
+  }, [saveMenuOpen]);
 
   // DHCP server config
   const [dhcpServer, setDhcpServer] = useState<DhcpServerConfig | undefined>(undefined);
@@ -285,6 +290,9 @@ export default function DeviceEditor() {
   // Login dialog for community submission
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showSyncDialog, setShowSyncDialog] = useState(false);
+  // In-app stand-in for window.confirm() on the "update N other instances?" prompts (#328) —
+  // native confirm() clashed with the app's design language and blocked agentic testing.
+  const [pendingInstanceUpdate, setPendingInstanceUpdate] = useState<{ message: string; run: () => void } | null>(null);
 
   // Face-plate editor
   const [showFacePlateEditor, setShowFacePlateEditor] = useState(false);
@@ -328,6 +336,7 @@ export default function DeviceEditor() {
     setCategory(node.data.category ?? tpl?.category ?? "");
     setColor(node.data.color);
     setHeaderColor(node.data.headerColor);
+    setHeaderColorEdited(false);
     setKnxAddress(node.data.knxAddress ?? "");
     setDaliAddress(node.data.daliAddress ?? "");
     setBusAddress(node.data.busAddress ?? "");
@@ -505,7 +514,7 @@ export default function DeviceEditor() {
       // Always persist dhcpServer if set (preserves range config when toggling off)
       ...(dhcpServer ? { dhcpServer } : {}),
       ...(powerDrawW != null ? { powerDrawW } : {}),
-      ...(powerCapacityW != null ? { powerCapacityW } : {}),
+      ...(powerCapacityW != null && carriesPowerCapacity(deviceType) ? { powerCapacityW } : {}),
       ...(poeBudgetW != null ? { poeBudgetW } : {}),
       ...(poeDrawW != null ? { poeDrawW } : {}),
       ...(voltage ? { voltage } : {}),
@@ -545,84 +554,82 @@ export default function DeviceEditor() {
     close();
   }, [editingNodeId, buildDeviceData, updateDevice, setCreatingNodeId, close]);
 
-  // Ctrl+Enter anywhere in the editor → Apply & Close
+  // Ctrl+Enter anywhere in the editor → Apply & Close. The confirm dialog nests INSIDE
+  // this wrapper, so its own handlers can never beat this capture-phase one; while it is
+  // open the shortcut has to stand down, or the editor saves and unmounts underneath it
+  // and the stashed instance update is dropped without ever running. (window.confirm()
+  // got this for free by blocking the page — #328.)
   const onCtrlEnter = useCallback((e: React.KeyboardEvent) => {
+    if (pendingInstanceUpdate) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
       handleSave();
     }
-  }, [handleSave]);
+  }, [handleSave, pendingInstanceUpdate]);
+
+  // What a template-family save should record as the header color. `savedHeaderColor` is
+  // whatever the object being written already carried, so updating a template that owns a
+  // color never silently erases it (#354).
+  const headerColorCapture = useCallback(
+    (savedHeaderColor: string | undefined): HeaderColorCapture => ({
+      deviceHeaderColor: headerColor,
+      edited: headerColorEdited,
+      savedHeaderColor,
+      projectDefault: projectHeaderColor,
+      appDefault: appHeaderColor,
+    }),
+    [headerColor, headerColorEdited, projectHeaderColor, appHeaderColor],
+  );
 
   // Shared builder for the "save as template", "update template" and "fork built-in" flows.
   // `overrides` carries the id (always) and, for updates/forks, version + a renamed label.
+  // The object itself is assembled by the pure builder in deviceTemplateBuild.ts.
   const buildTemplateFromForm = useCallback(
-    (overrides: Partial<DeviceTemplate> & Pick<DeviceTemplate, "id">): DeviceTemplate => {
-      const finalPorts: Port[] = ports
-        .filter((p) => p.label.trim())
-        .map((p, i) => ({
-          ...p,
-          id: `tpl-${i}`,
-          label: p.label.trim(),
-        }));
-      const trimmedAux = trimTrailingEmpty(auxiliaryData);
-      const existing = node?.data;
-      return {
-        deviceType: deviceType.trim() || "custom",
-        label: label.trim() || "Custom Device",
-        ...(shortName.trim() ? { shortName: shortName.trim() } : {}),
-        ports: finalPorts,
-        ...(color ? { color } : {}),
-        ...(headerColor ? { headerColor } : {}),
-        ...(category.trim() ? { category: category.trim() } : {}),
-        ...(manufacturer.trim() ? { manufacturer: manufacturer.trim() } : {}),
-        ...(modelNumber.trim() ? { modelNumber: modelNumber.trim() } : {}),
-        ...(referenceUrl.trim() ? { referenceUrl: referenceUrl.trim() } : {}),
-        ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
-        ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
-      ...(speakerLoad ? { speakerLoad } : {}),
-      ...(ampLoad ? { ampLoad } : {}),
-        ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
-      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
-      ...(installCable.trim() ? { installCable: installCable.trim() } : {}),
-      ...(installNotes.trim() ? { installNotes: installNotes.trim() } : {}),
-      ...(speakerLoad ? { speakerLoad } : {}),
-      ...(ampLoad ? { ampLoad } : {}),
-      ...(planSymbolSpec ? { planSymbol: planSymbolSpec } : {}),
-        ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
-        ...(powerDrawW != null ? { powerDrawW } : {}),
-        ...(powerCapacityW != null ? { powerCapacityW } : {}),
-        ...(voltage ? { voltage } : {}),
-        ...(protectionClass ? { protectionClass } : {}),
-        ...(thermalBtuh != null ? { thermalBtuh } : {}),
-        ...(poeBudgetW != null ? { poeBudgetW } : {}),
-        ...(poeDrawW != null ? { poeDrawW } : {}),
-        ...(unitCost != null ? { unitCost } : {}),
-        ...(heightMm != null ? { heightMm } : {}),
-        ...(widthMm != null ? { widthMm } : {}),
-        ...(depthMm != null ? { depthMm } : {}),
-        ...(weightKg != null ? { weightKg } : {}),
-        ...(rackForm ? { rackForm } : {}),
-        ...(isVenueProvided ? { isVenueProvided: true } : {}),
-        // Convert InstalledSlot[] back to the blueprint SlotDefinition[] that DeviceTemplate
-        // expects — card selections are per-placement, not part of the template spec.
-        ...(existing?.slots && existing.slots.length > 0
-          ? {
-              slots: existing.slots.map((s) => ({
-                id: s.slotId,
-                label: s.label,
-                slotFamily: s.slotFamily ?? "",
-                ...(s.cardTemplateId ? { defaultCardId: s.cardTemplateId } : {}),
-              })),
-            }
-          : {}),
-        ...(existing?.slotFamily ? { slotFamily: existing.slotFamily as string } : {}),
-        ...(trimmedAux.some((r) => r.text.trim()) ? { auxiliaryData: trimmedAux } : {}),
-        ...(() => { const t = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20); return t.length > 0 ? { searchTerms: t } : {}; })(),
-        ...overrides,
-      };
-    },
-    [ports, label, shortName, hostname, node, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColor, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, auxiliaryData, searchTermsRaw],
+    (overrides: Partial<DeviceTemplate> & Pick<DeviceTemplate, "id">): DeviceTemplate =>
+      buildDeviceTemplate(
+        {
+          ports,
+          label,
+          shortName,
+          deviceType,
+          color,
+          headerColor: headerColorCapture(
+            node?.data.templateId
+              ? getTemplateById(node.data.templateId, customTemplates)?.headerColor
+              : undefined,
+          ),
+          category,
+          manufacturer,
+          modelNumber,
+          referenceUrl,
+          installCable,
+          installNotes,
+          speakerLoad,
+          ampLoad,
+          planSymbol: planSymbolSpec,
+          hostname,
+          powerDrawW,
+          powerCapacityW,
+          voltage,
+          protectionClass,
+          thermalBtuh,
+          poeBudgetW,
+          poeDrawW,
+          unitCost,
+          heightMm,
+          widthMm,
+          depthMm,
+          weightKg,
+          rackForm,
+          isVenueProvided,
+          auxiliaryData,
+          searchTermsRaw,
+          existing: node?.data,
+        },
+        overrides,
+      ),
+    [ports, label, shortName, hostname, node, customTemplates, powerDrawW, powerCapacityW, voltage, protectionClass, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, deviceType, color, headerColorCapture, manufacturer, modelNumber, referenceUrl, installCable, installNotes, speakerLoad, ampLoad, planSymbolSpec, category, auxiliaryData, searchTermsRaw],
   );
 
   const handleSaveAsTemplate = useCallback(() => {
@@ -653,33 +660,37 @@ export default function DeviceEditor() {
     const others = nodes.filter(
       (n) => n.type === "device" && (n.data as DeviceData).templateId === templateId && n.id !== editingNodeId,
     ).length;
-    if (
-      others > 0 &&
-      !confirm(
-        others === 1
-          ? t("Update 1 other instance of this device on the current schematic?")
-          : t("Update {n} other instances of this device on the current schematic?", { n: others }),
-      )
-    ) {
+
+    const apply = () => {
+      updateCustomTemplate(templateId, template);
+      // Persist the edited device with the bumped version so it doesn't read as drifted.
+      const data = buildDeviceData({ templateVersion: nextVersion });
+      if (data) updateDevice(editingNodeId, data);
+      setCreatingNodeId(null);
+      if (others > 0) {
+        const { updated } = propagateTemplateToInstances(templateId, template, editingNodeId);
+        if (updated > 0)
+          addToast(
+            updated === 1
+              ? t("Updated 1 other instance on this schematic")
+              : t("Updated {n} other instances on this schematic", { n: updated }),
+            "success",
+          );
+      }
+      close();
+    };
+
+    if (others > 0) {
+      setPendingInstanceUpdate({
+        message:
+          others === 1
+            ? t("Update 1 other instance of this device on the current schematic?")
+            : t("Update {n} other instances of this device on the current schematic?", { n: others }),
+        run: apply,
+      });
       return;
     }
-
-    updateCustomTemplate(templateId, template);
-    // Persist the edited device with the bumped version so it doesn't read as drifted.
-    const data = buildDeviceData({ templateVersion: nextVersion });
-    if (data) updateDevice(editingNodeId, data);
-    setCreatingNodeId(null);
-    if (others > 0) {
-      const { updated } = propagateTemplateToInstances(templateId, template, editingNodeId);
-      if (updated > 0)
-        addToast(
-          updated === 1
-            ? t("Updated 1 other instance on this schematic")
-            : t("Updated {n} other instances on this schematic", { n: updated }),
-          "success",
-        );
-    }
-    close();
+    apply();
   }, [node, editingNodeId, customTemplates, buildTemplateFromForm, nodes, updateCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
 
   // Built-in device: fork it into a "(Custom)" user template, re-point the edited device at
@@ -693,37 +704,41 @@ export default function DeviceEditor() {
     const others = nodes.filter(
       (n) => n.type === "device" && (n.data as DeviceData).templateId === builtInId && n.id !== editingNodeId,
     ).length;
-    if (
-      others > 0 &&
-      !confirm(
-        others === 1
-          ? t('Create a "(Custom)" user template and update 1 other instance on the current schematic?')
-          : t('Create a "(Custom)" user template and update {n} other instances on the current schematic?', { n: others }),
-      )
-    ) {
+
+    const apply = () => {
+      const template = buildTemplateFromForm({ id: newId, version: 1, label: forkLabel });
+      addCustomTemplate(template);
+      // Re-point the edited device at the fork (keeping its instance-level fields).
+      const data = buildDeviceData({ templateId: newId, templateVersion: 1 });
+      if (data) updateDevice(editingNodeId, data);
+      setCreatingNodeId(null);
+      if (others > 0) {
+        const { updated } = propagateTemplateToInstances(builtInId, template, editingNodeId);
+        addToast(
+          updated === 0
+            ? t('Created "{name}"', { name: forkLabel })
+            : updated === 1
+              ? t('Created "{name}" and updated 1 other instance', { name: forkLabel })
+              : t('Created "{name}" and updated {n} other instances', { name: forkLabel, n: updated }),
+          "success",
+        );
+      } else {
+        addToast(t('Created "{name}"', { name: forkLabel }), "success");
+      }
+      close();
+    };
+
+    if (others > 0) {
+      setPendingInstanceUpdate({
+        message:
+          others === 1
+            ? t('Create a "(Custom)" user template and update 1 other instance on the current schematic?')
+            : t('Create a "(Custom)" user template and update {n} other instances on the current schematic?', { n: others }),
+        run: apply,
+      });
       return;
     }
-
-    const template = buildTemplateFromForm({ id: newId, version: 1, label: forkLabel });
-    addCustomTemplate(template);
-    // Re-point the edited device at the fork (keeping its instance-level fields).
-    const data = buildDeviceData({ templateId: newId, templateVersion: 1 });
-    if (data) updateDevice(editingNodeId, data);
-    setCreatingNodeId(null);
-    if (others > 0) {
-      const { updated } = propagateTemplateToInstances(builtInId, template, editingNodeId);
-      addToast(
-        updated === 0
-          ? t('Created "{name}"', { name: forkLabel })
-          : updated === 1
-            ? t('Created "{name}" and updated 1 other instance', { name: forkLabel })
-            : t('Created "{name}" and updated {n} other instances', { name: forkLabel, n: updated }),
-        "success",
-      );
-    } else {
-      addToast(t('Created "{name}"', { name: forkLabel }), "success");
-    }
-    close();
+    apply();
   }, [node, editingNodeId, label, nodes, buildTemplateFromForm, addCustomTemplate, buildDeviceData, updateDevice, setCreatingNodeId, propagateTemplateToInstances, addToast, close]);
 
   const handleSubmitToCommunity = useCallback(async () => {
@@ -763,7 +778,7 @@ export default function DeviceEditor() {
       ...(existing?.slotFamily ? { slotFamily: existing.slotFamily } : {}),
       ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
       ...(powerDrawW != null ? { powerDrawW } : {}),
-      ...(powerCapacityW != null ? { powerCapacityW } : {}),
+      ...(powerCapacityW != null && carriesPowerCapacity(dt) ? { powerCapacityW } : {}),
       ...(voltage ? { voltage } : {}),
       ...(protectionClass ? { protectionClass } : {}),
       ...(thermalBtuh != null ? { thermalBtuh } : {}),
@@ -810,28 +825,16 @@ export default function DeviceEditor() {
     if (!editingNodeId || !node?.data.templateId) return;
     const templateId = node.data.templateId;
 
-    // Normalize ports to stable preset IDs
-    const presetPorts: Port[] = ports
-      .filter((p) => p.label.trim())
-      .map((p, i) => ({ ...p, id: `preset-${i}`, label: p.label.trim() }));
-
-    // Remap hiddenPorts through old→new mapping
-    const idMap = new Map<string, string>();
-    ports.filter((p) => p.label.trim()).forEach((p, i) => { idMap.set(p.id, `preset-${i}`); });
-    const presetHidden = hiddenPorts
-      .map((id) => idMap.get(id) ?? id)
-      .filter((id) => presetPorts.some((p) => p.id === id));
-
-    setTemplatePreset(templateId, {
-      ports: presetPorts,
-      ...(presetHidden.length > 0 ? { hiddenPorts: presetHidden } : {}),
-      ...(color ? { color } : {}),
-      ...(headerColor ? { headerColor } : {}),
-    });
+    setTemplatePreset(templateId, buildTemplatePreset({
+      ports,
+      hiddenPorts,
+      color,
+      headerColor: headerColorCapture(templatePresets[templateId]?.headerColor),
+    }));
 
     // Also apply changes to current device
     handleSave();
-  }, [editingNodeId, node, ports, hiddenPorts, color, headerColor, setTemplatePreset, handleSave]);
+  }, [editingNodeId, node, ports, hiddenPorts, color, headerColorCapture, templatePresets, setTemplatePreset, handleSave]);
 
   const handleRevertToTemplate = useCallback(() => {
     if (!node) return;
@@ -881,7 +884,15 @@ export default function DeviceEditor() {
     }));
     setHiddenPorts([]);
     setColor(tpl.color);
-    setHeaderColor(tpl.headerColor);
+    // Header color too (#382): drop whatever was picked on this device and take what a freshly
+    // placed one would get. Clearing the edited flag means a later save treats it as inherited.
+    setHeaderColor(headerColorAfterRevert("template", {
+      presetHeaderColor: undefined,
+      templateHeaderColor: tpl.headerColor,
+      projectDefault: projectHeaderColor,
+      appDefault: appHeaderColor,
+    }));
+    setHeaderColorEdited(false);
 
     // For user templates, also revert all editable metadata fields
     if (customTemplates.some((t) => t.id === templateId)) {
@@ -919,7 +930,7 @@ export default function DeviceEditor() {
       setAuxiliaryData(normalizeAuxRows(tpl.auxiliaryData));
       setSearchTermsRaw((tpl.searchTerms ?? []).join(", "));
     }
-  }, [node, customTemplates]);
+  }, [node, customTemplates, projectHeaderColor, appHeaderColor]);
 
   const handleRevertToPreset = useCallback(() => {
     if (!node?.data.templateId) return;
@@ -947,8 +958,14 @@ export default function DeviceEditor() {
     })));
     setHiddenPorts(preset.hiddenPorts ?? []);
     setColor(preset.color);
-    setHeaderColor(preset.headerColor);
-  }, [node, templatePresets]);
+    setHeaderColor(headerColorAfterRevert("preset", {
+      presetHeaderColor: preset.headerColor,
+      templateHeaderColor: getTemplateById(node.data.templateId, customTemplates)?.headerColor,
+      projectDefault: projectHeaderColor,
+      appDefault: appHeaderColor,
+    }));
+    setHeaderColorEdited(false);
+  }, [node, templatePresets, customTemplates, projectHeaderColor, appHeaderColor]);
 
   const addPort = (direction: PortDirection) => {
     setPorts([...ports, newPortDraft(direction)]);
@@ -984,20 +1001,12 @@ export default function DeviceEditor() {
     setPorts(ports.map((p) => (p.id === id ? { ...p, ...updates } : p)));
   };
 
-  const bulkAddPorts = (direction: PortDirection, prefix: string, start: number, count: number, signalType: SignalType, section: string) => {
-    const newPorts: PortDraft[] = [];
-    const connectorType = DEFAULT_CONNECTOR[signalType];
-    const multiConnect = shouldDefaultMultiConnect(signalType, connectorType) || undefined;
-    for (let i = 0; i < count; i++) {
-      newPorts.push({
-        id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${i}`,
-        label: `${prefix} ${start + i}`,
-        signalType,
-        direction,
-        section: section || undefined,
-        multiConnect,
-      });
-    }
+  const bulkAddPorts = (spec: BulkPortSpec) => {
+    // Cap at the API's port limit so a typo'd range can't build a device the library rejects.
+    const count = Math.min(Math.floor(spec.count), Math.max(0, MAX_PORTS - ports.length));
+    if (count < 1) return;
+    const stamp = Date.now();
+    const newPorts = buildBulkPorts({ ...spec, start: Math.floor(spec.start), count }, (i) => `draft-${stamp}-${Math.random().toString(36).slice(2, 6)}-${i}`);
     setPorts([...ports, ...newPorts]);
   };
 
@@ -1066,11 +1075,21 @@ export default function DeviceEditor() {
 
     const isUserTemplate = customTemplates.some((t) => t.id === templateId);
 
+    // Placement stamps the resolved default header color onto every device (#354), so the
+    // header color only counts as a change when it differs from what a revert would restore.
+    const headerColorSources = {
+      presetHeaderColor: preset?.headerColor,
+      templateHeaderColor: tpl?.headerColor,
+      projectDefault: projectHeaderColor,
+      appDefault: appHeaderColor,
+    };
+    const ownHeaderColor = normalizeHeaderColor(headerColor);
+
     const dirtyVsTemplate = !!tpl && (
       !portsMatch(ports, tpl.ports) ||
       hiddenPorts.length > 0 ||
       (color ?? undefined) !== (tpl.color ?? undefined) ||
-      (headerColor ?? undefined) !== (tpl.headerColor ?? undefined) ||
+      ownHeaderColor !== headerColorAfterRevert("template", headerColorSources) ||
       // For user templates, also check all editable metadata fields
       (isUserTemplate && (
         label !== (tpl.label ?? "") ||
@@ -1101,23 +1120,40 @@ export default function DeviceEditor() {
       !portsMatch(ports, preset.ports) ||
       JSON.stringify([...hiddenPorts].sort()) !== JSON.stringify([...(preset.hiddenPorts ?? [])].sort()) ||
       (color ?? undefined) !== (preset.color ?? undefined) ||
-      (headerColor ?? undefined) !== (preset.headerColor ?? undefined)
+      ownHeaderColor !== headerColorAfterRevert("preset", headerColorSources)
     );
 
     return { dirtyVsPreset, dirtyVsTemplate };
-  }, [templateId, ports, hiddenPorts, color, headerColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, speakerLoad, ampLoad, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, templatesLoaded]);
+  }, [templateId, ports, hiddenPorts, color, headerColor, projectHeaderColor, appHeaderColor, templatePresets, customTemplates, label, manufacturer, modelNumber, referenceUrl, speakerLoad, ampLoad, category, hostname, powerDrawW, powerCapacityW, voltage, thermalBtuh, poeBudgetW, poeDrawW, unitCost, heightMm, widthMm, depthMm, weightKg, rackForm, isVenueProvided, templatesLoaded]);
 
   if (!editingNodeId || !node) return null;
 
   const drift = getTemplateDrift(node.data, customTemplates);
   const hasPreset = !!(templateId && templatePresets[templateId]);
+  const saveActionHandlers: Record<SaveActionId, () => void> = {
+    "save-user-template": handleSaveAsTemplate,
+    "submit-community": handleSubmitToCommunity,
+    "update-user-template": handleUpdateUserTemplate,
+    "update-as-custom": handleForkBuiltInToCustom,
+    "save-preset": handleSaveAsPreset,
+    "revert-preset": handleRevertToPreset,
+    "revert-template": handleRevertToTemplate,
+  };
+  const [primarySaveAction, ...menuSaveActions] = visibleSaveActions({
+    templateId,
+    isUserTemplate: customTemplates.some((t) => t.id === templateId),
+    hasLabeledPort: ports.some((p) => p.label.trim().length > 0),
+    hasPreset,
+    dirtyVsPreset,
+    dirtyVsTemplate,
+  });
   const inputs = ports.filter((p) => p.direction === "input");
   const outputs = ports.filter((p) => p.direction === "output");
   const bidir = ports.filter((p) => p.direction === "bidirectional");
   const passthroughPorts = ports.filter((p) => p.direction === "passthrough");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }} onKeyDownCapture={onCtrlEnter}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={(e) => { if (e.target === e.currentTarget && !saveMenuOpen) close(); }} onKeyDownCapture={onCtrlEnter}>
       <div
         className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-2xl w-[760px] max-w-[92vw] max-h-[85vh] flex flex-col"
       >
@@ -1444,16 +1480,42 @@ export default function DeviceEditor() {
             <input
               type="color"
               className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
-              value={headerColor ?? DEFAULT_HEADER_COLOR}
-              onChange={(e) => setHeaderColor(e.target.value)}
+              value={headerColor ?? HEADER_COLOR_SWATCH_FALLBACK}
+              onChange={(e) => { setHeaderColor(e.target.value); setHeaderColorEdited(true); }}
             />
-            {headerColor && (
+            {headerColor ? (
               <button
                 className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
-                onClick={() => setHeaderColor(undefined)}
+                onClick={() => { setHeaderColor(undefined); setHeaderColorEdited(true); }}
               >
                 {t("Reset")}
               </button>
+            ) : (
+              // This device has no header color of its own — show what a device placed now
+              // would get, as a hint beside the picker rather than inside it, so the swatch
+              // never claims a color the device isn't actually painted with. Resolved the
+              // same way placement does, and named for the rung it came from so a template's
+              // or preset's own color is never labeled as a Preferences setting (#354).
+              (() => {
+                const presetColor = templateId ? templatePresets[templateId]?.headerColor : undefined;
+                const templateColor = templateId ? getTemplateById(templateId, customTemplates)?.headerColor : undefined;
+                const fallback = resolveDeviceHeaderColor(presetColor, templateColor, projectHeaderColor, appHeaderColor);
+                if (!fallback) return null;
+                const source = normalizeHeaderColor(presetColor)
+                  ? t("from this preset")
+                  : normalizeHeaderColor(templateColor)
+                    ? t("from this template")
+                    : t("default for new devices");
+                return (
+                  <span className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+                    <span
+                      className="w-3 h-3 shrink-0 rounded-sm border border-[var(--color-border)]"
+                      style={{ backgroundColor: fallback }}
+                    />
+                    {source}
+                  </span>
+                );
+              })()
             )}
           </div>
 
@@ -1537,6 +1599,7 @@ export default function DeviceEditor() {
             ports={inputs}
             onAdd={() => addPort("input")}
             onBulkAdd={bulkAddPorts}
+            bulkRoom={Math.max(0, MAX_PORTS - ports.length)}
             onRemove={removePort}
             onDuplicate={duplicatePort}
             onUpdate={updatePort}
@@ -1556,6 +1619,7 @@ export default function DeviceEditor() {
             ports={outputs}
             onAdd={() => addPort("output")}
             onBulkAdd={bulkAddPorts}
+            bulkRoom={Math.max(0, MAX_PORTS - ports.length)}
             onRemove={removePort}
             onDuplicate={duplicatePort}
             onUpdate={updatePort}
@@ -1576,6 +1640,7 @@ export default function DeviceEditor() {
               ports={bidir}
               onAdd={() => addPort("bidirectional")}
               onBulkAdd={bulkAddPorts}
+              bulkRoom={Math.max(0, MAX_PORTS - ports.length)}
               onRemove={removePort}
               onDuplicate={duplicatePort}
               onUpdate={updatePort}
@@ -1597,6 +1662,7 @@ export default function DeviceEditor() {
               ports={passthroughPorts}
               onAdd={() => addPort("passthrough")}
               onBulkAdd={bulkAddPorts}
+              bulkRoom={Math.max(0, MAX_PORTS - ports.length)}
               onRemove={removePort}
               onDuplicate={duplicatePort}
               onUpdate={updatePort}
@@ -1789,7 +1855,7 @@ export default function DeviceEditor() {
           })()}
 
           {/* Power */}
-          {(ports.some((p) => p.signalType === "power") || deviceType.includes("power")) && (
+          {(ports.some((p) => p.signalType === "power") || deviceType.includes("power") || carriesPowerCapacity(deviceType)) && (
             <details className="text-xs">
               <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] select-none py-1">
                 {t("Power")}
@@ -1862,7 +1928,7 @@ export default function DeviceEditor() {
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </div>
-                {deviceType.includes("power-distribution") && (
+                {carriesPowerCapacity(deviceType) && (
                   <div className="col-span-2">
                     <label className="block text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-0.5">
                       {t("Power Capacity (W)")}
@@ -2160,66 +2226,52 @@ export default function DeviceEditor() {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-[var(--color-border)] flex items-center gap-2">
-          <button
-            onClick={handleSaveAsTemplate}
-            className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-            title={t("Save this device configuration as a reusable user template")}
-          >
-            {t("Save as User Template")}
-          </button>
-          {(!templateId || dirtyVsTemplate || customTemplates.some((t) => t.id === templateId)) && ports.some((p) => p.label.trim()) && (
+          <div ref={saveMenuRef} className="relative flex items-stretch">
             <button
-              onClick={handleSubmitToCommunity}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title={t("Submit this device to the community device library")}
+              onClick={saveActionHandlers[primarySaveAction]}
+              className={`px-3 py-1.5 text-xs ${menuSaveActions.length > 0 ? "rounded-l" : "rounded"} bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer`}
+              title={t(SAVE_ACTION_TITLES[primarySaveAction])}
             >
-              {t("Submit to Community")}
+              {t(SAVE_ACTION_LABELS[primarySaveAction])}
             </button>
-          )}
-          {templateId && customTemplates.some((t) => t.id === templateId) ? (
-            <button
-              onClick={handleUpdateUserTemplate}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title={t("Overwrite the saved user template with this configuration and apply it to every instance on the schematic")}
-            >
-              {t("Update User Template")}
-            </button>
-          ) : templateId ? (
-            <>
-              <button
-                onClick={handleForkBuiltInToCustom}
-                className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-                title={t("Save these changes as a new '(Custom)' user template and apply them to every instance of this device on the schematic")}
-              >
-                {t("Update as Custom")}
-              </button>
-              <button
-                onClick={handleSaveAsPreset}
-                className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-                title={t("Set this configuration as the project default for this template")}
-              >
-                {t("Save as Preset")}
-              </button>
-            </>
-          ) : null}
-          {hasPreset && dirtyVsPreset && (
-            <button
-              onClick={handleRevertToPreset}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title={t("Reset ports and visibility to the project preset")}
-            >
-              {t("Revert to Preset")}
-            </button>
-          )}
-          {dirtyVsTemplate && (
-            <button
-              onClick={handleRevertToTemplate}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-[var(--color-border)] transition-colors cursor-pointer"
-              title={t("Reset ports and visibility to the original template defaults")}
-            >
-              {t("Revert to Template")}
-            </button>
-          )}
+            {menuSaveActions.length > 0 && (
+              <>
+                <button
+                  onClick={() => setSaveMenuOpen((o) => !o)}
+                  className="px-1.5 rounded-r flex items-center bg-[var(--color-surface)] text-[var(--color-text)] hover:text-[var(--color-text-heading)] border border-l-0 border-[var(--color-border)] transition-colors cursor-pointer"
+                  title={t("More save and revert actions")}
+                  aria-haspopup="menu"
+                  aria-expanded={saveMenuOpen}
+                  aria-label={t("More save and revert actions")}
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+                {saveMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 bottom-full mb-1 w-56 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg py-1 z-50"
+                  >
+                    {menuSaveActions.map((id) => (
+                      <button
+                        key={id}
+                        role="menuitem"
+                        onClick={() => {
+                          setSaveMenuOpen(false);
+                          saveActionHandlers[id]();
+                        }}
+                        className="block w-full text-left px-3 py-2 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-heading)] transition-colors cursor-pointer"
+                        title={t(SAVE_ACTION_TITLES[id])}
+                      >
+                        {t(SAVE_ACTION_LABELS[id])}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           <div className="flex-1" />
           <button
             onClick={close}
@@ -2229,7 +2281,7 @@ export default function DeviceEditor() {
           </button>
           <button
             onClick={handleSave}
-            className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
+            className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white border border-transparent hover:bg-blue-500 transition-colors cursor-pointer"
           >
             {t("Apply")}
           </button>
@@ -2262,6 +2314,19 @@ export default function DeviceEditor() {
           onCancel={() => setShowSyncDialog(false)}
         />
       )}
+      {pendingInstanceUpdate && (
+        <ConfirmDialog
+          title={t("Update Other Instances?")}
+          message={pendingInstanceUpdate.message}
+          confirmLabel={t("Update")}
+          onConfirm={() => {
+            const { run } = pendingInstanceUpdate;
+            setPendingInstanceUpdate(null);
+            run();
+          }}
+          onCancel={() => setPendingInstanceUpdate(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2280,10 +2345,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function BulkAddForm({
   direction,
   onBulkAdd,
+  bulkRoom,
   onClose,
 }: {
   direction: PortDirection;
-  onBulkAdd: (direction: PortDirection, prefix: string, start: number, count: number, signalType: SignalType, section: string) => void;
+  onBulkAdd: (spec: BulkPortSpec) => void;
+  bulkRoom: number;
   onClose: () => void;
 }) {
   const t = useT();
@@ -2291,12 +2358,14 @@ function BulkAddForm({
   const [start, setStart] = useState(1);
   const [end, setEnd] = useState(8);
   const [signalType, setSignalType] = useState<SignalType>("sdi");
+  const [connectorType, setConnectorType] = useState<ConnectorType>(DEFAULT_CONNECTOR["sdi"]);
+  const [spaceBeforeNumber, setSpaceBeforeNumber] = useState(true);
   const [section, setSection] = useState("");
 
   const handleSubmit = () => {
     const count = end - start + 1;
-    if (count < 1 || !prefix.trim()) return;
-    onBulkAdd(direction, prefix.trim(), start, count, signalType, section.trim());
+    if (count < 1 || !prefix.trim() || bulkRoom < 1) return;
+    onBulkAdd({ direction, prefix: prefix.trim(), start, count, signalType, connectorType, section: section.trim() || undefined, spaceBeforeNumber });
     onClose();
   };
 
@@ -2336,13 +2405,42 @@ function BulkAddForm({
         <select
           className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer"
           value={signalType}
-          onChange={(e) => setSignalType(e.target.value as SignalType)}
+          title={t("Signal type")}
+          onChange={(e) => {
+            const next = e.target.value as SignalType;
+            setSignalType(next);
+            setConnectorType(DEFAULT_CONNECTOR[next]);
+          }}
         >
           {ALL_SIGNAL_TYPES.map((t) => (
             <option key={t} value={t}>{SIGNAL_LABELS[t]}</option>
           ))}
         </select>
+        <select
+          className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-1 text-xs outline-none focus:border-blue-500 cursor-pointer max-w-[140px]"
+          value={connectorType}
+          title={t("Connector type")}
+          onChange={(e) => setConnectorType(e.target.value as ConnectorType)}
+        >
+          {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
+            <optgroup key={groupName} label={t(groupName)}>
+              {types.map((c) => (
+                <option key={c} value={c}>
+                  {CONNECTOR_LABELS[c]}{c === DEFAULT_CONNECTOR[signalType] ? ` ${t("(default)")}` : ""}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </div>
+      <label className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-muted)] cursor-pointer">
+        <input
+          type="checkbox"
+          checked={spaceBeforeNumber}
+          onChange={(e) => setSpaceBeforeNumber(e.target.checked)}
+        />
+        {t("Space before number")}
+      </label>
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-[var(--color-text-muted)]">{t("Section:")}</span>
         <input
@@ -2366,8 +2464,22 @@ function BulkAddForm({
         </button>
       </div>
       <div className="text-[10px] text-[var(--color-text-muted)]">
-        {t("Preview:")} {prefix} {start}, {prefix} {start + 1}, ... {prefix} {end}
+        {t("Preview:")} {bulkLabel(prefix, start, spaceBeforeNumber)}, {bulkLabel(prefix, start + 1, spaceBeforeNumber)}, ... {bulkLabel(prefix, end, spaceBeforeNumber)}
       </div>
+      {!spaceBeforeNumber && /\d$/.test(prefix.trim()) && (
+        <div className="text-[10px] text-amber-500">
+          {t("Prefix ends in a digit — consider the space option")}
+        </div>
+      )}
+      {bulkRoom < 1 ? (
+        <div className="text-[10px] text-amber-500">{t("A device can have at most {max} ports.", { max: MAX_PORTS })}</div>
+      ) : end - start + 1 > bulkRoom ? (
+        <div className="text-[10px] text-amber-500">
+          {bulkRoom === 1
+            ? t("Only 1 more port fits (max {max}); the count will be capped.", { max: MAX_PORTS })
+            : t("Only {n} more ports fit (max {max}); the count will be capped.", { n: bulkRoom, max: MAX_PORTS })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2592,6 +2704,7 @@ function PortSection({
   ports,
   onAdd,
   onBulkAdd,
+  bulkRoom,
   onRemove,
   onDuplicate,
   onUpdate,
@@ -2608,7 +2721,8 @@ function PortSection({
   deviceType: string;
   ports: PortDraft[];
   onAdd: () => void;
-  onBulkAdd: (direction: PortDirection, prefix: string, start: number, count: number, signalType: SignalType, section: string) => void;
+  onBulkAdd: (spec: BulkPortSpec) => void;
+  bulkRoom: number;
   onRemove: (id: string) => void;
   onDuplicate: (id: string) => void;
   onUpdate: (id: string, updates: Partial<PortDraft>) => void;
@@ -2692,6 +2806,7 @@ function PortSection({
         <BulkAddForm
           direction={direction}
           onBulkAdd={onBulkAdd}
+          bulkRoom={bulkRoom}
           onClose={() => setShowBulkAdd(false)}
         />
       )}
@@ -2827,216 +2942,72 @@ function PortRow({
   const showIndicatorAfter =
     isLast && dropTarget?.direction === direction && dropTarget.index === index + 1;
 
-  return (
-    <>
-      {showIndicatorBefore && (
-        <div className="h-0.5 bg-blue-500 rounded-full my-0.5" />
-      )}
-      <div
-        ref={rowRef}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        className={`flex items-center gap-1.5 group py-0.5 ${
-          isDragging ? "opacity-30" : ""
-        } ${isHidden ? "opacity-50" : ""}`}
-      >
-        {/* Drag handle */}
-        <span
-          draggable
-          onDragStart={handleDragStart}
-          onDragEnd={() => {
-            setDraggedPortId(null);
-            setDropTarget(null);
-          }}
-          className="text-[var(--color-text-muted)] cursor-grab active:cursor-grabbing text-[10px] select-none shrink-0"
-          title={t("Drag to reorder")}
-        >
-          ⠿
-        </span>
+  // Secondary controls share one compact line under the port, so the name input
+  // keeps the primary row to itself instead of being squeezed by every badge
+  // that accumulates to its right (#303). Unset badges stay faint rather than
+  // hidden until hover: they hold their space either way, so hiding them would
+  // only leave a blank strip under every port on a long list.
+  const badgeClass = (active: boolean, activeClass: string) =>
+    `text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 select-none ${
+      active
+        ? activeClass
+        : "text-[var(--color-text-muted)] opacity-70 group-hover:opacity-100 hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+    }`;
 
-        {/* Eye toggle for port visibility */}
-        <button
-          onClick={onToggleVisibility}
-          className="shrink-0 cursor-pointer transition-colors"
-          title={isHidden ? t("Show port on schematic") : t("Hide port on schematic")}
-        >
-          {isHidden ? (
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 2l12 12" />
-              <path d="M6.5 6.5a2 2 0 0 0 2.8 2.8" />
-              <path d="M4.2 4.2C3 5.1 2 6.4 2 8c1.3 3 3.5 5 6 5 1.2 0 2.3-.4 3.3-1.2M13.4 11.4C14.6 10.4 15.3 9.2 16 8c-1.3-3-3.5-5-6-5-.7 0-1.4.1-2 .4" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 8c1.3-3 3.5-5 6-5s4.7 2 6 5c-1.3 3-3.5 5-6 5S3.3 11 2 8z" />
-              <circle cx="8" cy="8" r="2" />
-            </svg>
-          )}
-        </button>
-
-        <div
-          className="w-2.5 h-2.5 rounded-full shrink-0"
-          style={{ background: SIGNAL_COLORS[port.signalType] }}
-        />
-
-        <input
-          className="flex-1 min-w-[140px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
-          value={port.label}
-          onChange={(e) => onUpdate({ label: e.target.value })}
-          placeholder={t("Port label")}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-
-        {direction === "passthrough" ? (
-          <select
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
-            value={port.inheritsSignal ? "" : port.signalType}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "") {
-                onUpdate({ signalType: "custom", inheritsSignal: true });
-              } else {
-                onUpdate({ signalType: v as SignalType, inheritsSignal: undefined });
-              }
-            }}
+  const secondaryControl = (id: PortRowControlId) => {
+    const title = t(PORT_ROW_CONTROL_TITLES[id]);
+    switch (id) {
+      case "trunk":
+        return (
+          <label
+            key={id}
+            className={badgeClass(!!port.isMulticable, "bg-purple-100 text-purple-600")}
+            title={title}
           >
-            <option value="">{t("(inherits from connection)")}</option>
-            {ALL_SIGNAL_TYPES.map((t) => (
-              <option key={t} value={t}>{SIGNAL_LABELS[t]}</option>
-            ))}
-          </select>
-        ) : (
-          <select
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
-            value={port.signalType}
-            onChange={(e) => {
-              const newSignal = e.target.value as SignalType;
-              onUpdate({
-                signalType: newSignal,
-                connectorType: DEFAULT_CONNECTOR[newSignal],
-              });
-            }}
-          >
-            {ALL_SIGNAL_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {SIGNAL_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {direction !== "passthrough" && (
-          <select
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-1 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer max-w-[80px]"
-            value={port.connectorType ?? DEFAULT_CONNECTOR[port.signalType]}
-            onChange={(e) => onUpdate({ connectorType: e.target.value as ConnectorType })}
-            title={t("Connector type")}
-          >
-            {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
-              <optgroup key={groupName} label={t(groupName)}>
-                {types.map((c) => (
-                  <option key={c} value={c}>
-                    {CONNECTOR_LABELS[c]}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        )}
-
-        {/* Connector gender — only shown for connectors where M/F genuinely varies */}
-        {direction !== "passthrough" && (() => {
-          const ct = port.connectorType ?? DEFAULT_CONNECTOR[port.signalType];
-          if (!CONNECTORS_WITH_GENDER_VARIATION.has(ct)) return null;
-          const resolved = resolvePortGender({
-            id: port.id,
-            label: port.label,
-            signalType: port.signalType,
-            direction: port.direction,
-            connectorType: ct,
-            gender: port.gender,
-          });
-          const isOverride = port.gender != null;
-          return (
-            <select
-              className={`border border-[var(--color-border)] rounded px-1 py-1 text-[10px] outline-none focus:border-blue-500 cursor-pointer shrink-0 ${
-                isOverride
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                  : "bg-[var(--color-surface)] text-[var(--color-text-muted)]"
-              }`}
-              value={port.gender ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                onUpdate({ gender: v === "" ? undefined : (v as Gender) });
-              }}
-              title={isOverride
-                ? t("Connector gender (overridden)")
-                : t("Connector gender (auto: {value})", { value: resolved ?? "—" })}
-            >
-              <option value="">{resolved ? t("{value} (auto)", { value: resolved === "male" ? t("M") : t("F") }) : "—"}</option>
-              <option value="male">{t("Male")}</option>
-              <option value="female">{t("Female")}</option>
-            </select>
-          );
-        })()}
-
-        {/* Multicable trunk toggle */}
-        <label
-          className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 select-none ${
-            port.isMulticable
-              ? "bg-purple-100 text-purple-600"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-          }`}
-          title={t("Multicable trunk port")}
-        >
+            <input
+              type="checkbox"
+              checked={port.isMulticable ?? false}
+              onChange={(e) => onUpdate({ isMulticable: e.target.checked || undefined, channelCount: e.target.checked ? (port.channelCount ?? 0) : undefined })}
+              className="hidden"
+            />
+            {port.isMulticable ? `T${port.channelCount ?? 0}` : "T"}
+          </label>
+        );
+      case "channel-count":
+        return (
           <input
-            type="checkbox"
-            checked={port.isMulticable ?? false}
-            onChange={(e) => onUpdate({ isMulticable: e.target.checked || undefined, channelCount: e.target.checked ? (port.channelCount ?? 0) : undefined })}
-            className="hidden"
-          />
-          {port.isMulticable ? `T${port.channelCount ?? 0}` : "T"}
-        </label>
-
-        {port.isMulticable && (
-          <input
+            key={id}
             type="number"
             min={0}
             className="w-8 bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-0.5 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 shrink-0"
             value={port.channelCount ?? 0}
             onChange={(e) => onUpdate({ channelCount: parseInt(e.target.value) || 0 })}
-            title={t("Channel count")}
+            title={title}
             onKeyDown={(e) => e.stopPropagation()}
           />
-        )}
-
-        {/* Multi-connect toggle */}
-        <label
-          className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 select-none ${
-            port.multiConnect
-              ? "bg-amber-100 text-amber-700"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-          }`}
-          title={t("Multi-connect — port accepts multiple connections (SRT, wireless, custom signals)")}
-        >
-          <input
-            type="checkbox"
-            checked={port.multiConnect ?? false}
-            onChange={(e) => onUpdate({ multiConnect: e.target.checked || undefined })}
-            className="hidden"
-          />
-          M
-        </label>
-
-        {/* Direct attach toggle (adapters only) */}
-        {deviceType === "adapter" && (
+        );
+      case "multi-connect":
+        return (
           <label
-            className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 select-none ${
-              port.directAttach
-                ? "bg-green-100 text-green-700"
-                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-            }`}
-            title={t("Direct attach — plugs directly into device, no separate cable")}
+            key={id}
+            className={badgeClass(!!port.multiConnect, "bg-amber-100 text-amber-700")}
+            title={title}
+          >
+            <input
+              type="checkbox"
+              checked={port.multiConnect ?? false}
+              onChange={(e) => onUpdate({ multiConnect: e.target.checked || undefined })}
+              className="hidden"
+            />
+            M
+          </label>
+        );
+      case "direct-attach":
+        return (
+          <label
+            key={id}
+            className={badgeClass(!!port.directAttach, "bg-green-100 text-green-700")}
+            title={title}
           >
             <input
               type="checkbox"
@@ -3046,66 +3017,237 @@ function PortRow({
             />
             DA
           </label>
-        )}
-
-        {/* Section badge */}
-        <button
-          onClick={() => setShowSection(!showSection)}
-          className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 ${
-            port.section
-              ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-          }`}
-          title={t("Set section group")}
-        >
-          {port.section || "§"}
-        </button>
-
-        {/* Notes badge */}
-        <button
-          onClick={() => setShowNotes(!showNotes)}
-          className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 ${
-            port.notes
-              ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-          }`}
-          title={port.notes || t("Add note")}
-        >
-          {port.notes ? "N" : "N"}
-        </button>
-
-        {/* Flip badge */}
-        <button
-          onClick={() => onUpdate({ flipped: !port.flipped || undefined })}
-            className={`text-[9px] px-1 py-0.5 rounded cursor-pointer transition-colors shrink-0 ${
-              port.flipped
-                ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
-                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] opacity-0 group-hover:opacity-100"
-            }`}
-            title={t("Flip port to opposite side")}
+        );
+      case "section":
+        return (
+          <button
+            key={id}
+            onClick={() => setShowSection(!showSection)}
+            className={badgeClass(!!port.section, "bg-blue-100 text-blue-600 hover:bg-blue-200")}
+            title={title}
+          >
+            {port.section || "§"}
+          </button>
+        );
+      case "notes":
+        return (
+          <button
+            key={id}
+            onClick={() => setShowNotes(!showNotes)}
+            className={badgeClass(!!port.notes, "bg-amber-100 text-amber-700 hover:bg-amber-200")}
+            title={port.notes || title}
+          >
+            N
+          </button>
+        );
+      case "flip":
+        return (
+          <button
+            key={id}
+            onClick={() => onUpdate({ flipped: !port.flipped || undefined })}
+            className={badgeClass(!!port.flipped, "bg-purple-100 text-purple-700 hover:bg-purple-200")}
+            title={title}
           >
             ⇄
-        </button>
+          </button>
+        );
+      default: {
+        // Adding an id to portRowControls.ts without rendering it here is a
+        // compile error, not a silently missing control.
+        const unhandled: never = id;
+        return unhandled;
+      }
+    }
+  };
 
-        {/* Duplicate port */}
-        <button
-          onClick={onDuplicate}
-          className="text-[var(--color-text-muted)] hover:text-blue-500 cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-          title={t("Duplicate port")}
-        >
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-            <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" />
-          </svg>
-        </button>
+  return (
+    <>
+      {showIndicatorBefore && (
+        <div className="h-0.5 bg-blue-500 rounded-full my-0.5" />
+      )}
+      <div
+        ref={rowRef}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className={`group pt-0.5 pb-1.5 ${
+          isDragging ? "opacity-30" : ""
+        } ${isHidden ? "opacity-50" : ""}`}
+      >
+        {/* Never wrap: the actions sit at the end of this line, and a wrapped
+            line would reserve blank height on every row (they only appear on
+            hover). Every control here is width-capped so the row always fits. */}
+        <div className="flex items-center gap-1.5">
+          {/* Drag handle */}
+          <span
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={() => {
+              setDraggedPortId(null);
+              setDropTarget(null);
+            }}
+            className="text-[var(--color-text-muted)] cursor-grab active:cursor-grabbing text-[10px] select-none shrink-0"
+            title={t("Drag to reorder")}
+          >
+            ⠿
+          </span>
 
-        <button
-          onClick={onRemove}
-          className="text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          title={t("Remove port")}
-        >
-          &times;
-        </button>
+          {/* Eye toggle for port visibility */}
+          <button
+            onClick={onToggleVisibility}
+            className="shrink-0 cursor-pointer transition-colors"
+            title={isHidden ? t("Show port on schematic") : t("Hide port on schematic")}
+          >
+            {isHidden ? (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 2l12 12" />
+                <path d="M6.5 6.5a2 2 0 0 0 2.8 2.8" />
+                <path d="M4.2 4.2C3 5.1 2 6.4 2 8c1.3 3 3.5 5 6 5 1.2 0 2.3-.4 3.3-1.2M13.4 11.4C14.6 10.4 15.3 9.2 16 8c-1.3-3-3.5-5-6-5-.7 0-1.4.1-2 .4" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[var(--color-text)]" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 8c1.3-3 3.5-5 6-5s4.7 2 6 5c-1.3 3-3.5 5-6 5S3.3 11 2 8z" />
+                <circle cx="8" cy="8" r="2" />
+              </svg>
+            )}
+          </button>
+
+          <div
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ background: SIGNAL_COLORS[port.signalType] }}
+          />
+
+          {/* min-w floor, not min-w-0: flex-1 with no minimum let every other
+              control take its content width and leave the name whatever was
+              left, which is how it collapsed to a few characters (#303, #235). */}
+          <input
+            className="flex-1 min-w-[112px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"
+            value={port.label}
+            onChange={(e) => onUpdate({ label: e.target.value })}
+            placeholder={t("Port label")}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+
+          {direction === "passthrough" ? (
+            <select
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer"
+              value={port.inheritsSignal ? "" : port.signalType}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") {
+                  onUpdate({ signalType: "custom", inheritsSignal: true });
+                } else {
+                  onUpdate({ signalType: v as SignalType, inheritsSignal: undefined });
+                }
+              }}
+            >
+              <option value="">{t("(inherits from connection)")}</option>
+              {ALL_SIGNAL_TYPES.map((t) => (
+                <option key={t} value={t}>{SIGNAL_LABELS[t]}</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1.5 py-1 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer max-w-[120px]"
+              value={port.signalType}
+              onChange={(e) => {
+                const newSignal = e.target.value as SignalType;
+                onUpdate({
+                  signalType: newSignal,
+                  connectorType: DEFAULT_CONNECTOR[newSignal],
+                });
+              }}
+            >
+              {ALL_SIGNAL_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {SIGNAL_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {direction !== "passthrough" && (
+            <select
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-1 py-1 text-[10px] text-[var(--color-text-heading)] outline-none focus:border-blue-500 cursor-pointer max-w-[80px]"
+              value={port.connectorType ?? DEFAULT_CONNECTOR[port.signalType]}
+              onChange={(e) => onUpdate({ connectorType: e.target.value as ConnectorType })}
+              title={t("Connector type")}
+            >
+              {CONNECTOR_GROUP_ENTRIES.map(([groupName, types]) => (
+                <optgroup key={groupName} label={t(groupName)}>
+                  {types.map((c) => (
+                    <option key={c} value={c}>
+                      {CONNECTOR_LABELS[c]}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+
+          {/* Connector gender — only shown for connectors where M/F genuinely varies */}
+          {direction !== "passthrough" && (() => {
+            const ct = port.connectorType ?? DEFAULT_CONNECTOR[port.signalType];
+            if (!CONNECTORS_WITH_GENDER_VARIATION.has(ct)) return null;
+            const resolved = resolvePortGender({
+              id: port.id,
+              label: port.label,
+              signalType: port.signalType,
+              direction: port.direction,
+              connectorType: ct,
+              gender: port.gender,
+            });
+            const isOverride = port.gender != null;
+            return (
+              <select
+                className={`border border-[var(--color-border)] rounded px-1 py-1 text-[10px] outline-none focus:border-blue-500 cursor-pointer shrink-0 max-w-[76px] ${
+                  isOverride
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                    : "bg-[var(--color-surface)] text-[var(--color-text-muted)]"
+                }`}
+                value={port.gender ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  onUpdate({ gender: v === "" ? undefined : (v as Gender) });
+                }}
+                title={isOverride
+                  ? t("Connector gender (overridden)")
+                  : t("Connector gender (auto: {value})", { value: resolved ?? "—" })}
+              >
+                <option value="">{resolved ? t("{value} (auto)", { value: resolved === "male" ? t("M") : t("F") }) : "—"}</option>
+                <option value="male">{t("Male")}</option>
+                <option value="female">{t("Female")}</option>
+              </select>
+            );
+          })()}
+
+          {/* Duplicate port */}
+          <button
+            onClick={onDuplicate}
+            className="text-[var(--color-text-muted)] hover:text-blue-500 cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            title={t("Duplicate port")}
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+              <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" />
+            </svg>
+          </button>
+
+          <button
+            onClick={onRemove}
+            className="text-red-400/60 hover:text-red-500 text-sm cursor-pointer px-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            title={t("Remove port")}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Secondary per-port controls, on the same pl-6 indent the section and
+            note editors below use. The rule and the tight gap above it tie the
+            line to the port it belongs to — the row's pb keeps the next port
+            further away than this line is. */}
+        <div className="flex flex-wrap items-center gap-1 ml-[7px] pl-4 pt-0.5 border-l border-[var(--color-border)]/40">
+          {visiblePortRowControls({ deviceType, isMulticable: !!port.isMulticable }).map(secondaryControl)}
+        </div>
       </div>
 
       {showSection && (

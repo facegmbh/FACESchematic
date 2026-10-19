@@ -11,6 +11,7 @@ import {
   type ParsedConnection,
   type DeviceMatch,
 } from "../csvImport";
+import { resolveDefaultDeviceHeaderColor } from "../deviceHeaderColor";
 import { fetchTemplates, getBundledTemplates } from "../templateApi";
 import { scoreTemplate } from "../templateSearch";
 import type { DeviceTemplate } from "../types";
@@ -29,6 +30,9 @@ const MAPPING_ROLES = [
 export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
   const t = useT();
   const importCsvData = useSchematicStore((s) => s.importCsvData);
+  const projectHeaderColor = useSchematicStore((s) => s.defaultDeviceHeaderColor);
+  const appHeaderColor = useSchematicStore((s) => s.appDefaultDeviceHeaderColor);
+  const templatePresets = useSchematicStore((s) => s.templatePresets);
 
   // Step state
   const [step, setStep] = useState<1 | 2>(1);
@@ -136,10 +140,15 @@ export default function CsvImportWizard({ onClose }: { onClose: () => void }) {
   }, [deviceMatches]);
 
   const handleImport = useCallback(() => {
-    const result = buildImportResult(connections, deviceMatches);
+    // Imported devices are new devices, so they resolve their header color the same way a
+    // device dragged out of the library does — preset, template, then the defaults (#354).
+    const result = buildImportResult(connections, deviceMatches, {
+      defaultHeaderColor: resolveDefaultDeviceHeaderColor(projectHeaderColor, appHeaderColor),
+      templatePresets,
+    });
     importCsvData(result.nodes, result.edges);
     onClose();
-  }, [connections, deviceMatches, importCsvData, onClose]);
+  }, [connections, deviceMatches, importCsvData, onClose, projectHeaderColor, appHeaderColor, templatePresets]);
 
   // ---------- Render ----------
 

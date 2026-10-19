@@ -2,153 +2,30 @@ import { memo, useMemo, useCallback, useRef } from "react";
 import { useViewport, useReactFlow } from "@xyflow/react";
 import { useSchematicStore } from "../store";
 import { computePageGrid, type PageRect } from "../printPageGrid";
-import { PAGE_MARGIN_IN, getPaperSize } from "../printConfig";
-import type { TitleBlock, TitleBlockLayout, DeviceData, SignalType } from "../types";
-import type { RoutedEdge } from "../edgeRouter";
+import { PAGE_MARGIN_IN, getPaperSize, printTitleBlockHeightIn } from "../printConfig";
+import type { TitleBlock, TitleBlockLayout } from "../types";
 import { computeCellRects, normalizeSizes, getFieldValue, getFieldLabel } from "../titleBlockLayout";
 import { useT } from "../i18n";
-import { DEFAULT_SIGNAL_COLORS } from "../signalColors";
+import { transformLabel } from "../labelCaseUtils";
+import { computeCrossingLabels, type CrossingLabel } from "../crossingLabels";
 import { collectColorKeyEntries, layoutColorKey, type ColorKeyEntry } from "../colorKeyLayout";
+import {
+  continuationPillText,
+  layoutContinuationPills,
+  pillIsRotated,
+  titleBlockBandPx,
+  PILL_FONT_SIZE_PT,
+  PILL_GAP_PT,
+  PILL_PAD_PT,
+  type TitleBlockBand,
+} from "../continuationPill";
 
 // ─── Page crossing labels ─────────────────────────────────────────
-
-interface CrossingLabel {
-  /** Position of the label in canvas coords */
-  x: number;
-  y: number;
-  /** Text to display */
-  text: string;
-  /** Page number the signal continues on */
-  pageNum: number;
-  /** Anchor side: which direction the label text should flow from the crossing */
-  anchor: "left" | "right" | "up" | "down";
-  /** Signal wire color (hex) */
-  color: string;
-}
-
-/** Find which page (1-indexed) contains a given point, or 0 if none. */
-function pageAtPoint(x: number, y: number, pages: PageRect[]): number {
-  for (const p of pages) {
-    if (x >= p.x && x < p.x + p.widthPx && y >= p.y && y < p.y + p.heightPx) {
-      return p.index + 1;
-    }
-  }
-  return 0;
-}
-
-/**
- * Find all points where routed edge segments cross page boundary lines,
- * and generate labels showing the device (and room) on the other side.
- */
-function computeCrossingLabels(
-  pages: PageRect[],
-  routedEdges: Record<string, RoutedEdge>,
-  edges: { id: string; source: string; target: string; data?: { signalType?: SignalType; stubbed?: boolean } }[],
-  nodes: { id: string; type?: string; data: Record<string, unknown>; parentId?: string }[],
-  _pxPerPt: number,
-  signalColorOverrides?: Partial<Record<SignalType, string>>,
-): CrossingLabel[] {
-  if (pages.length <= 1) return [];
-
-  // Collect unique page boundary lines (internal edges only)
-  const minCol = Math.min(...pages.map((p) => p.col));
-  const minRow = Math.min(...pages.map((p) => p.row));
-  const vLines = new Set<number>(); // vertical boundaries (x values)
-  const hLines = new Set<number>(); // horizontal boundaries (y values)
-  for (const p of pages) {
-    if (p.col > minCol) vLines.add(p.x);
-    if (p.row > minRow) hLines.add(p.y);
-    vLines.add(p.x + p.widthPx);
-    hLines.add(p.y + p.heightPx);
-  }
-
-  // Build lookup: nodeId → label and room name
-  const nodeInfo = new Map<string, { label: string; room?: string }>();
-  for (const n of nodes) {
-    if (n.type !== "device") continue;
-    const data = n.data as DeviceData;
-    let room: string | undefined;
-    if (n.parentId) {
-      const parent = nodes.find((p) => p.id === n.parentId);
-      if (parent) room = (parent.data as { label?: string }).label;
-    }
-    nodeInfo.set(n.id, { label: data.label, room });
-  }
-
-  // Build edge lookup
-  const edgeMap = new Map(edges.map((e) => [e.id, e]));
-
-  const labels: CrossingLabel[] = [];
-  // Margin width in canvas px (distance from page edge to content border)
-  const marginPx = pages.length > 0 ? pages[0].contentX - pages[0].x : 0;
-  // Inset from content border — 15% of margin keeps pills visually separated
-  const inset = marginPx * 0.15;
-
-  // Resolve signal colors
-  const resolveColor = (edge: { data?: { signalType?: SignalType } }): string => {
-    const st = edge.data?.signalType;
-    if (!st) return DEFAULT_SIGNAL_COLORS.custom;
-    return signalColorOverrides?.[st] ?? DEFAULT_SIGNAL_COLORS[st];
-  };
-
-  for (const [edgeId, route] of Object.entries(routedEdges)) {
-    const edge = edgeMap.get(edgeId);
-    if (!edge) continue;
-    // Stubbed edges only render short stubs — their invisible middle section shouldn't generate crossing labels
-    if (edge.data?.stubbed) continue;
-    const sourceInfo = nodeInfo.get(edge.source);
-    const targetInfo = nodeInfo.get(edge.target);
-    if (!sourceInfo || !targetInfo) continue;
-
-    for (const seg of route.segments) {
-      if (seg.axis === "h") {
-        const y = seg.y1;
-        const minX = Math.min(seg.x1, seg.x2);
-        const maxX = Math.max(seg.x1, seg.x2);
-        const goingRight = seg.x2 > seg.x1;
-        for (const bx of vLines) {
-          if (bx > minX && bx < maxX) {
-            const rightwardTarget = goingRight ? targetInfo : sourceInfo;
-            const leftwardTarget = goingRight ? sourceInfo : targetInfo;
-
-            const rightPageNum = pageAtPoint(bx + 1, y, pages);
-            const leftPageNum = pageAtPoint(bx - 1, y, pages);
-
-            // Position inside the content border (margin + inset from boundary)
-            const edgeColor = resolveColor(edge);
-            labels.push({ x: bx - marginPx - inset, y, text: formatLabel(rightwardTarget), pageNum: rightPageNum, anchor: "left", color: edgeColor });
-            labels.push({ x: bx + marginPx + inset, y, text: formatLabel(leftwardTarget), pageNum: leftPageNum, anchor: "right", color: edgeColor });
-          }
-        }
-      } else {
-        const x = seg.x1;
-        const minY = Math.min(seg.y1, seg.y2);
-        const maxY = Math.max(seg.y1, seg.y2);
-        const goingDown = seg.y2 > seg.y1;
-        for (const by of hLines) {
-          if (by > minY && by < maxY) {
-            const downwardTarget = goingDown ? targetInfo : sourceInfo;
-            const upwardTarget = goingDown ? sourceInfo : targetInfo;
-
-            const downPageNum = pageAtPoint(x, by + 1, pages);
-            const upPageNum = pageAtPoint(x, by - 1, pages);
-
-            const edgeColor = resolveColor(edge);
-            labels.push({ x, y: by - marginPx - inset, text: formatLabel(downwardTarget), pageNum: downPageNum, anchor: "up", color: edgeColor });
-            labels.push({ x, y: by + marginPx + inset, text: formatLabel(upwardTarget), pageNum: upPageNum, anchor: "down", color: edgeColor });
-          }
-        }
-      }
-    }
-  }
-
-  return labels;
-}
-
-function formatLabel(info: { label: string; room?: string }): string {
-  if (info.room) return `${info.label} (${info.room})`;
-  return info.label;
-}
+//
+// The scan itself, and the nodeId → pill-name lookup it runs on, live in
+// crossingLabels.ts — the PDF export builds its pills from the same lookup, so a
+// crossing one surface draws a pill for is a crossing the other draws one for too
+// (#361). This file only measures and paints them.
 
 /** Measure text width using a canvas 2D context for pixel-accurate sizing. */
 let measureCtx: CanvasRenderingContext2D | null = null;
@@ -160,65 +37,61 @@ function measureTextWidth(text: string, font: string): number {
   return measureCtx.measureText(text).width;
 }
 
-function CrossingLabels({ labels, pxPerPt }: { labels: CrossingLabel[]; pxPerPt: number }) {
-  const t = useT();
+function CrossingLabels({ labels, pxPerPt, titleBlockBands }: { labels: CrossingLabel[]; pxPerPt: number; titleBlockBands: TitleBlockBand[] }) {
   if (labels.length === 0) return null;
-  const fontSize = 6.5 * pxPerPt;
-  const pad = 1.5 * pxPerPt;
+  // Type size, padding and pill text all come from the shared module: placement is
+  // driven by the pill's measured box, so a preview that measured its pills
+  // differently would push them to different places than the PDF does (#357).
+  const fontSize = PILL_FONT_SIZE_PT * pxPerPt;
+  const pad = PILL_PAD_PT * pxPerPt;
   const radius = 1.5 * pxPerPt;
   const font = `500 ${fontSize}px Inter, system-ui, sans-serif`;
+  const pillGap = PILL_GAP_PT * pxPerPt;
+
+  const texts = labels.map((l) => continuationPillText(l.text, l.pageNum));
+
+  // Box outer edge sits at l.x/l.y, growing INWARD (away from the page boundary)
+  // along its own wire — top/bottom-edge pills come back rotated onto the vertical
+  // wire they belong to. Pills crossing within a thickness of each other still slide
+  // along the edge until they clear, and any that landed on the title block ride up
+  // off it.
+  const boxes = layoutContinuationPills(
+    labels.map((l, i) => ({
+      anchor: l.anchor,
+      x: l.x,
+      y: l.y,
+      width: measureTextWidth(texts[i], font) + pad * 2,
+      height: fontSize + pad * 2,
+      // A pill that landed on no page at all (a boundary shared with an empty grid
+      // cell) is on nobody's edge, so it gets a key of its own rather than being
+      // spread against every other homeless pill in the document.
+      sheet: l.sheet > 0 ? l.sheet : `off-${i}`,
+      limit: l.limit,
+    })),
+    titleBlockBands,
+    pillGap,
+  );
 
   return (
     <g>
       {labels.map((l, i) => {
-        const arrow = l.anchor === "left" ? "\u2192" : l.anchor === "right" ? "\u2190" : l.anchor === "up" ? "\u2193" : "\u2191";
-        const pgRef = l.pageNum > 0 ? " " + t("Pg {n}", { n: l.pageNum }) : "";
-        const displayText = `${arrow} ${l.text}${pgRef}`;
-
-        const textW = measureTextWidth(displayText, font);
-        const boxW = textW + pad * 2;
-        const boxH = fontSize + pad * 2;
-
-        // Box outer edge sits at l.x/l.y, growing INWARD (away from the page boundary)
-        let boxX: number;
-        let boxY: number;
-        let textX: number;
-        let textY: number;
-
-        switch (l.anchor) {
-          case "left":
-            boxX = l.x - boxW;
-            boxY = l.y - boxH / 2;
-            textX = boxX + pad;
-            textY = l.y;
-            break;
-          case "right":
-            boxX = l.x;
-            boxY = l.y - boxH / 2;
-            textX = boxX + pad;
-            textY = l.y;
-            break;
-          case "up":
-            boxX = l.x - boxW / 2;
-            boxY = l.y - boxH;
-            textX = boxX + pad;
-            textY = l.y - boxH / 2;
-            break;
-          case "down":
-            boxX = l.x - boxW / 2;
-            boxY = l.y;
-            textX = boxX + pad;
-            textY = l.y + boxH / 2;
-            break;
-        }
+        const displayText = texts[i];
+        const box = boxes[i];
+        // A top- or bottom-edge pill lies along its vertical wire, so the text is
+        // rotated to read bottom-to-top (the drawing convention) from the pill's
+        // lower end; the box itself stays an axis-aligned narrow rect. Side-edge
+        // pills read flat along their horizontal wire, as before.
+        const rotated = pillIsRotated(l.anchor);
+        const textX = rotated ? box.x + box.width / 2 : box.x + pad;
+        const textY = rotated ? box.y + box.height - pad : box.y + box.height / 2;
 
         return (
           <g key={i}>
             <rect
-              x={boxX}
-              y={boxY}
-              width={boxW}
-              height={boxH}
+              x={box.x}
+              y={box.y}
+              width={box.width}
+              height={box.height}
               rx={radius}
               ry={radius}
               fill="white"
@@ -228,6 +101,7 @@ function CrossingLabels({ labels, pxPerPt }: { labels: CrossingLabel[]; pxPerPt:
             <text
               x={textX}
               y={textY}
+              transform={rotated ? `rotate(-90 ${textX} ${textY})` : undefined}
               dominantBaseline="central"
               fill="#374151"
               fontSize={fontSize}
@@ -477,7 +351,14 @@ function PageBoundaryOverlay() {
   const printCustomWidthIn = useSchematicStore((s) => s.printCustomWidthIn);
   const printCustomHeightIn = useSchematicStore((s) => s.printCustomHeightIn);
   const titleBlock = useSchematicStore((s) => s.titleBlock);
-  const titleBlockLayout = useSchematicStore((s) => s.titleBlockLayout);
+  const storedTitleBlockLayout = useSchematicStore((s) => s.titleBlockLayout);
+  const printTitleBlockEnabled = useSchematicStore((s) => s.printTitleBlockEnabled);
+  // A hidden title block is a zero-height one: no band to draw, no band for pills
+  // to dodge, and its height goes back to each page's drawing area (#388).
+  const titleBlockLayout = useMemo(() => {
+    const heightIn = printTitleBlockHeightIn(storedTitleBlockLayout, printTitleBlockEnabled);
+    return heightIn === storedTitleBlockLayout.heightIn ? storedTitleBlockLayout : { ...storedTitleBlockLayout, heightIn };
+  }, [storedTitleBlockLayout, printTitleBlockEnabled]);
   const routedEdges = useSchematicStore((s) => s.routedEdges);
   const storeNodes = useSchematicStore((s) => s.nodes);
   const storeEdges = useSchematicStore((s) => s.edges);
@@ -491,6 +372,10 @@ function PageBoundaryOverlay() {
   const printOriginOffsetX = useSchematicStore((s) => s.printOriginOffsetX);
   const printOriginOffsetY = useSchematicStore((s) => s.printOriginOffsetY);
   const setPrintOriginOffset = useSchematicStore((s) => s.setPrintOriginOffset);
+  const labelCase = useSchematicStore((s) => s.labelCase);
+  // A stub leg whose partner ends on a hidden inline adapter names the device beyond
+  // it, exactly as the stub tag on that leg does (#348).
+  const hiddenAdapterNodeIds = useSchematicStore((s) => s.hiddenAdapterNodeIds);
   // Subscribe to node positions so the overlay re-renders when nodes move
   useSchematicStore((s) =>
     s.nodes.map((n) => `${n.id}:${Math.round(n.position.x)},${Math.round(n.position.y)},${n.measured?.width ?? 0},${n.measured?.height ?? 0}`).join("|"),
@@ -507,8 +392,25 @@ function PageBoundaryOverlay() {
   const pxPerPt = pxPerIn / 72;
 
   const crossingLabels = useMemo(
-    () => computeCrossingLabels(pages, routedEdges, storeEdges, storeNodes, pxPerPt, signalColors),
-    [pages, routedEdges, storeEdges, storeNodes, pxPerPt, signalColors],
+    () => computeCrossingLabels(
+      pages,
+      routedEdges,
+      storeEdges,
+      storeNodes,
+      signalColors,
+      // Case-transform to match the PDF's pill text (#294) — pill placement is
+      // width-driven since #357, so differing text would also move the pills.
+      (label) => transformLabel(label, labelCase),
+      hiddenAdapterNodeIds,
+    ),
+    [pages, routedEdges, storeEdges, storeNodes, signalColors, labelCase, hiddenAdapterNodeIds],
+  );
+
+  const titleBlockBands = useMemo(
+    () => pages
+      .map((p) => titleBlockBandPx(p, titleBlockLayout.widthIn, titleBlockLayout.heightIn))
+      .filter((b): b is TitleBlockBand => b !== null),
+    [pages, titleBlockLayout.widthIn, titleBlockLayout.heightIn],
   );
 
   const colorKeyEntries = useMemo(
@@ -551,7 +453,7 @@ function PageBoundaryOverlay() {
         {pages.map((p) => (
           <PageOverlay key={p.index} page={p} zoom={zoom} titleBlock={titleBlock} layout={titleBlockLayout} totalPages={totalPages} minCol={minCol} minRow={minRow} />
         ))}
-        <CrossingLabels labels={crossingLabels} pxPerPt={pxPerPt} />
+        <CrossingLabels labels={crossingLabels} pxPerPt={pxPerPt} titleBlockBands={titleBlockBands} />
         {colorKeyEnabled && <ColorKeyLegend entries={colorKeyEntries} pages={pages} corner={colorKeyCorner} columns={colorKeyColumns} pageFilter={colorKeyPage} pxPerPt={pxPerPt} />}
         {(["tl", "tr", "bl", "br"] as const).map((corner) => (
           <OriginDragHandle
@@ -597,16 +499,16 @@ function PageOverlay({
   const fontSize = 14 / zoom;
   const labelFontSize = 10 / zoom;
 
-  // Title block geometry
+  // Title block geometry — the same band the continuation pills are clamped against
   const marginPx = p.contentX - p.x;
-  const tbTop = p.contentY + p.contentH;
-  const tbHeight = (p.y + p.heightPx) - tbTop - marginPx;
-  const hasTitleBlock = tbHeight > 0;
+  const band = titleBlockBandPx(p, layout.widthIn, layout.heightIn);
+  const hasTitleBlock = band !== null;
+  const tbTop = band?.y ?? 0;
+  const tbHeight = band?.height ?? 0;
+  const tbBoxW = band?.width ?? 0;
+  const tbBoxX = band?.x ?? 0;
 
-  // Title block width from layout (fixed inches → canvas pixels)
-  const pxPerIn = marginPx / 0.4; // PAGE_MARGIN_IN = 0.4
-  const tbBoxW = Math.min(layout.widthIn * pxPerIn, p.contentW);
-  const tbBoxX = p.contentX + p.contentW - tbBoxW;
+  const pxPerIn = marginPx / PAGE_MARGIN_IN;
   const pxPerPt = pxPerIn / 72; // convert font points to page pixels
   const stroke = 0.5 * pxPerPt; // scale with page, not screen
 
@@ -670,13 +572,16 @@ function PageOverlay({
       {/* Title block */}
       {hasTitleBlock && (
         <g>
-          {/* Outer border */}
+          {/* Outer border — opaque so cables routed under the band are hidden
+              exactly as they are on the printed sheet (#359). Only this rect is
+              filled; the rest of the overlay stays transparent, and the wrapping
+              div keeps pointerEvents "none" so the band never swallows clicks. */}
           <rect
             x={tbBoxX}
             y={tbTop}
             width={tbBoxW}
             height={tbHeight}
-            fill="none"
+            fill="white"
             stroke="#000000"
             strokeWidth={stroke}
           />

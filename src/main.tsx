@@ -19,6 +19,12 @@ function shouldShowLanding(): boolean {
   const path = window.location.pathname;
   // Shared schematic links, or any non-root path — go straight to editor
   if (path !== "/") return false;
+  // Seeding a fixture (#307 test scene, or the generated stress scene) means
+  // going straight to the editor, or the landing page would swallow the request
+  // for a first-time visitor. Literals rather than load.ts constants: importing
+  // load.ts here would pull the store into the entry chunk.
+  const fixture = new URLSearchParams(window.location.search).get("fixture");
+  if (fixture === "test" || fixture === "stress") return false;
   // Returning user who opted to skip the landing page
   if (localStorage.getItem("easyschematic-skip-landing")) return false;
   return true;

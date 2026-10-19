@@ -25,8 +25,11 @@ export default function ConnectionsPage() {
       <ul>
         <li>Connections go from <strong>output → input</strong> (left to right)</li>
         <li>Ports with <strong>matching signal types</strong> connect directly. Mismatched signal types can connect via an <strong>adapter</strong> (see below)</li>
-        <li>Each <strong>input</strong> port accepts only <strong>one</strong> connection</li>
-        <li><strong>Output</strong> ports can feed multiple inputs</li>
+        <li>
+          Each port — input <em>or</em> output — accepts <strong>one</strong> connection by default. To let a
+          single port carry several connections (one source feeding many destinations, or vice versa), mark it{" "}
+          <strong>multi-connect</strong> — see <em>Multi-connect ports (1:many)</em> below
+        </li>
         <li>
           <strong>Bidirectional</strong> ports connect on one side at a time — connecting one side disables the other
         </li>
@@ -50,6 +53,24 @@ export default function ConnectionsPage() {
         <li><strong>Drag</strong> from a connected port and release on empty space</li>
         <li>Or <strong>click</strong> the connection to select it, then press <strong>Delete</strong></li>
       </ul>
+
+      <h2>Shaping the cable path</h2>
+      <p>
+        Connections auto-route around devices, but you can shape any run by hand
+        with <strong>path handles</strong>:
+      </p>
+      <ul>
+        <li><strong>Right-click</strong> a connection and choose <strong>Add Handle</strong> — a handle appears where you clicked</li>
+        <li><strong>Click</strong> the connection to select it, then <strong>drag</strong> a handle to reshape the run (handles snap to the grid)</li>
+        <li>Right-click <strong>near a handle</strong> and choose <strong>Remove Handle</strong> to delete it</li>
+        <li>Right-click and choose <strong>Reset Route</strong> to drop all handles and return to auto-routing</li>
+      </ul>
+      <p>
+        Selecting a connection that has no handles yet shows a small{" "}
+        <strong>"Right-click cable to add a path handle"</strong> hint at its midpoint. For the full
+        story on how manual handles interact with auto-routing, see the{" "}
+        <a href="/connection-routing">Connection Routing guide</a>.
+      </p>
 
       <h2>Cable length</h2>
       <p>
@@ -86,7 +107,7 @@ export default function ConnectionsPage() {
       <ul>
         <li><strong>Break-in devices</strong> fan out individual connections into a trunk</li>
         <li><strong>Break-out devices</strong> split a trunk back into individual connections</li>
-        <li>Trunk connections display as thicker lines on the canvas</li>
+        <li>Trunk ports only connect to other trunk ports — a trunk can't land on a normal device port</li>
         <li>Right-click a trunk connection to set a <strong>cable label</strong></li>
       </ul>
 
@@ -133,17 +154,19 @@ export default function ConnectionsPage() {
         you're telling EasySchematic that these specific cables <em>should</em> share one physical path.
       </p>
 
-      <h2>Multi-connect ports</h2>
+      <h2>Multi-connect ports (1:many)</h2>
       <p>
         By default, each port accepts <strong>one connection</strong>. Some signals don't work that way in real life —
-        an SRT decoder can listen for many sender streams on a single UDP port, a wireless mic receiver pairs with
-        multiple transmitters, and a streaming encoder can broadcast one feed to many destinations. For these cases,
-        a port can be marked <strong>multi-connect</strong> to allow N connections to or from a single port.
+        one Dante flow can feed many destinations, an SRT decoder can listen for many sender streams on a single UDP
+        port, a wireless mic receiver pairs with multiple transmitters, and a streaming encoder can broadcast one
+        feed to many destinations. For these cases, a port can be marked <strong>multi-connect</strong> to allow N
+        connections to or from a single port — 1:many fan-out from a source, or many:1 fan-in to a destination.
       </p>
       <ul>
         <li>
-          Toggle multi-connect per port in the <strong>device editor</strong> — look for the
-          <strong> M</strong> badge on each port row (next to the multicable <strong>T</strong> toggle)
+          Toggle multi-connect per port in the <strong>device editor</strong> (double-click the device) — click the
+          <strong> M</strong> badge on the row of badges under the port (next to the multicable <strong>T</strong>{" "}
+          toggle). It lights up amber when the port is multi-connect
         </li>
         <li>
           New ports default to multi-connect when their signal type is <strong>SRT</strong> or <strong>Custom</strong>,
@@ -159,10 +182,29 @@ export default function ConnectionsPage() {
         </li>
       </ul>
 
+      <h3>Example: one Dante source, many destinations</h3>
+      <p>To show a Dante flow from one console output feeding several receivers:</p>
+      <ol>
+        <li><strong>Double-click</strong> the source device to open the device editor</li>
+        <li>Click the <strong>M</strong> badge under the Dante port so it lights up amber</li>
+        <li>
+          Draw a connection from that port to each destination — every destination gets its own line on the
+          canvas and its own row in the cable schedule
+        </li>
+      </ol>
+      <p>
+        If a destination should also accept several flows on one port, mark that port multi-connect too.
+      </p>
+
       <h2>Adapters</h2>
       <p>
         When you connect ports with incompatible signal types or different connector types, EasySchematic
-        can automatically insert an <strong>adapter</strong> device between them.
+        can automatically insert an <strong>adapter</strong> device between them. There is no separate
+        "add adapter" action — just draw the connection between the two mismatched ports, and if the
+        device library has a matching adapter it's inserted for you (or offered in a dialog when
+        several match). For example, connecting a
+        laptop's <strong>USB-A</strong> port to an <strong>RJ45</strong> port on a network switch
+        automatically inserts a <strong>USB-A (M) → RJ45 (F) Adapter</strong>, wired to both devices.
       </p>
 
       <h3>Connection preview colors</h3>
@@ -177,9 +219,27 @@ export default function ConnectionsPage() {
       <p>When you complete an incompatible connection:</p>
       <ul>
         <li>If exactly <strong>one</strong> adapter template matches, it's inserted automatically between the two devices</li>
-        <li>If <strong>multiple</strong> adapters match, a dialog lets you choose which one to insert</li>
-        <li>You can also click <strong>Connect Anyway</strong> to force the connection without an adapter</li>
+        <li>
+          If <strong>multiple</strong> adapters match, a dialog lets you choose which one to insert —
+          <strong> Connect Anyway</strong> is also available there to skip the adapter
+        </li>
+        <li>
+          If <strong>no</strong> adapter matches, the dialog tells you no matching adapters were found —
+          you can <strong>Cancel</strong>, or click <strong>Connect Anyway</strong> to force the
+          connection without an adapter
+        </li>
       </ul>
+      <p>
+        Matching works in <strong>either drag direction</strong> — a USB-A → RJ45 dongle is found whether
+        you start the connection from the USB-A port or from the RJ45 port.
+      </p>
+      <p>
+        Auto-insertion matches against the adapters <strong>built into the app</strong>, plus any{" "}
+        <strong>custom adapter devices</strong> you've created yourself. Adapters from the online
+        community library don't auto-insert until they're bundled into an app update — but you can
+        always place one manually from the <strong>device library</strong> and connect through it
+        like any other device.
+      </p>
 
       <h3>Adapters vs converters</h3>
       <ul>
@@ -211,7 +271,7 @@ export default function ConnectionsPage() {
         <li>They're excluded from pack list cable counts</li>
         <li>
           Toggle direct-attach per port in the <strong>device editor</strong> — look for the
-          <strong> DA</strong> badge on each port row (only visible on adapter devices)
+          <strong> DA</strong> badge under each port row (only visible on adapter devices)
         </li>
       </ul>
 
@@ -341,6 +401,13 @@ export default function ConnectionsPage() {
         name, its far-end port (shown by default at both ends), room (if applicable), and page number (in print
         view). Labels are <strong>draggable</strong> — grab and move them to reposition the stub endpoint.
       </p>
+      <p>
+        Whole selections stub at once. Select several connections, then either right-click one of them and choose{" "}
+        <strong>Stub N Selected Connections</strong>, or use the <strong>Stubs</strong> section of the bulk edit panel
+        (the <strong>Stub N connections</strong> button). Connections already stubbed are left alone, and{" "}
+        <strong>Show N Selected Connections in Full</strong> — <strong>Show N connections in full</strong> in the bulk
+        edit panel — reverses it for the stubbed ones. Either way the whole batch is one undo step.
+      </p>
       <ul>
         <li>Stub lines follow <strong>orthogonal routing</strong> with curved corners, matching normal connections</li>
         <li>Right-click a stub to <strong>Add Handle</strong> for intermediate waypoints, just like normal connections</li>
@@ -350,14 +417,25 @@ export default function ConnectionsPage() {
 
       <h3>Customizing stub labels</h3>
       <p>
-        Two options in <strong>Preferences → Display → Stub labels</strong> control what appears on stub labels
+        These options in <strong>Preferences → Display → Stub labels</strong> control what appears on stub labels
         across the whole schematic:
       </p>
       <ul>
         <li>
+          <strong>Show direction arrow on stub labels</strong> — prefixes the label with an arrow pointing toward
+          the far end, e.g. <code>→ Projector</code>. Off by default: the destination name already says where the
+          connection goes, and the arrow costs width on an already-tight box.
+        </li>
+        <li>
           <strong>Show port name on stub labels</strong> — adds the destination port in brackets after the device,
-          e.g. <code>→ Projector [HDMI In 1] (Main Hall) Pg 3</code>. Useful when a device has many ports of the
+          e.g. <code>Projector [HDMI In 1] (Main Hall) Pg 3</code>. Useful when a device has many ports of the
           same signal type.
+        </li>
+        <li>
+          <strong>Show room name on stub labels</strong> — adds the destination room in parentheses, e.g.{" "}
+          <code>Projector (Main Hall)</code>. The room only appears when the far device is in a{" "}
+          <em>different</em> room from the device at the stub's own end. A stub between two devices in the same
+          room leaves the room off, since it tells the reader nothing.
         </li>
         <li>
           <strong>Page number on stub labels</strong> — choose <em>Cross-page only</em> (default), <em>Always</em>,
@@ -366,9 +444,43 @@ export default function ConnectionsPage() {
         </li>
       </ul>
       <p>
-        Both settings can also be overridden on a single stub. Right-click the <strong>stub label</strong> itself
-        and use <strong>Show port</strong> or <strong>Page mode</strong> — each cycles through <em>Default</em>
-        (use the global setting) and explicit values, so an individual stub can opt in or out independently.
+        All of these can also be overridden on a single stub. Right-click the <strong>stub label</strong> itself
+        and use <strong>Show arrow</strong>, <strong>Show port</strong>, <strong>Show room</strong> or{" "}
+        <strong>Page mode</strong> — each cycles through <em>Default</em> (use the global setting) and explicit
+        values, so an individual stub can opt in or out independently. Setting <strong>Show room</strong> to{" "}
+        <em>On</em> on a single stub shows the room even when both devices share it.
+      </p>
+
+      <h3>Cable-ID-only tags</h3>
+      <p>
+        Sometimes a stub is wanted purely as a <strong>cable tag</strong> — the cable ID at the port and no
+        destination information at all. Right-click the stub label and set <strong>Tag text</strong> to{" "}
+        <em>Cable ID only</em>: the box then shows just the cable ID, e.g. <code>HDMI-001</code>. The arrow, port,
+        room and page options no longer apply and drop off the menu; switch <strong>Tag text</strong> back to{" "}
+        <em>Destination</em> to get them back.
+      </p>
+      <p>
+        Both stub labels of a connection are the same cable, so switching <strong>Tag text</strong> on one end
+        switches the other end with it, and a single undo puts both back. It applies to the canvas, PDF export and
+        DXF export alike. A connection with no cable ID — a direct-attach one, for instance — shows a dash instead.
+      </p>
+      <p>
+        To choose what newly stubbed connections start as, use <strong>Preferences → Display → Stub labels →
+        Tag text for new stubs</strong>. It defaults to <em>Destination</em> and applies to every project on this
+        computer. <strong>This project only</strong>, just below it, overrides that for the open schematic and is
+        saved in the schematic file. Neither setting changes stub labels already on the canvas.
+      </p>
+
+      <h3>Drawing new connections as stubs</h3>
+      <p>
+        If stubs are how you draw most of the time, set <strong>Preferences → Canvas → New Connections →
+        Draw new connections as</strong> to <em>Stub</em>. Connections you draw from then on arrive already stubbed
+        at both ends — identical to drawing one and then choosing <strong>Stub Connection</strong> from its
+        right-click menu — and a single undo still removes the whole connection. Connections that already exist are
+        untouched when you change the setting. The one exception is a connection that needs an adapter: when
+        EasySchematic inserts one for you, the two halves either side of the adapter stay as wires, since stubbing
+        both would scatter four stub labels around a device you did not place. Force one through with{" "}
+        <strong>Connect anyway</strong> and it is stubbed like any other.
       </p>
 
       <h2>Connector compatibility</h2>

@@ -1,15 +1,16 @@
 import { useEffect, useCallback } from "react";
 import { useSchematicStore } from "../store";
 import type { StubLabelData, StubLabelPageMode } from "../types";
+import { selectedConnectionEdges, stubbedLinkIdsOf } from "../stubSelection";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { useT } from "../i18n";
 
 /** The `t` a component got from `useT()`, passed down to the label builders. */
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
-/** Right-click menu for stub-label nodes — per-stub overrides for the three label
- *  fields plus a "show full connection" collapse action. Each cycle item rotates
- *  through "Default (follows global)" → explicit-on → explicit-off → undefined. */
+/** Right-click menu for stub-label nodes — what the tag prints, per-stub overrides for
+ *  the four label fields, plus a "show full connection" collapse action. Each cycle item
+ *  rotates through "Default (follows global)" → explicit-on → explicit-off → undefined. */
 export default function StubLabelContextMenu() {
   const t = useT();
   const menu = useSchematicStore((s) => s.stubLabelContextMenu);
@@ -38,7 +39,7 @@ export default function StubLabelContextMenu() {
   }, [menu]);
 
   const cycleBool = useCallback(
-    (field: "showPort" | "showRoom") => {
+    (field: "showArrow" | "showPort" | "showRoom") => {
       if (!menu) return;
       const store = useSchematicStore.getState();
       const node = store.nodes.find((n) => n.id === menu.nodeId);
@@ -67,6 +68,18 @@ export default function StubLabelContextMenu() {
     useSchematicStore.setState({ stubLabelContextMenu: null });
   }, [menu]);
 
+  // "Cable ID only" turns the tag into a plain cable tag — no destination device, port,
+  // room or page, whatever those toggles say (#270). Two states only, so this is a
+  // straight flip rather than a Default/on/off cycle: the default-mode setting (#377) is
+  // applied when a connection is stubbed, not deferred to here. The flip covers both tags
+  // of the connection in one undo step, since they are one cable (#376).
+  const toggleLabelMode = useCallback(() => {
+    if (!menu) return;
+    const store = useSchematicStore.getState();
+    store.toggleStubLabelMode(menu.nodeId);
+    useSchematicStore.setState({ stubLabelContextMenu: null });
+  }, [menu]);
+
   const collapseStubs = useCallback(() => {
     if (!menu) return;
     const store = useSchematicStore.getState();
@@ -81,15 +94,39 @@ export default function StubLabelContextMenu() {
     useSchematicStore.setState({ stubLabelContextMenu: null });
   }, [menu]);
 
+  const collapseSelection = useCallback(() => {
+    const store = useSchematicStore.getState();
+    store.collapseStubsForEdges(
+      selectedConnectionEdges(store.nodes, store.edges).map((e) => e.id),
+    );
+    useSchematicStore.setState({ stubLabelContextMenu: null });
+  }, []);
+
   if (!menu) return null;
 
   const store = useSchematicStore.getState();
   const node = store.nodes.find((n) => n.id === menu.nodeId);
   const data = node?.data as StubLabelData | undefined;
 
+  const showArrowLabel = boolItemLabel(t, "Show arrow", data?.showArrow, store.stubLabelShowArrow);
   const showPortLabel = boolItemLabel(t, "Show port", data?.showPort, store.stubLabelShowPort);
-  const showRoomLabel = boolItemLabel(t, "Show room", data?.showRoom, store.stubLabelShowRoom);
+  // The room default is "other rooms only" — a same-room tag leaves it off unless the tag
+  // itself is set On (#297) — so the Default label says so rather than a bare "on".
+  const showRoomLabel = boolItemLabel(t, "Show room", data?.showRoom, store.stubLabelShowRoom, t("other rooms"));
   const pageModeLabel = pageModeItemLabel(t, data?.pageMode, store.stubLabelPageMode);
+  // The four content toggles say nothing about a cable-ID-only tag, so they come off the
+  // menu in that mode rather than sitting there doing nothing when clicked.
+  const cableIdOnly = data?.labelMode === "cableId";
+
+  // Bulk unstub (#349): the tag is the only part of a stub with real hit area, so this is
+  // the menu a user reaches for after selecting a column of them. Offered on the same
+  // terms as the connection menu's version — ≥2 stubbed connections selected, and the
+  // right-clicked tag among them.
+  const selectedEdges = selectedConnectionEdges(store.nodes, store.edges);
+  const selectedLinkIds = stubbedLinkIdsOf(selectedEdges);
+  const canBulkCollapse =
+    selectedLinkIds.length >= 2 && !!data?.linkedConnectionId
+    && selectedLinkIds.includes(data.linkedConnectionId);
 
   return (
     <div
@@ -104,11 +141,26 @@ export default function StubLabelContextMenu() {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <MenuItem label={showPortLabel} onClick={() => cycleBool("showPort")} />
-      <MenuItem label={showRoomLabel} onClick={() => cycleBool("showRoom")} />
-      <MenuItem label={pageModeLabel} onClick={cyclePageMode} />
+      <MenuItem
+        label={t("Tag text: {mode}", { mode: cableIdOnly ? t("Cable ID only") : t("Destination") })}
+        onClick={toggleLabelMode}
+      />
+      {!cableIdOnly && (
+        <>
+          <MenuItem label={showArrowLabel} onClick={() => cycleBool("showArrow")} />
+          <MenuItem label={showPortLabel} onClick={() => cycleBool("showPort")} />
+          <MenuItem label={showRoomLabel} onClick={() => cycleBool("showRoom")} />
+          <MenuItem label={pageModeLabel} onClick={cyclePageMode} />
+        </>
+      )}
       <div className="border-t border-gray-200 my-1" />
       <MenuItem label={t("Show Full Connection")} onClick={collapseStubs} />
+      {canBulkCollapse && (
+        <MenuItem
+          label={t("Show {n} Selected Connections in Full", { n: selectedLinkIds.length })}
+          onClick={collapseSelection}
+        />
+      )}
     </div>
   );
 }
@@ -118,11 +170,12 @@ function boolItemLabel(
   prefix: string,
   override: boolean | undefined,
   globalVal: boolean,
+  onText = t("on"),
 ): string {
   if (override === undefined)
     return t("{label}: Default ({state})", {
       label: t(prefix),
-      state: globalVal ? t("on") : t("off"),
+      state: globalVal ? onText : t("off"),
     });
   return t("{label}: {state}", { label: t(prefix), state: override ? t("On") : t("Off") });
 }

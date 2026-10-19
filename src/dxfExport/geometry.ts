@@ -2,7 +2,7 @@ import { ARC_R, GAP_HALF } from "../pathfinding";
 import type { RoutedEdge } from "../edgeRouter";
 import type { ConnectionEdge, LineStyle, SignalType } from "../types";
 import type { DxfWriter, EntityStyle } from "./writer";
-import { cssFontPxToDxfHeight, pxToIn } from "./units";
+import { ACI_WHITE, cssFontPxToDxfHeight, pxToIn } from "./units";
 import { CANONICAL_LAYERS } from "./layers";
 
 /** Corner-fillet radius on waypoint turns (matches canvas CORNER_RADIUS=8). */
@@ -333,7 +333,96 @@ export function findEndpointLabelPos(
   }
 }
 
-/** Emit cable ID label(s) for an edge. */
+// Canvas connection-label chip (OffsetEdge `cableIdLabelStyle` / `customLabelStyle`):
+// opaque white ground, `padding: 0 3px`, 1px signal-colored border, 2px radius.
+const CHIP_PAD_X_PX = 3;
+/** Half the leading a 9px label gets at the browser's default line-height. */
+const CHIP_PAD_Y_PX = 1.6;
+/** Per-character advance as a fraction of CSS font size — matches OffsetEdge's
+ *  `estimateBadgeWidth`, which sizes the same chips on the canvas. */
+const CHIP_CHAR_ASPECT = 0.58;
+const CHIP_BORDER_PX = 1;
+const CHIP_RADIUS_IN = 2 / 96;
+
+/**
+ * Emit a connection label the way the canvas draws it: an opaque white chip with a
+ * signal-colored border, then the text over it. `cxPx`/`cyPx` is the chip centre in
+ * screen px.
+ *
+ * The chip is what actually fixes #298. Ordering the labels after the geometry keeps
+ * OTHER connections off the text, but a cable ID sits ON its own routed line by
+ * construction — "endpoint" mode anchors it middle-centre on the polyline, and
+ * "midpoint" mode only offsets when the longest segment is horizontal — and DXF text
+ * has no fill area, so glyphs never occlude what is under them however late they are
+ * written. MTEXT background fill would mask it in AutoCAD/TrueView but LibreCAD
+ * ignores that group, which is why the issue asks for a real mask entity.
+ *
+ * The ground is a SOLID, not a HATCH: it goes under every cable ID in every export,
+ * so it has to be an entity no consumer can refuse (#333).
+ *
+ * The MTEXT then carries a background fill as well, so the label is masked twice. The
+ * two mechanisms cover different readers and neither one covers both: LibreCAD fills
+ * SOLID but cannot even parse the background-fill groups (libdxfrw drops 90/63/45/441
+ * before the renderer ever sees them), while readers that decline SOLID have the
+ * background fill to fall back on. Illustrator is the reason this matters and is
+ * undocumented on both counts, so the chip carries both rather than betting on one.
+ * Drawing order is unaffected: the background belongs to the MTEXT itself, so it can
+ * never land under its own glyphs or over a later-emitted connection.
+ *
+ * Both grounds use ACI 255, not 7. ACI 7 is the adaptive white/black pseudo-colour —
+ * an opaque "white" chip written as 7 prints solid BLACK over its own text on white
+ * paper in AutoCAD.
+ *
+ * The SOLID is sized from `estimateBadgeWidth`'s character-advance estimate, the same
+ * one the canvas uses, while the MTEXT background is sized by the reader from the real
+ * glyph metrics. In a reader that honours both, the wider of the two wins and can
+ * overpaint the border by a hair. Cosmetic, and the alternative — dropping one ground —
+ * costs a reader its only mask.
+ */
+function emitLabelChip(
+  writer: DxfWriter,
+  cxPx: number, cyPx: number,
+  text: string,
+  fontPx: number,
+  trueColor: number,
+) {
+  const wPx = text.length * fontPx * CHIP_CHAR_ASPECT + 2 * CHIP_PAD_X_PX + 2 * CHIP_BORDER_PX;
+  const hPx = fontPx + 2 * CHIP_PAD_Y_PX + 2 * CHIP_BORDER_PX;
+  const x = pxToIn(cxPx - wPx / 2);
+  const y = -pxToIn(cyPx + hPx / 2);
+  const w = pxToIn(wPx);
+  const h = pxToIn(hPx);
+
+  writer.addSolidFillRect(
+    CANONICAL_LAYERS.LABELS, x, y, w, h,
+    { trueColor: 0xffffff, aci: ACI_WHITE },
+  );
+  writer.addRoundedRect(
+    CANONICAL_LAYERS.LABELS, x, y, w, h, CHIP_RADIUS_IN,
+    { trueColor, linetype: "CONTINUOUS" },
+  );
+  writer.addMText(
+    CANONICAL_LAYERS.LABELS,
+    pxToIn(cxPx), -pxToIn(cyPx),
+    text,
+    {
+      height: cssFontPxToDxfHeight(fontPx),
+      attachment: 5,
+      style: { trueColor, linetype: "CONTINUOUS" },
+      backgroundAci: ACI_WHITE,
+      backgroundScale: 1.2,
+    },
+  );
+}
+
+/**
+ * Emit cable ID label(s) for an edge.
+ *
+ * `stubEnd` names the endpoint terminating at a stub-label box, if any. The endpoint
+ * cable ID is suppressed there, matching the canvas: the stub box already identifies
+ * the connection, and printing the ID at both the device port AND the stub label would
+ * put four IDs on one logical cable instead of two.
+ */
 export function emitCableIdLabels(
   writer: DxfWriter,
   edge: ConnectionEdge,
@@ -342,47 +431,25 @@ export function emitCableIdLabels(
   globalGap: number,
   globalMidOffset: number,
   trueColor: number,
+  stubEnd: "source" | "target" | null = null,
 ) {
   if (!edge.data?.cableId) return;
   if (edge.data?.hideCableId) return;
 
-  const height = cssFontPxToDxfHeight(9); // matches canvas 9pt cable ID label
   const gap = edge.data?.cableIdGap ?? globalGap;
   const midOffset = edge.data?.cableIdMidOffset ?? globalMidOffset;
-
-  const style: EntityStyle = { trueColor, linetype: "CONTINUOUS" };
   const effectiveMode = edge.data?.cableIdLabelMode ?? mode;
 
   if (effectiveMode === "midpoint") {
     const pos = findMidpointLabelPos(routed, midOffset);
-    writer.addMText(
-      CANONICAL_LAYERS.LABELS,
-      pxToIn(pos.x), -pxToIn(pos.y),
-      edge.data.cableId,
-      {
-        height,
-        attachment: 5, // middle-center
-        style,
-        backgroundAci: 7, // white
-        backgroundScale: 1.2,
-      },
-    );
+    emitLabelChip(writer, pos.x, pos.y, edge.data.cableId, 9, trueColor);
   } else {
-    // Emit at both ends
+    // Emit at both ends, minus any end that terminates at a stub label.
     for (const nearStart of [true, false]) {
+      if (nearStart && stubEnd === "source") continue;
+      if (!nearStart && stubEnd === "target") continue;
       const pos = findEndpointLabelPos(routed, nearStart, gap);
-      writer.addMText(
-        CANONICAL_LAYERS.LABELS,
-        pxToIn(pos.x), -pxToIn(pos.y),
-        edge.data.cableId,
-        {
-          height,
-          attachment: 5,
-          style,
-          backgroundAci: 7,
-          backgroundScale: 1.2,
-        },
-      );
+      emitLabelChip(writer, pos.x, pos.y, edge.data.cableId, 9, trueColor);
     }
   }
 }
@@ -393,7 +460,11 @@ export function emitCableIdLabels(
  *
  *  On a stub leg, `stubEnd` names the endpoint that terminates at the stub-label
  *  box; the middle label is then anchored just inside that end so it reads
- *  between the cable ID and the stub label, matching the canvas (#201). */
+ *  between the cable ID and the stub label, matching the canvas (#201).
+ *
+ *  Custom labels are free text, so their chips lean hardest on the character-advance
+ *  width estimate — see `emitLabelChip` for why a reader honouring both grounds can
+ *  paint the MTEXT background a hair wider than the SOLID and its border. */
 export function emitCustomLabel(
   writer: DxfWriter,
   edge: ConnectionEdge,
@@ -406,42 +477,30 @@ export function emitCustomLabel(
   const targetLabel = edge.data?.targetLabel as string | undefined;
   if (!sourceLabel && !midLabel && !targetLabel) return;
 
-  const height = cssFontPxToDxfHeight(10); // matches canvas 10pt custom label
+  const fontPx = 9; // matches canvas customLabelStyle, sized to the cable ID chip (#209)
   const gap = 4; // matches canvas CUSTOM_LABEL_GAP
-  const style: EntityStyle = { trueColor, linetype: "CONTINUOUS" };
 
   if (sourceLabel) {
     const pos = findEndpointLabelPos(routed, true, gap);
-    writer.addMText(
-      CANONICAL_LAYERS.LABELS,
-      pxToIn(pos.x), -pxToIn(pos.y),
-      sourceLabel,
-      { height, attachment: 5, style, backgroundAci: 7, backgroundScale: 1.3 },
-    );
+    emitLabelChip(writer, pos.x, pos.y, sourceLabel, fontPx, trueColor);
   }
   if (midLabel) {
     const pos = stubEnd
       ? findEndpointLabelPos(routed, stubEnd === "source", gap)
       : findMidpointLabelPos(routed, 0);
-    writer.addMText(
-      CANONICAL_LAYERS.LABELS,
-      pxToIn(pos.x), -pxToIn(pos.y),
-      midLabel,
-      { height, attachment: 5, style, backgroundAci: 7, backgroundScale: 1.3 },
-    );
+    emitLabelChip(writer, pos.x, pos.y, midLabel, fontPx, trueColor);
   }
   if (targetLabel) {
     const pos = findEndpointLabelPos(routed, false, gap);
-    writer.addMText(
-      CANONICAL_LAYERS.LABELS,
-      pxToIn(pos.x), -pxToIn(pos.y),
-      targetLabel,
-      { height, attachment: 5, style, backgroundAci: 7, backgroundScale: 1.3 },
-    );
+    emitLabelChip(writer, pos.x, pos.y, targetLabel, fontPx, trueColor);
   }
 }
 
-/** Emit a stub end marker (arrow + device name + room + page). */
+/** Emit a stub end marker (arrow + device name + room + page).
+ *
+ *  Currently unreferenced — stub ends became first-class `stub-label` nodes and are
+ *  emitted by `emitStubLabel` instead. Kept, but its background fill uses ACI 255 like
+ *  every other ground here, so wiring it back up can't reintroduce the adaptive 7. */
 export function emitStubEnd(
   writer: DxfWriter,
   endPt: { x: number; y: number },
@@ -488,7 +547,7 @@ export function emitStubEnd(
       height: cssFontPxToDxfHeight(9), // matches canvas 9pt stub label
       attachment: 5,
       style: { trueColor },
-      backgroundAci: 7,
+      backgroundAci: ACI_WHITE,
       backgroundScale: 1.2,
     },
   );

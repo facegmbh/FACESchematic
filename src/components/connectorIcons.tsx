@@ -763,6 +763,8 @@ const CONNECTOR_SPECS: Partial<Record<ConnectorType, ConnectorSpec>> = {
   // ── Fiber ──
   "lc":             { widthMm: 6.3,   heightMm: 9.0,   render: (p) => renderRectangle(6.3, 9.0, 0.5, p) },
   "sc":             { widthMm: 9.0,   heightMm: 9.0,   render: (p) => renderRectangle(9.0, 9.0, 0.5, p) },
+  // ST is the odd one out in the fiber family — a round bayonet barrel, not a square ferrule housing.
+  "st":             { widthMm: 9.5,   heightMm: 9.5,   render: (p) => renderCircle(9.5, p) },
   "toslink":        { widthMm: 7.2,   heightMm: 9.8,   render: renderToslink },
   "sfp":            { widthMm: 13.4,  heightMm: 8.5,   render: (p) => renderRectangle(13.4, 8.5, 0.5, p) },
   "qsfp":           { widthMm: 18.4,  heightMm: 8.5,   render: (p) => renderRectangle(18.4, 8.5, 0.5, p) },
@@ -847,6 +849,28 @@ const CONNECTOR_SPECS: Partial<Record<ConnectorType, ConnectorSpec>> = {
     return (<g>{outline}<rect x={-5.6} y={0.5} width={1.2} height={4} fill={color} /><rect x={4.4} y={0.5} width={1.2} height={4} fill={color} /><circle cx={0} cy={-4.5} r={1.5} fill={color} /></g>);
   }},
 
+  // ── CEE 7 European power ──
+  "schuko": { widthMm: 42.0, heightMm: 42.0, render: ({ color, detail, strokeWidth }) => {
+    const outline = renderCircle(42.0, { color, detail, strokeWidth });
+    if (detail < 2) return outline;
+    return (<g>{outline}<circle cx={-9.5} cy={0} r={2.4} fill="none" stroke={color} strokeWidth={strokeWidth} /><circle cx={9.5} cy={0} r={2.4} fill="none" stroke={color} strokeWidth={strokeWidth} /><rect x={-3} y={-21} width={6} height={3} fill={color} /><rect x={-3} y={18} width={6} height={3} fill={color} /></g>);
+  }},
+  "french-power": { widthMm: 42.0, heightMm: 42.0, render: ({ color, detail, strokeWidth }) => {
+    const outline = renderCircle(42.0, { color, detail, strokeWidth });
+    if (detail < 2) return outline;
+    return (<g>{outline}<circle cx={-9.5} cy={0} r={2.4} fill="none" stroke={color} strokeWidth={strokeWidth} /><circle cx={9.5} cy={0} r={2.4} fill="none" stroke={color} strokeWidth={strokeWidth} /><circle cx={0} cy={-12} r={2.4} fill={color} /></g>);
+  }},
+  "europlug": { widthMm: 30.0, heightMm: 38.0, render: ({ color, detail, strokeWidth }) => {
+    const outline = renderRectangle(30.0, 38.0, 6.0, { color, detail, strokeWidth });
+    if (detail < 2) return outline;
+    return (<g>{outline}<circle cx={-9.5} cy={0} r={1.5} fill={color} /><circle cx={9.5} cy={0} r={1.5} fill={color} /></g>);
+  }},
+  "uk-power": { widthMm: 50.0, heightMm: 38.0, render: ({ color, detail, strokeWidth }) => {
+    const outline = renderRectangle(50.0, 38.0, 3.0, { color, detail, strokeWidth });
+    if (detail < 2) return outline;
+    return (<g>{outline}<rect x={-2} y={-14} width={4} height={6} fill={color} /><rect x={-14.5} y={5} width={3} height={5.5} fill={color} /><rect x={11.5} y={5} width={3} height={5.5} fill={color} /></g>);
+  }},
+
   // ── NEMA / Edison ──
   "edison": { widthMm: 33.3, heightMm: 26.2, render: ({ color, detail, strokeWidth }) => {
     const outline = renderRectangle(33.3, 26.2, 1.0, { color, detail, strokeWidth });
@@ -855,21 +879,6 @@ const CONNECTOR_SPECS: Partial<Record<ConnectorType, ConnectorSpec>> = {
   }},
   // ── CEE 7/7 (Schuko) ──
   // Round body Ø50 mm, two 4.8 mm pins 19 mm apart, earth clips top and bottom on the rim.
-  "cee-7-7": { widthMm: 50.0, heightMm: 50.0, render: ({ color, detail, strokeWidth }) => {
-    const outline = renderCircle(50.0, { color, detail, strokeWidth });
-    if (detail < 2) return outline;
-    return (
-      <g>
-        {outline}
-        <circle cx={-9.5} cy={0} r={2.4} fill={color} />
-        <circle cx={9.5} cy={0} r={2.4} fill={color} />
-        {/* Schutzkontakt-Bügel oben und unten */}
-        <path d="M -7 -22 A 23 23 0 0 1 7 -22" fill="none" stroke={color} strokeWidth={strokeWidth * 1.5} strokeLinecap="round" />
-        <path d="M 7 22 A 23 23 0 0 1 -7 22" fill="none" stroke={color} strokeWidth={strokeWidth * 1.5} strokeLinecap="round" />
-      </g>
-    );
-  }},
-
   "l5-20": { widthMm: 41.3, heightMm: 41.3, render: ({ color, detail, strokeWidth }) => {
     const outline = renderCircle(41.3, { color, detail, strokeWidth });
     if (detail < 2) return outline;

@@ -20,14 +20,14 @@ function tpl(id: string, label: string, ports: Partial<Port>[] = []): DeviceTemp
 describe("mergeCustomTemplates — re-importing an edited export", () => {
   it("overwrites a template with the same id instead of skipping it", () => {
     const existing = [tpl("ups-3000", "DIGITUS OnLine USV 3000VA", [{ label: "Schuko Out 1", connectorType: "edison" }])];
-    const incoming = [tpl("ups-3000", "DIGITUS OnLine USV 3000VA", [{ label: "Schuko Out 1", connectorType: "cee-7-7" }])];
+    const incoming = [tpl("ups-3000", "DIGITUS OnLine USV 3000VA", [{ label: "Schuko Out 1", connectorType: "schuko" }])];
 
     const res = mergeCustomTemplates(existing, incoming);
 
     expect(res.updated).toBe(1);
     expect(res.added).toBe(0);
     expect(res.merged).toHaveLength(1);
-    expect(res.merged[0].ports[0].connectorType).toBe("cee-7-7");
+    expect(res.merged[0].ports[0].connectorType).toBe("schuko");
   });
 
   it("keeps the existing position when overwriting, and appends genuinely new templates", () => {

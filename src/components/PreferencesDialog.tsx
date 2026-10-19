@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import { importLegendImage } from "../floorplanUnderlay";
+import { HEADER_COLOR_SWATCH_FALLBACK, resolveDefaultDeviceHeaderColor } from "../deviceHeaderColor";
 import type { CompanyProfile } from "../types";
-import { DEFAULT_SCROLL_CONFIG, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_PAGE_MODE, PROJECT_STATUS_LABELS } from "../types";
-import type { LabelCaseMode, PanMode, ProjectStatus, ScrollAction, ScrollConfig, StubLabelPageMode } from "../types";
+import { DEFAULT_SCROLL_CONFIG, DEFAULT_STUB_LABEL_SHOW_ARROW, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_STUB_LABEL_MODE, DEFAULT_CONNECTION_TYPE, PROJECT_STATUS_LABELS } from "../types";
+import type { DefaultConnectionType, LabelCaseMode, PanMode, ProjectStatus, ScrollAction, ScrollConfig, StubLabelMode, StubLabelPageMode } from "../types";
 import { LOCALES, LOCALE_LABELS, setLocale, useLocale, useT, type Locale } from "../i18n";
 
 const AUTOROUTE_PREF_KEY = "easyschematic-autoroute-pref";
@@ -76,6 +77,90 @@ function SensitivityRow({
   );
 }
 
+/** How long the picker sits still before the chosen color is committed (#354). */
+const COLOR_COMMIT_DELAY_MS = 250;
+
+/** Header-color picker row (#354) — the same swatch + Reset pairing the device editor's
+ *  header color picker uses, laid out as a preferences row. `undefined` = not set.
+ *
+ *  Dragging in the OS color wheel fires an event per frame, and committing the project
+ *  override autosaves the whole document, so the swatch tracks the wheel from local state
+ *  and only commits once the picker goes quiet, loses focus, or the row unmounts. */
+function ColorRow({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string | undefined;
+  /** Swatch shown while nothing is set — the color that would apply anyway. */
+  placeholder: string;
+  onChange: (v: string | undefined) => void;
+}) {
+  const t = useT();
+  // null = no uncommitted choice, so the swatch follows the setting itself.
+  const [draft, setDraft] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Read by the delayed commit and by the unmount cleanup, neither of which can see the
+  // render they were scheduled from.
+  const pending = useRef<{ draft: string | null; onChange: (v: string | undefined) => void }>({
+    draft: null,
+    onChange,
+  });
+  useEffect(() => {
+    pending.current = { draft, onChange };
+  });
+
+  const commit = () => {
+    clearTimeout(timer.current);
+    const next = pending.current.draft;
+    if (next === null) return;
+    setDraft(null);
+    pending.current.onChange(next);
+  };
+
+  // Closing the dialog mid-drag still keeps the color the user picked.
+  useEffect(() => () => {
+    clearTimeout(timer.current);
+    const next = pending.current.draft;
+    if (next !== null) pending.current.onChange(next);
+  }, []);
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-xs text-[var(--color-text)]">{label}</span>
+      <div className="flex items-center gap-2 w-[140px] justify-end">
+        {(draft ?? value) ? (
+          <button
+            className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
+            onClick={() => {
+              clearTimeout(timer.current);
+              setDraft(null);
+              onChange(undefined);
+            }}
+          >
+            {t("Reset")}
+          </button>
+        ) : (
+          <span className="text-[10px] text-[var(--color-text-muted)]">{t("Not set")}</span>
+        )}
+        <input
+          type="color"
+          className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer p-0"
+          value={draft ?? value ?? placeholder}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            clearTimeout(timer.current);
+            timer.current = setTimeout(commit, COLOR_COMMIT_DELAY_MS);
+          }}
+          onBlur={commit}
+        />
+      </div>
+    </div>
+  );
+}
+
 type PrefTab = "canvas" | "display" | "company" | "ai";
 
 /** English source strings — the i18n keys. Translated where they are rendered. */
@@ -109,16 +194,28 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   const setProjectStatus = useSchematicStore((s) => s.setProjectStatus);
   const panMode = useSchematicStore((s) => s.panMode);
   const setPanMode = useSchematicStore((s) => s.setPanMode);
+  const stubLabelShowArrow = useSchematicStore((s) => s.stubLabelShowArrow);
+  const setStubLabelShowArrow = useSchematicStore((s) => s.setStubLabelShowArrow);
   const stubLabelShowPort = useSchematicStore((s) => s.stubLabelShowPort);
   const setStubLabelShowPort = useSchematicStore((s) => s.setStubLabelShowPort);
   const stubLabelShowRoom = useSchematicStore((s) => s.stubLabelShowRoom);
   const setStubLabelShowRoom = useSchematicStore((s) => s.setStubLabelShowRoom);
   const stubLabelPageMode = useSchematicStore((s) => s.stubLabelPageMode);
   const setStubLabelPageMode = useSchematicStore((s) => s.setStubLabelPageMode);
+  const appStubLabelMode = useSchematicStore((s) => s.appDefaultStubLabelMode);
+  const setAppStubLabelMode = useSchematicStore((s) => s.setAppDefaultStubLabelMode);
+  const projectStubLabelMode = useSchematicStore((s) => s.defaultStubLabelMode);
+  const setProjectStubLabelMode = useSchematicStore((s) => s.setDefaultStubLabelMode);
+  const defaultConnectionType = useSchematicStore((s) => s.defaultConnectionType);
+  const setDefaultConnectionType = useSchematicStore((s) => s.setDefaultConnectionType);
   const useShortNames = useSchematicStore((s) => s.useShortNames);
   const setUseShortNames = useSchematicStore((s) => s.setUseShortNames);
   const wrapDeviceLabels = useSchematicStore((s) => s.wrapDeviceLabels);
   const setWrapDeviceLabels = useSchematicStore((s) => s.setWrapDeviceLabels);
+  const appHeaderColor = useSchematicStore((s) => s.appDefaultDeviceHeaderColor);
+  const setAppHeaderColor = useSchematicStore((s) => s.setAppDefaultDeviceHeaderColor);
+  const projectHeaderColor = useSchematicStore((s) => s.defaultDeviceHeaderColor);
+  const setProjectHeaderColor = useSchematicStore((s) => s.setDefaultDeviceHeaderColor);
   const mcpEnabled = useSchematicStore((s) => s.mcpBridgeEnabled);
   const setMcpEnabled = useSchematicStore((s) => s.setMcpBridgeEnabled);
   const mcpToken = useSchematicStore((s) => s.mcpBridgeToken);
@@ -139,6 +236,9 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   const update = (patch: Partial<ScrollConfig>) =>
     setScrollConfig({ ...scrollConfig, ...patch });
 
+  // Which of the two header-color settings a device placed right now would take (#354).
+  const effectiveHeaderColor = resolveDefaultDeviceHeaderColor(projectHeaderColor, appHeaderColor);
+
   const isDefault =
     scrollConfig.scroll === DEFAULT_SCROLL_CONFIG.scroll &&
     scrollConfig.shiftScroll === DEFAULT_SCROLL_CONFIG.shiftScroll &&
@@ -151,8 +251,15 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
     labelCase === "as-typed" &&
     currency === "USD" &&
     panMode === "select-first" &&
+    stubLabelShowArrow === DEFAULT_STUB_LABEL_SHOW_ARROW &&
     stubLabelShowPort === DEFAULT_STUB_LABEL_SHOW_PORT &&
-    stubLabelPageMode === DEFAULT_STUB_LABEL_PAGE_MODE;
+    stubLabelPageMode === DEFAULT_STUB_LABEL_PAGE_MODE &&
+    defaultConnectionType === DEFAULT_CONNECTION_TYPE &&
+    // The per-project override is document data (like the project status), so it is not
+    // part of "reset preferences" — only the app-level default header color is (#354).
+    appHeaderColor === undefined &&
+    // Same split for the default stub tag mode: only the app preference resets (#377).
+    appStubLabelMode === DEFAULT_STUB_LABEL_MODE;
 
   return (
     <div
@@ -322,6 +429,27 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 </p>
               </div>
 
+              {/* New Connections */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                  {t("New Connections")}
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-xs text-[var(--color-text)]">{t("Draw new connections as")}</span>
+                  <select
+                    className={selectClass}
+                    value={defaultConnectionType}
+                    onChange={(e) => setDefaultConnectionType(e.target.value as DefaultConnectionType)}
+                  >
+                    <option value="wire">{t("Wire")}</option>
+                    <option value="stub">{t("Stub")}</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("Stub creates each new connection already stubbed at both ends, the same as right-clicking it and choosing Stub Connection. Existing connections are left alone, and connections through an auto-inserted adapter stay wires.")}
+                </p>
+              </div>
+
               {/* Auto-Route */}
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
@@ -395,7 +523,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   </select>
                 </div>
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                  {t("Display style for device, port, slot, and card labels on the canvas and in exports. Doesn't modify your data — switch back to As-typed any time to see original casing.")}
+                  {t("Display style for device, port, room, slot, and card labels on the canvas and in exports. Doesn't modify your data — switch back to As-typed any time to see original casing.")}
                 </p>
                 <div className="flex items-center justify-between py-1 mt-2">
                   <span className="text-xs text-[var(--color-text)]">{t("Use short device names")}</span>
@@ -423,12 +551,70 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 </p>
               </div>
 
+              {/* Device header color (#354) */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                  {t("Device header color")}
+                </div>
+                <ColorRow
+                  label={t("Default for new devices")}
+                  value={appHeaderColor}
+                  placeholder={HEADER_COLOR_SWATCH_FALLBACK}
+                  onChange={setAppHeaderColor}
+                />
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("Header bar color given to every device you place from here on, in this and every other project on this computer. Not set = the standard header color.")}
+                </p>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("This is the device's header color everywhere it is drawn, not just on the canvas: it also overrides the device's own color in the rack elevation, the rack SVG and PDF, the face plate editor, and the DXF export. Set it and every new device shares one color in those views instead of being colored by device type — leave it unset, or clear a device's header color in the device editor, to keep that color coding.")}
+                </p>
+                <div className="mt-2">
+                  <ColorRow
+                    label={t("This project only")}
+                    value={projectHeaderColor}
+                    placeholder={appHeaderColor ?? HEADER_COLOR_SWATCH_FALLBACK}
+                    onChange={setProjectHeaderColor}
+                  />
+                </div>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("Overrides the default above for this schematic, and is saved in the schematic file so it travels with it. Devices already on the canvas keep their own colors either way — change one from the device editor's header color picker.")}
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[10px] text-[var(--color-text-muted)]">
+                    {t("New devices here get")}
+                  </span>
+                  <span
+                    className="w-4 h-4 shrink-0 rounded border border-[var(--color-border)]"
+                    style={{ backgroundColor: effectiveHeaderColor ?? "var(--color-surface)" }}
+                  />
+                  <span className="text-[10px] text-[var(--color-text-muted)]">
+                    {effectiveHeaderColor
+                      ? projectHeaderColor
+                        ? t("{color} (this project)", { color: effectiveHeaderColor })
+                        : t("{color} (app default)", { color: effectiveHeaderColor })
+                      : t("the standard header color")}
+                  </span>
+                </div>
+              </div>
+
               {/* Stub labels */}
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
                   {t("Stub labels")}
                 </div>
                 <div className="flex items-center justify-between py-1">
+                  <span className="text-xs text-[var(--color-text)]">{t("Show direction arrow on stub labels")}</span>
+                  <input
+                    type="checkbox"
+                    checked={stubLabelShowArrow}
+                    onChange={(e) => setStubLabelShowArrow(e.target.checked)}
+                    className="cursor-pointer accent-blue-600"
+                  />
+                </div>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("Prefixes each stub label with an arrow pointing toward the far end (e.g.")} <code className="text-[10px]">→ Projector</code>{t("). Off by default — the destination name already says where the connection goes.")}
+                </p>
+                <div className="flex items-center justify-between py-1 mt-2">
                   <span className="text-xs text-[var(--color-text)]">{t("Show port name on stub labels")}</span>
                   <input
                     type="checkbox"
@@ -450,7 +636,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   />
                 </div>
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                  {t("Adds the destination room (e.g.")} <code className="text-[10px]">(Server Room)</code>{t(") after the device name on stubbed connections. Per-stub overrides via right-click on the label.")}
+                  {t("Adds the destination room (e.g.")} <code className="text-[10px]">(Server Room)</code>{t(") after the device name on stubbed connections, when the far device is in a different room. A tag between two devices in the same room leaves the room off unless you right-click it and set Show room to On.")}
                 </p>
                 <div className="flex items-center justify-between py-1 mt-2">
                   <span className="text-xs text-[var(--color-text)]">{t("Page number on stub labels")}</span>
@@ -466,6 +652,38 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 </div>
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                   {t("When to display the destination page on stub labels. Cross-page only suppresses the tag when both ends are on the same printed page.")}
+                </p>
+                {/* Default stub tag mode (#377) — same app + project pair as the header color (#354) */}
+                <div className="flex items-center justify-between py-1 mt-2">
+                  <span className="text-xs text-[var(--color-text)]">{t("Tag text for new stubs")}</span>
+                  <select
+                    className={selectClass}
+                    value={appStubLabelMode}
+                    onChange={(e) => setAppStubLabelMode(e.target.value as StubLabelMode)}
+                  >
+                    <option value="full">{t("Destination")}</option>
+                    <option value="cableId">{t("Cable ID only")}</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("What both tags of a connection show when you stub it, in this and every other project on this computer. Destination names the far device; Cable ID only shows just the cable ID.")}
+                </p>
+                <div className="flex items-center justify-between py-1 mt-2">
+                  <span className="text-xs text-[var(--color-text)]">{t("This project only")}</span>
+                  <select
+                    className={selectClass}
+                    value={projectStubLabelMode ?? ""}
+                    onChange={(e) =>
+                      setProjectStubLabelMode(e.target.value === "" ? undefined : (e.target.value as StubLabelMode))
+                    }
+                  >
+                    <option value="">{t("Use default")}</option>
+                    <option value="full">{t("Destination")}</option>
+                    <option value="cableId">{t("Cable ID only")}</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {t("Overrides the default above for this schematic, and is saved in the schematic file. Stub tags already on the canvas keep their tag text either way; right-click a tag to switch it, and its partner tag at the other end switches with it.")}
                 </p>
               </div>
 
@@ -701,8 +919,12 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 setLabelCase("as-typed");
                 setCurrency("USD");
                 setPanMode("select-first");
+                setStubLabelShowArrow(DEFAULT_STUB_LABEL_SHOW_ARROW);
                 setStubLabelShowPort(DEFAULT_STUB_LABEL_SHOW_PORT);
                 setStubLabelPageMode(DEFAULT_STUB_LABEL_PAGE_MODE);
+                setDefaultConnectionType(DEFAULT_CONNECTION_TYPE);
+                setAppHeaderColor(undefined);
+                setAppStubLabelMode(DEFAULT_STUB_LABEL_MODE);
               }}
               className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
             >

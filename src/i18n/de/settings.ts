@@ -62,8 +62,8 @@ export const DE_SETTINGS: Record<string, string> = {
   "UPPERCASE": "GROSSBUCHSTABEN",
   "lowercase": "kleinbuchstaben",
   "Capitalize Words": "Wortanfänge Groß",
-  "Display style for device, port, slot, and card labels on the canvas and in exports. Doesn't modify your data — switch back to As-typed any time to see original casing.":
-    "Darstellung von Geräte-, Port-, Slot- und Kartenbeschriftungen auf der Zeichenfläche und im Export. Die Daten selbst bleiben unangetastet — zurück auf „Wie eingegeben“ zeigt jederzeit die Originalschreibweise.",
+  "Display style for device, port, room, slot, and card labels on the canvas and in exports. Doesn't modify your data — switch back to As-typed any time to see original casing.":
+    "Darstellung von Geräte-, Port-, Raum-, Slot- und Kartenbeschriftungen auf der Zeichenfläche und im Export. Die Daten selbst bleiben unangetastet — zurück auf „Wie eingegeben“ zeigt jederzeit die Originalschreibweise.",
   "Use short device names": "Kurze Gerätenamen verwenden",
   "Render device labels using a more compact identifier when available — curated short name first, then model number, falling back to the full label. Per-device override available in the device editor.":
     "Zeigt Geräte mit der kompakteren Bezeichnung, sofern vorhanden — zuerst der gepflegte Kurzname, dann die Modellnummer, sonst die volle Beschriftung. Pro Gerät im Geräteeditor überschreibbar.",
@@ -79,8 +79,8 @@ export const DE_SETTINGS: Record<string, string> = {
     ") hinter dem Gerätenamen bei gestubbten Verbindungen.",
   "Show room name on stub labels": "Raumname auf Stub-Beschriftungen",
   "Adds the destination room (e.g.": "Ergänzt den Zielraum (z. B.",
-  ") after the device name on stubbed connections. Per-stub overrides via right-click on the label.":
-    ") hinter dem Gerätenamen bei gestubbten Verbindungen. Pro Stub per Rechtsklick auf die Beschriftung anpassbar.",
+  ") after the device name on stubbed connections, when the far device is in a different room. A tag between two devices in the same room leaves the room off unless you right-click it and set Show room to On.":
+    ") hinter dem Gerätenamen bei gestubbten Verbindungen, wenn das Gegengerät in einem anderen Raum steht. Zwischen zwei Geräten im selben Raum bleibt der Raum weg — außer die Beschriftung wird per Rechtsklick auf „Raum zeigen: Ein“ gestellt.",
   "Page number on stub labels": "Seitenzahl auf Stub-Beschriftungen",
   "Cross-page only": "Nur seitenübergreifend",
   "When to display the destination page on stub labels. Cross-page only suppresses the tag when both ends are on the same printed page.":
@@ -160,4 +160,42 @@ export const DE_SETTINGS: Record<string, string> = {
 
   // ─── Footer ────────────────────────────────────────────────────
   "Reset to defaults": "Auf Standard zurücksetzen",
+
+  // ─── Upstream-Merge 2026-10 ───
+  // Canvas › New Connections
+  "New Connections": "Neue Verbindungen",
+  "Draw new connections as": "Neue Verbindungen zeichnen als",
+  "Wire": "Leitung",
+  "Stub": "Stub",
+  "Stub creates each new connection already stubbed at both ends, the same as right-clicking it and choosing Stub Connection. Existing connections are left alone, and connections through an auto-inserted adapter stay wires.":
+    "„Stub“ legt jede neue Verbindung gleich an beiden Enden als Stub an — wie Rechtsklick darauf und „Als Stub darstellen“. Bestehende Verbindungen bleiben unberührt, und Verbindungen über einen automatisch eingefügten Adapter bleiben Leitungen.",
+
+  // Display › Device header color
+  "Device header color": "Kopfzeilenfarbe der Geräte",
+  "Default for new devices": "Standard für neue Geräte",
+  "Not set": "Nicht gesetzt",
+  "Header bar color given to every device you place from here on, in this and every other project on this computer. Not set = the standard header color.":
+    "Kopfzeilenfarbe für jedes Gerät, das ab jetzt platziert wird — in diesem und jedem anderen Projekt auf diesem Rechner. Nicht gesetzt = die Standard-Kopfzeilenfarbe.",
+  "This is the device's header color everywhere it is drawn, not just on the canvas: it also overrides the device's own color in the rack elevation, the rack SVG and PDF, the face plate editor, and the DXF export. Set it and every new device shares one color in those views instead of being colored by device type — leave it unset, or clear a device's header color in the device editor, to keep that color coding.":
+    "Das ist die Kopfzeilenfarbe des Geräts überall, wo es gezeichnet wird, nicht nur auf der Zeichenfläche: Die Farbe ersetzt auch die eigene Gerätefarbe in der Rackansicht, im Rack-SVG und -PDF, im Frontblenden-Editor und im DXF-Export. Ist sie gesetzt, teilen sich alle neuen Geräte in diesen Ansichten eine Farbe, statt nach Gerätetyp eingefärbt zu werden — wer diese Farbcodierung behalten will, lässt sie leer oder löscht die Kopfzeilenfarbe eines Geräts im Geräteeditor.",
+  "This project only": "Nur dieses Projekt",
+  "Overrides the default above for this schematic, and is saved in the schematic file so it travels with it. Devices already on the canvas keep their own colors either way — change one from the device editor's header color picker.":
+    "Ersetzt den Standard oben für diesen Schaltplan und wird in der Schaltplandatei gespeichert, reist also mit. Geräte, die schon auf der Zeichenfläche liegen, behalten ihre Farben so oder so — einzelne über die Kopfzeilenfarbe im Geräteeditor ändern.",
+  "New devices here get": "Neue Geräte bekommen hier",
+  "{color} (this project)": "{color} (dieses Projekt)",
+  "{color} (app default)": "{color} (App-Standard)",
+  "the standard header color": "die Standard-Kopfzeilenfarbe",
+
+  // Display › Stub labels
+  "Show direction arrow on stub labels": "Richtungspfeil auf Stub-Beschriftungen",
+  "Prefixes each stub label with an arrow pointing toward the far end (e.g.":
+    "Stellt jeder Stub-Beschriftung einen Pfeil zur Gegenseite voran (z. B.",
+  "). Off by default — the destination name already says where the connection goes.":
+    "). Standardmäßig aus — der Zielname sagt schon, wohin die Verbindung führt.",
+  "Tag text for new stubs": "Beschriftung neuer Stubs",
+  "Use default": "Standard verwenden",
+  "What both tags of a connection show when you stub it, in this and every other project on this computer. Destination names the far device; Cable ID only shows just the cable ID.":
+    "Was beide Beschriftungen einer Verbindung zeigen, wenn sie als Stub dargestellt wird — in diesem und jedem anderen Projekt auf diesem Rechner. „Ziel“ nennt das Gegengerät, „Nur Kabel-ID“ zeigt allein die Kabel-ID.",
+  "Overrides the default above for this schematic, and is saved in the schematic file. Stub tags already on the canvas keep their tag text either way; right-click a tag to switch it, and its partner tag at the other end switches with it.":
+    "Ersetzt den Standard oben für diesen Schaltplan und wird in der Schaltplandatei gespeichert. Stub-Beschriftungen, die schon auf der Zeichenfläche liegen, behalten ihren Text so oder so; per Rechtsklick lässt sich eine umschalten, die Partner-Beschriftung am anderen Ende schaltet mit.",
 };

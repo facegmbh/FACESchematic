@@ -65,9 +65,12 @@ export async function drawTitleBlockMm(
         skipVLines.add(`${c},${r}`);
   }
 
+  // Filled white to match PrintSheetRenderer's on-screen block, which is opaque
+  // over anything a viewport overlaps into the band (#359).
   doc.setDrawColor(100, 100, 100);
+  doc.setFillColor(255, 255, 255);
   doc.setLineWidth(0.12); // ~0.005in in mm
-  doc.rect(tbLeft, tbTop, tbWidthMm, tbHeightMm);
+  doc.rect(tbLeft, tbTop, tbWidthMm, tbHeightMm, "FD");
 
   // Horizontal grid lines
   for (let ri = 1; ri < layout.rows.length; ri++) {

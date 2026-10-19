@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 
 import { useSchematicStore } from "../store";
+import { selectedConnectionEdges, stubbedLinkIdsOf } from "../stubSelection";
 import { LINE_STYLE_LABELS, LINE_STYLE_DASHARRAY, type LineStyle } from "../types";
 import { useT } from "../i18n";
 
@@ -14,6 +15,8 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
   const t = useT();
   // Serialize to a stable string — avoids the "new array ref every tick" infinite-loop
   // trap. Include relevant data fields so the panel reflects applied patches.
+  // Selected stub tags are part of the key: they can be the only thing selected (#349),
+  // and the panel has to reflect the connections they stand for.
   const selectionKey = useSchematicStore((s) =>
     s.edges
       .filter((e) => e.selected)
@@ -21,14 +24,16 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
         (e) =>
           `${e.id}:${e.data?.lineStyle ?? ""}:${e.data?.directAttach ? "1" : "0"}:${e.data?.hideCableId ? "1" : "0"}:${String(e.data?.sourceLabel ?? "")}:${String(e.data?.label ?? "")}:${String(e.data?.targetLabel ?? "")}:${String(e.data?.color ?? "")}:${e.data?.bundleId ?? ""}:${e.data?.signalType ?? ""}:${String(e.data?.cableIdLabelMode ?? "")}:${e.data?.linkedConnectionId ?? ""}:${e.data?.manualWaypoints?.length ?? 0}`,
       )
-      .join("|"),
+      .join("|")
+      + "#"
+      + s.nodes.filter((n) => n.selected && n.type === "stub-label").map((n) => n.id).join(","),
   );
   const bundles = useSchematicStore((s) => s.bundles);
   const globalCableIdMode = useSchematicStore((s) => s.cableIdLabelMode);
 
   // selectionKey is the invalidation signal for this getState() snapshot
   const selectedEdges = useMemo(
-    () => useSchematicStore.getState().edges.filter((e) => e.selected),
+    () => selectedConnectionEdges(useSchematicStore.getState().nodes, useSchematicStore.getState().edges),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectionKey],
   );
@@ -54,6 +59,14 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
   const commitBundleLabel = (value: string) => {
     if (bundleId) useSchematicStore.getState().setBundleMeta(bundleId, { label: value.trim() || undefined });
   };
+
+  // --- Stub state (#349) ---
+  // A stubbed connection is two selected legs, so it is counted by its linked id, not by edge.
+  const unstubbedEdges = selectedEdges.filter((e) => !e.data?.linkedConnectionId);
+  const stubbedLinkIds = stubbedLinkIdsOf(selectedEdges);
+  const doStub = () => useSchematicStore.getState().convertEdgesToStubs(unstubbedEdges.map((e) => e.id));
+  const doCollapse = () =>
+    useSchematicStore.getState().collapseStubsForEdges(selectedEdges.map((e) => e.id));
 
   const lineStyles = selectedEdges.map((e) => (e.data?.lineStyle as LineStyle | undefined) ?? "solid");
   const allSameStyle = lineStyles.every((s) => s === lineStyles[0]);
@@ -252,6 +265,35 @@ export default function BulkConnectionEditPanel({ onClose }: Props) {
             )}
           </p>
         )}
+      </section>
+
+      {/* Stubs */}
+      <section className="mb-3">
+        <div className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">
+          {t("Stubs")}
+        </div>
+        <div className="space-y-1">
+          {unstubbedEdges.length > 0 && (
+            <button
+              onClick={doStub}
+              className="w-full px-2 py-1 text-[11px] bg-blue-600 text-white rounded hover:bg-blue-500 cursor-pointer"
+            >
+              {unstubbedEdges.length === 1
+                ? t("Stub 1 connection")
+                : t("Stub {n} connections", { n: unstubbedEdges.length })}
+            </button>
+          )}
+          {stubbedLinkIds.length > 0 && (
+            <button
+              onClick={doCollapse}
+              className="w-full px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-blue-600 border border-[var(--color-border)] rounded hover:border-blue-300 cursor-pointer"
+            >
+              {stubbedLinkIds.length === 1
+                ? t("Show 1 connection in full")
+                : t("Show {n} connections in full", { n: stubbedLinkIds.length })}
+            </button>
+          )}
+        </div>
       </section>
 
       {/* Labels */}

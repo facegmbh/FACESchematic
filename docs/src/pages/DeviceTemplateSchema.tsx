@@ -99,13 +99,14 @@ export default function DeviceTemplateSchemaPage() {
           <tr><td><code>rackForm</code></td><td>string</td><td>Rack-form override — <code>"full"</code>, <code>"half"</code>, or <code>"shelf-only"</code>. Bypasses the size heuristic for edge cases like desktop units with optional rack ears</td></tr>
           <tr><td><code>facePlateLayout</code></td><td>object</td><td>Custom face-plate connector layout (set via the Face-Plate Editor in-app); persists with the template so future placements inherit it</td></tr>
           <tr><td><code>powerDrawW</code></td><td>number</td><td>Max power consumption in watts</td></tr>
-          <tr><td><code>powerCapacityW</code></td><td>number</td><td>For power distros: total capacity in watts</td></tr>
+          <tr><td><code>powerCapacityW</code></td><td>number</td><td>For power distribution, company switches and power supplies: total supply/output capacity in watts</td></tr>
           <tr><td><code>poeBudgetW</code></td><td>number</td><td>For PoE switches: total PoE budget in watts</td></tr>
           <tr><td><code>voltage</code></td><td>string</td><td>e.g. "100-240V" or "12V DC"</td></tr>
           <tr><td><code>thermalBtuh</code></td><td>number</td><td>Thermal load in BTU/h for HVAC sizing. Auto-derived from <code>powerDrawW × 3.412</code> if omitted; specify only when the measured value differs (e.g. devices with low standby dissipation).</td></tr>
           <tr><td><code>unitCost</code></td><td>number</td><td>MSRP / typical unit cost in USD</td></tr>
           <tr><td><code>searchTerms</code></td><td>string[]</td><td>Extra keywords for the device library search</td></tr>
           <tr><td><code>color</code></td><td>string</td><td>Hex color (e.g. "#3b82f6") for the device card</td></tr>
+          <tr><td><code>headerColor</code></td><td>string</td><td>Hex color for the device's header bar. Set on a user template by saving a device whose header color you picked yourself; devices placed from the template take it ahead of the project and app default header color settings. Omit to leave those defaults in charge.</td></tr>
         </tbody>
       </table>
 

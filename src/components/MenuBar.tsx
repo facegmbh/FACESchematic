@@ -280,7 +280,12 @@ export default function MenuBar() {
         if (!session) return;
         const data = store.exportToJSON();
         updateSchematicInCloud(store.cloudSchematicId!, data)
-          .then((result) => store.setCloudSavedAt(result.updated_at))
+          .then((result) => {
+            store.setCloudSavedAt(result.updated_at);
+            // Work is durable in the cloud — safe to resume autosave if a failed
+            // hydrate had paused it (#240).
+            store.resumeAutosave();
+          })
           .catch((e: unknown) => {
             store.addToast(e instanceof Error ? e.message : t("Cloud save failed"), "error");
           });
@@ -291,6 +296,8 @@ export default function MenuBar() {
     if (store.fileHandle) {
       try {
         await writeToFileHandle(store.fileHandle);
+        // Write confirmed — resume autosave if a failed hydrate paused it (#240).
+        store.resumeAutosave();
         store.addToast(t("Saved"), "success", 1500);
         return;
       } catch {
@@ -310,6 +317,10 @@ export default function MenuBar() {
       store.adoptLocalFile(handle);
       try {
         await writeToFileHandle(handle);
+        // Write confirmed — resume autosave if a failed hydrate paused it (#240).
+        // Deliberately AFTER the await: adoptLocalFile above runs before the write
+        // settles, so arming there would clobber the recoverable copy on failure.
+        store.resumeAutosave();
         store.addToast(t("Saved"), "success", 1500);
       } catch (e: unknown) {
         store.addToast(e instanceof Error ? e.message : t("Save failed"), "error");
@@ -335,6 +346,10 @@ export default function MenuBar() {
       store.adoptLocalFile(handle);
       try {
         await writeToFileHandle(handle);
+        // Write confirmed — resume autosave if a failed hydrate paused it (#240).
+        // Deliberately AFTER the await: adoptLocalFile above runs before the write
+        // settles, so arming there would clobber the recoverable copy on failure.
+        store.resumeAutosave();
         store.addToast(t("Saved"), "success", 1500);
       } catch (e: unknown) {
         store.addToast(e instanceof Error ? e.message : t("Save failed"), "error");
@@ -547,6 +562,8 @@ export default function MenuBar() {
       nodes: state.nodes,
       schematicName: state.schematicName,
       titleBlock: state.titleBlock,
+      // The paper picked in the print view, not a hardcoded Letter (#379).
+      paper: getPaperSize(state.printPaperId, state.printCustomWidthIn, state.printCustomHeightIn),
       schematicDefaults: { useShortNames: state.useShortNames, wrapDeviceLabels: state.wrapDeviceLabels },
     });
   };
@@ -604,6 +621,18 @@ export default function MenuBar() {
     newSchematic();
   }, [isLoggedIn, isOnline, newSchematic]);
 
+  /** Seed the test fixture (#307). Dev builds only — see src/testSchematic/load.ts. */
+  const handleLoadTestSchematic = useCallback(async () => {
+    const store = useSchematicStore.getState();
+    try {
+      const { loadTestSchematic } = await import("../testSchematic/load");
+      // False means the overwrite prompt was declined — nothing changed, so no toast.
+      if (await loadTestSchematic()) store.addToast("Test schematic loaded", "success", 2000);
+    } catch (e) {
+      store.addToast(e instanceof Error ? e.message : "Could not load the test schematic", "error");
+    }
+  }, []);
+
   const closeMenu = () => setOpenMenu(null);
 
   const menus: Record<string, MenuEntry[]> = {
@@ -622,6 +651,19 @@ export default function MenuBar() {
       { type: "item", label: t("Import Cable Schedule..."), onClick: () => setShowCsvImport(true) },
       { type: "separator" },
       { type: "item", label: t("Preferences..."), onClick: () => setShowPreferences(true) },
+      // Test scaffolding (#307) — dev builds only. Deployed builds seed the same
+      // fixture with ?fixture=test, so this never reaches the shipped menu.
+      ...(import.meta.env.DEV
+        ? ([
+            { type: "separator" },
+            {
+              type: "item",
+              label: "Load Test Schematic",
+              title: "Replace the current schematic with the seeded test fixture",
+              onClick: handleLoadTestSchematic,
+            },
+          ] as MenuEntry[])
+        : []),
     ],
     Edit: [
       { type: "item", label: t("Undo"), shortcut: "Ctrl+Z", disabled: undoSize === 0, onClick: undo },

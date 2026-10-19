@@ -11,13 +11,13 @@
  */
 
 import { createDefaultLayout } from "./titleBlockLayout";
-import { DEFAULT_CONNECTOR } from "./connectorTypes";
+import { DEFAULT_CONNECTOR, migrateLegacyConnectorTypes } from "./connectorTypes";
 import { defaultStubPlacement } from "./stubPlacement";
 import { createDefaultDrawingBlock } from "./floorplan";
 import { getPortAbsolutePositions } from "./snapUtils";
 import type { SchematicNode } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 48;
+export const CURRENT_SCHEMA_VERSION = 49;
 
 /** Stub-label nodes paint at this z-index so connection lines render UNDER their
  *  white box (matches waypoint/junction z — above edge z, below the 10000 edge labels). */
@@ -714,6 +714,14 @@ const migrations: Record<number, Migration> = {
     data.version = 48;
     return data;
   },
+  48: (data) => {
+    // v48 → v49: FACE's own "cee-7-7" connector becomes upstream's "schuko" (#390), so a
+    // Schuko port drawn before the upstream merge connects, adapts and reports like one
+    // drawn after it. Ports sit on devices, slot cards and embedded templates alike.
+    migrateLegacyConnectorTypes(data);
+    data.version = 49;
+    return data;
+  },
 };
 
 // ---------- v35 → v36 helpers ----------
@@ -1087,6 +1095,23 @@ export function migrateSchematic(data: any): any {
       return n;
     });
     if (changed) data = { ...data, nodes };
+  }
+
+  // Version-independent invariant: `selected` is transient UI state. Saves now
+  // strip it (#384 follow-up), but autosaves and exported files written before
+  // that fix still carry it — restoring one would resurrect a stale selection
+  // that the next Delete keypress operates on. Strip on the way in so legacy
+  // blobs are healed forever.
+  for (const key of ["nodes", "edges"] as const) {
+    if (!Array.isArray(data[key])) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration element
+    if (data[key].some((el: any) => el?.selected !== undefined)) {
+      data = {
+        ...data,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed migration element
+        [key]: data[key].map(({ selected: _s, ...rest }: any) => rest),
+      };
+    }
   }
 
   return data;

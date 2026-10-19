@@ -1,9 +1,17 @@
-import { escapeForMText, escapeForText, fmt } from "./units";
+import { aciFromTrueColor, escapeForMText, escapeForText, fmt } from "./units";
 
 /**
- * Hand-rolled AutoCAD 2000 (AC1015) DXF writer.
+ * Hand-rolled AutoCAD 2004 (AC1018) DXF writer.
  *
- * R2000 requires per-entity handles (group 5), owner refs (group 330), and
+ * The document declares R2004 rather than R2000 because of the group codes it
+ * actually uses: true colour (420) and the MTEXT background-fill block
+ * (90/63/45/441) are both R2004-era, and a strict reader parsing a file that
+ * calls itself R2000 is entitled to drop them. Illustrator's importer is
+ * RealDWG-based and strict; Adobe documents support through AutoCAD 2007, so
+ * R2004 is comfortably inside the range. Nothing else about the output changes
+ * — R2004 is R2000 plus groups we were already writing.
+ *
+ * R2000+ requires per-entity handles (group 5), owner refs (group 330), and
  * AcDb* subclass markers (group 100). Everything that the reader validates
  * is produced here — miss a subclass marker and AutoCAD rejects the file.
  *
@@ -102,9 +110,11 @@ export interface TextStyle {
 }
 
 export interface EntityStyle {
-  /** ACI color (group 62). Defaults to BYLAYER (256). */
+  /** ACI color (group 62). Derived from `trueColor` when omitted; set it
+   *  explicitly only to override that fallback. */
   aci?: number;
-  /** 24-bit true color (group 420). Takes precedence over aci. */
+  /** 24-bit true color (group 420). Takes precedence over aci in any reader
+   *  that understands 420. */
   trueColor?: number;
   /** Linetype name. Defaults to BYLAYER. */
   linetype?: string;
@@ -162,7 +172,7 @@ export class DxfWriter {
 
   writeHeader() {
     this.startSection("HEADER");
-    this.s(9, "$ACADVER"); this.s(1, "AC1015");
+    this.s(9, "$ACADVER"); this.s(1, "AC1018");
     this.s(9, "$DWGCODEPAGE"); this.s(3, "ANSI_1252");
     this.s(9, "$INSBASE");
     this.r(10, 0); this.r(20, 0); this.r(30, 0);
@@ -489,7 +499,13 @@ export class DxfWriter {
     this.s(100, "AcDbEntity");
     this.s(8, layer);
     if (style?.linetype) this.s(6, style.linetype);
+    // Group 62 always accompanies group 420. A reader that ignores 420 — which
+    // is every reader that treats this as an older drawing, Illustrator's
+    // included — otherwise falls back to BYLAYER and paints the entity in the
+    // layer's colour, which is how a whole schematic can come in monochrome or,
+    // on an ACI-7 layer, not come in at all.
     if (style?.aci !== undefined) this.i(62, style.aci);
+    else if (style?.trueColor !== undefined) this.i(62, aciFromTrueColor(style.trueColor));
     if (style?.lineWeight !== undefined) this.i(370, style.lineWeight);
     if (style?.trueColor !== undefined) this.i(420, style.trueColor);
     this.s(100, subclass);
@@ -665,16 +681,45 @@ export class DxfWriter {
     this.s(7, "STANDARD");
     if (opts.rotationDeg) this.r(50, opts.rotationDeg);
     if (opts.backgroundAci !== undefined) {
+      // Group order follows the MTEXT reference — 90, then 45, then 63, then 441.
+      // A lenient reader takes these in any order, but the strict RealDWG-lineage
+      // ones this export has to survive are happier reading them in spec order.
       this.i(90, 1); // background fill flag: use fill color
-      this.i(63, opts.backgroundAci);
       this.r(45, opts.backgroundScale ?? 1.25); // border offset factor
+      this.i(63, opts.backgroundAci);
       this.i(441, 0); // transparency
     }
   }
 
-  /** Solid hatch fill over a single closed rectangular boundary. */
-  addSolidHatchRect(layer: string, x: number, y: number, w: number, h: number, style?: EntityStyle) {
-    this.addSolidHatchPolygon(layer, [
+  /**
+   * Opaque filled quad as a SOLID (AcDbTrace) entity.
+   *
+   * Every opaque fill this exporter draws goes through here rather than through a
+   * HATCH. HATCH is the entity AutoCAD-lineage readers are strictest about — the
+   * boundary-path block, the associativity/seed/pixel-size groups and the pattern
+   * groups all have to line up or the reader reports an undefined group code and
+   * discards the WHOLE drawing, not just the entity (#333). SOLID predates all of
+   * that: four corners, no options, understood by every consumer including the
+   * RealDWG-based importer Illustrator switched to.
+   *
+   * Pass the corners in outline order. SOLID stores the last two swapped — the
+   * quad it paints is 10 → 11 → 13 → 12 — so writing outline order straight
+   * through would draw a bow tie. Three corners emit a triangle (13 repeats 12).
+   */
+  addSolidQuad(layer: string, points: { x: number; y: number }[], style?: EntityStyle) {
+    if (points.length < 3) return;
+    const p0 = points[0], p1 = points[1], p2 = points[2], p3 = points[3] ?? points[2];
+    this.s(0, "SOLID");
+    this.writeEntityPreamble("AcDbTrace", layer, style);
+    this.r(10, p0.x); this.r(20, p0.y); this.r(30, 0);
+    this.r(11, p1.x); this.r(21, p1.y); this.r(31, 0);
+    this.r(12, p3.x); this.r(22, p3.y); this.r(32, 0);
+    this.r(13, p2.x); this.r(23, p2.y); this.r(33, 0);
+  }
+
+  /** Opaque fill over an axis-aligned rectangle. */
+  addSolidFillRect(layer: string, x: number, y: number, w: number, h: number, style?: EntityStyle) {
+    this.addSolidQuad(layer, [
       { x, y },
       { x: x + w, y },
       { x: x + w, y: y + h },
@@ -682,63 +727,46 @@ export class DxfWriter {
     ], style);
   }
 
-  /** Solid hatch fill over a single closed polygon boundary. */
-  addSolidHatchPolygon(layer: string, points: { x: number; y: number }[], style?: EntityStyle) {
+  /**
+   * Opaque fill over a convex polygon, as a fan of SOLID quads anchored on the
+   * first corner. Every shape this exporter fills — rectangle, diamond, triangle,
+   * polygonised ellipse — is convex, so a fan covers it exactly with no overlap.
+   */
+  addSolidFillPolygon(layer: string, points: { x: number; y: number }[], style?: EntityStyle) {
     if (points.length < 3) return;
-    this.s(0, "HATCH");
-    this.writeEntityPreamble("AcDbHatch", layer, style);
-    this.r(10, 0); this.r(20, 0); this.r(30, 0); // elevation
-    this.r(210, 0); this.r(220, 0); this.r(230, 1); // extrusion
-    this.s(2, "SOLID");
-    this.i(70, 1); // solid fill
-    this.i(71, 0); // associativity: non-associative
-    this.i(91, 1); // number of boundary paths
-    // Boundary path: external (1) + polyline (2) = 3
-    this.i(92, 3);
-    this.i(72, 0); // has bulge = 0
-    this.i(73, 1); // closed
-    this.i(93, points.length);
-    for (const p of points) {
-      this.r(10, p.x); this.r(20, p.y);
+    for (let i = 1; i + 1 < points.length; i += 2) {
+      const corners = [points[0], points[i], points[i + 1]];
+      if (i + 2 < points.length) corners.push(points[i + 2]);
+      this.addSolidQuad(layer, corners, style);
     }
-    this.i(97, 0); // source boundary objects count
-    this.i(75, 0); // hatch style: odd parity
-    this.i(76, 1); // hatch pattern type: predefined
-    this.r(47, 1); // pixel size
-    this.i(98, 0); // seed points
   }
 
-  /** Solid hatch over an ellipse boundary. */
-  addSolidHatchEllipse(
+  /**
+   * Opaque fill over an ellipse, polygonised. `majorX`/`majorY` is the major-axis
+   * endpoint relative to the centre and `ratio` the minor/major ratio — the same
+   * arguments `addEllipse` takes, so a fill and its outline stay in step.
+   */
+  addSolidFillEllipse(
     layer: string,
     cx: number, cy: number,
     majorX: number, majorY: number,
     ratio: number,
     style?: EntityStyle,
   ) {
-    this.s(0, "HATCH");
-    this.writeEntityPreamble("AcDbHatch", layer, style);
-    this.r(10, 0); this.r(20, 0); this.r(30, 0);
-    this.r(210, 0); this.r(220, 0); this.r(230, 1);
-    this.s(2, "SOLID");
-    this.i(70, 1);
-    this.i(71, 0);
-    this.i(91, 1);
-    this.i(92, 1); // external, non-polyline
-    this.i(93, 1); // number of edges
-    // Edge: ellipse (type 3)
-    this.i(72, 3);
-    this.r(10, cx); this.r(20, cy);
-    this.r(11, majorX); this.r(21, majorY);
-    this.r(40, ratio);
-    this.r(50, 0);
-    this.r(51, 360);
-    this.i(73, 1); // CCW
-    this.i(97, 0);
-    this.i(75, 0);
-    this.i(76, 1);
-    this.r(47, 1);
-    this.i(98, 0);
+    const SEGMENTS = 48; // sagitta ~0.2% of the radius (r*(1-cos(pi/48))) — invisible in print
+    const major = Math.hypot(majorX, majorY);
+    if (major <= 0) return;
+    const minor = major * ratio;
+    const rot = Math.atan2(majorY, majorX);
+    const cos = Math.cos(rot), sin = Math.sin(rot);
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i < SEGMENTS; i++) {
+      const t = (i / SEGMENTS) * 2 * Math.PI;
+      const ex = major * Math.cos(t);
+      const ey = minor * Math.sin(t);
+      points.push({ x: cx + ex * cos - ey * sin, y: cy + ex * sin + ey * cos });
+    }
+    this.addSolidFillPolygon(layer, points, style);
   }
 
   // ─── OBJECTS ─────────────────────────────────────────────────────────

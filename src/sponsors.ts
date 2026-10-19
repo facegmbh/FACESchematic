@@ -18,4 +18,12 @@ export const sponsors: Sponsor[] = [
     name: "Sean Curtis",
     kind: "individual",
   },
+  {
+    name: "HI-T3C",
+    kind: "individual",
+  },
+  {
+    name: "Brandon Meyers",
+    kind: "individual",
+  },
 ];

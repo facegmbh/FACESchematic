@@ -2,10 +2,12 @@ import { create } from "zustand";
 import {
   applyNodeChanges,
   applyEdgeChanges,
+  reconnectEdge,
   type OnNodesChange,
   type OnEdgesChange,
   type OnConnect,
   type Connection,
+  type Edge,
 } from "@xyflow/react";
 import type {
   DeviceNode,
@@ -53,11 +55,14 @@ import type {
   FloorplanLine,
 } from "./types";
 import type { ReactFlowInstance } from "@xyflow/react";
-import type { SignalType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, ProjectStatus } from "./types";
-import { defaultStubPlacement, healStubPortAlignment, STUB_W_EST } from "./stubPlacement";
-import { getPortAbsolutePositions } from "./snapUtils";
+import type { SignalType, ConnectorType, ScrollConfig, LineStyle, LabelCaseMode, DistanceSettings, PanMode, StubLabelPageMode, DefaultConnectionType, ProjectStatus } from "./types";
+import { defaultStubPlacement, healStubPortAlignment, nearestStubHandleSide, reconcileStubPairs, stubTagEndOf, STUB_H_EST, STUB_W_EST } from "./stubPlacement";
+import { estimateDeviceHeight, getPortAbsolutePositions, parentOffsetFromMap, settleTagsAfterMove, tagHostId } from "./snapUtils";
+import { findFreeAdapterSlot, ADAPTER_GAP, DEVICE_W_EST } from "./adapterPlacement";
+import { resolveHiddenAdapterIds } from "./adapterVisibility";
+import { findPortByHandle } from "./portHandles";
 import { textStubSideForPort, textStubBoxPosition } from "./textStub";
-import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_HEADER_COLOR, portSide } from "./types";
+import { DEFAULT_SCROLL_CONFIG, DEFAULT_LABEL_CASE, DEFAULT_DISTANCE_SETTINGS, DEFAULT_PAN_MODE, DEFAULT_STUB_LABEL_SHOW_ARROW, DEFAULT_STUB_LABEL_SHOW_PORT, DEFAULT_STUB_LABEL_SHOW_ROOM, DEFAULT_STUB_LABEL_PAGE_MODE, DEFAULT_STUB_LABEL_MODE, DEFAULT_CONNECTION_TYPE, DEFAULT_HEADER_COLOR, portSide } from "./types";
 import {
   DEFAULT_FLOORPLAN_SCALE,
   DEFAULT_HEATMAP,
@@ -66,6 +71,18 @@ import {
   DEFAULT_FLOORPLAN_NOTE_FONT_MM,
   DEFAULT_FLOORPLAN_NOTE_WIDTH_MM,
 } from "./types";
+import {
+  loadAppDefaultHeaderColor,
+  normalizeHeaderColor,
+  resolveDeviceHeaderColor,
+  saveAppDefaultHeaderColor,
+} from "./deviceHeaderColor";
+import {
+  loadAppDefaultStubLabelMode,
+  normalizeStubLabelMode,
+  resolveDefaultStubLabelMode,
+  saveAppDefaultStubLabelMode,
+} from "./stubLabelModeDefault";
 import { pairKey } from "./roomDistance";
 import { t } from "./i18n";
 import {
@@ -98,7 +115,7 @@ import { reconcileWaypointNodes, syncEdgesFromWaypointNodes, spliceWaypointsForR
 import { computeHandleInsertion } from "./edgeHandles";
 import { orthogonalize, extractSegments, segmentsCross, type RoutedEdge, type CrossingPoint } from "./edgeRouter";
 import { simplifyWaypoints, waypointsToSvgPath, waypointsToSvgPathWithHops } from "./pathfinding";
-import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, areSignalPairsCompatible, effectiveSignalType } from "./connectorTypes";
+import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, resolveSignalBridgePorts, resolveConnectorBridgePorts, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, areSignalPairsCompatible, effectiveSignalType, migrateLegacyConnectorTypes } from "./connectorTypes";
 import { inferRackHeightU, inferRackForm, shelfFootprintMm, shelfInnerWidthMm } from "./rackUtils";
 import { mergeCustomTemplates } from "./templateExport";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
@@ -316,7 +333,7 @@ let hydrated = false;
 // snapUtils) must import directly from "./gridConstants" — pulling it through
 // the store causes a TDZ error on first load because of the cycle.
 export { GRID_SIZE } from "./gridConstants";
-import { GRID_SIZE, DEVICE_NODE_WIDTH } from "./gridConstants";
+import { GRID_SIZE } from "./gridConstants";
 
 /** Snap all node positions to the grid. Mutates the array in place.
  *  Stub labels are skipped — they store sub-grid Y to center the box on a
@@ -344,6 +361,28 @@ function applyWaypointHeal(nodes: SchematicNode[], edges: ConnectionEdge[]): Con
   return healedEdges;
 }
 
+/** A corrupt save (hand-merged Dropbox conflict) can carry a cyclic parentId
+ *  chain. The store's own walks are cycle-guarded, but React Flow's parent
+ *  resolution and the edge router are not — detach the node that closes each
+ *  cycle so the schematic can actually render (#322). */
+function breakParentCycles(nodes: SchematicNode[]): SchematicNode[] {
+  const byId = new Map<string, SchematicNode>();
+  for (const n of nodes) byId.set(n.id, n);
+  for (const n of nodes) {
+    const seen = new Set<string>();
+    let cur: SchematicNode | undefined = n;
+    while (cur?.parentId) {
+      if (seen.has(cur.id)) {
+        cur.parentId = undefined;
+        break;
+      }
+      seen.add(cur.id);
+      cur = byId.get(cur.parentId);
+    }
+  }
+  return nodes;
+}
+
 function snapNodesToGrid(nodes: SchematicNode[]): SchematicNode[] {
   for (const n of nodes) {
     // Stub labels are healed against their REAL partner port at routing time
@@ -352,6 +391,12 @@ function snapNodesToGrid(nodes: SchematicNode[]): SchematicNode[] {
     // colinearity with such ports (kink at the label). Leave their stored Y alone.
     // Text stubs (#196) store the same sub-grid, port-centred Y for the same reason.
     if (n.type === "stub-label" || n.type === "text-stub") continue;
+    // Rounding RELATIVE coords is safe here even for parented nodes: this pass
+    // snaps every ancestor room too, so each ancestor origin lands on a grid
+    // multiple and the child's absolute position comes out grid-aligned. Room
+    // origins only go off-grid through LATER geometry edits (edge-aligned
+    // resizes) — snapRoomChildrenToGrid re-snaps children in absolute space
+    // when that happens (#322).
     n.position.x = Math.round(n.position.x / GRID_SIZE) * GRID_SIZE;
     n.position.y = Math.round(n.position.y / GRID_SIZE) * GRID_SIZE;
   }
@@ -391,6 +436,39 @@ interface Clipboard {
   boundsHeight: number;
 }
 
+/** A connection that a port edit left invalid, awaiting a user decision (#306). */
+export interface PortEditConflict {
+  edgeId: string;
+  source: string;
+  target: string;
+  sourceHandle: string | null;
+  targetHandle: string | null;
+  sourcePort: Port;
+  targetPort: Port;
+  /** Effective connector each end of this cable actually plugs into — a passthrough
+   *  port's front/rear face connector, a plain port's connectorType. */
+  sourceConnector?: ConnectorType;
+  targetConnector?: ConnectorType;
+  /** Effective signal at each end (resolves inherited passthrough signals). */
+  sourceSignal: SignalType;
+  targetSignal: SignalType;
+  /** "incompatible" covers failures no adapter can bridge — a direction flip,
+   *  a revoked multi-connect, a multicore toggle on one end. */
+  reason: "signal-mismatch" | "connector-mismatch" | "incompatible";
+  /** Set when an attempted adapter insertion could not bridge this cable, so the
+   *  dialog can say so and offer the remaining resolutions. */
+  adapterFailed?: boolean;
+}
+
+/**
+ * What a re-route drag did to the connection it grabbed. "stub-label-end" means the drag
+ * was holding a stub tag rather than a real connection end: the tag is not a port, so
+ * nothing was changed and no undo step was pushed (#318). Both device ends of a stubbed
+ * connection are true ends and behave like any other — dropped on a port they re-route,
+ * dropped in empty space they disconnect.
+ */
+export type ReconnectOutcome = "reconnected" | "deleted" | "stub-label-end" | "none";
+
 interface SchematicState {
   nodes: SchematicNode[];
   edges: ConnectionEdge[];
@@ -411,7 +489,10 @@ interface SchematicState {
 
   // Actions
   addDevice: (template: DeviceTemplate, position: { x: number; y: number }) => void;
-  removeSelected: () => void;
+  /** removedStubLinks counts whole stubbed connections (both halves + both labels)
+   *  cascaded away because only one half was selected — callers that need to report
+   *  the cascade (the MCP bridge) can use it; UI callers ignore it. */
+  removeSelected: () => { removedStubLinks: number };
   deleteNode: (nodeId: string) => void;
   deleteNodeAndChildren: (nodeId: string) => void;
   /** Reposition a single node within its current parent (one undo step). Does not
@@ -420,7 +501,15 @@ interface SchematicState {
   /** Remove a single connection by id via the standard removeSelected path (so bundle
    *  GC, junction + waypoint reconciliation all run). Used by the bridge's
    *  delete_connection tool. */
-  deleteConnection: (connectionId: string) => void;
+  deleteConnection: (connectionId: string) => { removedStubLinks: number };
+  /** Re-route one end of a connection onto a port the user dropped it on. Keeps the
+   *  connection id — cable IDs, path handles and patch hops are all keyed by it. One
+   *  undo step; a refused drop pushes none. */
+  reconnectConnectionEnd: (oldEdge: Edge, newConnection: Connection) => ReconnectOutcome;
+  /** A re-route drag released over empty space: disconnect the end being held, which
+   *  deletes the connection. `draggedEndNodeId` is the node that end sits on. One undo
+   *  step; a refused drop pushes none. */
+  disconnectConnectionEnd: (edgeId: string, draggedEndNodeId: string | null) => ReconnectOutcome;
   copySelected: () => void;
   pasteClipboard: () => void;
   alignSelectedNodes: (op: AlignOperation) => void;
@@ -430,7 +519,7 @@ interface SchematicState {
   updateDeviceShortName: (nodeId: string, shortName: string) => void;
   batchUpdateDeviceShortNames: (changes: { nodeId: string; shortName: string }[]) => void;
   updateDevice: (nodeId: string, data: DeviceData) => void;
-  /** Patch device data without clearing baseLabel (for spreadsheet edits). */
+  /** Merge a partial into device data — no renumbering, no port revalidation (for spreadsheet edits). */
   patchDeviceData: (nodeId: string, patch: Partial<DeviceData>) => void;
   /** Patch many devices in one undo step (bulk property edit of a multi-selection).
    *  Keys set to `undefined` are deleted. Runs auto-numbering, so patches may set
@@ -506,6 +595,13 @@ interface SchematicState {
   /** Called when a room's NodeResizer finishes. Snapshots undo and reconciles
    *  device membership against the new bounds. */
   onRoomResizeEnd: (nodeId: string) => void;
+  /** Re-snap every node parented (directly or transitively) under `roomId` onto
+   *  the ABSOLUTE grid. Room geometry changes (drag, edge resize) shift children
+   *  by the origin delta, which is not grid-aligned when the origin sits off-grid
+   *  — ports then miss the routing grid and cables to outside devices kink (#322).
+   *  `extraIds` widens the pass to nodes no longer under the room — a shrink can
+   *  detach a former child at its shifted (off-grid) absolute position. */
+  snapRoomChildrenToGrid: (roomId: string, extraIds?: ReadonlySet<string>) => void;
 
   // Undo/Redo
   pushSnapshot: () => void;
@@ -562,8 +658,17 @@ interface SchematicState {
   batchPatchEdgeData: (changes: { edgeId: string; patch: Partial<import("./types").ConnectionData> }[]) => void;
 
   // Stub conversion (real React Flow nodes for the labels)
-  convertEdgeToStubs: (edgeId: string) => void;
+  convertEdgeToStubs: (edgeId: string, opts?: { silentBundleToast?: boolean }) => void;
   collapseStubsForEdge: (edgeId: string) => void;
+  /** Stub every listed connection that isn't stubbed already, as one undo step (#349).
+   *  Already-stubbed connections are left exactly as they are. */
+  convertEdgesToStubs: (edgeIds: string[]) => void;
+  /** Show every listed stubbed connection in full again, as one undo step (#349). Both
+   *  legs of one stubbed connection may be listed; it collapses once. */
+  collapseStubsForEdges: (edgeIds: string[]) => void;
+  /** What a newly drawn connection becomes — a routed wire, or stubbed at both ends (#353). */
+  defaultConnectionType: DefaultConnectionType;
+  setDefaultConnectionType: (type: DefaultConnectionType) => void;
 
   // Manual edge routing
   /** Add one routing handle to `edgeId` at a canvas position, selecting the edge so the
@@ -648,6 +753,8 @@ interface SchematicState {
   printCustomHeightIn: number;
   printOriginOffsetX: number;
   printOriginOffsetY: number;
+  /** Print view title block shown on pages and in the PDF; hiding it gives its band to the drawing (#388). */
+  printTitleBlockEnabled: boolean;
   // Color key / signal legend for print view
   colorKeyEnabled: boolean;
   colorKeyCorner: "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -670,6 +777,7 @@ interface SchematicState {
   setRoomDistance: (roomIdA: string, roomIdB: string, distance: number | undefined) => void;
   clearRoomDistance: (roomIdA: string, roomIdB: string) => void;
   setDistanceSettings: (partial: Partial<DistanceSettings>) => void;
+  setPrintTitleBlockEnabled: (v: boolean) => void;
   setColorKeyEnabled: (v: boolean) => void;
   setColorKeyCorner: (c: "top-left" | "top-right" | "bottom-left" | "bottom-right") => void;
   setColorKeyColumns: (n: number) => void;
@@ -706,7 +814,9 @@ interface SchematicState {
   reportLayouts: Record<string, unknown>;
   setReportLayout: (key: string, layout: unknown) => void;
   reportHiddenColumns: Record<string, string[]>;
-  setReportHiddenColumns: (tableId: string, columnIds: string[]) => void;
+  /** Pass `undefined` to forget the preference entirely, restoring whatever default the
+   *  table computes for itself (the Patch Panel Schedule's automatic single-face columns). */
+  setReportHiddenColumns: (tableId: string, columnIds: string[] | undefined) => void;
   globalReportHeaderLayout: TitleBlockLayout | null;
   globalReportFooterLayout: TitleBlockLayout | null;
   setGlobalReportHeaderLayout: (layout: TitleBlockLayout) => void;
@@ -763,10 +873,20 @@ interface SchematicState {
     sourcePort: Port;
     targetPort: Port;
     reason: "signal-mismatch" | "connector-mismatch";
+    /** When set, the adapter replaces this existing connection instead of joining a new one (#306). */
+    replaceEdgeId?: string;
   } | null;
   dismissIncompatibleDialog: () => void;
   forceIncompatibleConnection: () => void;
-  insertAdapterBetween: (template: DeviceTemplate) => void;
+  /** Returns false when a replace-mode insertion could not resolve both adapter
+   *  legs, in which case nothing was committed (#306). */
+  insertAdapterBetween: (template: DeviceTemplate) => boolean;
+
+  // Port-edit revalidation dialog (#306): connections a port edit made invalid
+  pendingPortEditConflicts: PortEditConflict[] | null;
+  resolvePortEditConflict: (edgeId: string, action: "disconnect" | "keep" | "adapter", adapterTemplate?: DeviceTemplate) => void;
+  resolveAllPortEditConflicts: (action: "disconnect" | "keep") => void;
+  dismissPortEditConflicts: () => void;
 
   // Adapter visibility (#adapter-overhaul)
   hideAdapters: boolean;
@@ -841,6 +961,8 @@ interface SchematicState {
   setCableIdMidOffset: (offset: number) => void;
   cableIdLabelMode: "endpoint" | "midpoint";
   setCableIdLabelMode: (mode: "endpoint" | "midpoint") => void;
+  stubLabelShowArrow: boolean;
+  setStubLabelShowArrow: (show: boolean) => void;
   stubLabelShowPort: boolean;
   setStubLabelShowPort: (show: boolean) => void;
   stubLabelShowRoom: boolean;
@@ -851,6 +973,29 @@ interface SchematicState {
   setUseShortNames: (use: boolean) => void;
   wrapDeviceLabels: boolean;
   setWrapDeviceLabels: (wrap: boolean) => void;
+
+  /** Default device header color (#354). The app preference is an editor preference shared
+   *  by every project on this machine (localStorage); the project override travels with the
+   *  schematic file and wins where set. Both apply to devices placed from here on —
+   *  devices already on the canvas are never recolored. */
+  appDefaultDeviceHeaderColor: string | undefined;
+  setAppDefaultDeviceHeaderColor: (color: string | undefined) => void;
+  defaultDeviceHeaderColor: string | undefined;
+  setDefaultDeviceHeaderColor: (color: string | undefined) => void;
+
+  /** Default stub tag mode (#377) — what both tags of a newly stubbed connection print.
+   *  Same shape as the default header color: the app preference lives in localStorage and
+   *  applies to every project; the project override travels with the file and wins where
+   *  set. Stamped when a connection is stubbed; tags already on the canvas never change. */
+  appDefaultStubLabelMode: import("./types").StubLabelMode;
+  setAppDefaultStubLabelMode: (mode: import("./types").StubLabelMode) => void;
+  defaultStubLabelMode: import("./types").StubLabelMode | undefined;
+  setDefaultStubLabelMode: (mode: import("./types").StubLabelMode | undefined) => void;
+  /** Set what a stub tag prints on BOTH tags of its stubbed connection, as one undo step —
+   *  the two tags are one cable, so they never disagree about it (#376). */
+  setStubLabelMode: (nodeId: string, mode: import("./types").StubLabelMode) => void;
+  /** Flip a stub tag between "full" and "cableId" (and its partner with it), one undo step. */
+  toggleStubLabelMode: (nodeId: string) => void;
   patchStubLabelData: (nodeId: string, patch: Partial<import("./types").StubLabelData>) => void;
   /** Attach a free-text stub to a single device port (#196). No edge/connection is
    *  created; the new node starts in edit mode. */
@@ -1001,6 +1146,8 @@ interface SchematicState {
   saveToLocalStorage: () => void;
   /** Reconcile stored underlay source files with what the open project references. */
   pruneUnderlaySources: () => void;
+  /** Re-arm autosave after a confirmed successful write (#240). */
+  resumeAutosave: () => void;
   loadFromLocalStorage: () => boolean;
   exportToJSON: () => SchematicFile;
   /** exportToJSON plus the floorplan underlays' source files, for a save to a file. Async
@@ -1150,14 +1297,18 @@ function syncRackCounters(pages: SchematicPage[]) {
     const pm = page.id.match(/^rackpage-(\d+)$/);
     if (pm) rackPageIdCounter = Math.max(rackPageIdCounter, Number(pm[1]));
     if (page.type === "print-sheet") {
+      // The print-sheet id counter must advance for EVERY print sheet, even one
+      // with no viewports: a new sheet is created with `viewports: []`, so nesting
+      // this bump inside the viewport loop below left plain sheets unable to
+      // advance the counter on reload — the next new sheet then reused the id.
+      const sm = page.id.match(/^printsheet-(\d+)$/);
+      if (sm) printSheetIdCounter = Math.max(printSheetIdCounter, Number(sm[1]));
       // Arrays default to [] — an older/partial page missing these would throw
       // "not iterable" here, AFTER importFromJSON already loaded the schematic,
       // surfacing to callers as a false "Invalid schematic file." (#176)
       for (const vp of page.viewports ?? []) {
         const vm = vp.id.match(/^viewport-(\d+)$/);
         if (vm) viewportIdCounter = Math.max(viewportIdCounter, Number(vm[1]));
-        const sm = page.id.match(/^printsheet-(\d+)$/);
-        if (sm) printSheetIdCounter = Math.max(printSheetIdCounter, Number(sm[1]));
       }
       continue;
     }
@@ -1239,9 +1390,48 @@ const redoStack: Snapshot[] = [];
 /** If set, the next pushUndo call uses this instead of the passed snapshot. */
 let pendingUndoSnapshot: Snapshot | null = null;
 
-/** Set while runAsSingleUndoStep is running, so nested pushUndo calls collapse into one. */
-let undoBatchActive = false;
-let undoBatchPushed = false;
+/**
+ * While set, pushUndo only counts the call instead of recording it — runAsSingleUndoStep
+ * pushes one entry for the whole batch itself. Counting rather than dropping silently is
+ * what tells the batch whether anything actually changed the schematic.
+ */
+let suppressedUndoPushes: { count: number } | null = null;
+
+/** Same idea for saveToLocalStorage: a bulk loop saves once at the end, not per step. */
+let deferredSave: { pending: boolean } | null = null;
+
+/**
+ * Trailing-debounce autosave for the paths that fire every pointer-move frame —
+ * node drags, marquee sweeps, NodeResizer gestures, print-sheet viewport drags.
+ * Serializing the whole schematic on each frame thrashed RAM on ~100-object
+ * selections (#384). A trailing debounce needs no per-gesture end signal, so it
+ * also covers gestures that never send one (an aborted touch drag emits no
+ * dragging=false batch). Discrete actions keep calling saveToLocalStorage
+ * directly; the pagehide/hidden flush below covers a close straight after a
+ * gesture.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 250;
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleAutosave() {
+  if (autosaveTimer !== null) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null;
+    useSchematicStore.getState().saveToLocalStorage();
+  }, AUTOSAVE_DEBOUNCE_MS);
+}
+/** Exported as a test seam — production callers are the pagehide/hidden listeners below. */
+export function flushAutosave() {
+  if (autosaveTimer === null) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  useSchematicStore.getState().saveToLocalStorage();
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushAutosave);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAutosave();
+  });
+}
 
 /** Edge ID being reconnected — excluded from isValidConnection duplicate checks. */
 let _reconnectingEdgeId: string | null = null;
@@ -1250,11 +1440,9 @@ export function setReconnectingEdgeId(id: string | null) {
 }
 
 function pushUndo(partial: { nodes: SchematicNode[]; edges: ConnectionEdge[]; autoRoute?: boolean }) {
-  // Inside runAsSingleUndoStep only the first push survives — it carries the pre-batch
-  // snapshot, so N per-item actions collapse into one undo entry instead of N.
-  if (undoBatchActive) {
-    if (undoBatchPushed) return;
-    undoBatchPushed = true;
+  if (suppressedUndoPushes) {
+    suppressedUndoPushes.count++;
+    return;
   }
   const liveState = useSchematicStore?.getState?.();
   const pages = liveState?.pages ?? [];
@@ -1267,6 +1455,112 @@ function pushUndo(partial: { nodes: SchematicNode[]; edges: ConnectionEdge[]; au
   // Sync reactive counters so undo/redo buttons stay in sync
   useSchematicStore.setState({ undoSize: undoStack.length, redoSize: 0 });
 }
+
+/**
+ * Hand a just-drawn connection to the same conversion the right-click ▸ Stub Connection
+ * action runs, when the schematic's default says new connections arrive stubbed (#353).
+ * Returns true when the conversion ran — it saves on its way out, so the caller skips
+ * its own save.
+ *
+ * convertEdgeToStubs pushes an undo entry off the just-wired state; that entry is
+ * dropped so one undo takes the whole gesture back to before the connection existed
+ * rather than leaving a bare wire behind. Whether it pushed is decided by the top of
+ * the stack changing identity, NOT by its length: pushUndo caps the history by pushing
+ * and then shifting, so a stack already at MAX_HISTORY comes back the same length it
+ * went in and a length comparison would silently stop popping.
+ */
+function applyDefaultConnectionType(edgeId: string): boolean {
+  const store = useSchematicStore.getState();
+  if (store.defaultConnectionType !== "stub") return false;
+  const topBefore = undoStack[undoStack.length - 1];
+  store.convertEdgeToStubs(edgeId);
+  if (undoStack[undoStack.length - 1] === topBefore) return false;
+  undoFailedPush();
+  useSchematicStore.setState({ undoSize: undoStack.length });
+  return true;
+}
+
+/**
+ * Unwind a pushUndo() that turned out to precede a failure, so the failed action leaves no
+ * undo entry behind (#365).
+ *
+ * A bare `undoStack.pop()` at the call site assumes the preceding pushUndo actually pushed —
+ * true outside a batch, but inside a suppressed runAsSingleUndoStep batch pushUndo only
+ * incremented the suppression counter and touched neither stack. Popping the real stack there
+ * would destroy an unrelated pre-batch entry instead of the (never-pushed) suppressed one, so
+ * this routes the unwind through whichever bookkeeping the matching pushUndo actually did.
+ *
+ * The dev-mode checks assert the invariant a corrupting pop would have violated: pops never
+ * outnumber pushes, in the live suppression counter or on the real stack.
+ */
+function undoFailedPush(): void {
+  if (suppressedUndoPushes) {
+    if (import.meta.env.DEV && suppressedUndoPushes.count <= 0) {
+      throw new Error(
+        "undoFailedPush: popped more times than pushed in the current suppressed undo batch",
+      );
+    }
+    suppressedUndoPushes.count = Math.max(0, suppressedUndoPushes.count - 1);
+    return;
+  }
+  if (import.meta.env.DEV && undoStack.length === 0) {
+    throw new Error("undoFailedPush: popped an empty undo stack");
+  }
+  undoStack.pop();
+}
+
+/**
+ * Run a single-connection action across many connections and leave ONE undo entry, so a
+ * bulk gesture comes back in a single Ctrl+Z (#349).
+ *
+ * The inner calls' pushes are suppressed outright rather than pushed and popped back off:
+ * pushUndo caps the history by pushing and then shifting, so throwaway pushes would still
+ * evict real entries off the BOTTOM of the stack — and a batch larger than MAX_HISTORY
+ * would evict its own pre-loop snapshot, leaving the whole bulk action un-undoable. The
+ * one entry the batch does push carries pages and bundles too, which matters because
+ * stubbing a bundled member can dissolve its bundle.
+ *
+ * Saves are deferred the same way, so a 100-connection bulk serializes the document once.
+ */
+function runAsSingleUndoStep(ids: string[], apply: (id: string) => void) {
+  if (ids.length === 0) return;
+  const state = useSchematicStore.getState();
+  const before: Snapshot = structuredClone({
+    nodes: state.nodes,
+    edges: state.edges,
+    pages: state.pages,
+    bundles: state.bundles,
+  });
+  const previousPending = pendingUndoSnapshot;
+  // Restore, don't reset: a batch nested inside another suppressed batch must hand the outer
+  // batch its own suppression and deferred save back (#370).
+  const previousSuppressed = suppressedUndoPushes;
+  const previousDeferredSave = deferredSave;
+  const suppressed = { count: 0 };
+  const save = { pending: false };
+  suppressedUndoPushes = suppressed;
+  deferredSave = save;
+  try {
+    for (const id of ids) apply(id);
+  } finally {
+    suppressedUndoPushes = previousSuppressed;
+    deferredSave = previousDeferredSave;
+  }
+  // Every action bailed without changing anything — no undo entry, nothing to save.
+  if (suppressed.count === 0) return;
+  pendingUndoSnapshot = before;
+  pushUndo({ nodes: before.nodes, edges: before.edges });
+  pendingUndoSnapshot = previousPending; // pushUndo cleared it; hand any outer gesture its own back
+  if (save.pending) useSchematicStore.getState().saveToLocalStorage();
+}
+
+/**
+ * Test-only seam (#365): exposes the bulk-undo suppression machinery — runAsSingleUndoStep
+ * and its matching failure-unwind helper — so tests can drive a per-item action that pushes
+ * and then fails mid-batch, the exact shape that used to spring the bare-pop trap, without
+ * waiting for a real bulk action to grow one. Not read by any UI path.
+ */
+export const __undoBatchInternalsForTest = { runAsSingleUndoStep, undoFailedPush };
 
 // ── Async routing (Web Worker) plumbing ──────────────────────────────────
 // recomputeRoutes posts a seq-tagged request to the routing worker and stashes the main-thread-only
@@ -1336,8 +1630,15 @@ function applyRoutingResult(r: RoutingResult): void {
   });
 }
 
+// Monotonic suffix so two clone calls in the same millisecond can't produce identical port IDs.
+// This happens when several devices are cloned in one synchronous tick (e.g. a multi-device paste,
+// or two copies of the same slotted template — cloneCardPorts' slotId is template-local, not
+// instance-unique, so it collides the same way). Resets on reload; the Date.now() prefix keeps IDs
+// distinct across sessions.
+let portClonePrefixSeq = 0;
+
 function clonePorts(ports: Port[]): Port[] {
-  const prefix = `p${Date.now()}`;
+  const prefix = `p${Date.now()}-${portClonePrefixSeq++}`;
   return ports.map((p, i) => {
     const clone: Port = { ...p, id: `${prefix}-${i}` };
     // Deep clone nested objects
@@ -1350,7 +1651,7 @@ function clonePorts(ports: Port[]): Port[] {
 
 /** Clone ports for a card installed in a slot, namespacing IDs and setting section. */
 function cloneCardPorts(ports: Port[], slotId: string, slotLabel: string): Port[] {
-  const prefix = `slot-${slotId}-${Date.now()}`;
+  const prefix = `slot-${slotId}-${Date.now()}-${portClonePrefixSeq++}`;
   return ports.map((p, i) => {
     const clone: Port = { ...p, id: `${prefix}-${i}`, section: slotLabel };
     if (p.capabilities) clone.capabilities = { ...p.capabilities };
@@ -1458,6 +1759,31 @@ function renumberNodes(nodes: SchematicNode[]): SchematicNode[] {
   });
 }
 
+/** Is this device still wearing the name the app gave it, or did the user type one?
+ *
+ *  `baseLabel` is the live marker — renumberNodes owns the label while it is set and a
+ *  rename clears it — but it is absent on plenty of real devices: everything saved
+ *  through the device editor before #333, plus hand-authored, imported and pre-v9
+ *  files that never carried one. `model` is the template name the device was placed
+ *  from and no rename touches it, so a label of exactly `model`, or `${model} <n>` as
+ *  renumberNodes would have written it, is still an app-assigned name.
+ *
+ *  Deliberately not persisted as a baseLabel backfill: writing baseLabel back would
+ *  hand these devices to renumberNodes, which renames on load. Reading the fallback
+ *  only where the question is asked keeps the effect inside the action the user
+ *  invoked. */
+export function isAutoNamedDevice(
+  data: Pick<DeviceData, "label" | "baseLabel" | "model">,
+): boolean {
+  if (data.baseLabel) return true;
+  const model = data.model;
+  if (!model) return false;
+  if (data.label === model) return true;
+  if (!data.label.startsWith(`${model} `)) return false;
+  const suffix = data.label.slice(model.length + 1);
+  return suffix.length > 0 && /^\d+$/.test(suffix);
+}
+
 /** Ensure parent nodes appear before their children in the array (topological sort). */
 function sortNodesParentFirst(nodes: SchematicNode[]): SchematicNode[] {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
@@ -1466,8 +1792,10 @@ function sortNodesParentFirst(nodes: SchematicNode[]): SchematicNode[] {
 
   function visit(n: SchematicNode) {
     if (visited.has(n.id)) return;
-    if (n.parentId && nodeMap.has(n.parentId)) visit(nodeMap.get(n.parentId)!);
+    // Mark on entry so a cyclic parentId chain (corrupt save) terminates
+    // instead of recursing forever; ordering is unchanged for acyclic input.
     visited.add(n.id);
+    if (n.parentId && nodeMap.has(n.parentId)) visit(nodeMap.get(n.parentId)!);
     result.push(n);
   }
 
@@ -1485,18 +1813,22 @@ function getAbsolutePosition(
   const n = nodeMap.get(nodeId);
   if (!n) return { x: 0, y: 0 };
   if (!n.parentId) return n.position;
-  const p = getAbsolutePosition(n.parentId, nodeMap);
-  return { x: n.position.x + p.x, y: n.position.y + p.y };
+  const { dx, dy } = parentOffsetFromMap(n, nodeMap);
+  return { x: n.position.x + dx, y: n.position.y + dy };
 }
 
-/** True if ancestorId is an ancestor of childId (prevents circular nesting). */
+/** True if ancestorId is an ancestor of childId (prevents circular nesting).
+ *  Tolerates cyclic parentId chains from corrupt saves — a revisited id ends
+ *  the walk instead of hanging. */
 function isAncestorOf(
   ancestorId: string,
   childId: string,
   nodeMap: Map<string, SchematicNode>,
 ): boolean {
+  const seen = new Set<string>();
   let cur = nodeMap.get(childId);
-  while (cur?.parentId) {
+  while (cur?.parentId && !seen.has(cur.id)) {
+    seen.add(cur.id);
     if (cur.parentId === ancestorId) return true;
     cur = nodeMap.get(cur.parentId);
   }
@@ -1551,36 +1883,6 @@ function nodeCenterFromAbsolute(
   return { x: absolutePosition.x + w / 2, y: absolutePosition.y + h / 2 };
 }
 
-/** #182: when a device moves, clear `placed` on its connected auto-placed stub
- *  labels so they re-follow the device's port instead of stranding with a dogleg.
- *  A stub leg is an edge with exactly one stub-label end; the other end is the
- *  device. User-positioned stub labels are left alone. Returns a new nodes array
- *  (or the same array when nothing needs clearing). Shared by moveDevice and
- *  placeDeviceInRoom so the "which stubs follow" logic lives in one place. */
-function reanchorConnectedStubLabels(
-  nodes: SchematicNode[],
-  edges: ConnectionEdge[],
-  deviceId: string,
-): SchematicNode[] {
-  const stubIds = new Set(nodes.filter((n) => n.type === "stub-label").map((n) => n.id));
-  const followStubs = new Set<string>();
-  for (const e of edges) {
-    const srcStub = stubIds.has(e.source);
-    const tgtStub = stubIds.has(e.target);
-    if (srcStub === tgtStub) continue; // not a stub leg
-    const devEnd = srcStub ? e.target : e.source;
-    if (devEnd === deviceId) followStubs.add(srcStub ? e.source : e.target);
-  }
-  if (followStubs.size === 0) return nodes;
-  return nodes.map((n) => {
-    if (followStubs.has(n.id) && n.type === "stub-label") {
-      const d = n.data as import("./types").StubLabelData;
-      if (!d.userMoved && d.placed === true) return { ...n, data: { ...d, placed: false } };
-    }
-    return n;
-  });
-}
-
 function getPortFromHandle(
   nodes: SchematicNode[],
   nodeId: string,
@@ -1589,14 +1891,388 @@ function getPortFromHandle(
   if (!handleId) return undefined;
   const node = nodes.find((n) => n.id === nodeId);
   if (!node || node.type !== "device") return undefined;
-  const ports = (node.data as DeviceData).ports;
-  // Direct match first
-  const direct = ports.find((p) => p.id === handleId);
-  if (direct) return direct;
-  // Bidirectional handles: "{portId}-in" / "{portId}-out"
-  // Passthrough handles:   "{portId}-rear" / "{portId}-front"
-  const baseId = handleId.replace(/-(in|out|rear|front)$/, "");
-  return ports.find((p) => p.id === baseId);
+  return findPortByHandle(node.data as DeviceData, handleId);
+}
+
+/**
+ * Re-route validity for ONE LEG of a stubbed connection, whose tag end is a stub-label
+ * node rather than a port (#318).
+ *
+ * The plain rules below can't judge this: they resolve both ends to ports and a tag has
+ * none, so every leg came back invalid and a drop on a perfectly good port was read as a
+ * release over empty space — deleting the pair. The tag is only a stand-in for the device
+ * at the far end of the logical cable, so validate what the cable really joins: the port
+ * being dropped on against the port on the partner leg's device, in the leg's own
+ * direction. Both legs drop out of the edge list first — they ARE this cable, so they
+ * must not count against the handle-occupancy guards.
+ */
+function validateStubLegConnection(
+  nodes: SchematicNode[],
+  edges: ConnectionEdge[],
+  connection: Connection,
+  tagId: string,
+  excludeEdgeId: string | null,
+): boolean {
+  const tag = nodes.find((n) => n.id === tagId);
+  if (!tag || tag.type !== "stub-label") return false;
+  const linkId = (tag.data as import("./types").StubLabelData).linkedConnectionId;
+  if (!linkId) return false;
+
+  // The partner leg carries the far device. Without it the link is already half-dead
+  // (reconcileStubPairs is about to drop it) and there is nothing to re-route onto.
+  const partner = edges.find(
+    (e) => e.data?.linkedConnectionId === linkId && e.source !== tagId && e.target !== tagId,
+  );
+  if (!partner) return false;
+  const partnerTagId = stubTagEndOf(partner, nodes);
+  if (!partnerTagId) return false;
+
+  // A leg runs device → tag on the source side and tag → device on the target side, so
+  // each leg's orientation names which half of the logical cable it is. The two must
+  // disagree; if they don't, the pair is malformed.
+  const draggedIsSourceSide = connection.target === tagId;
+  const partnerIsSourceSide = partner.target === partnerTagId;
+  if (draggedIsSourceSide === partnerIsSourceSide) return false;
+
+  const dropped = draggedIsSourceSide
+    ? { node: connection.source, handle: connection.sourceHandle ?? null }
+    : { node: connection.target, handle: connection.targetHandle ?? null };
+  const far = partnerIsSourceSide
+    ? { node: partner.source, handle: partner.sourceHandle ?? null }
+    : { node: partner.target, handle: partner.targetHandle ?? null };
+
+  const straightThrough: Connection = draggedIsSourceSide
+    ? { source: dropped.node, sourceHandle: dropped.handle, target: far.node, targetHandle: far.handle }
+    : { source: far.node, sourceHandle: far.handle, target: dropped.node, targetHandle: dropped.handle };
+
+  const ownLegIds = new Set(edges.filter((e) => e.data?.linkedConnectionId === linkId).map((e) => e.id));
+  if (excludeEdgeId) ownLegIds.add(excludeEdgeId);
+  return validateConnection(nodes, edges.filter((e) => !ownLegIds.has(e.id)), straightThrough, null);
+}
+
+/** Connect-time validity rules, shared by the store's isValidConnection and port-edit
+ *  revalidation (#306). `excludeEdgeId` is left out of the duplicate-handle checks. */
+function validateConnection(
+  nodes: SchematicNode[],
+  edges: ConnectionEdge[],
+  connection: Connection,
+  excludeEdgeId: string | null,
+): boolean {
+  // Exactly one end on a stub tag means a stub leg is being re-routed — judged against
+  // the far device instead, since a tag is not a port. (Tag handles are not connectable,
+  // so this is only ever reached from a reconnect drag, never a fresh one.)
+  const tagId = stubTagEndOf(connection, nodes);
+  if (tagId) return validateStubLegConnection(nodes, edges, connection, tagId, excludeEdgeId);
+
+  const sourcePort = getPortFromHandle(
+    nodes,
+    connection.source,
+    connection.sourceHandle,
+  );
+  const targetPort = getPortFromHandle(
+    nodes,
+    connection.target,
+    connection.targetHandle,
+  );
+
+  if (!sourcePort || !targetPort) return false;
+
+  // ── Passthrough port handling ────────────────────────────────────────
+  const srcIsPassthrough = sourcePort.direction === "passthrough";
+  const tgtIsPassthrough = targetPort.direction === "passthrough";
+
+  if (srcIsPassthrough || tgtIsPassthrough) {
+    // Detect which face of each passthrough port this connection uses
+    const srcSide = connection.sourceHandle?.endsWith("-rear") ? "rear"
+      : connection.sourceHandle?.endsWith("-front") ? "front"
+      : undefined;
+    const tgtSide = connection.targetHandle?.endsWith("-rear") ? "rear"
+      : connection.targetHandle?.endsWith("-front") ? "front"
+      : undefined;
+
+    // Block same-device connections unless both handles are "-front" on a patch-panel
+    // (that's a patch cable connecting two front-face jacks on the same panel)
+    if (connection.source === connection.target) {
+      const srcNode = nodes.find((n) => n.id === connection.source);
+      const isFrontToFront = srcSide === "front" && tgtSide === "front";
+      const isPatchPanel = (srcNode as DeviceNode | undefined)?.data?.deviceType === "patch-panel";
+      if (!isFrontToFront || !isPatchPanel) return false;
+    }
+
+    // Resolve the effective connector type for each side
+    const srcConnector = srcIsPassthrough
+      ? (srcSide === "rear" ? sourcePort.rearConnectorType : srcSide === "front" ? sourcePort.frontConnectorType : sourcePort.connectorType)
+      : sourcePort.connectorType;
+    const tgtConnector = tgtIsPassthrough
+      ? (tgtSide === "rear" ? targetPort.rearConnectorType : tgtSide === "front" ? targetPort.frontConnectorType : targetPort.connectorType)
+      : targetPort.connectorType;
+
+    // Connector compatibility (bare-wire always passes)
+    if (!areConnectorsCompatible(srcConnector ?? sourcePort.connectorType, tgtConnector ?? targetPort.connectorType)) return false;
+
+    // Signal-type check: if either port inherits its signal from edges we can't know it
+    // at connection time, so we accept anything. Otherwise use effectiveSignalType.
+    const srcSignal = effectiveSignalType(sourcePort, connection.source, edges, srcIsPassthrough ? srcSide : undefined);
+    const tgtSignal = effectiveSignalType(targetPort, connection.target, edges, tgtIsPassthrough ? tgtSide : undefined);
+    const srcInherits = sourcePort.inheritsSignal && srcSignal === sourcePort.signalType;
+    const tgtInherits = targetPort.inheritsSignal && tgtSignal === targetPort.signalType;
+    if (!srcInherits && !tgtInherits && srcSignal !== tgtSignal) {
+      const netBypass = NETWORK_SIGNAL_TYPES.has(srcSignal) && NETWORK_SIGNAL_TYPES.has(tgtSignal);
+      const bareBypass = BARE_WIRE_CONNECTORS.has(srcConnector ?? "none" as never) ||
+        BARE_WIRE_CONNECTORS.has(tgtConnector ?? "none" as never);
+      const pairBypass = areSignalPairsCompatible(srcSignal, tgtSignal);
+      if (!netBypass && !bareBypass && !pairBypass) return false;
+    }
+
+    // Duplicate-handle guard (same as non-passthrough below)
+    if (!sourcePort.multiConnect) {
+      const dup = edges.some(
+        (e) => e.id !== excludeEdgeId && e.source === connection.source && e.sourceHandle === connection.sourceHandle,
+      );
+      if (dup) return false;
+    }
+    if (!targetPort.multiConnect) {
+      const dup = edges.some(
+        (e) => e.id !== excludeEdgeId && e.target === connection.target && e.targetHandle === connection.targetHandle,
+      );
+      if (dup) return false;
+    }
+
+    return true;
+  }
+  // ── End passthrough handling ─────────────────────────────────────────
+
+  // Network signal types (ethernet, dante, etc.) can connect in any direction
+  const networkBypass = NETWORK_SIGNAL_TYPES.has(sourcePort.signalType) && NETWORK_SIGNAL_TYPES.has(targetPort.signalType);
+  // Bare-wire connectors (phoenix/terminal-block) bypass signal type checks — if you're
+  // screwing bare wire into screw terminals, you presumably know what signal you're carrying
+  const bareWireBypass = !!sourcePort.connectorType && !!targetPort.connectorType &&
+    BARE_WIRE_CONNECTORS.has(sourcePort.connectorType) && BARE_WIRE_CONNECTORS.has(targetPort.connectorType);
+  const signalBypass = areSignalsCompatibleViaConnector(
+    sourcePort.signalType, sourcePort.connectorType,
+    targetPort.signalType, targetPort.connectorType,
+  ) || areSignalPairsCompatible(sourcePort.signalType, targetPort.signalType);
+  if (!networkBypass && !bareWireBypass) {
+    const canSource = sourcePort.direction === "output" || sourcePort.direction === "bidirectional";
+    const canTarget = targetPort.direction === "input" || targetPort.direction === "bidirectional";
+    if (!canSource || !canTarget) return false;
+  }
+  if (sourcePort.signalType !== targetPort.signalType && !networkBypass && !bareWireBypass && !signalBypass) return false;
+
+  // Multicable ports can only connect to other multicable ports
+  const srcIsMulticable = sourcePort.isMulticable ?? false;
+  const tgtIsMulticable = targetPort.isMulticable ?? false;
+  if (srcIsMulticable !== tgtIsMulticable) return false;
+
+  // Don't allow multiple connections to the same handle, unless the port is multi-connect
+  if (!targetPort.multiConnect) {
+    const duplicateTarget = edges.some(
+      (e) =>
+        e.id !== excludeEdgeId &&
+        e.target === connection.target &&
+        e.targetHandle === connection.targetHandle,
+    );
+    if (duplicateTarget) return false;
+  }
+
+  if (!sourcePort.multiConnect) {
+    const duplicateSource = edges.some(
+      (e) =>
+        e.id !== excludeEdgeId &&
+        e.source === connection.source &&
+        e.sourceHandle === connection.sourceHandle,
+    );
+    if (duplicateSource) return false;
+  }
+
+  // For bidirectional ports, block the opposite side if one side is already connected
+  if (sourcePort.direction === "bidirectional" && connection.sourceHandle) {
+    const baseId = connection.sourceHandle.replace(/-(in|out|rear|front)$/, "");
+    const otherHandle = connection.sourceHandle.endsWith("-out")
+      ? `${baseId}-in`
+      : `${baseId}-out`;
+    const otherConnected = edges.some(
+      (e) =>
+        (e.source === connection.source && e.sourceHandle === otherHandle) ||
+        (e.target === connection.source && e.targetHandle === otherHandle),
+    );
+    if (otherConnected) return false;
+  }
+  if (targetPort.direction === "bidirectional" && connection.targetHandle) {
+    const baseId = connection.targetHandle.replace(/-(in|out|rear|front)$/, "");
+    const otherHandle = connection.targetHandle.endsWith("-in")
+      ? `${baseId}-out`
+      : `${baseId}-in`;
+    const otherConnected = edges.some(
+      (e) =>
+        (e.source === connection.target && e.sourceHandle === otherHandle) ||
+        (e.target === connection.target && e.targetHandle === otherHandle),
+    );
+    if (otherConnected) return false;
+  }
+
+  return true;
+}
+
+/** Which face of a passthrough port a handle addresses ("p1-front" → "front"). */
+function handleFace(handle: string | null | undefined): "rear" | "front" | undefined {
+  return handle?.endsWith("-rear") ? "rear" : handle?.endsWith("-front") ? "front" : undefined;
+}
+
+/** The connector a cable on this handle actually mates with: the front/rear face
+ *  connector for a passthrough port, plain connectorType otherwise — the same
+ *  resolution validateConnection applies. */
+function faceConnector(port: Port, handle: string | null | undefined): ConnectorType | undefined {
+  if (port.direction !== "passthrough") return port.connectorType;
+  const face = handleFace(handle);
+  return face === "rear" ? port.rearConnectorType
+    : face === "front" ? port.frontConnectorType
+    : port.connectorType;
+}
+
+/** After a device's ports are edited, find connections on that device that the new
+ *  port properties make invalid — connector/signal types, but also direction,
+ *  multi-connect, and multicore — using the same rules as connect time (#306).
+ *  Connections the user already accepted as mismatched (connectorMismatch /
+ *  allowIncompatible) are skipped. Pure so it can be unit-tested. */
+export function findInvalidatedConnections(
+  nodes: SchematicNode[],
+  edges: ConnectionEdge[],
+  nodeId: string,
+  oldPorts: Port[],
+): PortEditConflict[] {
+  const node = nodes.find((n) => n.id === nodeId && n.type === "device");
+  if (!node) return [];
+  const oldById = new Map(oldPorts.map((p) => [p.id, p]));
+  const changed = new Set<string>();
+  for (const p of (node.data as DeviceData).ports) {
+    const old = oldById.get(p.id);
+    if (!old) continue;
+    if (
+      old.connectorType !== p.connectorType ||
+      old.signalType !== p.signalType ||
+      old.frontConnectorType !== p.frontConnectorType ||
+      old.rearConnectorType !== p.rearConnectorType ||
+      old.direction !== p.direction ||
+      (old.multiConnect ?? false) !== (p.multiConnect ?? false) ||
+      (old.isMulticable ?? false) !== (p.isMulticable ?? false)
+    ) {
+      changed.add(p.id);
+    }
+  }
+  if (changed.size === 0) return [];
+
+  // Handles are usually the bare port id; bidirectional/passthrough ports append
+  // -in/-out/-rear/-front. Port ids can themselves end in such a suffix, so prefer
+  // an exact id match before stripping — same contract as getPortFromHandle.
+  const portIds = new Set((node.data as DeviceData).ports.map((p) => p.id));
+  const handlePortId = (h: string) =>
+    portIds.has(h) ? h : h.replace(/-(in|out|rear|front)$/, "");
+
+  const conflicts: PortEditConflict[] = [];
+  for (const e of edges) {
+    const touchesEdit =
+      (e.source === nodeId && changed.has(handlePortId(e.sourceHandle ?? ""))) ||
+      (e.target === nodeId && changed.has(handlePortId(e.targetHandle ?? "")));
+    if (!touchesEdit) continue;
+    if (e.data?.connectorMismatch || e.data?.allowIncompatible) continue;
+
+    const sourcePort = getPortFromHandle(nodes, e.source, e.sourceHandle ?? null);
+    const targetPort = getPortFromHandle(nodes, e.target, e.targetHandle ?? null);
+    if (!sourcePort || !targetPort) continue;
+
+    const connection: Connection = {
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle ?? null,
+      targetHandle: e.targetHandle ?? null,
+    };
+
+    // Classify (and later adapt) by what the cable actually plugs into: the face
+    // connector on passthrough ports and the effective (possibly inherited) signal.
+    const sourceConnector = faceConnector(sourcePort, e.sourceHandle);
+    const targetConnector = faceConnector(targetPort, e.targetHandle);
+    const sourceSignal = effectiveSignalType(
+      sourcePort, e.source, edges,
+      sourcePort.direction === "passthrough" ? handleFace(e.sourceHandle) : undefined,
+    );
+    const targetSignal = effectiveSignalType(
+      targetPort, e.target, edges,
+      targetPort.direction === "passthrough" ? handleFace(e.targetHandle) : undefined,
+    );
+
+    const push = (reason: PortEditConflict["reason"]) =>
+      conflicts.push({
+        edgeId: e.id,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.sourceHandle ?? null,
+        targetHandle: e.targetHandle ?? null,
+        sourcePort,
+        targetPort,
+        sourceConnector,
+        targetConnector,
+        sourceSignal,
+        targetSignal,
+        reason,
+      });
+
+    if (!validateConnection(nodes, edges, connection, e.id)) {
+      const connectorsBad =
+        !!sourceConnector && !!targetConnector &&
+        !areConnectorsCompatible(sourceConnector, targetConnector);
+      // Matching connectors and signals that still fail validation mean a cause no
+      // adapter can bridge (direction, multi-connect, multicore) — say so honestly.
+      push(
+        connectorsBad && sourceSignal === targetSignal ? "connector-mismatch"
+          : sourceSignal !== targetSignal ? "signal-mismatch"
+          : "incompatible",
+      );
+      continue;
+    }
+
+    // Connector mismatches don't fail isValidConnection — onConnect handles them
+    // with the adapter flow — so apply the same connector checks here.
+    if (
+      sourceConnector && targetConnector &&
+      ((sourceConnector !== targetConnector &&
+        !areConnectorsCompatible(sourceConnector, targetConnector)) ||
+        needsAdapter(sourceConnector, targetConnector))
+    ) {
+      push("connector-mismatch");
+    }
+  }
+  return conflicts;
+}
+
+/** Revalidate every device whose ports differ between two whole-schematic states.
+ *  Redo re-applies the very port edit the user undid, so it has to re-stage that
+ *  edit's conflicts rather than land the invalid cables silently (#326). Devices
+ *  absent from the outgoing state, and ports the restore added or removed, aren't
+ *  edits — findInvalidatedConnections only looks at ports present on both sides. */
+function revalidateRestoredState(
+  fromNodes: SchematicNode[],
+  toNodes: SchematicNode[],
+  toEdges: ConnectionEdge[],
+): PortEditConflict[] {
+  const portsBefore = new Map<string, Port[]>();
+  for (const n of fromNodes) {
+    if (n.type === "device") portsBefore.set(n.id, (n.data as DeviceData).ports);
+  }
+  const conflicts: PortEditConflict[] = [];
+  // A cable between two restored devices is found from each end — one conflict each.
+  const seen = new Set<string>();
+  for (const n of toNodes) {
+    if (n.type !== "device") continue;
+    const oldPorts = portsBefore.get(n.id);
+    if (!oldPorts) continue;
+    for (const c of findInvalidatedConnections(toNodes, toEdges, n.id, oldPorts)) {
+      if (seen.has(c.edgeId)) continue;
+      seen.add(c.edgeId);
+      conflicts.push(c);
+    }
+  }
+  return conflicts;
 }
 
 function removeOrphanedEdges(nodes: SchematicNode[], edges: ConnectionEdge[]): ConnectionEdge[] {
@@ -1637,22 +2313,33 @@ function dropBundledDuplicates(templates: DeviceTemplate[]): DeviceTemplate[] {
 }
 
 function loadCustomTemplates(): DeviceTemplate[] {
+  return readStoredCustomTemplates() ?? [];
+}
+
+/**
+ * The stored custom template list, or null when nothing has ever been saved (or storage is
+ * unreadable). A stored "[]" — a library the user cleared — is a real, empty list (#251).
+ */
+function readStoredCustomTemplates(): DeviceTemplate[] | null {
   try {
     const raw = localStorage.getItem(TEMPLATES_KEY);
-    if (!raw) return [];
+    if (raw == null) return null;
     const templates = JSON.parse(raw) as DeviceTemplate[];
+    if (!Array.isArray(templates)) return null;
     // Migrate legacy custom templates: move unique key from deviceType to id
     for (const t of templates) {
       if (!t.id && t.deviceType.startsWith("custom-")) {
         t.id = t.deviceType;
       }
     }
+    // FACE: Schuko ports saved before the upstream merge say "cee-7-7".
+    const renamedConnectors = migrateLegacyConnectorTypes(templates);
     const deduped = dropBundledDuplicates(templates);
     // Write the cleanup back so it's a one-time migration rather than a per-load filter.
-    if (deduped.length !== templates.length) saveCustomTemplates(deduped);
+    if (deduped.length !== templates.length || renamedConnectors > 0) saveCustomTemplates(deduped);
     return deduped;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -1662,6 +2349,27 @@ function saveCustomTemplates(templates: DeviceTemplate[]) {
   } catch {
     // silently fail
   }
+}
+
+/**
+ * The custom template list to mutate. Every tab of the app (and the installed app) shares one
+ * localStorage but keeps its own in-memory copy, so a tab that missed another tab's writes
+ * would otherwise save its stale list back over them — wiping devices imported elsewhere, or
+ * resurrecting ones deleted or cleared there (#251). Whatever is stored is the truth; memory
+ * is used only when nothing has been stored yet or storage can't be read.
+ */
+function withStoredCustomTemplates(inMemory: DeviceTemplate[]): DeviceTemplate[] {
+  return readStoredCustomTemplates() ?? inMemory;
+}
+
+/** Same idea for the library order list (#251). */
+function withStoredCustomTemplateOrder(inMemory: string[]): string[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATE_META_KEY);
+    const order = raw ? (JSON.parse(raw) as CustomTemplateMeta).order : undefined;
+    if (Array.isArray(order)) return order;
+  } catch { /* use memory */ }
+  return inMemory;
 }
 
 function loadCustomTemplateMeta(templates: DeviceTemplate[]): CustomTemplateMeta {
@@ -1754,6 +2462,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   printCustomHeightIn: 36,
   printOriginOffsetX: 0,
   printOriginOffsetY: 0,
+  printTitleBlockEnabled: true,
   colorKeyEnabled: false,
   colorKeyCorner: "bottom-left" as "top-left" | "top-right" | "bottom-left" | "bottom-right",
   colorKeyColumns: 1,
@@ -1800,18 +2509,25 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   cableIdGap: 4,
   cableIdMidOffset: 0,
   cableIdLabelMode: "endpoint" as "endpoint" | "midpoint",
+  stubLabelShowArrow: DEFAULT_STUB_LABEL_SHOW_ARROW,
   stubLabelShowPort: DEFAULT_STUB_LABEL_SHOW_PORT,
   stubLabelShowRoom: DEFAULT_STUB_LABEL_SHOW_ROOM,
   stubLabelPageMode: DEFAULT_STUB_LABEL_PAGE_MODE,
+  defaultConnectionType: DEFAULT_CONNECTION_TYPE,
   useShortNames: false,
   // Default on, matching newSchematic(). Devices leaving data.wrapLabel undefined inherit this.
   wrapDeviceLabels: true,
+  appDefaultDeviceHeaderColor: loadAppDefaultHeaderColor(),
+  defaultDeviceHeaderColor: undefined,
+  appDefaultStubLabelMode: loadAppDefaultStubLabelMode(),
+  defaultStubLabelMode: undefined,
   cableIdMap: {},
   cloudSchematicId: null,
   cloudSavedAt: null,
   fileHandle: null,
   isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
   pendingIncompatibleConnection: null,
+  pendingPortEditConflicts: null,
   hideAdapters: false,
   hiddenAdapterNodeIds: new Set(),
   hiddenVirtualEdgeIds: new Set(),
@@ -1860,7 +2576,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ? syncEdgesFromWaypointNodes(oldEdges, normalized)
       : oldEdges;
     set({ nodes: normalized, ...(newEdges !== oldEdges ? { edges: newEdges } : {}) });
-    get().saveToLocalStorage();
+    scheduleAutosave();
   },
 
   onEdgesChange: (changes) => {
@@ -1871,12 +2587,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     }
     const newEdges = applyEdgeChanges(changes, get().edges) as ConnectionEdge[];
     if (hasRemove) {
-      // Removed edges may have had waypoint nodes — reconcile them away.
-      set({ edges: newEdges, nodes: reconcileWaypointNodes(get().nodes, newEdges) });
+      // Losing one leg of a stubbed connection also strands its partner leg and both
+      // tags (#318) — cascade that first, so the waypoint reconcile below sees the final
+      // edge list and doesn't leave path handles behind for the cascaded leg.
+      const healed = reconcileStubPairs(get().nodes, newEdges);
+      set({ edges: healed.edges, nodes: reconcileWaypointNodes(healed.nodes, healed.edges) });
     } else {
       set({ edges: newEdges });
     }
-    get().saveToLocalStorage();
+    scheduleAutosave();
   },
 
   onConnect: (connection) => {
@@ -1886,19 +2605,34 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       const srcPort = getPortFromHandle(state.nodes, connection.source, connection.sourceHandle);
       const tgtPort = getPortFromHandle(state.nodes, connection.target, connection.targetHandle);
       if (srcPort && tgtPort) {
-        const canSource = srcPort.direction === "output" || srcPort.direction === "bidirectional";
-        const canTarget = tgtPort.direction === "input" || tgtPort.direction === "bidirectional";
+        // Port directions mostly no longer gate this branch: a reversed adapter
+        // legitimately bridges into a strict output (the device hosts the adapter's
+        // plug — #310), and canWireAdapterBridge inside the matcher judges direction
+        // fit per orientation. Two pairs stay out: passthroughs keep their own
+        // validation path (except network-to-network, which this branch always
+        // admitted), and input-to-input has no drawable outcome at all — no adapter
+        // leg, nor a forced connection, can ever be drawn from a strict input.
         const networkBypass = NETWORK_SIGNAL_TYPES.has(srcPort.signalType) && NETWORK_SIGNAL_TYPES.has(tgtPort.signalType);
-        if ((canSource && canTarget || networkBypass) && srcPort.signalType !== tgtPort.signalType && !areSignalPairsCompatible(srcPort.signalType, tgtPort.signalType)) {
-          // Auto-insert if exactly one adapter matches
+        const bridgeable =
+          ((srcPort.direction !== "passthrough" && tgtPort.direction !== "passthrough") || networkBypass) &&
+          !(srcPort.direction === "input" && tgtPort.direction === "input");
+        if (bridgeable && srcPort.signalType !== tgtPort.signalType && !areSignalPairsCompatible(srcPort.signalType, tgtPort.signalType)) {
+          // Auto-insert if exactly one adapter matches; otherwise (zero or many) the
+          // dialog opens — a signal-mismatch drop must never end silently (#310).
           const allTemplates = [...DEVICE_TEMPLATES, ...state.customTemplates];
-          const adapterMatches = findAdaptersForSignalBridge(srcPort.signalType, tgtPort.signalType, allTemplates);
+          const adapterMatches = findAdaptersForSignalBridge(
+            srcPort.signalType, tgtPort.signalType, allTemplates,
+            { sourcePort: srcPort, targetPort: tgtPort },
+          );
+          const pendingConn = { connection, sourcePort: srcPort, targetPort: tgtPort, reason: "signal-mismatch" as const };
+          set({ pendingIncompatibleConnection: pendingConn });
           if (adapterMatches.length === 1) {
-            set({ pendingIncompatibleConnection: { connection, sourcePort: srcPort, targetPort: tgtPort, reason: "signal-mismatch" } });
-            get().insertAdapterBetween(adapterMatches[0]);
-            return;
+            // A refused insert (e.g. a preset reshaped the adapter's ports) clears the
+            // pending state — restore it so the dialog reports instead of silence.
+            if (!get().insertAdapterBetween(adapterMatches[0])) {
+              set({ pendingIncompatibleConnection: pendingConn });
+            }
           }
-          set({ pendingIncompatibleConnection: { connection, sourcePort: srcPort, targetPort: tgtPort, reason: "signal-mismatch" } });
         }
       }
       return;
@@ -1928,18 +2662,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         targetPort.connectorType!,
         sourcePort.signalType,
         allTemplates,
+        { sourcePort, targetPort },
       );
 
-      if (adapterMatches.length === 1) {
-        // Auto-insert the single matching adapter (insertAdapterBetween handles its own undo)
-        set({ pendingIncompatibleConnection: { connection, sourcePort, targetPort, reason: "connector-mismatch" } });
-        get().insertAdapterBetween(adapterMatches[0]);
-        return;
-      } else {
-        // Zero or multiple matches — show dialog for user to choose (or connect anyway)
-        set({ pendingIncompatibleConnection: { connection, sourcePort, targetPort, reason: "connector-mismatch" } });
-        return;
+      // Exactly one match auto-inserts (insertAdapterBetween handles its own undo);
+      // zero or multiple show the dialog for the user to choose (or connect anyway).
+      const pendingConn = { connection, sourcePort, targetPort, reason: "connector-mismatch" as const };
+      set({ pendingIncompatibleConnection: pendingConn });
+      if (adapterMatches.length === 1 && !get().insertAdapterBetween(adapterMatches[0])) {
+        // A refused insert clears the pending state — restore it so the dialog
+        // reports instead of the drop ending silently (#310).
+        set({ pendingIncompatibleConnection: pendingConn });
       }
+      return;
     }
 
     // Also handle CONNECTOR_ACCEPTS adapter pairs (compatible but needs adapter cable)
@@ -1950,16 +2685,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         targetPort.connectorType!,
         sourcePort.signalType,
         allTemplates,
+        { sourcePort, targetPort },
       );
 
-      if (adapterMatches.length === 1) {
-        set({ pendingIncompatibleConnection: { connection, sourcePort, targetPort, reason: "connector-mismatch" } });
-        get().insertAdapterBetween(adapterMatches[0]);
-        return;
-      } else {
-        set({ pendingIncompatibleConnection: { connection, sourcePort, targetPort, reason: "connector-mismatch" } });
-        return;
+      const pendingConn = { connection, sourcePort, targetPort, reason: "connector-mismatch" as const };
+      set({ pendingIncompatibleConnection: pendingConn });
+      if (adapterMatches.length === 1 && !get().insertAdapterBetween(adapterMatches[0])) {
+        set({ pendingIncompatibleConnection: pendingConn });
       }
+      return;
     }
 
     pushUndo({ nodes: state.nodes, edges: state.edges });
@@ -1995,7 +2729,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       nodes: existingEdges === state.edges ? state.nodes : reconcileWaypointNodes(state.nodes, existingEdges),
       edges: [...existingEdges, newEdge],
     });
-    get().saveToLocalStorage();
+
+    // A "stub" default runs the brand-new connection straight through the same
+    // conversion the right-click action uses, so drawing a connection and stubbing it
+    // by hand land on byte-identical state (#353).
+    if (!applyDefaultConnectionType(newEdge.id)) get().saveToLocalStorage();
   },
 
   addDevice: (template, position) => {
@@ -2008,7 +2746,6 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     let ports: Port[];
     let hiddenPorts: string[] | undefined;
     let color = template.color;
-    let headerColor = template.headerColor;
 
     if (preset) {
       // Clone preset ports, then map preset hiddenPorts through old→new ID mapping
@@ -2022,14 +2759,23 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ports = cloned;
       hiddenPorts = preset.hiddenPorts?.map((id) => idMap.get(id) ?? id).filter((id) => cloned.some((p) => p.id === id));
       color = preset.color ?? template.color;
-      headerColor = preset.headerColor ?? template.headerColor;
     } else {
       ports = clonePorts(template.ports);
       // Stamp templatePortId so sync can reconcile even if port IDs drift.
       ports.forEach((p, i) => { p.templatePortId = template.ports[i].id; });
     }
 
-    headerColor = headerColor ?? DEFAULT_HEADER_COLOR;
+    // Header color for a freshly placed device — the project preset's saved color, then the
+    // template's own saved color, then the project override, then the app preference, then
+    // nothing at all (the theme's surface color). A color saved onto this template or its
+    // preset is about this device specifically, so it beats both defaults. Stamped here so a
+    // later change to any of them leaves this device alone (#354).
+    const headerColor = resolveDeviceHeaderColor(
+      preset?.headerColor,
+      template.headerColor,
+      state.defaultDeviceHeaderColor,
+      state.appDefaultDeviceHeaderColor,
+    );
 
     // Initialize expansion slots from template (recursively handles sub-slots)
     let installedSlots: InstalledSlot[] | undefined;
@@ -2164,10 +2910,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return n;
       });
 
+    // Deleting ONE leg of a stubbed connection (or one of its two tags) leaves the other
+    // half behind rendering "?" — drop the whole link instead (#318). This runs before
+    // every other reconciler below so they all see the final node/edge lists; run last it
+    // would leave path handles, bundle membership and hops behind for the cascaded leg.
+    const stubHealed = reconcileStubPairs(remainingNodes, edgesAfterSplice);
+
     // Cascade-remove text stubs (#196) whose anchor device was deleted — they carry no
     // edge, so the edge-based orphan pruning above never touches them.
-    const survivingNodeIds = new Set(remainingNodes.map((n) => n.id));
-    const remainingNodesPruned = remainingNodes.filter(
+    const survivingNodeIds = new Set(stubHealed.nodes.map((n) => n.id));
+    const remainingNodesPruned = stubHealed.nodes.filter(
       (n) => n.type !== "text-stub" || survivingNodeIds.has((n.data as import("./types").TextStubData).anchorNodeId),
     );
 
@@ -2221,7 +2973,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     // After deleting nodes/edges, waypoint node ids may be stale (indices shifted
     // or owning edges removed). Reconcile against the new canonical edges.
-    const reconciledNodes = reconcileWaypointNodes(remainingNodesPruned, edgesAfterSplice);
+    const reconciledNodes = reconcileWaypointNodes(remainingNodesPruned, stubHealed.edges);
 
     // Purge any pairwise distances referencing a deleted room (#146).
     let nextDistances = state.roomDistances;
@@ -2237,7 +2989,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     }
 
     // Deleting members may drop a bundle below 2 — GC dangling membership + empty bundles.
-    const gc = gcBundles(edgesAfterSplice, state.bundles);
+    const gc = gcBundles(stubHealed.edges, state.bundles);
     // Drop junction anchors orphaned by a dissolved bundle (and re-heal a live bundle whose
     // anchor was itself in the deleted selection).
     const healedNodes = reconcileBundleJunctions(reconciledNodes, gc.edges);
@@ -2253,6 +3005,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ...(nextDistances !== state.roomDistances ? { roomDistances: nextDistances } : {}),
     });
     get().saveToLocalStorage();
+    return { removedStubLinks: stubHealed.removedLinks };
   },
 
   deleteNode: (nodeId: string) => {
@@ -2268,25 +3021,79 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     if (!state.nodes.some((n) => n.id === nodeId)) return;
     pushUndo({ nodes: state.nodes, edges: state.edges });
-    // #182: keep stub labels glued to the moved device (mirrors the drag-stop path in
-    // App.tsx so an MCP move_device behaves like a drag).
-    const reanchored = reanchorConnectedStubLabels(state.nodes, state.edges, nodeId);
+    // #182: keep the moved device's tags glued to it — the same helper both drag-stop
+    // paths call, so an MCP move_device behaves like a drag (#346).
+    const settled = settleTagsAfterMove(state.nodes, state.edges, new Set([nodeId])) ?? state.nodes;
     set({
-      nodes: reanchored.map((n) => (n.id === nodeId ? { ...n, position } : n)),
+      nodes: settled.map((n) => (n.id === nodeId ? { ...n, position } : n)),
     });
     get().saveToLocalStorage();
   },
 
   deleteConnection: (connectionId: string) => {
     const state = get();
-    if (!state.edges.some((e) => e.id === connectionId)) return;
+    if (!state.edges.some((e) => e.id === connectionId)) return { removedStubLinks: 0 };
     // Select only this edge, deselect everything else, then removeSelected — the same
     // path the UI uses, so undo, bundle GC, junction + waypoint reconciliation all run.
     set({
       nodes: state.nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
       edges: state.edges.map((e) => ({ ...e, selected: e.id === connectionId })),
     });
-    get().removeSelected();
+    return get().removeSelected();
+  },
+
+  reconnectConnectionEnd: (oldEdge: Edge, newConnection: Connection) => {
+    const state = get();
+    // reconnectEdge is a no-op for an edge that is already gone — bail before the
+    // snapshot rather than leave a dead undo step behind.
+    if (!state.edges.some((e) => e.id === oldEdge.id)) return "none";
+    // A stub tag is not a port: dropping the TAG end on one would leave the tag with no
+    // leg and render "?" at both ends of the link (#318). The device end of a stub leg
+    // is a true end and re-routes like any other — the pair keeps its linkedConnectionId,
+    // so both tags stay whole and re-derive their text from the new endpoint.
+    const tagId = stubTagEndOf(oldEdge, state.nodes);
+    if (tagId && newConnection.source !== tagId && newConnection.target !== tagId) {
+      return "stub-label-end";
+    }
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    // Keep the existing connection id (shouldReplaceId: false). Cable IDs, path handles
+    // and patch hops are all keyed by it, and React Flow's default regenerates the id
+    // from the new endpoints, silently orphaning every one of them.
+    const updated = reconnectEdge(oldEdge, newConnection, state.edges, { shouldReplaceId: false });
+    // A stub tag exists to sit beside its port, so moving the leg's device end takes the
+    // tag along — clearing `placed` re-runs the same one-shot auto-place a device move
+    // uses (#182), which re-anchors the box and its l/r handle to the new port. A tag the
+    // user has dragged into place keeps that position, as it does on a device move.
+    let nodes = state.nodes;
+    if (tagId) {
+      nodes = state.nodes.map((n) => {
+        if (n.id !== tagId || n.type !== "stub-label") return n;
+        const d = n.data as import("./types").StubLabelData;
+        return d.userMoved || d.placed !== true ? n : { ...n, data: { ...d, placed: false } };
+      });
+    }
+    set({ edges: updated as ConnectionEdge[], ...(nodes === state.nodes ? {} : { nodes }) });
+    get().saveToLocalStorage();
+    return "reconnected";
+  },
+
+  disconnectConnectionEnd: (edgeId: string, draggedEndNodeId: string | null) => {
+    const state = get();
+    const edge = state.edges.find((e) => e.id === edgeId);
+    if (!edge) return "none";
+    // Releasing a stub TAG over empty space is always a fumble — the tag's handles are
+    // not connectable, so that drag could never have landed anywhere (#318).
+    const tagId = stubTagEndOf(edge, state.nodes);
+    if (tagId && draggedEndNodeId === tagId) return "stub-label-end";
+    // Everything else disconnects: the same path Delete takes, so a stub leg drops its
+    // partner leg and both tags via reconcileStubPairs, and waypoint / bundle / junction
+    // reconciliation all run. removeSelected pushes the single undo step — but only after
+    // deleteConnection has rewritten every selection flag to isolate this edge, so hand it
+    // the pre-drag state to snapshot instead; otherwise one Ctrl+Z brings the connection
+    // back selected, with the user's own selection gone, primed for the next Delete.
+    get().setPendingUndoSnapshot();
+    get().deleteConnection(edgeId);
+    return "deleted";
   },
 
   deleteNodeAndChildren: (nodeId: string) => {
@@ -2541,154 +3348,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   isValidConnection: (connection) => {
     const state = get();
-    const sourcePort = getPortFromHandle(
-      state.nodes,
-      connection.source,
-      connection.sourceHandle,
-    );
-    const targetPort = getPortFromHandle(
-      state.nodes,
-      connection.target,
-      connection.targetHandle,
-    );
-
-    if (!sourcePort || !targetPort) return false;
-
-    // ── Passthrough port handling ────────────────────────────────────────
-    const srcIsPassthrough = sourcePort.direction === "passthrough";
-    const tgtIsPassthrough = targetPort.direction === "passthrough";
-
-    if (srcIsPassthrough || tgtIsPassthrough) {
-      // Detect which face of each passthrough port this connection uses
-      const srcSide = connection.sourceHandle?.endsWith("-rear") ? "rear"
-        : connection.sourceHandle?.endsWith("-front") ? "front"
-        : undefined;
-      const tgtSide = connection.targetHandle?.endsWith("-rear") ? "rear"
-        : connection.targetHandle?.endsWith("-front") ? "front"
-        : undefined;
-
-      // Block same-device connections unless both handles are "-front" on a patch-panel
-      // (that's a patch cable connecting two front-face jacks on the same panel)
-      if (connection.source === connection.target) {
-        const srcNode = state.nodes.find((n) => n.id === connection.source);
-        const isFrontToFront = srcSide === "front" && tgtSide === "front";
-        const isPatchPanel = (srcNode as DeviceNode | undefined)?.data?.deviceType === "patch-panel";
-        if (!isFrontToFront || !isPatchPanel) return false;
-      }
-
-      // Resolve the effective connector type for each side
-      const srcConnector = srcIsPassthrough
-        ? (srcSide === "rear" ? sourcePort.rearConnectorType : srcSide === "front" ? sourcePort.frontConnectorType : sourcePort.connectorType)
-        : sourcePort.connectorType;
-      const tgtConnector = tgtIsPassthrough
-        ? (tgtSide === "rear" ? targetPort.rearConnectorType : tgtSide === "front" ? targetPort.frontConnectorType : targetPort.connectorType)
-        : targetPort.connectorType;
-
-      // Connector compatibility (bare-wire always passes)
-      if (!areConnectorsCompatible(srcConnector ?? sourcePort.connectorType, tgtConnector ?? targetPort.connectorType)) return false;
-
-      // Signal-type check: if either port inherits its signal from edges we can't know it
-      // at connection time, so we accept anything. Otherwise use effectiveSignalType.
-      const srcSignal = effectiveSignalType(sourcePort, connection.source, state.edges, srcIsPassthrough ? srcSide : undefined);
-      const tgtSignal = effectiveSignalType(targetPort, connection.target, state.edges, tgtIsPassthrough ? tgtSide : undefined);
-      const srcInherits = sourcePort.inheritsSignal && srcSignal === sourcePort.signalType;
-      const tgtInherits = targetPort.inheritsSignal && tgtSignal === targetPort.signalType;
-      if (!srcInherits && !tgtInherits && srcSignal !== tgtSignal) {
-        const netBypass = NETWORK_SIGNAL_TYPES.has(srcSignal) && NETWORK_SIGNAL_TYPES.has(tgtSignal);
-        const bareBypass = BARE_WIRE_CONNECTORS.has(srcConnector ?? "none" as never) ||
-          BARE_WIRE_CONNECTORS.has(tgtConnector ?? "none" as never);
-        const pairBypass = areSignalPairsCompatible(srcSignal, tgtSignal);
-        if (!netBypass && !bareBypass && !pairBypass) return false;
-      }
-
-      // Duplicate-handle guard (same as non-passthrough below)
-      if (!sourcePort.multiConnect) {
-        const dup = state.edges.some(
-          (e) => e.id !== _reconnectingEdgeId && e.source === connection.source && e.sourceHandle === connection.sourceHandle,
-        );
-        if (dup) return false;
-      }
-      if (!targetPort.multiConnect) {
-        const dup = state.edges.some(
-          (e) => e.id !== _reconnectingEdgeId && e.target === connection.target && e.targetHandle === connection.targetHandle,
-        );
-        if (dup) return false;
-      }
-
-      return true;
-    }
-    // ── End passthrough handling ─────────────────────────────────────────
-
-    // Network signal types (ethernet, dante, etc.) can connect in any direction
-    const networkBypass = NETWORK_SIGNAL_TYPES.has(sourcePort.signalType) && NETWORK_SIGNAL_TYPES.has(targetPort.signalType);
-    // Bare-wire connectors (phoenix/terminal-block) bypass signal type checks — if you're
-    // screwing bare wire into screw terminals, you presumably know what signal you're carrying
-    const bareWireBypass = !!sourcePort.connectorType && !!targetPort.connectorType &&
-      BARE_WIRE_CONNECTORS.has(sourcePort.connectorType) && BARE_WIRE_CONNECTORS.has(targetPort.connectorType);
-    const signalBypass = areSignalsCompatibleViaConnector(
-      sourcePort.signalType, sourcePort.connectorType,
-      targetPort.signalType, targetPort.connectorType,
-    ) || areSignalPairsCompatible(sourcePort.signalType, targetPort.signalType);
-    if (!networkBypass && !bareWireBypass) {
-      const canSource = sourcePort.direction === "output" || sourcePort.direction === "bidirectional";
-      const canTarget = targetPort.direction === "input" || targetPort.direction === "bidirectional";
-      if (!canSource || !canTarget) return false;
-    }
-    if (sourcePort.signalType !== targetPort.signalType && !networkBypass && !bareWireBypass && !signalBypass) return false;
-
-    // Multicable ports can only connect to other multicable ports
-    const srcIsMulticable = sourcePort.isMulticable ?? false;
-    const tgtIsMulticable = targetPort.isMulticable ?? false;
-    if (srcIsMulticable !== tgtIsMulticable) return false;
-
-    // Don't allow multiple connections to the same handle, unless the port is multi-connect
-    if (!targetPort.multiConnect) {
-      const duplicateTarget = state.edges.some(
-        (e) =>
-          e.id !== _reconnectingEdgeId &&
-          e.target === connection.target &&
-          e.targetHandle === connection.targetHandle,
-      );
-      if (duplicateTarget) return false;
-    }
-
-    if (!sourcePort.multiConnect) {
-      const duplicateSource = state.edges.some(
-        (e) =>
-          e.id !== _reconnectingEdgeId &&
-          e.source === connection.source &&
-          e.sourceHandle === connection.sourceHandle,
-      );
-      if (duplicateSource) return false;
-    }
-
-    // For bidirectional ports, block the opposite side if one side is already connected
-    if (sourcePort.direction === "bidirectional" && connection.sourceHandle) {
-      const baseId = connection.sourceHandle.replace(/-(in|out|rear|front)$/, "");
-      const otherHandle = connection.sourceHandle.endsWith("-out")
-        ? `${baseId}-in`
-        : `${baseId}-out`;
-      const otherConnected = state.edges.some(
-        (e) =>
-          (e.source === connection.source && e.sourceHandle === otherHandle) ||
-          (e.target === connection.source && e.targetHandle === otherHandle),
-      );
-      if (otherConnected) return false;
-    }
-    if (targetPort.direction === "bidirectional" && connection.targetHandle) {
-      const baseId = connection.targetHandle.replace(/-(in|out|rear|front)$/, "");
-      const otherHandle = connection.targetHandle.endsWith("-in")
-        ? `${baseId}-out`
-        : `${baseId}-in`;
-      const otherConnected = state.edges.some(
-        (e) =>
-          (e.source === connection.target && e.sourceHandle === otherHandle) ||
-          (e.target === connection.target && e.targetHandle === otherHandle),
-      );
-      if (otherConnected) return false;
-    }
-
-    return true;
+    return validateConnection(state.nodes, state.edges, connection, _reconnectingEdgeId);
   },
 
   updateDeviceLabel: (nodeId, label) => {
@@ -2778,10 +3438,17 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       });
     }
 
+    // baseLabel means "this device is still auto-named"; a rename clears it so
+    // renumberNodes stops owning the label. Only a rename — the editor saves every
+    // other field through here too, and dropping baseLabel on those made swapDevice
+    // read the device as user-renamed and keep the stale name (#333).
+    const renamed = !oldNode || data.label !== (oldNode.data as DeviceData).label;
+    const baseLabel = renamed ? undefined : (oldNode.data as DeviceData).baseLabel;
+
     set({
       nodes: renumberNodes(get().nodes.map((n) => {
         if (n.id !== nodeId || n.type !== "device") return n;
-        return { ...n, data: { ...data, baseLabel: undefined } } as DeviceNode;
+        return { ...n, data: { ...data, baseLabel } } as DeviceNode;
       })),
     });
 
@@ -2822,6 +3489,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     });
     if (edgesChanged) {
       set({ edges: syncedEdges });
+    }
+
+    // A connector/signal edit can strand existing connections in an invalid state —
+    // surface them so the user can disconnect, adapt, or knowingly keep them (#306)
+    if (oldNode) {
+      const conflicts = findInvalidatedConnections(
+        get().nodes,
+        get().edges,
+        nodeId,
+        (oldNode.data as DeviceData).ports,
+      );
+      if (conflicts.length > 0) {
+        set({ pendingPortEditConflicts: conflicts });
+      }
     }
 
     get().saveToLocalStorage();
@@ -2959,6 +3640,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     if (!template || template.version == null) return null;
 
     const result = syncDeviceWithTemplate(node.data, template, nodeId, state.edges);
+    const oldPorts = node.data.ports;
 
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
@@ -2968,6 +3650,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           : n,
       ),
     });
+
+    // Syncing keeps port IDs stable but can change a port's signal type under a live
+    // cable, stranding it exactly like a hand edit — so stage the same conflicts
+    // updateDevice and propagateTemplateToInstances do (#306). Without this the dialog
+    // only appeared when the sync was redone, since redo revalidates (#326).
+    const conflicts = findInvalidatedConnections(get().nodes, get().edges, nodeId, oldPorts);
+    if (conflicts.length > 0) {
+      const existing = get().pendingPortEditConflicts ?? [];
+      const seen = new Set(existing.map((c) => c.edgeId));
+      const fresh = conflicts.filter((c) => !seen.has(c.edgeId));
+      if (fresh.length > 0) set({ pendingPortEditConflicts: [...existing, ...fresh] });
+    }
+
     get().saveToLocalStorage();
     return result;
   },
@@ -2992,9 +3687,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // device-side port IDs stable (so live edges stay attached), adds new template ports,
     // preserves per-instance overrides, and only orphans removed ports — never touching the
     // edge list. Re-point templateId/version so a forked built-in now tracks the user copy.
+    const oldPortsByNodeId = new Map<string, Port[]>();
     const newNodes = state.nodes.map((n) => {
       if (!targetIds.has(n.id) || n.type !== "device") return n;
       const dn = n as DeviceNode;
+      oldPortsByNodeId.set(n.id, dn.data.ports);
       const { updatedData } = syncDeviceWithTemplate(dn.data, newTemplate, n.id, state.edges);
       return {
         ...dn,
@@ -3007,6 +3704,28 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     });
 
     set({ nodes: newNodes });
+
+    // The propagated port changes can strand these instances' connections exactly like a
+    // direct edit, so run the same revalidation over every updated instance and fold the
+    // failures into the pending list — the editor's updateDevice may already have staged
+    // the edited instance's conflicts, and one dialog should cover them all (#306).
+    const propagated: PortEditConflict[] = [];
+    for (const [id, oldPorts] of oldPortsByNodeId) {
+      propagated.push(...findInvalidatedConnections(get().nodes, get().edges, id, oldPorts));
+    }
+    if (propagated.length > 0) {
+      // A cable between two updated instances is found once from each end — dedupe
+      // across the merged list so each edge stages a single conflict.
+      const existing = get().pendingPortEditConflicts ?? [];
+      const seen = new Set(existing.map((c) => c.edgeId));
+      const fresh = propagated.filter((c) => {
+        if (seen.has(c.edgeId)) return false;
+        seen.add(c.edgeId);
+        return true;
+      });
+      if (fresh.length > 0) set({ pendingPortEditConflicts: [...existing, ...fresh] });
+    }
+
     get().saveToLocalStorage();
     return { updated: targetIds.size };
   },
@@ -3117,8 +3836,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     // 5. Build new DeviceData. Take factual fields from template; preserve a small set
     //    of instance-level customizations from the old device.
-    const userRenamed = !oldData.baseLabel; // baseLabel cleared on user rename
+    const userRenamed = !isAutoNamedDevice(oldData);
     const preservedLabel = userRenamed ? oldData.label : newTemplate.label;
+    // The device's own header color survives the swap — a swap changes the model, not the
+    // color the user (or the default header color setting) gave this device. Only a device
+    // that never had one picks up a color the new template carries, so swapping into a
+    // template that was saved with a header color still colors the device (#354).
+    // FACE: every device is stamped with the built-in red, so red alone is not a color of its
+    // own — a template saved with a color still wins over it.
+    const ownHeaderColor = oldData.headerColor === DEFAULT_HEADER_COLOR ? undefined : oldData.headerColor;
+    const swappedHeaderColor = ownHeaderColor ?? normalizeHeaderColor(newTemplate.headerColor) ?? oldData.headerColor;
     const newData: DeviceData = {
       label: preservedLabel,
       deviceType: newTemplate.deviceType,
@@ -3161,6 +3888,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       ...(oldData.hostname ? { hostname: oldData.hostname } : (newTemplate.hostname ? { hostname: newTemplate.hostname } : {})),
       ...(oldData.useShortName !== undefined ? { useShortName: oldData.useShortName } : {}),
       ...(oldData.wrapLabel !== undefined ? { wrapLabel: oldData.wrapLabel } : {}),
+      ...(swappedHeaderColor ? { headerColor: swappedHeaderColor } : {}),
     };
 
     // 6. Remap edges. For each mapping with a target, compute the new handle. Otherwise drop.
@@ -3794,14 +4522,14 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       return true;
     }
 
-    // COMMIT: re-anchor connected stub labels (as a drag/move would), move the device
+    // COMMIT: re-anchor the device's tags (as a drag/move would), move the device
     // to the absolute target as a temporarily top-level node, then let reparentNode do
     // the geometric reparent + relative-coord conversion + parent-first sort. Clearing
     // parentId first avoids reparentNode's "parent unchanged" early-return.
     pushUndo({ nodes: state.nodes, edges: state.edges });
-    const reanchored = reanchorConnectedStubLabels(state.nodes, state.edges, nodeId);
+    const settled = settleTagsAfterMove(state.nodes, state.edges, new Set([nodeId])) ?? state.nodes;
     set({
-      nodes: reanchored.map((n) =>
+      nodes: settled.map((n) =>
         n.id === nodeId ? { ...n, parentId: undefined, position: absPos } : n,
       ),
     });
@@ -3876,10 +4604,79 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
-  onRoomResizeEnd: (_nodeId) => {
+  onRoomResizeEnd: (nodeId) => {
     const state = get();
     pushUndo({ nodes: state.nodes, edges: state.edges });
+    // Capture the descendant set BEFORE reconciling membership: a shrink can push
+    // a child's center outside the new bounds, and reparentAllDevices then detaches
+    // it (or hands it to another room) at its origin-shifted, off-grid absolute
+    // position — the snap below must still cover those escapees.
+    const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
+    const wasUnderRoom = new Set<string>();
+    for (const n of state.nodes) {
+      if (isAncestorOf(nodeId, n.id, nodeMap)) wasUnderRoom.add(n.id);
+    }
     get().reparentAllDevices({ skipUndo: true });
+    // A left/top-edge resize moves the room origin by arbitrary px — children
+    // travel with it, so pull them back onto the absolute grid.
+    get().snapRoomChildrenToGrid(nodeId, wasUnderRoom);
+  },
+
+  snapRoomChildrenToGrid: (roomId, extraIds) => {
+    const state = get();
+    const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
+    // state.nodes is kept parent-first (sortNodesParentFirst), so reading parent
+    // offsets from newPos-then-nodeMap sums final positions for nested parents
+    // (rack-in-room) too.
+    const newPos = new Map<string, { x: number; y: number }>();
+    for (const n of state.nodes) {
+      // Same exclusions as snapNodesToGrid — stubs sit at sub-grid, port-centred Y.
+      if (n.type === "stub-label" || n.type === "text-stub") continue;
+      if (!isAncestorOf(roomId, n.id, nodeMap) && !extraIds?.has(n.id)) continue;
+      const { dx, dy } = parentOffsetFromMap(n, nodeMap, newPos);
+      const x = Math.round((n.position.x + dx) / GRID_SIZE) * GRID_SIZE - dx;
+      const y = Math.round((n.position.y + dy) / GRID_SIZE) * GRID_SIZE - dy;
+      if (x !== n.position.x || y !== n.position.y) newPos.set(n.id, { x, y });
+    }
+    if (newPos.size === 0) return;
+
+    // Carry each tag along with the device it hangs off (#334). The correction above
+    // is up to half a grid cell, and a tag left behind by it sits that far off its
+    // port row for good: this writes nodes directly, so the reanchor pass never runs,
+    // and healStubPortAlignment's band stops strictly short of half a cell. Moving the
+    // pair rigidly means the gap is never opened — on a group drag, on a plain room
+    // drag, and on a left/top-edge resize alike.
+    const absShiftOf = (id: string): { dx: number; dy: number } | undefined => {
+      const n = nodeMap.get(id);
+      if (!n) return undefined;
+      const moved = newPos.get(id) ?? n.position;
+      const pre = parentOffsetFromMap(n, nodeMap);
+      const post = parentOffsetFromMap(n, nodeMap, newPos);
+      return {
+        dx: moved.x + post.dx - (n.position.x + pre.dx),
+        dy: moved.y + post.dy - (n.position.y + pre.dy),
+      };
+    };
+    for (const n of state.nodes) {
+      if (n.type !== "stub-label" && n.type !== "text-stub") continue;
+      const hostId = tagHostId(n, state.nodes, state.edges, state.hiddenAdapterNodeIds);
+      const host = hostId === undefined ? undefined : absShiftOf(hostId);
+      if (!host) continue;
+      // A tag inside the room already travels with its own parent; only the
+      // remainder of its device's shift is still owed.
+      const own = n.parentId ? absShiftOf(n.parentId) : undefined;
+      const dx = host.dx - (own?.dx ?? 0);
+      const dy = host.dy - (own?.dy ?? 0);
+      if (dx === 0 && dy === 0) continue;
+      newPos.set(n.id, { x: n.position.x + dx, y: n.position.y + dy });
+    }
+    set({
+      nodes: state.nodes.map((n) => {
+        const p = newPos.get(n.id);
+        return p ? { ...n, position: p } : n;
+      }),
+    });
+    get().saveToLocalStorage();
   },
 
   pushSnapshot: () => {
@@ -3904,18 +4701,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   runAsSingleUndoStep: (fn) => {
-    // The first pushUndo inside fn consumes this, so the entry holds pre-batch state.
-    get().setPendingUndoSnapshot();
-    undoBatchActive = true;
-    undoBatchPushed = false;
-    try {
-      fn();
-    } finally {
-      undoBatchActive = false;
-      // fn may have mutated nothing — don't leave a stale snapshot armed.
-      get().clearPendingUndoSnapshot();
-    }
-    if (undoBatchPushed) get().saveToLocalStorage();
+    // One batch of one: the module-level runAsSingleUndoStep suppresses every push inside
+    // fn, records the pre-batch snapshot once and saves once — only if something changed.
+    runAsSingleUndoStep(["batch"], () => fn());
   },
 
   undo: () => {
@@ -3925,7 +4713,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     redoStack.push(structuredClone({ nodes: state.nodes, edges: state.edges, pages: state.pages, bundles: state.bundles, autoRoute: state.autoRoute }));
     const edges = prev.edges.map(({ zIndex: _, selected: _s, ...rest }) => ({ ...rest, zIndex: 0 })) as typeof prev.edges;
     const restoreAutoRoute = prev.autoRoute !== undefined ? { autoRoute: prev.autoRoute } : {};
-    set({ nodes: prev.nodes, edges, pages: prev.pages ?? state.pages, bundles: prev.bundles ?? state.bundles, ...restoreAutoRoute, undoSize: undoStack.length, redoSize: redoStack.length });
+    // Staged port-edit conflicts describe cables in the state being replaced — acting on
+    // them against the restored state would disconnect or flag valid cables (#306).
+    set({ nodes: prev.nodes, edges, pages: prev.pages ?? state.pages, bundles: prev.bundles ?? state.bundles, ...restoreAutoRoute, pendingPortEditConflicts: null, undoSize: undoStack.length, redoSize: redoStack.length });
     get().saveToLocalStorage();
   },
 
@@ -3936,7 +4726,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     undoStack.push(structuredClone({ nodes: state.nodes, edges: state.edges, pages: state.pages, bundles: state.bundles, autoRoute: state.autoRoute }));
     const edges = next.edges.map(({ zIndex: _, selected: _s, ...rest }) => ({ ...rest, zIndex: 0 })) as typeof next.edges;
     const restoreAutoRoute = next.autoRoute !== undefined ? { autoRoute: next.autoRoute } : {};
-    set({ nodes: next.nodes, edges, pages: next.pages ?? state.pages, bundles: next.bundles ?? state.bundles, ...restoreAutoRoute, undoSize: undoStack.length, redoSize: redoStack.length });
+    // Redoing a port edit re-applies it, so the conflicts undo cleared have to come
+    // back with it — otherwise the invalid cables land with no dialog (#326).
+    const conflicts = revalidateRestoredState(state.nodes, next.nodes, edges);
+    set({ nodes: next.nodes, edges, pages: next.pages ?? state.pages, bundles: next.bundles ?? state.bundles, ...restoreAutoRoute, pendingPortEditConflicts: conflicts.length > 0 ? conflicts : null, undoSize: undoStack.length, redoSize: redoStack.length });
     get().saveToLocalStorage();
   },
 
@@ -3964,15 +4757,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   addCustomTemplate: (template) => {
-    const updated = [...get().customTemplates, template];
-    const order = [...get().customTemplateOrder, templateKey(template)];
+    const updated = [...withStoredCustomTemplates(get().customTemplates), template];
+    const order = [...withStoredCustomTemplateOrder(get().customTemplateOrder), templateKey(template)];
     set({ customTemplates: updated, customTemplateOrder: order });
     saveCustomTemplates(updated);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
   },
 
   updateCustomTemplate: (id, template) => {
-    const updated = get().customTemplates.map((t) => (t.id === id ? template : t));
+    const updated = withStoredCustomTemplates(get().customTemplates).map((t) => (t.id === id ? template : t));
     set({ customTemplates: updated });
     saveCustomTemplates(updated);
   },
@@ -3980,13 +4773,21 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   addOwnedGear: (template, quantity = 1) => {
     const normalizedQuantity = Math.max(1, Math.floor(quantity));
     const key = templateKey(template);
-    const ownedGear = [...get().ownedGear];
-    const existing = ownedGear.find((item) => templateKey(item.template) === key);
-    if (existing) {
-      existing.quantity += normalizedQuantity;
-    } else {
-      ownedGear.push({ template: structuredClone(template), quantity: normalizedQuantity });
-    }
+    const current = get().ownedGear;
+    // Build a new array immutably (mirrors updateOwnedGearQuantity). Mutating the matched item's
+    // quantity in place would clobber the live state object before set().
+    // Target the FIRST match only, exactly like the previous find()-based code: load/import paths
+    // take `ownedGear` verbatim, so a hand-edited file can carry two rows with the same key, and a
+    // blanket map() would bump both.
+    const index = current.findIndex((item) => templateKey(item.template) === key);
+    const ownedGear =
+      index === -1
+        ? [...current, { template: structuredClone(template), quantity: normalizedQuantity }]
+        : [
+            ...current.slice(0, index),
+            { ...current[index], quantity: current[index].quantity + normalizedQuantity },
+            ...current.slice(index + 1),
+          ];
     set({ ownedGear, showOwnedGearPane: true });
     get().saveToLocalStorage();
   },
@@ -4034,8 +4835,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   removeCustomTemplate: (key) => {
-    const updated = get().customTemplates.filter((t) => templateKey(t) !== key);
-    const order = get().customTemplateOrder.filter((k) => k !== key);
+    const updated = withStoredCustomTemplates(get().customTemplates).filter((t) => templateKey(t) !== key);
+    const order = withStoredCustomTemplateOrder(get().customTemplateOrder).filter((k) => k !== key);
     const { [key]: _, ...groupAssignments } = get().customTemplateGroupAssignments;
     set({ customTemplates: updated, customTemplateOrder: order, customTemplateGroupAssignments: groupAssignments });
     saveCustomTemplates(updated);
@@ -4139,20 +4940,30 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     const pending = state.pendingIncompatibleConnection;
     if (!pending) return;
+    // An edge's sourceHandle only resolves against source-type handles, and a strict
+    // `input` port renders target-only — a connection drawn from one sits in the
+    // model but never appears (#310). Flip the ends so the drawable port is the
+    // source; with two strict inputs no orientation is drawable, so refuse outright
+    // (onConnect keeps that pair from ever staging, this guards other callers).
+    const flip = pending.sourcePort.direction === "input";
+    if (flip && pending.targetPort.direction === "input") {
+      set({ pendingIncompatibleConnection: null });
+      return;
+    }
     pushUndo({ nodes: state.nodes, edges: state.edges });
 
     const incompatibleData: ConnectionData = {
-      signalType: pending.sourcePort.signalType,
+      signalType: (flip ? pending.targetPort : pending.sourcePort).signalType,
       connectorMismatch: true,
       allowIncompatible: true,
     };
     const existingEdges = ensureUniqueEdgeIds(state.edges);
     const newEdge: ConnectionEdge = {
       id: nextEdgeId(existingEdges),
-      source: pending.connection.source,
-      target: pending.connection.target,
-      sourceHandle: pending.connection.sourceHandle,
-      targetHandle: pending.connection.targetHandle,
+      source: flip ? pending.connection.target : pending.connection.source,
+      target: flip ? pending.connection.source : pending.connection.target,
+      sourceHandle: flip ? pending.connection.targetHandle : pending.connection.sourceHandle,
+      targetHandle: flip ? pending.connection.sourceHandle : pending.connection.targetHandle,
       data: incompatibleData,
       style: {
         stroke: resolveEdgeStroke(incompatibleData),
@@ -4165,21 +4976,26 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       edges: [...existingEdges, newEdge],
       pendingIncompatibleConnection: null,
     });
-    get().saveToLocalStorage();
+    // "Connect anyway" is the same drawn connection the user started, so it obeys the
+    // same default (#353). The adapter-insertion path below deliberately does not: it
+    // produces two connections around a device the user never placed, and stubbing
+    // both would put four stub labels and a floating adapter where one link belongs.
+    if (!applyDefaultConnectionType(newEdge.id)) get().saveToLocalStorage();
   },
 
   insertAdapterBetween: (template) => {
     const state = get();
     const pending = state.pendingIncompatibleConnection;
-    if (!pending) return;
+    if (!pending) return false;
     pushUndo({ nodes: state.nodes, edges: state.edges });
 
     // Resolve source and target device absolute positions for midpoint
     const sourceNode = state.nodes.find((n) => n.id === pending.connection.source);
     const targetNode = state.nodes.find((n) => n.id === pending.connection.target);
     if (!sourceNode || !targetNode) {
-      set({ pendingIncompatibleConnection: null });
-      return;
+      undoFailedPush();
+      set({ pendingIncompatibleConnection: null, undoSize: undoStack.length });
+      return false;
     }
 
     // Compute absolute positions, walking the full parent chain so devices
@@ -4201,42 +5017,43 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     const srcAbs = absPos(sourceNode);
     const tgtAbs = absPos(targetNode);
-    const srcW = sourceNode.measured?.width ?? 144;
-    const tgtW = targetNode.measured?.width ?? 144;
+    // Same width fallback chain the placement search below uses, so the midpoint it
+    // aims for and the boxes it tests agree about how wide an unmeasured device is.
+    const deviceWidth = (n: SchematicNode) =>
+      n.measured?.width ?? (n.width as number) ?? (n.style?.width as number) ?? DEVICE_W_EST;
+    const srcW = deviceWidth(sourceNode);
+    const tgtW = deviceWidth(targetNode);
 
     // Midpoint between the right edge of the left device and left edge of the right device
     // (or just center-to-center if they're stacked vertically)
     const srcCenterX = srcAbs.x + srcW / 2;
     const tgtCenterX = tgtAbs.x + tgtW / 2;
-    const srcCenterY = srcAbs.y + (sourceNode.measured?.height ?? 48) / 2;
-    const tgtCenterY = tgtAbs.y + (targetNode.measured?.height ?? 48) / 2;
+    // Port rows, not a flat 48px: the same estimate the placement search below uses to
+    // size neighbours, so the row it aims for is the row the cable actually runs on.
+    const srcCenterY = srcAbs.y + (sourceNode.measured?.height ?? estimateDeviceHeight(sourceNode)) / 2;
+    const tgtCenterY = tgtAbs.y + (targetNode.measured?.height ?? estimateDeviceHeight(targetNode)) / 2;
 
-    let idealX = Math.round(((srcCenterX + tgtCenterX) / 2) / GRID_SIZE) * GRID_SIZE;
-    let idealY = Math.round(((srcCenterY + tgtCenterY) / 2) / GRID_SIZE) * GRID_SIZE;
+    const idealAbsX = Math.round(((srcCenterX + tgtCenterX) / 2) / GRID_SIZE) * GRID_SIZE;
+    const idealAbsY = Math.round(((srcCenterY + tgtCenterY) / 2) / GRID_SIZE) * GRID_SIZE;
 
     // If both are in the same room, parent the adapter there too
     const adapterParentId = (sourceNode.parentId && sourceNode.parentId === targetNode.parentId)
       ? sourceNode.parentId : undefined;
 
-    // Convert back to parent-relative coords if parented
-    if (adapterParentId) {
-      const parentNode = state.nodes.find((n) => n.id === adapterParentId);
-      if (parentNode) {
-        idealX -= parentNode.position.x;
-        idealY -= parentNode.position.y;
-      }
-    }
+    // Everything below works in the adapter's own frame: parent-relative when it is
+    // parented, absolute when it isn't. The offset walks the full parent chain so a
+    // room nested in another room resolves like every other coordinate here.
+    const adapterParent = adapterParentId ? adapterNodeMap.get(adapterParentId) : undefined;
+    const parentOrigin = adapterParent ? absPos(adapterParent) : { x: 0, y: 0 };
 
-    // Snap to grid
-    idealX = Math.round(idealX / GRID_SIZE) * GRID_SIZE;
-    idealY = Math.round(idealY / GRID_SIZE) * GRID_SIZE;
+    const idealX = Math.round((idealAbsX - parentOrigin.x) / GRID_SIZE) * GRID_SIZE;
+    const idealY = Math.round((idealAbsY - parentOrigin.y) / GRID_SIZE) * GRID_SIZE;
 
     // Create adapter device
     const preset = template.id ? state.templatePresets[template.id] : undefined;
     let adapterPorts: Port[];
     let hiddenPorts: string[] | undefined;
     let color = template.color;
-    let headerColor = template.headerColor;
 
     if (preset) {
       const cloned = clonePorts(preset.ports);
@@ -4245,12 +5062,18 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       adapterPorts = cloned;
       hiddenPorts = preset.hiddenPorts?.map((id) => idMap.get(id) ?? id).filter((id) => cloned.some((p) => p.id === id));
       color = preset.color ?? template.color;
-      headerColor = preset.headerColor ?? template.headerColor;
     } else {
       adapterPorts = clonePorts(template.ports);
     }
 
-    headerColor = headerColor ?? DEFAULT_HEADER_COLOR;
+    // An auto-inserted adapter is a new device like any other, so it resolves its header
+    // color the same way — preset, then template, then the two defaults (#354).
+    const adapterHeaderColor = resolveDeviceHeaderColor(
+      preset?.headerColor,
+      template.headerColor,
+      state.defaultDeviceHeaderColor,
+      state.appDefaultDeviceHeaderColor,
+    );
 
     const adapterId = nextNodeId();
     let adapterNode: DeviceNode = {
@@ -4263,7 +5086,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         deviceType: template.deviceType,
         ports: adapterPorts,
         color,
-        ...(headerColor ? { headerColor } : {}),
+        ...(adapterHeaderColor ? { headerColor: adapterHeaderColor } : {}),
         baseLabel: template.label,
         model: template.label,
         ...(template.shortName ? { shortName: template.shortName } : {}),
@@ -4282,46 +5105,170 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       },
     };
 
-    // Nudge adapter position if it overlaps existing devices
-    const MIN_GAP = GRID_SIZE * 5; // 80px — enough for stubs + routing
-    const adapterW = DEVICE_NODE_WIDTH; // approximate width before measurement
-    const adapterH = 48;
-    let posX = adapterNode.position.x;
-    const posY = adapterNode.position.y;
-    for (const other of state.nodes) {
-      if (other.type !== "device") continue;
-      if (other.parentId !== adapterParentId) continue;
-      const ow = other.measured?.width ?? 144;
-      const oh = other.measured?.height ?? 48;
-      // Check AABB overlap with gap
-      const overlapX = posX < other.position.x + ow + MIN_GAP && posX + adapterW + MIN_GAP > other.position.x;
-      const overlapY = posY < other.position.y + oh && posY + adapterH > other.position.y;
-      if (overlapX && overlapY) {
-        // Push horizontally toward the midpoint direction
-        const pushRight = other.position.x + ow + MIN_GAP;
-        const pushLeft = other.position.x - adapterW - MIN_GAP;
-        // Pick whichever side is closer to the ideal position
-        if (Math.abs(pushRight - idealX) < Math.abs(pushLeft - idealX)) {
-          posX = Math.round(pushRight / GRID_SIZE) * GRID_SIZE;
-        } else {
-          posX = Math.round(pushLeft / GRID_SIZE) * GRID_SIZE;
-        }
-      }
-    }
-    adapterNode = { ...adapterNode, position: { x: posX, y: posY } };
+    // Move the adapter off the midpoint if devices are already sitting there. Every
+    // neighbour is re-checked against every candidate slot, on both axes: the old
+    // single pass only moved along X and never revisited a device it had cleared, so
+    // it could push the adapter straight onto one it had already checked (#363).
+    //
+    // Every device on the page is an obstacle, resolved into the adapter's own frame.
+    // The old loop only looked at devices sharing the adapter's parent, which meant
+    // that on the ordinary cross-room drag — endpoints in two different rooms, so the
+    // adapter is unparented — the filter matched nothing and the adapter dropped
+    // straight onto whatever room-parented device happened to sit at the midpoint.
+    //
+    // Heights come from the shared port-row estimate — the flat 48px guess used to
+    // miss an overlap outright whenever a neighbour's first port row was the part
+    // being covered — and sizes follow the same fallback chain snapUtils uses, so a
+    // device carrying an explicit size but no measurement yet is not guessed at.
+    const deviceBox = (n: SchematicNode) => {
+      const abs = absPos(n);
+      return {
+        x: abs.x - parentOrigin.x,
+        y: abs.y - parentOrigin.y,
+        w: deviceWidth(n),
+        h: n.measured?.height ?? (n.height as number) ?? (n.style?.height as number) ?? estimateDeviceHeight(n),
+      };
+    };
+    // Stub tags and text stubs are obstacles too (#371): they sit near the cable path,
+    // so the midpoint is exactly where one tends to be.
+    // They are tag-sized, not device-sized, until React Flow measures them.
+    const tagBox = (n: SchematicNode) => {
+      const abs = absPos(n);
+      return {
+        x: abs.x - parentOrigin.x,
+        y: abs.y - parentOrigin.y,
+        w: n.measured?.width ?? STUB_W_EST,
+        h: n.measured?.height ?? STUB_H_EST,
+      };
+    };
+    const obstacles = state.nodes.flatMap((n) =>
+      n.type === "device" ? [deviceBox(n)]
+      : n.type === "stub-label" || n.type === "text-stub" ? [tagBox(n)]
+      : [],
+    );
 
-    // Find matching ports on adapter
-    const adapterInput = adapterPorts.find(
+    // Staying inside the parent room is more than cosmetic: room membership is
+    // geometric (findBestEnclosingRoom), so an adapter parked outside the room it
+    // claims is detached by the next reparent pass — silently changing which room it
+    // is filed under in the room-grouped reports. Sizes use the same fallback order
+    // that membership check does, so the two can't disagree about the room's edges.
+    const roomBounds = adapterParent
+      ? {
+          x: 0,
+          y: 0,
+          w: adapterParent.measured?.width ?? (adapterParent.style?.width as number) ?? (adapterParent.width as number) ?? 400,
+          h: adapterParent.measured?.height ?? (adapterParent.style?.height as number) ?? (adapterParent.height as number) ?? 300,
+        }
+      : undefined;
+
+    adapterNode = {
+      ...adapterNode,
+      position: findFreeAdapterSlot(
+        { x: idealX, y: idealY },
+        { w: DEVICE_W_EST, h: estimateDeviceHeight(adapterNode) },
+        obstacles,
+        ADAPTER_GAP,
+        roomBounds,
+      ),
+    };
+
+    // Find matching ports on adapter, using the same resolver the matcher used so the
+    // two can't disagree. Both resolvers also match the adapter used in reverse —
+    // dragging Ethernet→USB onto a USB→Ethernet dongle, or USB-A→USB-C onto a
+    // USB-C→USB-A one — so the two ends follow whichever orientation was matched.
+    // A connector mismatch must resolve by connector: picking ports by signal type
+    // alone would wire a USB-A→USB-C drag into the adapter's USB-C end and leave both
+    // legs connector-mismatched. Signal resolution and the per-end finds remain as
+    // fallbacks so a partially-matching adapter still wires the end it can, as before.
+    let bridge =
+      (pending.reason === "connector-mismatch" &&
+      pending.sourcePort.connectorType &&
+      pending.targetPort.connectorType
+        ? resolveConnectorBridgePorts(
+            { ports: adapterPorts },
+            pending.sourcePort.connectorType,
+            pending.targetPort.connectorType,
+            pending.sourcePort.signalType,
+          )
+        : null) ??
+      resolveSignalBridgePorts(
+        { ports: adapterPorts },
+        pending.sourcePort.signalType,
+        pending.targetPort.signalType,
+      );
+
+    // A reversed match is the same physical part used in its other orientation:
+    // signal enters the declared output side and leaves the declared input side.
+    // Flip the instance's strict port directions to match, so the outgoing leg gets a
+    // source-type handle on the adapter (a strict input renders target-only, and an
+    // edge's sourceHandle only resolves against source handles, #310). A direction
+    // swap already mirrors a strict port's rendered side, so only bidirectional and
+    // passthrough ports need the `flipped` placement toggle (the same thing "Flip
+    // all ports" does) for the legs to approach from facing sides instead of reading
+    // as crossed. Handle IDs are unaffected: strict ports use the bare port ID
+    // whichever direction they face, and bidirectional ports stay bidirectional.
+    if (bridge?.reversed) {
+      const sourceSideId = bridge.sourceSidePort.id;
+      const targetSideId = bridge.targetSidePort.id;
+      adapterPorts = adapterPorts.map((p) =>
+        p.direction === "input" ? { ...p, direction: "output" as const }
+        : p.direction === "output" ? { ...p, direction: "input" as const }
+        : { ...p, flipped: !p.flipped || undefined });
+      adapterNode = {
+        ...adapterNode,
+        data: { ...adapterNode.data, ports: adapterPorts },
+      };
+      bridge = {
+        reversed: true,
+        sourceSidePort: adapterPorts.find((p) => p.id === sourceSideId)!,
+        targetSidePort: adapterPorts.find((p) => p.id === targetSideId)!,
+      };
+    }
+
+    const adapterInput = bridge?.sourceSidePort ?? adapterPorts.find(
       (p) => (p.direction === "input" || p.direction === "bidirectional") && p.signalType === pending.sourcePort.signalType,
     );
-    const adapterOutput = adapterPorts.find(
+    const adapterOutput = bridge?.targetSidePort ?? adapterPorts.find(
       (p) => (p.direction === "output" || p.direction === "bidirectional") && p.signalType === pending.targetPort.signalType,
     );
 
-    const existingEdges = ensureUniqueEdgeIds(state.edges);
+    // Replacing an existing cable must be atomic (#306): a project preset can reshape
+    // the adapter's ports out from under the template the dialog matched against, and
+    // committing with an unresolved leg would silently delete the user's cable. Leave
+    // the cable and state untouched and report failure so the caller can re-offer the
+    // remaining resolutions.
+    if (pending.replaceEdgeId && (!adapterInput || !adapterOutput)) {
+      undoFailedPush();
+      set({ pendingIncompatibleConnection: null, undoSize: undoStack.length });
+      return false;
+    }
+
+    // A drawn leg must put its edge source on a source-type handle: React Flow
+    // resolves sourceHandle only against handleBounds.source (ConnectionMode.Loose
+    // relaxes the target end only), and DeviceNode renders a strict `input` port as a
+    // target-only handle. Leg 1 draws source device → adapter, so the device source
+    // port must not be a strict input; leg 2 draws adapter → device, so the
+    // adapter-side port must not be. The reversed flip above guarantees the latter
+    // for bridge matches — this guard covers the fallback port resolution and direct
+    // callers, refusing whole rather than committing an adapter the canvas can only
+    // half-draw (#310).
+    if ((adapterInput && pending.sourcePort.direction === "input") ||
+        (adapterOutput && adapterOutput.direction === "input")) {
+      undoFailedPush();
+      set({ pendingIncompatibleConnection: null, undoSize: undoStack.length });
+      return false;
+    }
+
+    // Replacing an existing connection (#306): the invalid cable makes way for the adapter legs
+    const existingEdges = ensureUniqueEdgeIds(
+      pending.replaceEdgeId ? state.edges.filter((e) => e.id !== pending.replaceEdgeId) : state.edges,
+    );
     const newEdges: ConnectionEdge[] = [];
 
     if (adapterInput) {
+      // A strict `input` port renders as a target-only handle, but ConnectionMode.Loose
+      // lets a targetHandle resolve against source handles too — so the incoming leg is
+      // safe whichever direction the adapter was matched in.
       const inputHandle = adapterInput.direction === "bidirectional" ? `${adapterInput.id}-in` : adapterInput.id;
       const inputData: ConnectionData = {
         signalType: pending.sourcePort.signalType,
@@ -4349,6 +5296,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...(!areConnectorsCompatible(adapterOutput.connectorType, pending.targetPort.connectorType) ? { connectorMismatch: true } : {}),
         ...(adapterOutput.directAttach ? { directAttach: true } : {}),
       };
+      // Always drawn adapter → device: the reversed flip above guarantees the adapter
+      // side is a source-type handle, and the device end resolves under
+      // ConnectionMode.Loose whatever its direction (target handles fall back to
+      // source bounds). One inbound and one outbound leg is also the shape the
+      // hide-adapters virtual-edge builder collapses.
       newEdges.push({
         id: nextEdgeId([...existingEdges, ...newEdges]),
         source: adapterId,
@@ -4372,6 +5324,112 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       pendingIncompatibleConnection: null,
     });
     get().saveToLocalStorage();
+    return true;
+  },
+
+  resolvePortEditConflict: (edgeId, action, adapterTemplate) => {
+    const state = get();
+    const conflicts = state.pendingPortEditConflicts;
+    const conflict = conflicts?.find((c) => c.edgeId === edgeId);
+    if (!conflict) return;
+    const remaining = conflicts!.filter((c) => c.edgeId !== edgeId);
+    const rest = remaining.length > 0 ? remaining : null;
+
+    if (action === "adapter") {
+      if (!adapterTemplate || conflict.reason === "incompatible") return;
+      // Reuse the adapter auto-insert machinery: stage the pair as a pending
+      // connection that replaces the invalid cable (insertAdapterBetween pushes undo).
+      // insertAdapterBetween reads connectorType/signalType off the pending ports for
+      // bridge resolution and leg mismatch flags, so hand it the effective face
+      // connector and signal — a passthrough Port's own connectorType is not the
+      // connector this cable mates with.
+      set({
+        pendingIncompatibleConnection: {
+          connection: {
+            source: conflict.source,
+            target: conflict.target,
+            sourceHandle: conflict.sourceHandle,
+            targetHandle: conflict.targetHandle,
+          },
+          sourcePort: { ...conflict.sourcePort, connectorType: conflict.sourceConnector, signalType: conflict.sourceSignal },
+          targetPort: { ...conflict.targetPort, connectorType: conflict.targetConnector, signalType: conflict.targetSignal },
+          reason: conflict.reason,
+          replaceEdgeId: conflict.edgeId,
+        },
+      });
+      // The replace path is atomic: on failure the cable is untouched, so keep the
+      // conflict listed — marked, so the dialog can say the adapter didn't fit.
+      if (get().insertAdapterBetween(adapterTemplate)) {
+        set({ pendingPortEditConflicts: rest });
+      } else {
+        set({
+          pendingPortEditConflicts: conflicts!.map((c) =>
+            c.edgeId === edgeId ? { ...c, adapterFailed: true } : c,
+          ),
+        });
+      }
+      return;
+    }
+
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    if (action === "disconnect") {
+      const newEdges = state.edges.filter((e) => e.id !== edgeId);
+      set({
+        edges: newEdges,
+        nodes: reconcileWaypointNodes(state.nodes, newEdges),
+        pendingPortEditConflicts: rest,
+      });
+    } else {
+      // keep — flag the connection as a known mismatch so it renders as knowingly-wrong
+      set({
+        edges: state.edges.map((e) => {
+          if (e.id !== edgeId) return e;
+          const nextData: ConnectionData = {
+            ...e.data!,
+            signalType: conflict.sourceSignal,
+            connectorMismatch: true,
+          };
+          return { ...e, data: nextData, style: { ...e.style, stroke: resolveEdgeStroke(nextData) } };
+        }),
+        pendingPortEditConflicts: rest,
+      });
+    }
+    get().saveToLocalStorage();
+  },
+
+  resolveAllPortEditConflicts: (action) => {
+    const state = get();
+    const conflicts = state.pendingPortEditConflicts;
+    if (!conflicts || conflicts.length === 0) return;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const byEdgeId = new Map(conflicts.map((c) => [c.edgeId, c]));
+    if (action === "disconnect") {
+      const newEdges = state.edges.filter((e) => !byEdgeId.has(e.id));
+      set({
+        edges: newEdges,
+        nodes: reconcileWaypointNodes(state.nodes, newEdges),
+        pendingPortEditConflicts: null,
+      });
+    } else {
+      set({
+        edges: state.edges.map((e) => {
+          const c = byEdgeId.get(e.id);
+          if (!c) return e;
+          const nextData: ConnectionData = {
+            ...e.data!,
+            signalType: c.sourceSignal,
+            connectorMismatch: true,
+          };
+          return { ...e, data: nextData, style: { ...e.style, stroke: resolveEdgeStroke(nextData) } };
+        }),
+        pendingPortEditConflicts: null,
+      });
+    }
+    get().saveToLocalStorage();
+  },
+
+  dismissPortEditConflicts: () => {
+    set({ pendingPortEditConflicts: null });
   },
 
   setPrintView: (v) => { set({ printView: v }); },
@@ -4381,6 +5439,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setPrintCustomWidthIn: (w) => { set({ printCustomWidthIn: Math.max(1, w) }); get().saveToLocalStorage(); },
   setPrintCustomHeightIn: (h) => { set({ printCustomHeightIn: Math.max(1, h) }); get().saveToLocalStorage(); },
   setPrintOriginOffset: (x, y) => { set({ printOriginOffsetX: x, printOriginOffsetY: y }); get().saveToLocalStorage(); },
+  setPrintTitleBlockEnabled: (v) => { set({ printTitleBlockEnabled: v }); get().saveToLocalStorage(); },
   setColorKeyEnabled: (v) => { set({ colorKeyEnabled: v }); get().saveToLocalStorage(); },
   setColorKeyCorner: (c) => { set({ colorKeyCorner: c }); get().saveToLocalStorage(); },
   setColorKeyColumns: (n) => { set({ colorKeyColumns: Math.max(1, Math.min(4, n)) }); get().saveToLocalStorage(); },
@@ -4493,7 +5552,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   setReportHiddenColumns: (tableId, columnIds) => {
-    set({ reportHiddenColumns: { ...get().reportHiddenColumns, [tableId]: columnIds } });
+    const next = { ...get().reportHiddenColumns };
+    if (columnIds) next[tableId] = columnIds;
+    else delete next[tableId];
+    set({ reportHiddenColumns: next });
     get().saveToLocalStorage();
   },
 
@@ -4630,6 +5692,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
+  setStubLabelShowArrow: (show) => {
+    set({ stubLabelShowArrow: show });
+    get().saveToLocalStorage();
+  },
+
   setStubLabelShowPort: (show) => {
     set({ stubLabelShowPort: show });
     get().saveToLocalStorage();
@@ -4652,6 +5719,34 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   setWrapDeviceLabels: (wrap) => {
     set({ wrapDeviceLabels: wrap });
+    get().saveToLocalStorage();
+  },
+
+  // The app-level default header color is an editor preference, so it goes to
+  // localStorage rather than into the schematic file (#354). Neither setter touches
+  // existing devices — the color is stamped at placement, not resolved at paint time.
+  setAppDefaultDeviceHeaderColor: (color) => {
+    const normalized = normalizeHeaderColor(color);
+    set({ appDefaultDeviceHeaderColor: normalized });
+    saveAppDefaultHeaderColor(normalized);
+  },
+
+  setDefaultDeviceHeaderColor: (color) => {
+    set({ defaultDeviceHeaderColor: normalizeHeaderColor(color) });
+    get().saveToLocalStorage();
+  },
+
+  // Same split as the header color: the app preference is an editor preference kept in
+  // localStorage, the project override is document data. Neither touches existing tags —
+  // the mode is stamped when a connection is stubbed (#377).
+  setAppDefaultStubLabelMode: (mode) => {
+    const normalized = normalizeStubLabelMode(mode) ?? DEFAULT_STUB_LABEL_MODE;
+    set({ appDefaultStubLabelMode: normalized });
+    saveAppDefaultStubLabelMode(normalized);
+  },
+
+  setDefaultStubLabelMode: (mode) => {
+    set({ defaultStubLabelMode: normalizeStubLabelMode(mode) });
     get().saveToLocalStorage();
   },
 
@@ -4863,15 +5958,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   importCustomTemplates: (templates) => {
-    // Templates the bundled library already ships are skipped rather than re-added as
-    // user templates: re-importing an old FACE device archive shouldn't resurrect
-    // local duplicates of devices that are now built in.
+    migrateLegacyConnectorTypes(templates); // a template file exported before the switch to "schuko"
     const incoming = dropBundledDuplicates(templates);
     const skipped = templates.length - incoming.length;
-    const { merged, addedKeys, added, updated } = mergeCustomTemplates(get().customTemplates, incoming);
+    // Merge against what storage holds, not just this tab's copy — another tab may have
+    // added templates since (#251).
+    const { merged, addedKeys, added, updated } = mergeCustomTemplates(withStoredCustomTemplates(get().customTemplates), incoming);
     if (added === 0 && updated === 0) return { added: 0, updated: 0, skipped };
 
-    const order = [...get().customTemplateOrder, ...addedKeys];
+    const order = [...withStoredCustomTemplateOrder(get().customTemplateOrder), ...addedKeys];
     set({ customTemplates: merged, customTemplateOrder: order });
     saveCustomTemplates(merged);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
@@ -6161,7 +7256,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       return { ...p, viewports: p.viewports.map((v) => v.id === viewportId ? { ...v, ...patch } : v) };
     });
     set({ pages: updatedPages });
-    get().saveToLocalStorage();
+    // Driven per pointer-move while dragging/resizing a print-sheet viewport —
+    // same every-frame serialization cost as node drags (#384).
+    scheduleAutosave();
   },
 
   removeViewport: (pageId, viewportId) => {
@@ -6252,13 +7349,42 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     void pruneUnderlaySources(keys);
   },
 
+  /** Re-arm autosave after a CONFIRMED successful write to durable storage.
+   *  A failed initial hydrate leaves `hydrated` false so autosave can't clobber
+   *  the still-recoverable saved copy (#240). Once the user's work is safely on
+   *  disk or in the cloud that protection has done its job, so persistence
+   *  resumes and the unreadable blob is replaced with current state.
+   *
+   *  Call this ONLY after the write resolves — never optimistically alongside
+   *  `adoptLocalFile`, which MenuBar invokes BEFORE `writeToFileHandle` settles
+   *  and even when `importFromJSON` just threw. Arming there would overwrite the
+   *  recoverable copy on a failed write, which is the exact loss this prevents. */
+  resumeAutosave: () => {
+    if (hydrated) return;      // normal case — keep the hot save path cheap
+    hydrated = true;
+    get().saveToLocalStorage();
+  },
+
   saveToLocalStorage: () => {
+    // A save of current state supersedes any pending debounced autosave — clear it so a
+    // discrete action right after a gesture doesn't re-serialize the document 250ms later.
+    if (autosaveTimer !== null) {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+    }
+    if (deferredSave) {
+      deferredSave.pending = true;
+      return;
+    }
     if (!hydrated) return;
     const state = get();
     const data: SchematicFile = {
       version: CURRENT_SCHEMA_VERSION,
       name: state.schematicName,
-      nodes: state.nodes,
+      // `selected` is transient UI state on both nodes and edges: persisting it
+      // resurrects a stale selection on reload, which the next Delete keypress
+      // would then operate on.
+      nodes: state.nodes.map(({ selected: _s, ...rest }) => rest) as SchematicNode[],
       edges: state.edges.map(({ zIndex: _, selected: _s, ...rest }) => rest) as ConnectionEdge[],
       ownedGear: state.ownedGear.length > 0 ? state.ownedGear : undefined,
       signalColors: state.signalColors,
@@ -6299,17 +7425,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       cableIdGap: state.cableIdGap !== 4 ? state.cableIdGap : undefined,
       cableIdMidOffset: state.cableIdMidOffset !== 0 ? state.cableIdMidOffset : undefined,
       cableIdLabelMode: state.cableIdLabelMode !== "endpoint" ? state.cableIdLabelMode : undefined,
+      stubLabelShowArrow: state.stubLabelShowArrow !== DEFAULT_STUB_LABEL_SHOW_ARROW ? state.stubLabelShowArrow : undefined,
       stubLabelShowPort: state.stubLabelShowPort !== DEFAULT_STUB_LABEL_SHOW_PORT ? state.stubLabelShowPort : undefined,
       stubLabelShowRoom: state.stubLabelShowRoom !== DEFAULT_STUB_LABEL_SHOW_ROOM ? state.stubLabelShowRoom : undefined,
       stubLabelPageMode: state.stubLabelPageMode !== DEFAULT_STUB_LABEL_PAGE_MODE ? state.stubLabelPageMode : undefined,
+      defaultConnectionType: state.defaultConnectionType !== DEFAULT_CONNECTION_TYPE ? state.defaultConnectionType : undefined,
       useShortNames: state.useShortNames || undefined,
       wrapDeviceLabels: state.wrapDeviceLabels === false ? false : undefined,
+      defaultDeviceHeaderColor: state.defaultDeviceHeaderColor,
+      defaultStubLabelMode: state.defaultStubLabelMode,
       hideAdapters: state.hideAdapters || undefined,
       autoRoute: state.autoRoute === false ? false : undefined,
       edgeHitboxSize: state.edgeHitboxSize !== 10 ? state.edgeHitboxSize : undefined,
       categoryOrder: state.categoryOrder ?? undefined,
       showOwnedGearPane: state.showOwnedGearPane || undefined,
       libraryActiveTab: state.libraryActiveTab !== "devices" ? state.libraryActiveTab : undefined,
+      printTitleBlockEnabled: state.printTitleBlockEnabled ? undefined : false,
       colorKeyEnabled: state.colorKeyEnabled || undefined,
       colorKeyCorner: state.colorKeyCorner !== "bottom-left" ? state.colorKeyCorner : undefined,
       colorKeyColumns: state.colorKeyColumns !== 1 ? state.colorKeyColumns : undefined,
@@ -6344,6 +7475,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           // Only load if still empty (no race with user actions)
           if (get().nodes.length > 0) return;
           const data = migrateSchematic(mod.default) as SchematicFile;
+          breakParentCycles(data.nodes);
           snapNodesToGrid(data.nodes);
           applyRoomLockState(data.nodes);
           syncCounters(data.nodes, data.edges);
@@ -6401,15 +7533,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             cableIdGap: data.cableIdGap ?? 4,
             cableIdMidOffset: data.cableIdMidOffset ?? 0,
             cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
+            stubLabelShowArrow: data.stubLabelShowArrow ?? DEFAULT_STUB_LABEL_SHOW_ARROW,
             stubLabelShowPort: data.stubLabelShowPort ?? DEFAULT_STUB_LABEL_SHOW_PORT,
             stubLabelShowRoom: data.stubLabelShowRoom ?? DEFAULT_STUB_LABEL_SHOW_ROOM,
             stubLabelPageMode: data.stubLabelPageMode ?? DEFAULT_STUB_LABEL_PAGE_MODE,
+            defaultConnectionType: data.defaultConnectionType ?? DEFAULT_CONNECTION_TYPE,
             useShortNames: data.useShortNames ?? false,
             wrapDeviceLabels: data.wrapDeviceLabels ?? true,
+            defaultDeviceHeaderColor: normalizeHeaderColor(data.defaultDeviceHeaderColor),
+            defaultStubLabelMode: normalizeStubLabelMode(data.defaultStubLabelMode),
             hideAdapters: data.hideAdapters ?? false,
             categoryOrder: data.categoryOrder ?? null,
             showOwnedGearPane: data.showOwnedGearPane ?? false,
             libraryActiveTab: data.showOwnedGearPane ? (data.libraryActiveTab ?? "devices") : "devices",
+            printTitleBlockEnabled: data.printTitleBlockEnabled ?? true,
             colorKeyEnabled: data.colorKeyEnabled ?? false,
             colorKeyCorner: data.colorKeyCorner ?? "bottom-left",
             colorKeyColumns: data.colorKeyColumns ?? 1,
@@ -6422,15 +7559,29 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             distanceSettings: data.distanceSettings ?? undefined,
             loadSeq: get().loadSeq + 1,
           });
-          if (data.pages?.length) syncRackCounters(data.pages);
+          // Same ordering as the main load path: arm autosave before the
+          // post-load side-effect so a throw can't disable autosave or escape as
+          // an unhandled rejection.
           hydrated = true;
+          try {
+            if (data.pages?.length) syncRackCounters(data.pages);
+          } catch (err) {
+            console.error("Post-load side-effect failed (demo still loaded):", err);
+          }
           get().saveToLocalStorage();
           get().pruneUnderlaySources();
+        }).catch((err) => {
+          // First-run only: localStorage was empty, so there is no saved copy to
+          // protect. Arm autosave anyway so the visitor's own edits on the blank
+          // canvas still persist, and log the demo-load failure so it isn't silent.
+          hydrated = true;
+          console.error("Failed to load the demo schematic:", err);
         });
         return false;
       }
       const parsed = JSON.parse(raw);
       const data = migrateSchematic(parsed) as SchematicFile;
+      breakParentCycles(data.nodes);
       snapNodesToGrid(data.nodes);
       applyRoomLockState(data.nodes);
       syncCounters(data.nodes, data.edges);
@@ -6486,17 +7637,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         cableIdGap: data.cableIdGap ?? 4,
         cableIdMidOffset: data.cableIdMidOffset ?? 0,
         cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
+        stubLabelShowArrow: data.stubLabelShowArrow ?? DEFAULT_STUB_LABEL_SHOW_ARROW,
         stubLabelShowPort: data.stubLabelShowPort ?? DEFAULT_STUB_LABEL_SHOW_PORT,
         stubLabelShowRoom: data.stubLabelShowRoom ?? DEFAULT_STUB_LABEL_SHOW_ROOM,
         stubLabelPageMode: data.stubLabelPageMode ?? DEFAULT_STUB_LABEL_PAGE_MODE,
+        defaultConnectionType: data.defaultConnectionType ?? DEFAULT_CONNECTION_TYPE,
         useShortNames: data.useShortNames ?? false,
         wrapDeviceLabels: data.wrapDeviceLabels ?? true,
+        defaultDeviceHeaderColor: normalizeHeaderColor(data.defaultDeviceHeaderColor),
+        defaultStubLabelMode: normalizeStubLabelMode(data.defaultStubLabelMode),
         hideAdapters: data.hideAdapters ?? false,
         autoRoute: data.autoRoute ?? true,
         edgeHitboxSize: data.edgeHitboxSize ?? 10,
         categoryOrder: data.categoryOrder ?? null,
         showOwnedGearPane: data.showOwnedGearPane ?? false,
         libraryActiveTab: data.showOwnedGearPane ? (data.libraryActiveTab ?? "devices") : "devices",
+        printTitleBlockEnabled: data.printTitleBlockEnabled ?? true,
         colorKeyEnabled: data.colorKeyEnabled ?? false,
         colorKeyCorner: data.colorKeyCorner ?? "bottom-left",
         colorKeyColumns: data.colorKeyColumns ?? 1,
@@ -6512,11 +7668,27 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         cloudSavedAt: parsed.cloudSavedAt ?? null,
         loadSeq: get().loadSeq + 1,
       });
-      if (data.pages?.length) syncRackCounters(data.pages);
+      // The schematic is committed to state above; arm autosave here, BEFORE the
+      // post-load side-effect, so a throw below can neither strand a loaded
+      // schematic with autosave off nor mislabel it as a failed load (#176).
       hydrated = true;
+      try {
+        if (data.pages?.length) syncRackCounters(data.pages);
+      } catch (err) {
+        console.error("Post-load side-effect failed (schematic still loaded):", err);
+      }
       return true;
-    } catch {
-      hydrated = true;
+    } catch (err) {
+      // Reaching here means the load failed BEFORE the schematic was committed to
+      // state (bad JSON / migration / heal), so the canvas is still blank. Leave
+      // `hydrated` false so autosave stays a no-op and can't overwrite the saved
+      // copy still on disk with this empty state. Surface the failure instead of
+      // blanking silently; New / Open / Import re-arm autosave for a fresh document.
+      console.error("Failed to load saved schematic from localStorage:", err);
+      get().addToast(
+        t("Couldn't open your last saved schematic. Autosave is paused so your saved copy isn't overwritten — starting a new schematic, opening a file, or importing one resumes it."),
+        "error",
+      );
       return false;
     }
   },
@@ -6533,7 +7705,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     return {
       version: CURRENT_SCHEMA_VERSION,
       name: state.schematicName,
-      nodes: state.nodes,
+      nodes: state.nodes.map(({ selected: _s, ...rest }) => rest) as SchematicNode[],
       edges: state.edges.map(({ zIndex: _, selected: _s, ...rest }) => rest) as ConnectionEdge[],
       customTemplates: state.customTemplates.length > 0 ? state.customTemplates : undefined,
       ownedGear: state.ownedGear.length > 0 ? state.ownedGear : undefined,
@@ -6575,17 +7747,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       cableIdGap: state.cableIdGap !== 4 ? state.cableIdGap : undefined,
       cableIdMidOffset: state.cableIdMidOffset !== 0 ? state.cableIdMidOffset : undefined,
       cableIdLabelMode: state.cableIdLabelMode !== "endpoint" ? state.cableIdLabelMode : undefined,
+      stubLabelShowArrow: state.stubLabelShowArrow !== DEFAULT_STUB_LABEL_SHOW_ARROW ? state.stubLabelShowArrow : undefined,
       stubLabelShowPort: state.stubLabelShowPort !== DEFAULT_STUB_LABEL_SHOW_PORT ? state.stubLabelShowPort : undefined,
       stubLabelShowRoom: state.stubLabelShowRoom !== DEFAULT_STUB_LABEL_SHOW_ROOM ? state.stubLabelShowRoom : undefined,
       stubLabelPageMode: state.stubLabelPageMode !== DEFAULT_STUB_LABEL_PAGE_MODE ? state.stubLabelPageMode : undefined,
+      defaultConnectionType: state.defaultConnectionType !== DEFAULT_CONNECTION_TYPE ? state.defaultConnectionType : undefined,
       useShortNames: state.useShortNames || undefined,
       wrapDeviceLabels: state.wrapDeviceLabels === false ? false : undefined,
+      defaultDeviceHeaderColor: state.defaultDeviceHeaderColor,
+      defaultStubLabelMode: state.defaultStubLabelMode,
       hideAdapters: state.hideAdapters || undefined,
       autoRoute: state.autoRoute === false ? false : undefined,
       edgeHitboxSize: state.edgeHitboxSize !== 10 ? state.edgeHitboxSize : undefined,
       categoryOrder: state.categoryOrder ?? undefined,
       showOwnedGearPane: state.showOwnedGearPane || undefined,
       libraryActiveTab: state.libraryActiveTab !== "devices" ? state.libraryActiveTab : undefined,
+      printTitleBlockEnabled: state.printTitleBlockEnabled ? undefined : false,
       colorKeyEnabled: state.colorKeyEnabled || undefined,
       colorKeyCorner: state.colorKeyCorner !== "bottom-left" ? state.colorKeyCorner : undefined,
       colorKeyColumns: state.colorKeyColumns !== 1 ? state.colorKeyColumns : undefined,
@@ -6610,6 +7787,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         (node.data as { html: string }).html = sanitizeNoteHtml((node.data as { html: string }).html);
       }
     }
+    breakParentCycles(nodes);
     snapNodesToGrid(nodes);
     applyRoomLockState(nodes);
     syncCounters(nodes, edges);
@@ -6621,7 +7799,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // key, and skip any that the bundled library already ships — older schematics still
     // embed the FACE house library that now lives in src/devices/face-library.ts).
     if (data.customTemplates?.length) {
-      const existing = get().customTemplates;
+      const existing = withStoredCustomTemplates(get().customTemplates);
       const existingKeys = new Set(existing.map((t) => templateKey(t)));
       const newTemplates = dropBundledDuplicates(data.customTemplates)
         .filter((t) => !existingKeys.has(templateKey(t)));
@@ -6680,16 +7858,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       cableIdGap: data.cableIdGap ?? 4,
       cableIdMidOffset: data.cableIdMidOffset ?? 0,
       cableIdLabelMode: data.cableIdLabelMode ?? "endpoint",
+      stubLabelShowArrow: data.stubLabelShowArrow ?? DEFAULT_STUB_LABEL_SHOW_ARROW,
       stubLabelShowPort: data.stubLabelShowPort ?? DEFAULT_STUB_LABEL_SHOW_PORT,
+      stubLabelShowRoom: data.stubLabelShowRoom ?? DEFAULT_STUB_LABEL_SHOW_ROOM,
       stubLabelPageMode: data.stubLabelPageMode ?? DEFAULT_STUB_LABEL_PAGE_MODE,
+      defaultConnectionType: data.defaultConnectionType ?? DEFAULT_CONNECTION_TYPE,
       useShortNames: data.useShortNames ?? false,
       wrapDeviceLabels: data.wrapDeviceLabels ?? true,
+      defaultDeviceHeaderColor: normalizeHeaderColor(data.defaultDeviceHeaderColor),
+      defaultStubLabelMode: normalizeStubLabelMode(data.defaultStubLabelMode),
       hideAdapters: data.hideAdapters ?? false,
       autoRoute: data.autoRoute ?? true,
       edgeHitboxSize: data.edgeHitboxSize ?? 10,
       categoryOrder: data.categoryOrder ?? null,
       showOwnedGearPane: data.showOwnedGearPane ?? false,
       libraryActiveTab: data.showOwnedGearPane ? (data.libraryActiveTab ?? "devices") : "devices",
+      printTitleBlockEnabled: data.printTitleBlockEnabled ?? true,
       colorKeyEnabled: data.colorKeyEnabled ?? false,
       colorKeyCorner: data.colorKeyCorner ?? "bottom-left",
       colorKeyColumns: data.colorKeyColumns ?? 1,
@@ -6707,18 +7891,31 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       fileHandle: null,
       loadSeq: get().loadSeq + 1,
     });
+    // Re-arm autosave for this just-loaded document. If the initial localStorage
+    // hydrate failed, `hydrated` is still false; without this an opened / imported
+    // schematic (file, share link, or cloud) would silently never autosave.
+    hydrated = true;
     // Post-load side-effects (ID counters + persistence). The schematic is
     // already committed to state above; a failure here must NOT propagate, or a
     // caller's try/catch mislabels a successfully-loaded file as invalid (#176).
+    // They are guarded SEPARATELY so they can't take each other down: sharing one
+    // try meant a bad `pages` shape threw past the persist, leaving the imported
+    // schematic unsaved until the next edit — and on the recovery path (import
+    // after a failed hydrate) a reload before that edit would drop the user back
+    // onto the old unreadable blob.
     try {
       if (data.pages?.length) syncRackCounters(data.pages);
+    } catch (err) {
+      console.error("Post-import counter sync failed (schematic still loaded):", err);
+    }
+    try {
       saveCategoryOrder(data.categoryOrder ?? null);
       get().saveToLocalStorage();
       // Adopt the plan sources the file brought, then drop what nothing references. Order
       // matters: pruning first would delete what we are about to restore.
       void restoreUnderlaySources(data.underlaySources).then(() => get().pruneUnderlaySources());
     } catch (err) {
-      console.error("Post-import side-effect failed (schematic still loaded):", err);
+      console.error("Post-import persist failed (schematic still loaded):", err);
     }
   },
 
@@ -6736,6 +7933,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       nodes: renumberNodes(mergedNodes),
       edges: mergedEdges,
     });
+    // A CSV import establishes real content the same way New / Open / Import do,
+    // so it re-arms autosave too. Without this, importing after a failed initial
+    // hydrate would leave `hydrated` false and every save below a silent no-op.
+    hydrated = true;
     get().saveToLocalStorage();
   },
 
@@ -6767,6 +7968,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         fileHandle: null,
         titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
         titleBlockLayout: createDefaultLayout(),
+        printTitleBlockEnabled: true,
         hiddenSignalTypes: "",
         hiddenPinSignalTypes: "",
         hideUnconnectedPorts: false,
@@ -6788,11 +7990,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         cableIdGap: 4,
         cableIdMidOffset: 0,
         cableIdLabelMode: "endpoint" as "endpoint" | "midpoint",
+        stubLabelShowArrow: DEFAULT_STUB_LABEL_SHOW_ARROW,
         stubLabelShowPort: DEFAULT_STUB_LABEL_SHOW_PORT,
         stubLabelShowRoom: DEFAULT_STUB_LABEL_SHOW_ROOM,
         stubLabelPageMode: DEFAULT_STUB_LABEL_PAGE_MODE,
+        defaultConnectionType: DEFAULT_CONNECTION_TYPE,
         useShortNames: false,
-        wrapDeviceLabels: true,
+        wrapDeviceLabels: false,
+        // The project overrides reset with the document; the app preferences persist.
+        defaultDeviceHeaderColor: undefined,
+        defaultStubLabelMode: undefined,
         autoRoute: true,
         edgeHitboxSize: 10,
         panMode: DEFAULT_PAN_MODE,
@@ -6805,6 +8012,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         loadSeq: get().loadSeq + 1,
       });
     }
+    // Establishing a blank / template document also re-arms autosave in case the
+    // initial localStorage hydrate had failed (which leaves `hydrated` false).
+    hydrated = true;
     get().saveToLocalStorage();
   },
 
@@ -6854,6 +8064,46 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       }),
     });
     get().saveToLocalStorage();
+  },
+
+  setStubLabelMode: (nodeId, mode) => {
+    const state = get();
+    const tag = state.nodes.find((n) => n.id === nodeId && n.type === "stub-label");
+    if (!tag) return;
+    const linkedId = (tag.data as import("./types").StubLabelData).linkedConnectionId;
+    // The tag and its partner — same linkedConnectionId, other end. Matching on the link
+    // rather than on `side` also picks up a partner a #270-era file left in the other mode.
+    const pairIds = new Set(
+      state.nodes
+        .filter((n) => n.type === "stub-label" && linkedId && (n.data as import("./types").StubLabelData).linkedConnectionId === linkedId)
+        .map((n) => n.id),
+    );
+    pairIds.add(nodeId);
+    // "full" is stored as unset, the way every tag saved before #270 reads.
+    const stored = mode === DEFAULT_STUB_LABEL_MODE ? undefined : mode;
+    const changed = state.nodes.some(
+      (n) => pairIds.has(n.id) && (n.data as import("./types").StubLabelData).labelMode !== stored,
+    );
+    if (!changed) return;
+    // One snapshot for the pair: undo puts both tags back together (#376).
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      nodes: state.nodes.map((n) => {
+        if (!pairIds.has(n.id)) return n;
+        const data = { ...(n.data as import("./types").StubLabelData) };
+        if (stored) data.labelMode = stored;
+        else delete data.labelMode;
+        return { ...n, data } as typeof n;
+      }),
+    });
+    get().saveToLocalStorage();
+  },
+
+  toggleStubLabelMode: (nodeId) => {
+    const tag = get().nodes.find((n) => n.id === nodeId && n.type === "stub-label");
+    if (!tag) return;
+    const current = (tag.data as import("./types").StubLabelData).labelMode;
+    get().setStubLabelMode(nodeId, current === "cableId" ? "full" : "cableId");
   },
 
   addTextStub: (nodeId, portId) => {
@@ -6939,7 +8189,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().saveToLocalStorage();
   },
 
-  convertEdgeToStubs: (edgeId) => {
+  setDefaultConnectionType: (type) => {
+    set({ defaultConnectionType: type });
+    get().saveToLocalStorage();
+  },
+
+  convertEdgeToStubs: (edgeId, opts) => {
     const state = get();
     const edge = state.edges.find((e) => e.id === edgeId);
     if (!edge) return;
@@ -7024,6 +8279,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const stubNodeIdSrc = `stub-${edge.id}-src`;
     const stubNodeIdTgt = `stub-${edge.id}-tgt`;
     const sigType = edge.data!.signalType;
+    // Both tags start in the default stub tag mode — project override, then app
+    // preference, then "full" (#377). Stamped here so a later change to either setting
+    // leaves these tags alone; "full" stamps nothing, since unset already reads as "full".
+    const labelMode = resolveDefaultStubLabelMode(state.defaultStubLabelMode, state.appDefaultStubLabelMode);
+    const modeStamp = labelMode !== DEFAULT_STUB_LABEL_MODE ? { labelMode } : {};
 
     // Don't stamp data.placed yet — the X above assumes STUB_W_EST (80px), but
     // a wide cable label can produce a 200+ px box. tryPlace's overlap-correction
@@ -7037,7 +8297,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       position: { x: srcStubAbs.x - srcParentAbs.x, y: srcStubAbs.y - srcParentAbs.y },
       ...(srcParentId ? { parentId: srcParentId } : {}),
       zIndex: STUB_LABEL_Z_INDEX, // paint above connection lines (#178)
-      data: { signalType: sigType, linkedConnectionId, side: "source" },
+      data: { signalType: sigType, linkedConnectionId, side: "source", ...modeStamp },
     } as SchematicNode;
     const tgtStubNode: SchematicNode = {
       id: stubNodeIdTgt,
@@ -7045,7 +8305,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       position: { x: tgtStubAbs.x - tgtParentAbs.x, y: tgtStubAbs.y - tgtParentAbs.y },
       ...(tgtParentId ? { parentId: tgtParentId } : {}),
       zIndex: STUB_LABEL_Z_INDEX, // paint above connection lines (#178)
-      data: { signalType: sigType, linkedConnectionId, side: "target" },
+      data: { signalType: sigType, linkedConnectionId, side: "target", ...modeStamp },
     } as SchematicNode;
 
     const baseData = { ...edge.data! };
@@ -7099,8 +8359,45 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       edges: gc.edges,
       bundles: gc.bundles,
     });
-    if (wasBundled) get().addToast(t("Removed from bundle (stubbed)"), "info");
+    if (wasBundled && !opts?.silentBundleToast) get().addToast(t("Removed from bundle (stubbed)"), "info");
     get().saveToLocalStorage();
+  },
+
+  convertEdgesToStubs: (edgeIds) => {
+    const state = get();
+    const targets = edgeIds.filter((id) => {
+      const edge = state.edges.find((e) => e.id === id);
+      return !!edge && !edge.data?.linkedConnectionId;
+    });
+    // Counted before the loop, i.e. connections that were in a bundle when the batch
+    // started: stubbing one member can dissolve a 2-member bundle, so by the time the
+    // second member is stubbed it no longer reports itself as bundled.
+    const unbundled = targets.filter(
+      (id) => !!state.edges.find((e) => e.id === id)?.data?.bundleId,
+    ).length;
+    runAsSingleUndoStep(targets, (id) => get().convertEdgeToStubs(id, { silentBundleToast: true }));
+    if (unbundled > 0) {
+      get().addToast(
+        unbundled === 1
+          ? t("Removed from bundle (stubbed)")
+          : t("Removed {n} connections from their bundle (stubbed)", { n: unbundled }),
+        "info",
+      );
+    }
+  },
+
+  collapseStubsForEdges: (edgeIds) => {
+    const state = get();
+    // Both legs of one stubbed connection can be selected — collapse each pair once.
+    const seen = new Set<string>();
+    const targets: string[] = [];
+    for (const id of edgeIds) {
+      const linkedId = state.edges.find((e) => e.id === id)?.data?.linkedConnectionId;
+      if (!linkedId || seen.has(linkedId)) continue;
+      seen.add(linkedId);
+      targets.push(id);
+    }
+    runAsSingleUndoStep(targets, (id) => get().collapseStubsForEdge(id));
   },
 
   collapseStubsForEdge: (edgeId) => {
@@ -7382,6 +8679,32 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     }
     const bundleGroups = new Map<string, BundleEndpoint[]>();
 
+    // Handle resolution has to match the A* router's (edgeRouter.getHandlePositions +
+    // resolveHandle + nearestStubHandle) or the same schematic terminates its wires
+    // somewhere else the moment auto-route is switched off.
+    type Bound = { id?: string | null; x: number; y: number; width: number; height: number };
+    /** Heal a stale bare↔directional handle ref. A port that became bidirectional renders
+     *  `-in`/`-out`; an edge authored against the bare id would otherwise miss entirely and
+     *  the connection would render as nothing at all. */
+    const resolveBound = (
+      bounds: { source?: Bound[] | null; target?: Bound[] | null } | null | undefined,
+      handleId: string | null | undefined,
+      role: "source" | "target",
+    ): Bound | undefined => {
+      if (handleId == null) return undefined;
+      const all = [...(bounds?.source ?? []), ...(bounds?.target ?? [])];
+      const preferred = role === "source" ? "-out" : "-in";
+      const other = role === "source" ? "-in" : "-out";
+      return (
+        all.find((h) => h.id === handleId) ??
+        all.find((h) => h.id === `${handleId}${preferred}`) ??
+        all.find((h) => h.id === `${handleId}${other}`) ??
+        (/-(in|out)$/.test(handleId)
+          ? all.find((h) => h.id === handleId.replace(/-(in|out)$/, ""))
+          : undefined)
+      );
+    };
+
     for (const edge of state.edges) {
       const srcInternal = rfInstance.getInternalNode(edge.source);
       const tgtInternal = rfInstance.getInternalNode(edge.target);
@@ -7393,14 +8716,47 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       const tgtAbs = tgtInternal.internals.positionAbsolute;
 
       // Find the handle positions
-      const srcHandle = [...(srcBounds?.source ?? []), ...(srcBounds?.target ?? [])].find((h) => h.id === edge.sourceHandle);
-      const tgtHandle = [...(tgtBounds?.source ?? []), ...(tgtBounds?.target ?? [])].find((h) => h.id === edge.targetHandle);
+      let srcHandle = resolveBound(srcBounds, edge.sourceHandle, "source");
+      let tgtHandle = resolveBound(tgtBounds, edge.targetHandle, "target");
       if (!srcHandle || !tgtHandle) continue;
 
+      // Stub labels: the stored l/r handle is only the creation-time guess, so re-pick the
+      // side facing the adjacent route point — otherwise the wire crosses over the label
+      // box to reach the stale side. The label's connecting handle is vertically centred
+      // by construction (top: 50% of the box), which is exact where the DOM's sub-pixel
+      // bounds are not. Toward-X must be the same point edgeRouter's nearestStubHandle
+      // uses (first/last path handle when the connection is hand-routed, far handle
+      // otherwise) or the two builders pick opposite sides on the same schematic.
+      const srcIsStub = srcInternal.type === "stub-label";
+      const tgtIsStub = tgtInternal.type === "stub-label";
+      const centerXOf = (b: Bound, abs: { x: number }) => abs.x + b.x + b.width / 2;
+      const mw = edge.data?.manualWaypoints;
+      if (srcIsStub) {
+        const side = nearestStubHandleSide(
+          srcAbs.x,
+          srcInternal.measured?.width ?? STUB_W_EST,
+          mw?.length ? mw[0].x : centerXOf(tgtHandle, tgtAbs),
+        );
+        srcHandle = resolveBound(srcBounds, side, "source") ?? srcHandle;
+      }
+      if (tgtIsStub) {
+        const side = nearestStubHandleSide(
+          tgtAbs.x,
+          tgtInternal.measured?.width ?? STUB_W_EST,
+          mw?.length ? mw[mw.length - 1].x : centerXOf(srcHandle, srcAbs),
+        );
+        tgtHandle = resolveBound(tgtBounds, side, "target") ?? tgtHandle;
+      }
+      const handleCenterY = (
+        b: Bound, abs: { y: number }, isStub: boolean, measuredH: number | undefined,
+      ) => (isStub && (b.id === "l" || b.id === "r")
+        ? abs.y + (measuredH ?? STUB_H_EST) / 2
+        : abs.y + b.y + b.height / 2);
+
       const sx = Math.round(srcAbs.x + srcHandle.x + srcHandle.width / 2);
-      const sy = Math.round(srcAbs.y + srcHandle.y + srcHandle.height / 2);
+      const sy = Math.round(handleCenterY(srcHandle, srcAbs, srcIsStub, srcInternal.measured?.height));
       const tx = Math.round(tgtAbs.x + tgtHandle.x + tgtHandle.width / 2);
-      const ty = Math.round(tgtAbs.y + tgtHandle.y + tgtHandle.height / 2);
+      const ty = Math.round(handleCenterY(tgtHandle, tgtAbs, tgtIsStub, tgtInternal.measured?.height));
 
       // Bundle members defer to the shared-trunk pass below.
       const bid = edge.data?.bundleId;
@@ -7556,22 +8912,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       : state.edges;
 
     // --- Adapter visibility: compute hidden adapters and virtual edges ---
-    const hiddenAdapterNodeIds = new Set<string>();
+    const hiddenAdapterNodeIds = resolveHiddenAdapterIds(state.nodes, state.hideAdapters);
     const hiddenVirtualEdgeIds = new Set<string>();
     const virtualEdgeGradients: Record<string, { sourceColor: string; targetColor: string }> = {};
     // Map from virtual edge ID back to the hidden partner edge ID
     const virtualEdgeSources = new Map<string, { primaryEdgeId: string; secondaryEdgeId: string; adapterNodeId: string }>();
-
-    for (const n of state.nodes) {
-      if (n.type !== "device") continue;
-      const data = n.data as DeviceData;
-      if (data.deviceType !== "adapter") continue;
-      // Resolve visibility
-      if (data.adapterVisibility === "force-show") continue;
-      if (data.adapterVisibility === "force-hide" || state.hideAdapters) {
-        hiddenAdapterNodeIds.add(n.id);
-      }
-    }
 
     if (hiddenAdapterNodeIds.size > 0) {
       // For each hidden adapter, find its edge pair and create virtual edges
@@ -7849,4 +9194,28 @@ function followSchematicWiring(state: SchematicState) {
   if (!changed) return;
   useSchematicStore.setState({ pages });
   useSchematicStore.getState().saveToLocalStorage();
+}
+
+/** Re-read the custom device library (templates + groups/order) from localStorage. */
+export function reloadCustomTemplatesFromStorage(): void {
+  const customTemplates = loadCustomTemplates();
+  const meta = loadCustomTemplateMeta(customTemplates);
+  useSchematicStore.setState({
+    customTemplates,
+    customTemplateGroups: meta.groups,
+    customTemplateOrder: meta.order,
+    customTemplateGroupAssignments: meta.groupAssignments,
+  });
+}
+
+// Keep every open tab's device library in step with the shared localStorage (#251). The
+// "storage" event fires in the OTHER tabs of this origin whenever one tab writes a key. A
+// page restored from the back/forward cache missed any events while frozen, so it re-reads.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === TEMPLATES_KEY || e.key === TEMPLATE_META_KEY) reloadCustomTemplatesFromStorage();
+  });
+  window.addEventListener("pageshow", (e) => {
+    if (e.persisted) reloadCustomTemplatesFromStorage();
+  });
 }

@@ -264,4 +264,20 @@ export const DE_REPORTS: Record<string, string> = {
   "Room pairs ({unit})": "Raumpaare ({unit})",
   "Create at least two top-level rooms to define distances.":
     "Mindestens zwei oberste Räume anlegen, um Abstände festzulegen.",
+
+  // ─── Upstream-Merge 2026-10 ───
+  // Patch Panels tab: column picker (sections from patchPanelColumns.ts)
+  "Show / hide columns — the PDF prints what the table shows":
+    "Spalten ein- und ausblenden — das PDF druckt, was die Tabelle zeigt",
+  "Port Columns": "Port-Spalten",
+  "Single-Face Columns": "Einseiten-Spalten",
+  "Passthrough Columns": "Passthrough-Spalten",
+  "The table needs at least one column": "Die Tabelle braucht mindestens eine Spalte",
+  "Show the single-face columns only when a panel with separate rear/front ports is in view":
+    "Einseiten-Spalten nur zeigen, wenn ein Panel mit getrennten Ports hinten/vorn in der Ansicht ist",
+  "Automatic (in use)": "Automatisch (aktiv)",
+  "Back to automatic": "Zurück auf automatisch",
+  // Print preview seeded from the tab
+  "Columns, sort and grouping mirror the report tab. Changes here apply to this export; use the tab’s Columns menu to keep them.":
+    "Spalten, Sortierung und Gruppierung folgen dem Berichts-Tab. Änderungen hier gelten nur für diesen Export; dauerhaft über das Menü „Spalten“ im Tab.",
 };

@@ -6,6 +6,7 @@
 import type { SignalType, Port, DeviceTemplate, SchematicNode, DeviceNode, ConnectionEdge } from "./types";
 import { SIGNAL_LABELS, SIGNAL_COLORS } from "./types";
 import { DEFAULT_CONNECTOR } from "./connectorTypes";
+import { normalizeHeaderColor } from "./deviceHeaderColor";
 import { scoreTemplate } from "./templateSearch";
 import { DEVICE_NODE_WIDTH } from "./gridConstants";
 
@@ -57,10 +58,14 @@ export function parseCsv(text: string): CsvParseResult {
   // Normalize line endings
   t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  // Auto-detect delimiter: count tabs vs commas in first line
-  const firstLine = t.split("\n")[0] ?? "";
-  const tabCount = (firstLine.match(/\t/g) ?? []).length;
-  const commaCount = (firstLine.match(/,/g) ?? []).length;
+  // Auto-detect delimiter. Probe the first few lines, not just the first one —
+  // report exports open with a title/date preamble that carries no delimiters.
+  let tabCount = 0;
+  let commaCount = 0;
+  for (const line of t.split("\n").slice(0, 5)) {
+    tabCount = Math.max(tabCount, (line.match(/\t/g) ?? []).length);
+    commaCount = Math.max(commaCount, (line.match(/,/g) ?? []).length);
+  }
   const delim = tabCount > commaCount ? "\t" : ",";
 
   const rows: string[][] = [];
@@ -102,7 +107,19 @@ export function parseCsv(text: string): CsvParseResult {
   if (currentRow.some((f) => f.length > 0)) rows.push(currentRow);
 
   if (rows.length === 0) return { headers: [], rows: [] };
-  return { headers: rows[0], rows: rows.slice(1) };
+
+  // The first row is not always the header row: our own cable-schedule export
+  // (and many vendor schedules) lead with title/date lines. Take the first row
+  // that maps both device columns; fall back to row 0 for plain files.
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const m = detectColumns(rows[i]);
+    if (m.sourceDevice >= 0 && m.destDevice >= 0) {
+      headerIdx = i;
+      break;
+    }
+  }
+  return { headers: rows[headerIdx], rows: rows.slice(headerIdx + 1) };
 }
 
 // ---------- Column Detection ----------
@@ -117,14 +134,36 @@ const COLUMN_KEYWORDS: Record<keyof ColumnMapping, string[]> = {
   destRoom: ["dest room", "destination room", "tgt room", "to room", "dest location"],
 };
 
-function scoreHeader(header: string, keywords: string[]): number {
+// `priority` is only ever comparable within a single role — keyword lists differ in
+// length between roles, so mixing it into `score` would silently reorder cross-role
+// ties (a bare "Room" would flip from sourceRoom to destRoom). detectColumns keeps
+// the two separate for exactly that reason.
+function scoreHeader(header: string, keywords: string[]): { score: number; priority: number } {
   const h = header.toLowerCase().trim();
-  for (const kw of keywords) {
-    if (h === kw) return 100; // exact match
-    if (h.includes(kw)) return 60; // contains
-    if (kw.includes(h) && h.length > 2) return 40; // header is substring of keyword
-  }
-  return 0;
+  // Take the BEST match across all keywords, not the first one that matches. A header
+  // could easily win a weak match against keyword N ("Source" is a substring of the
+  // earlier keyword "source device") before ever reaching its own exact keyword later
+  // in the list — which used to return 40 for "Source" instead of the 100 it deserves,
+  // and let a weaker column (e.g. "Src Conn", also containing "src") win the role
+  // instead. That misdetected the app's own cable-schedule export headers (#331).
+  let best = 0;
+  // Earlier keywords are the more specific/primary spelling of the role, so when two
+  // columns tie in the same tier — e.g. "Signal" and "Cable Type" both exactly matching
+  // a signalType keyword, which the app's own export ships as separate columns — the
+  // one matching the earlier keyword wins.
+  let priority = 0;
+  keywords.forEach((kw, i) => {
+    const rank = keywords.length - i;
+    let s = 0;
+    if (h === kw) s = 100;
+    else if (h.includes(kw)) s = 60;
+    else if (kw.includes(h) && h.length > 2) s = 40;
+    if (s > best || (s === best && s > 0 && rank > priority)) {
+      best = s;
+      priority = rank;
+    }
+  });
+  return { score: best, priority };
 }
 
 export function detectColumns(headers: string[]): ColumnMapping {
@@ -140,16 +179,27 @@ export function detectColumns(headers: string[]): ColumnMapping {
   };
 
   // Build score matrix
-  const scores: { role: keyof ColumnMapping; col: number; score: number }[] = [];
+  const scores: { role: keyof ColumnMapping; col: number; score: number; priority: number }[] = [];
   for (const role of roles) {
     for (let col = 0; col < headers.length; col++) {
-      const s = scoreHeader(headers[col], COLUMN_KEYWORDS[role]);
-      if (s > 0) scores.push({ role, col, score: s });
+      const { score, priority } = scoreHeader(headers[col], COLUMN_KEYWORDS[role]);
+      if (score > 0) scores.push({ role, col, score, priority });
     }
   }
 
-  // Greedy assignment: highest score first
-  scores.sort((a, b) => b.score - a.score);
+  // Greedy assignment: highest score first, then role-declaration order — a tie across
+  // roles has always been settled that way (so a bare "Room" stays on sourceRoom,
+  // matching the fallback below). Keyword priority only breaks ties between two columns
+  // competing for the SAME role; comparing it across roles is meaningless, since the
+  // keyword lists differ in length.
+  const roleOrder = new Map(roles.map((r, i) => [r, i]));
+  scores.sort(
+    (a, b) =>
+      b.score - a.score ||
+      roleOrder.get(a.role)! - roleOrder.get(b.role)! ||
+      b.priority - a.priority ||
+      a.col - b.col,
+  );
   const usedCols = new Set<number>();
   const usedRoles = new Set<string>();
   for (const { role, col } of scores) {
@@ -524,6 +574,14 @@ let importCounter = 0;
 export function buildImportResult(
   connections: ParsedConnection[],
   deviceMatches: Map<string, DeviceMatch>,
+  opts?: {
+    /** Header color for the devices this import creates — already resolved from the project
+     *  override / app preference by the caller (#354). Omitted = no header color at all. */
+    defaultHeaderColor?: string;
+    /** The project presets, by template id, so a matched template's preset color outranks the
+     *  template's own the same way it does when the device is placed from the library. */
+    templatePresets?: Record<string, { headerColor?: string }>;
+  },
 ): { nodes: SchematicNode[]; edges: ConnectionEdge[] } {
   importCounter = Date.now();
   const nodes: SchematicNode[] = [];
@@ -548,11 +606,14 @@ export function buildImportResult(
   }
 
   // Build room assignments
-  // deviceRoomPath: device → full room path string (e.g. "Studio A > Control Room")
+  // deviceRoomPath: device → full room path string (e.g. "Studio A > Control Room"),
+  // normalized so "A>B" and "A > B" resolve to the same room
+  const normalizeRoomPath = (path: string) =>
+    path.split(">").map((s) => s.trim()).filter(Boolean).join(" > ");
   const deviceRoomPath = new Map<string, string>();
   for (const c of connections) {
-    if (c.sourceRoom) deviceRoomPath.set(c.sourceDevice, c.sourceRoom);
-    if (c.destRoom) deviceRoomPath.set(c.destDevice, c.destRoom);
+    if (c.sourceRoom) deviceRoomPath.set(c.sourceDevice, normalizeRoomPath(c.sourceRoom));
+    if (c.destRoom) deviceRoomPath.set(c.destDevice, normalizeRoomPath(c.destRoom));
   }
 
   // For layout grouping, use the full path as the band key (handles same-name subrooms)
@@ -615,6 +676,10 @@ export function buildImportResult(
     let ports: Port[];
     let deviceType: string;
     let color: string | undefined;
+    // A header color saved onto the matched template — or onto that template's project
+    // preset — is about that device specifically, so it beats the default the caller
+    // resolved from the two settings (#354).
+    let headerColor = opts?.defaultHeaderColor;
 
     if (match.template) {
       // Use template ports with fresh IDs
@@ -625,6 +690,13 @@ export function buildImportResult(
       }));
       deviceType = match.template.deviceType;
       color = match.template.color;
+      const presetHeaderColor = match.template.id
+        ? opts?.templatePresets?.[match.template.id]?.headerColor
+        : undefined;
+      headerColor =
+        normalizeHeaderColor(presetHeaderColor) ??
+        normalizeHeaderColor(match.template.headerColor) ??
+        headerColor;
     } else {
       // Generic: use inferred ports with fresh IDs
       const prefix = `p${++importCounter}`;
@@ -649,6 +721,7 @@ export function buildImportResult(
         deviceType,
         ports,
         ...(color ? { color } : {}),
+        ...(headerColor ? { headerColor } : {}),
         ...(match.template?.manufacturer ? { manufacturer: match.template.manufacturer } : {}),
         ...(match.template?.modelNumber ? { modelNumber: match.template.modelNumber } : {}),
         baseLabel: name,
