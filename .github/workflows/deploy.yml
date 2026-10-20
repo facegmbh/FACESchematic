@@ -40,6 +40,22 @@ jobs:
           done
           echo "BHE: keine Symbolbibliothek auf diesem Host — Build ohne sie"
 
+      # Das Backend (SPEC-backend-deploy.md) verschluesselt die hinterlegten Odoo-API-
+      # Schluessel mit FACE_SECRET. Das Geheimnis liegt neben dem Runner, nie im
+      # Repository, und wird beim ersten Lauf einmalig erzeugt. Es darf sich danach nicht
+      # mehr aendern — sonst muessen sich alle neu anmelden —, deshalb wird eine
+      # vorhandene Datei nie ueberschrieben. Der Checkout wird bei jedem Lauf geleert,
+      # also kommt sie jedes Mal neu als .env hinein, die docker compose liest.
+      - name: Backend-Geheimnis einsetzen (nicht in git)
+        run: |
+          env_file="$HOME/faceschematic/backend.env"
+          if [ ! -f "$env_file" ]; then
+            mkdir -p "$(dirname "$env_file")"
+            ( umask 077 && echo "FACE_SECRET=$(openssl rand -hex 32)" > "$env_file" )
+            echo "Backend: neues Geheimnis in $env_file angelegt"
+          fi
+          cp "$env_file" .env
+
       - name: Build & deploy (docker compose)
         run: docker compose -p faceschematic up -d --build --remove-orphans
 
@@ -52,3 +68,12 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080)
           echo "http://localhost:8080 -> $code"
           test "$code" = "200"
+          # Das Backend durch den App-nginx hindurch — es braucht ein paar Sekunden zum Start.
+          for i in $(seq 1 15); do
+            body=$(curl -s http://localhost:8080/face/health || true)
+            case "$body" in *'"status":"ok"'*) echo "/face/health -> $body"; exit 0 ;; esac
+            sleep 2
+          done
+          echo "/face/health antwortet nicht: $body"
+          docker compose -p faceschematic logs --tail 50 backend
+          exit 1
