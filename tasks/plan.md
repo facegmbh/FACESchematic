@@ -32,15 +32,15 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 
 ### Checkpoint A (Freigabe durch Jean-Luc, dann Push auf master)
 - [x] `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, `npm run build` grün
-- [ ] Nach Deploy: `https://schematic.face-gmbh.com/face/health` antwortet, App läuft wie vorher
+- [x] Nach Deploy: `https://schematic.face-gmbh.com/face/health` antwortet, App läuft wie vorher (20.10.)
 
 ### Phase 2: face-identity
-- [ ] Task 4: Anmelde-API gegen Odoo (Login, Me, Logout) mit Mock-Odoo-Tests
-- [ ] Task 5: Anmeldung im Editor (Client, Store, Dialog, Knopf, Texte)
+- [x] Task 4: Anmelde-API gegen Odoo (Login, Me, Logout) mit Mock-Odoo-Tests
+- [x] Task 5: Anmeldung im Editor (Client, Store, Dialog, Knopf, Texte)
 
 ### Checkpoint B (Freigabe, dann Push auf master)
-- [ ] Alle Tests und Build grün
-- [ ] Lokal Ende-zu-Ende: Backend gegen Mock-Odoo, Vite-Dev mit Proxy, Anmelden/Abmelden im Browser (Playwright)
+- [x] Alle Tests und Build grün
+- [x] Lokal Ende-zu-Ende: Backend gegen Mock-Odoo, Vite-Dev mit Proxy, Anmelden/Abmelden im Browser (Playwright)
 - [ ] Nach Deploy: Jean-Luc meldet sich mit echtem Odoo-Konto an
 
 ## Risks and Mitigations
