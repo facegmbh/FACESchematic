@@ -9,10 +9,17 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import express from "express";
 import { loadConfig, type Config } from "./config.js";
+import { createAuth, type AuthOptions } from "./auth.js";
+import { setOdooDb } from "./odoo.js";
+import { Store } from "./store.js";
 
 const { version: VERSION } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
-export function createApp(_config: Config): express.Express {
+export function createApp(config: Config, opts: AuthOptions = {}): express.Express {
+  setOdooDb(config.odooUrl, config.odooDb);
+  const store = new Store(config.dataDir, config.secret);
+  const auth = createAuth(config, store, opts);
+
   const app = express();
   app.disable("x-powered-by");
   // Behind nginx proxy manager and the app's nginx, both on private networks.
@@ -21,6 +28,8 @@ export function createApp(_config: Config): express.Express {
   app.get("/face/health", (_req, res) => {
     res.json({ status: "ok", version: VERSION });
   });
+
+  app.use("/face/api", auth.router);
 
   return app;
 }
