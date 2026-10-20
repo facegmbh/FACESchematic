@@ -26,12 +26,12 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 ## Task List
 
 ### Phase 1: backend-deploy
-- [ ] Task 1: Backend-Grundgerüst mit `/face/health`
-- [ ] Task 2: Container, Compose und nginx-Weiterleitung
-- [ ] Task 3: Deploy-Workflow mit Geheimnis und Healthcheck
+- [x] Task 1: Backend-Grundgerüst mit `/face/health`
+- [x] Task 2: Container, Compose und nginx-Weiterleitung
+- [x] Task 3: Deploy-Workflow mit Geheimnis und Healthcheck
 
 ### Checkpoint A (Freigabe durch Jean-Luc, dann Push auf master)
-- [ ] `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, `npm run build` grün
+- [x] `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, `npm run build` grün
 - [ ] Nach Deploy: `https://schematic.face-gmbh.com/face/health` antwortet, App läuft wie vorher
 
 ### Phase 2: face-identity
