@@ -158,6 +158,21 @@ export const DE_SETTINGS: Record<string, string> = {
   "Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.":
     "Die Einrichtung steht in der Dokumentation unter „AI Assistant (MCP)“. Das ist eine frühe Beta — bisher wird nur ein Grundstock an Aktionen unterstützt.",
 
+  // ─── FACE-Anmeldung (Odoo) ─────────────────────────────────────
+  "Sign in with Odoo": "Mit Odoo anmelden",
+  "Your drawings are stored on Odoo projects, with your Odoo rights.":
+    "Zeichnungen liegen an Odoo-Projekten — es gelten deine Odoo-Rechte.",
+  "Odoo e-mail": "Odoo-E-Mail",
+  "Odoo API key": "Odoo-API-Schlüssel",
+  "Not your password: create one in Odoo under your avatar → My Profile → Account Security → New API Key.":
+    "Nicht das Passwort: in Odoo erstellen unter Avatar → Mein Profil → Kontosicherheit → Neuer API-Schlüssel.",
+  "Enter your Odoo e-mail and API key.": "Odoo-E-Mail und API-Schlüssel eingeben.",
+  "Sign-in failed.": "Anmeldung fehlgeschlagen.",
+  "Sign-out failed.": "Abmelden fehlgeschlagen.",
+  "Signing in…": "Anmelden…",
+  "Sign in": "Anmelden",
+  "Signed in with Odoo as {login}": "Mit Odoo angemeldet als {login}",
+
   // ─── Footer ────────────────────────────────────────────────────
   "Reset to defaults": "Auf Standard zurücksetzen",
 

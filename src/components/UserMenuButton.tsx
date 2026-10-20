@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { checkSession, logout } from "../templateApi";
 import { clearCache } from "../cloudCache";
 import LoginDialog from "./LoginDialog";
+import FaceUserMenuButton from "./FaceUserMenuButton";
+import { FACE_BACKEND } from "../faceBackend";
 import { useT } from "../i18n";
 
 interface User {
@@ -10,7 +12,13 @@ interface User {
   name: string | null;
 }
 
+/** FACE: the FACE image signs in with Odoo against its own backend (SPEC-face-identity.md);
+ *  the upstream account (blocked by our nginx anyway) stays for every other build. */
 export default function UserMenuButton() {
+  return FACE_BACKEND ? <FaceUserMenuButton /> : <UpstreamUserMenuButton />;
+}
+
+function UpstreamUserMenuButton() {
   const [user, setUser] = useState<User | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [showLogin, setShowLogin] = useState(false);

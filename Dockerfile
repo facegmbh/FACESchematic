@@ -13,6 +13,10 @@ ENV VITE_TEMPLATE_API_URL=${VITE_TEMPLATE_API_URL}
 # choice is kept in localStorage and overrides this default.
 ARG VITE_DEFAULT_LOCALE=de
 ENV VITE_DEFAULT_LOCALE=${VITE_DEFAULT_LOCALE}
+# The FACE image has its own backend under /face/ (mcp-server/Dockerfile.cloud): the account
+# button signs in with Odoo there instead of the upstream account (SPEC-face-identity.md).
+ARG VITE_FACE_BACKEND=1
+ENV VITE_FACE_BACKEND=${VITE_FACE_BACKEND}
 # The planning company printed in the legend's footer and offered to the plan head, so a
 # fresh workstation produces a correct sheet without anyone filling a form first. Address
 # lines are separated by "|". Anyone can still change it under Preferences > Company; a
