@@ -37,6 +37,8 @@ RUN npm run build
 # Production stage
 FROM nginx:bookworm
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# A broken config fails the build here, and the running container stays as it is.
+RUN nginx -t
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

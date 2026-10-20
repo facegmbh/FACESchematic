@@ -39,6 +39,9 @@ export default defineConfig({
         // → updateSW(true)) is now what skips waiting and reloads, on the
         // user's terms or after they go idle.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // FACE: /face/ is the backend (SPEC-backend-deploy.md). Its pages — the sign-in
+        // page claude.ai opens, later — must reach the server, not the cached app shell.
+        navigateFallbackDenylist: [/^\/face\//],
         globPatterns: ['**/*.{js,css,html,svg,png,ttf,json}'],
         globIgnores: [
           '**/deviceLibrary.fallback.json',
@@ -67,6 +70,10 @@ export default defineConfig({
     }),
   ],
   cacheDir,
+  // FACE: the backend (mcp-server/dist/cloud/server.js) on its default port.
+  server: {
+    proxy: { '/face': 'http://localhost:8787' },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_HASH__: JSON.stringify(gitHash),

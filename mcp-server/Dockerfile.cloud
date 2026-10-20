@@ -1,0 +1,24 @@
+# FACESchematic backend (see SPEC-backend-deploy.md).
+# Build context is the repository root: the build copies the shared wire protocol from
+# src/mcp/protocol.ts into the package, exactly as `npm run build` does locally.
+#   docker build -f mcp-server/Dockerfile.cloud .
+FROM node:22-alpine AS build
+WORKDIR /repo
+COPY src/mcp/protocol.ts src/mcp/protocol.ts
+COPY mcp-server/package.json mcp-server/package-lock.json mcp-server/
+RUN cd mcp-server && npm ci
+COPY mcp-server/ mcp-server/
+RUN cd mcp-server && npm run build && npm prune --omit=dev
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /repo/mcp-server/package.json ./
+COPY --from=build /repo/mcp-server/node_modules ./node_modules
+COPY --from=build /repo/mcp-server/dist ./dist
+RUN mkdir -p /data && chown node:node /data
+USER node
+VOLUME /data
+EXPOSE 8787
+HEALTHCHECK --interval=60s --timeout=5s CMD wget -qO- http://127.0.0.1:8787/face/health || exit 1
+CMD ["node", "dist/cloud/server.js"]

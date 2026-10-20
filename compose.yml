@@ -6,3 +6,21 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
+  # FACE backend (SPEC-backend-deploy.md): reached only through the app's nginx under
+  # /face/, so it publishes no port. FACE_SECRET comes from .env, which the deploy
+  # workflow writes from ~/faceschematic/backend.env; without it this container alone
+  # stops with the reason in its log and the app keeps running.
+  backend:
+    build:
+      context: .
+      dockerfile: mcp-server/Dockerfile.cloud
+    environment:
+      FACE_SECRET: ${FACE_SECRET:-}
+      FACE_PUBLIC_URL: https://schematic.face-gmbh.com
+      TZ: Europe/Berlin
+    volumes:
+      - backend-data:/data
+    restart: unless-stopped
+
+volumes:
+  backend-data:
