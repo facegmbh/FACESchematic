@@ -41,7 +41,7 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 ### Checkpoint B (Freigabe, dann Push auf master)
 - [x] Alle Tests und Build grün
 - [x] Lokal Ende-zu-Ende: Backend gegen Mock-Odoo, Vite-Dev mit Proxy, Anmelden/Abmelden im Browser (Playwright)
-- [ ] Nach Deploy: Jean-Luc meldet sich mit echtem Odoo-Konto an
+- [x] Nach Deploy: Jean-Luc meldet sich mit echtem Odoo-Konto an (22.10.)
 
 ## Risks and Mitigations
 
