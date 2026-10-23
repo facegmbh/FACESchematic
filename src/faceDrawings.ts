@@ -6,14 +6,18 @@
  * doing with it lives here: editing (holding the lock) or only reading, who holds the lock,
  * who else is looking. A heartbeat every 30 s keeps that fresh; the backend lets go of a tab
  * 90 s after its last one.
+ *
+ * Every answer from the backend can arrive after the user has moved on — opened a file, another
+ * drawing, New. An answer is only applied while the content is still the one it was asked for
+ * (same `loadSeq`, same drawing); otherwise it would tie unrelated content to a drawing, and
+ * the next Ctrl+S would overwrite that drawing with it.
  */
 import { create } from "zustand";
 import { faceApi, FaceApiError } from "./faceBackend";
-import { useSchematicStore, type OdooDrawingRef } from "./store";
+import { useSchematicStore } from "./store";
 import type { SchematicFile } from "./types";
 
 const HEARTBEAT_MS = 30_000;
-const TAB_ID_KEY = "face-tab-id";
 
 export interface ProjectSummary {
   id: number;
@@ -78,15 +82,20 @@ export class LockedError extends Error {
 
 const store = () => useSchematicStore.getState();
 
-/** Who this tab is to the backend's locks. Survives a reload of the tab, not a new tab. */
+/** Who this tab is to the backend's locks — per page load. Not kept in sessionStorage: a
+ *  duplicated browser tab copies that, and two tabs would then share one lock. Leaving the
+ *  page releases the lock (pagehide), so a reload simply takes it again. */
+let tabId: string | null = null;
 export function getTabId(): string {
-  let id = sessionStorage.getItem(TAB_ID_KEY);
-  if (!id) {
-    id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^\w-]/g, "");
-    sessionStorage.setItem(TAB_ID_KEY, id);
-  }
-  return id;
+  tabId ??= (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^\w-]/g, "");
+  return tabId;
 }
+
+/** The content as it is now — compared after an await to see whether the user moved on. */
+const snapshot = () => ({ loadSeq: store().loadSeq, drawingId: store().odooDrawing?.drawingId });
+type Snapshot = ReturnType<typeof snapshot>;
+const unchanged = (s: Snapshot) => store().loadSeq === s.loadSeq && store().odooDrawing?.drawingId === s.drawingId;
+const stillLinkedTo = (drawingId: number) => store().odooDrawing?.drawingId === drawingId;
 
 // --- "changed since saved" ---------------------------------------------------------
 
@@ -114,30 +123,38 @@ export function isChangedSinceOdooSave(): boolean {
 
 let heartbeat: ReturnType<typeof setInterval> | null = null;
 let watching = false;
+let leaving = false;
+/** Set while this module itself re-links the content, so the watcher neither releases nor
+ *  claims in between (opening a drawing first clears the link, then sets it again). */
+let relinking = false;
 
 async function view(drawingId: number): Promise<void> {
   const r = await faceApi<{ holder: Holder | null; viewers: string[] }>(`/face/api/drawings/${drawingId}/view`, {
     method: "POST",
     body: { tabId: getTabId() },
   });
-  useOdooPresence.setState({ role: "viewer", holder: r.holder, viewers: r.viewers });
+  if (stillLinkedTo(drawingId)) useOdooPresence.setState({ role: "viewer", holder: r.holder, viewers: r.viewers });
 }
 
 /** Take the lock if it is free (or, with takeOver, from my own other tab); otherwise read. */
 async function claim(takeOver = false): Promise<void> {
-  const ref = store().odooDrawing;
-  if (!ref) return;
+  const drawingId = store().odooDrawing?.drawingId;
+  if (drawingId === undefined) return;
   try {
-    const r = await faceApi<{ ok: true; viewers: string[] }>(`/face/api/drawings/${ref.drawingId}/lock`, {
+    const r = await faceApi<{ ok: true; viewers: string[] }>(`/face/api/drawings/${drawingId}/lock`, {
       method: "POST",
       body: { tabId: getTabId(), takeOver },
     });
+    if (!stillLinkedTo(drawingId)) {
+      release(drawingId);
+      return;
+    }
     useOdooPresence.setState({ role: "editor", holder: null, viewers: r.viewers });
   } catch (err) {
     if (!(err instanceof FaceApiError && err.status === 409)) throw err;
-    await view(ref.drawingId);
+    await view(drawingId);
   }
-  startHeartbeat();
+  if (stillLinkedTo(drawingId)) startHeartbeat();
 }
 
 async function beat(): Promise<void> {
@@ -170,31 +187,44 @@ export function stopOdooPresence(): void {
   useOdooPresence.setState({ role: null, holder: null, viewers: [] });
 }
 
-/** When the content stops being an Odoo drawing (New, open a file, import…), let go of it. */
+/**
+ * The link decides: when the content stops being an Odoo drawing (New, open a file, import…),
+ * let go of it; when a link appears that this module did not set — the backup restored after a
+ * reload — take the lock for it. Independent of which component's effect runs first.
+ */
 function watchLink(): void {
   if (watching) return;
   watching = true;
   useSchematicStore.subscribe((state, prev) => {
     const before = prev.odooDrawing?.drawingId;
-    if (before !== undefined && before !== state.odooDrawing?.drawingId) {
+    const after = state.odooDrawing?.drawingId;
+    if (before === after || relinking) return;
+    if (before !== undefined) {
       release(before);
       stopOdooPresence();
     }
+    if (after !== undefined) void claim().catch(() => undefined);
   });
 }
 
-/** On start-up: pick up a drawing the backup still links to, and free the lock on leaving. */
+/** On start-up: watch the link, pick up one the backup already restored, free the lock on leaving. */
 export function startOdooPresence(): void {
   watchLink();
-  window.addEventListener("pagehide", () => {
-    const ref = store().odooDrawing;
-    if (ref) release(ref.drawingId);
-  });
-  if (store().odooDrawing) void claim().catch(() => undefined);
+  if (!leaving) {
+    leaving = true;
+    window.addEventListener("pagehide", () => {
+      const ref = store().odooDrawing;
+      if (ref) release(ref.drawingId);
+    });
+  }
+  if (store().odooDrawing && useOdooPresence.getState().role === null) void claim().catch(() => undefined);
 }
 
 /** Another tab of mine edits it — take over editing here. */
 export const takeOverOdooDrawing = () => claim(true);
+
+/** Nobody edits it any more — start editing here (a reader's way back, keeping its changes). */
+export const editOdooDrawing = () => claim(false);
 
 // --- open, create, save ------------------------------------------------------------
 
@@ -204,17 +234,35 @@ export const searchOdooProjects = (query: string) =>
 export const listOdooDrawings = (projectId: number) =>
   faceApi<DrawingListItem[]>(`/face/api/projects/${projectId}/drawings`);
 
-function link(d: DrawingSummary, projectName: string): OdooDrawingRef {
-  const ref: OdooDrawingRef = { drawingId: d.id, projectId: d.projectId, projectName, name: d.name, baseWriteDate: d.writeDate };
-  store().setOdooDrawing(ref);
-  return ref;
+/** Set the link without the watcher reacting — the caller handles the lock itself. */
+function link(d: DrawingSummary, projectName: string): void {
+  relinking = true;
+  try {
+    store().setOdooDrawing({ drawingId: d.id, projectId: d.projectId, projectName, name: d.name, baseWriteDate: d.writeDate });
+  } finally {
+    relinking = false;
+  }
 }
 
 export async function openOdooDrawing(drawingId: number): Promise<void> {
   watchLink();
+  const asked = snapshot();
   const d = await faceApi<DrawingSummary & { projectName: string; data: SchematicFile }>(`/face/api/drawings/${drawingId}`);
-  store().importFromJSON(d.data);
-  store().setSchematicName(d.name);
+  if (!unchanged(asked)) return; // the user opened something else meanwhile
+  const previous = store().odooDrawing?.drawingId;
+  relinking = true;
+  try {
+    store().importFromJSON(d.data);
+    // Undo must not reach back into the document this one replaces — Ctrl+S would store it.
+    store().clearUndoHistory();
+    store().setSchematicName(d.name);
+  } finally {
+    relinking = false;
+  }
+  if (previous !== undefined && previous !== d.id) {
+    release(previous);
+    stopOdooPresence();
+  }
   link(d, d.projectName);
   savedFingerprint = fingerprintOf(store().exportToJSON());
   await claim();
@@ -225,6 +273,7 @@ export async function createOdooDrawing(projectId: number, name: string): Promis
   watchLink();
   const previousName = store().schematicName;
   store().setSchematicName(name.trim() || previousName);
+  const asked = snapshot();
   const data = store().exportToJSON();
   let d: DrawingSummary & { projectName: string };
   try {
@@ -233,8 +282,18 @@ export async function createOdooDrawing(projectId: number, name: string): Promis
       body: { name: name.trim(), data, tabId: getTabId() },
     });
   } catch (err) {
-    store().setSchematicName(previousName);
+    if (unchanged(asked)) store().setSchematicName(previousName);
     throw err;
+  }
+  if (!unchanged(asked)) {
+    // Stored, but the editor shows something else now: don't tie that to the new drawing.
+    release(d.id);
+    throw new Error("Gespeichert, aber inzwischen ist ein anderer Inhalt geöffnet — er wurde nicht verknüpft.");
+  }
+  const previous = asked.drawingId;
+  if (previous !== undefined) {
+    release(previous);
+    stopOdooPresence();
   }
   store().setSchematicName(d.name);
   link(d, d.projectName ?? "");
@@ -243,26 +302,42 @@ export async function createOdooDrawing(projectId: number, name: string): Promis
   startHeartbeat();
 }
 
-export async function saveOdooDrawing({ force = false }: { force?: boolean } = {}): Promise<void> {
+let saving: Promise<void> | null = null;
+
+/** Save back to Odoo. A second call while one runs waits for that one instead of sending again
+ *  (it would carry the old base date and come back "stale", naming the user themself). */
+export function saveOdooDrawing(opts: { force?: boolean } = {}): Promise<void> {
+  saving ??= putDrawing(opts.force ?? false, true).finally(() => {
+    saving = null;
+  });
+  return saving;
+}
+
+async function putDrawing(force: boolean, mayReclaim: boolean): Promise<void> {
   const ref = store().odooDrawing;
   if (!ref) throw new Error("Diese Zeichnung ist nicht mit Odoo verbunden.");
+  const asked = snapshot();
   const data = store().exportToJSON();
   try {
     const d = await faceApi<DrawingSummary>(`/face/api/drawings/${ref.drawingId}`, {
       method: "PUT",
       body: { data, tabId: getTabId(), baseWriteDate: ref.baseWriteDate, force },
     });
+    if (!unchanged(asked)) return; // saved; the editor has moved on to something else
     store().setOdooDrawing({ ...ref, baseWriteDate: d.writeDate });
     savedFingerprint = fingerprintOf(data);
   } catch (err) {
-    if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "stale") {
+    if (!(err instanceof FaceApiError && err.status === 409)) throw err;
+    if (err.body.reason === "stale") {
       throw new StaleError((err.body.writtenBy as string | null) ?? null, String(err.body.writeDate ?? ""), err.message);
     }
-    if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "locked") {
-      const holder = (err.body.holder as Holder | null) ?? null;
-      useOdooPresence.setState({ role: "viewer", holder, viewers: (err.body.viewers as string[]) ?? [] });
-      throw new LockedError(holder, err.message);
+    const holder = (err.body.holder as Holder | null) ?? null;
+    // The lock lapsed (offline, restart) and nobody took it: take it back and try once more.
+    if (!holder && mayReclaim && unchanged(asked)) {
+      await claim();
+      if (useOdooPresence.getState().role === "editor") return putDrawing(force, false);
     }
-    throw err;
+    if (unchanged(asked)) useOdooPresence.setState({ role: "viewer", holder, viewers: (err.body.viewers as string[]) ?? [] });
+    throw new LockedError(holder, err.message);
   }
 }

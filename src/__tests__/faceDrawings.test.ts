@@ -185,3 +185,110 @@ describe("Odoo drawings in the editor (SPEC-odoo-drawings)", () => {
     expect(fd.useOdooPresence.getState().viewers).toEqual(["Max Mustermann"]);
   });
 });
+
+/** A response the test releases by hand — to change the content while a request is in flight. */
+function deferred(status: number, body?: unknown) {
+  let release!: () => void;
+  const promise = new Promise<Response>((resolve) => {
+    release = () => resolve(new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+  });
+  return { promise, release };
+}
+
+describe("review findings (Task 12)", () => {
+  it("a create that answers after another file was opened links nothing — and frees the new drawing", async () => {
+    const answer = deferred(201, { ...DRAWING, id: 777, name: "Neu", projectId: 102, projectName: "Pier 99" });
+    fetchMock.mockReturnValueOnce(answer.promise).mockReturnValue(respond(204));
+    const pending = fd.createOdooDrawing(102, "Neu");
+    store.getState().importFromJSON(fileFixture as never); // the user opens a local file meanwhile
+    answer.release();
+    await pending.catch(() => undefined);
+    expect(store.getState().odooDrawing).toBeNull();
+    expect(fd.useOdooPresence.getState().role).toBeNull();
+    expect(calls()).toContain("POST /face/api/drawings/777/unlock");
+  });
+
+  it("a save that answers after another drawing was opened leaves the new link alone", async () => {
+    await openAsEditor();
+    const answer = deferred(200, { ...DRAWING, writeDate: "2026-10-23 09:00:00" });
+    fetchMock.mockReturnValueOnce(answer.promise);
+    const pending = fd.saveOdooDrawing();
+    // Meanwhile drawing 502 is opened.
+    fetchMock
+      .mockReturnValueOnce(respond(200, { ...DRAWING, id: 502, name: "Andere", writeDate: "2026-10-01 08:00:00", data: fileFixture }))
+      .mockReturnValue(respond(200, { ok: true, viewers: [] }));
+    await fd.openOdooDrawing(502);
+    answer.release();
+    await pending.catch(() => undefined);
+    expect(store.getState().odooDrawing).toMatchObject({ drawingId: 502, baseWriteDate: "2026-10-01 08:00:00" });
+  });
+
+  it("a link restored from the backup after start-up still takes the lock (production effect order)", async () => {
+    vi.stubGlobal("window", { addEventListener: vi.fn() });
+    await openAsEditor();
+    store.getState().saveToLocalStorage();
+    fetchMock.mockReturnValue(respond(204));
+    store.setState({ odooDrawing: null });
+    fd.stopOdooPresence();
+    fetchMock.mockReset();
+    fetchMock.mockReturnValue(respond(200, { ok: true, viewers: [] }));
+    fd.startOdooPresence(); // runs before the canvas restores the backup
+    store.getState().loadFromLocalStorage();
+    await vi.waitFor(() => expect(fd.useOdooPresence.getState().role).toBe("editor"));
+    expect(calls()).toContain("POST /face/api/drawings/501/lock");
+  });
+
+  it("opening from Odoo clears undo — the previous document cannot come back into the drawing", async () => {
+    store.getState().addNote({ x: 0, y: 0 });
+    expect(store.getState().undoSize).toBeGreaterThan(0);
+    await openAsEditor();
+    expect(store.getState().undoSize).toBe(0);
+    expect(store.getState().redoSize).toBe(0);
+  });
+
+  it("the tab id is per page load, never copied into a duplicated tab via sessionStorage", () => {
+    const id = fd.getTabId();
+    expect(fd.getTabId()).toBe(id);
+    expect(sessionStorage.getItem("face-tab-id")).toBeNull();
+  });
+
+  it("a reader may start editing once nobody holds the lock", async () => {
+    fetchMock
+      .mockReturnValueOnce(respond(200, { ...DRAWING, data: fileFixture }))
+      .mockReturnValueOnce(respond(409, { reason: "locked", holder: { name: "Max Mustermann", since: 1, sameUser: false }, viewers: [], error: "x" }))
+      .mockReturnValueOnce(respond(200, { holder: null, viewers: [] }));
+    await fd.openOdooDrawing(501);
+    expect(fd.useOdooPresence.getState()).toMatchObject({ role: "viewer", holder: null });
+    fetchMock.mockReturnValueOnce(respond(200, { ok: true, viewers: [] }));
+    await fd.editOdooDrawing();
+    expect(fd.useOdooPresence.getState().role).toBe("editor");
+  });
+
+  it("a save refused for a lapsed lock that nobody else holds takes the lock and tries once more", async () => {
+    await openAsEditor();
+    fetchMock
+      .mockReturnValueOnce(respond(409, { reason: "locked", holder: null, viewers: [], error: "x" }))
+      .mockReturnValueOnce(respond(200, { ok: true, viewers: [] }))
+      .mockReturnValueOnce(respond(200, { ...DRAWING, writeDate: "2026-10-23 09:00:00" }));
+    await fd.saveOdooDrawing();
+    expect(calls().slice(2)).toEqual(["PUT /face/api/drawings/501", "POST /face/api/drawings/501/lock", "PUT /face/api/drawings/501"]);
+    expect(store.getState().odooDrawing?.baseWriteDate).toBe("2026-10-23 09:00:00");
+  });
+
+  it("re-opening the same drawing does not let go of its lock in between", async () => {
+    await openAsEditor();
+    await openAsEditor();
+    expect(calls()).not.toContain("POST /face/api/drawings/501/unlock");
+  });
+
+  it("a second Ctrl+S while one is running waits for it instead of sending again", async () => {
+    await openAsEditor();
+    const answer = deferred(200, { ...DRAWING, writeDate: "2026-10-23 09:00:00" });
+    fetchMock.mockReturnValueOnce(answer.promise);
+    const first = fd.saveOdooDrawing();
+    const second = fd.saveOdooDrawing();
+    answer.release();
+    await Promise.all([first, second]);
+    expect(calls().filter((c) => c === "PUT /face/api/drawings/501")).toHaveLength(1);
+  });
+});

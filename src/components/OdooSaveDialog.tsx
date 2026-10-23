@@ -23,13 +23,16 @@ export default function OdooSaveDialog({ onClose }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Not closable while saving: the answer must still find this dialog, not a new document.
+  const close = () => !busy && onClose();
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !busy) onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, busy]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +58,7 @@ export default function OdooSaveDialog({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={close}>
       <form
         role="dialog"
         aria-modal="true"
@@ -98,7 +101,8 @@ export default function OdooSaveDialog({ onClose }: Props) {
         <div className="px-5 py-3 flex justify-end gap-2 border-t" style={{ borderColor: "var(--color-border)" }}>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
+            disabled={busy}
             className="px-3 py-1.5 text-xs rounded transition-colors cursor-pointer"
             style={{ backgroundColor: "var(--color-surface)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
           >

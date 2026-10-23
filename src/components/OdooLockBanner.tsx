@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { isChangedSinceOdooSave, openOdooDrawing, takeOverOdooDrawing, useOdooPresence } from "../faceDrawings";
+import { editOdooDrawing, takeOverOdooDrawing, useOdooPresence } from "../faceDrawings";
 import { useSchematicStore } from "../store";
 import { useT } from "../i18n";
-import ConfirmDialog from "./ConfirmDialog";
 import { showOdooDialog } from "./OdooDialogs";
 import { formatTime } from "./OdooOpenDialog";
 
@@ -16,7 +15,6 @@ export default function OdooLockBanner() {
   const role = useOdooPresence((s) => s.role);
   const holder = useOdooPresence((s) => s.holder);
   const [error, setError] = useState("");
-  const [confirmReload, setConfirmReload] = useState(false);
 
   if (!ref || role !== "viewer") return null;
 
@@ -24,7 +22,6 @@ export default function OdooLockBanner() {
     setError("");
     action().catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   };
-  const reload = () => run(() => openOdooDrawing(ref.drawingId));
 
   let text: string;
   let label: string;
@@ -41,9 +38,10 @@ export default function OdooLockBanner() {
     label = t("Edit here");
     onClick = () => run(takeOverOdooDrawing);
   } else {
+    // Keeps what was changed here; if someone saved meanwhile, Ctrl+S asks before overwriting.
     text = t("Nobody is editing this drawing any more.");
-    label = t("Reload and edit");
-    onClick = () => (isChangedSinceOdooSave() ? setConfirmReload(true) : reload());
+    label = t("Edit here");
+    onClick = () => run(editOdooDrawing);
   }
 
   return (
@@ -59,18 +57,6 @@ export default function OdooLockBanner() {
       >
         {label}
       </button>
-      {confirmReload && (
-        <ConfirmDialog
-          title={t("Unsaved changes")}
-          message={t("Reloading discards the changes made here while reading. Reload anyway?")}
-          confirmLabel={t("Reload and edit")}
-          onConfirm={() => {
-            setConfirmReload(false);
-            reload();
-          }}
-          onCancel={() => setConfirmReload(false)}
-        />
-      )}
     </div>
   );
 }

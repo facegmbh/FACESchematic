@@ -629,6 +629,9 @@ interface SchematicState {
    *  perform collapses into a single entry holding the pre-batch state; if they change
    *  nothing, no undo entry is left behind. Synchronous callbacks only. */
   runAsSingleUndoStep: (fn: () => void) => void;
+  /** Forget undo and redo — for a document that replaces the open one (FACE: opening an Odoo
+   *  drawing), so undo cannot bring the previous document back into it. */
+  clearUndoHistory: () => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -4727,6 +4730,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     // One batch of one: the module-level runAsSingleUndoStep suppresses every push inside
     // fn, records the pre-batch snapshot once and saves once — only if something changed.
     runAsSingleUndoStep(["batch"], () => fn());
+  },
+
+  clearUndoHistory: () => {
+    undoStack.length = 0;
+    redoStack.length = 0;
+    set({ undoSize: 0, redoSize: 0 });
   },
 
   undo: () => {

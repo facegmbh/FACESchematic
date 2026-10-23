@@ -195,9 +195,6 @@ export const DE_MENU: Record<string, string> = {
   "You are editing this drawing in another tab.": "Diese Zeichnung bearbeitest du gerade in einem anderen Tab.",
   "Edit here": "Hier bearbeiten",
   "Nobody is editing this drawing any more.": "Die Zeichnung bearbeitet niemand mehr.",
-  "Reload and edit": "Neu laden und bearbeiten",
-  "Reloading discards the changes made here while reading. Reload anyway?":
-    "Neu laden verwirft, was hier beim Lesen geändert wurde. Trotzdem neu laden?",
   "Also open: {names} (reading)": "Auch geöffnet von: {names} (liest mit)",
   "Saved in the meantime": "Inzwischen gespeichert",
   "{name} saved this drawing at {when}, after you opened it. Overwrite their version, or keep both by saving yours under a new name?":
