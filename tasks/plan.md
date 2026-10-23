@@ -55,8 +55,8 @@ Entscheidungen für diese Phase:
 - **Eigener kleiner Store** für den Odoo-Zustand (wie `useFaceSession`), damit `store.ts`
   (≈ 9000 Zeilen) nur die Strg+S-Weiche berührt.
 
-- [ ] Task 6: Backend — Projekte, Zeichnungsliste, Laden
-- [ ] Task 7: Backend — Anlegen, Speichern, Sperre, Zuschauer, Veraltet-Prüfung
+- [x] Task 6: Backend — Projekte, Zeichnungsliste, Laden
+- [x] Task 7: Backend — Anlegen, Speichern, Sperre, Zuschauer, Veraltet-Prüfung
 - [ ] Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
 - [ ] Task 9: „In Odoo speichern…“ und Strg+S-Weiche
 - [ ] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
