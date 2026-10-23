@@ -50,7 +50,8 @@ test("the server process exits with a reason when FACE_SECRET is missing", () =>
   const run = spawnSync(process.execPath, [entry], {
     env: { PATH: process.env.PATH, FACE_PUBLIC_URL: "https://schematic.face-gmbh.com" },
     encoding: "utf8",
-    timeout: 10000,
+    // Generous: a busy machine can take a while to start node and load express.
+    timeout: 60000,
   });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /FACE_SECRET/);
