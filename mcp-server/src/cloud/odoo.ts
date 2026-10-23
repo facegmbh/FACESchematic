@@ -20,7 +20,7 @@ const CREDENTIALS_HINT =
 export class OdooError extends Error {
   constructor(
     message: string,
-    readonly kind: "network" | "credentials" | "access" | "odoo",
+    readonly kind: "network" | "credentials" | "access" | "missing" | "odoo",
   ) {
     super(message);
   }
@@ -78,7 +78,8 @@ export class OdooClient {
       const name = data.error.data?.name ?? "";
       const message = data.error.data?.message || data.error.message || "Odoo-Fehler";
       if (/AccessDenied/i.test(name)) throw new OdooError(CREDENTIALS_HINT, "credentials");
-      if (/AccessError|MissingError/i.test(name)) throw new OdooError(message, "access");
+      if (/MissingError/i.test(name)) throw new OdooError(message, "missing");
+      if (/AccessError/i.test(name)) throw new OdooError(message, "access");
       throw new OdooError(message, "odoo");
     }
     return data.result;

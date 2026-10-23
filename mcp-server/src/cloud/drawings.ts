@@ -60,6 +60,16 @@ function toSummary(row: AttachmentRow): DrawingSummary {
 }
 
 export class NotFoundError extends Error {}
+export class BadRequestError extends Error {}
+
+/** What a client may store: a schematic file — an object with a list of nodes. Anything else
+ *  would land in Odoo and break every editor that opens it. */
+function assertSchematic(data: unknown): void {
+  const d = data as { nodes?: unknown } | null;
+  if (!d || typeof d !== "object" || Array.isArray(d) || !Array.isArray(d.nodes)) {
+    throw new BadRequestError("Das ist kein Schaltplan.");
+  }
+}
 
 export async function listProjects(odoo: OdooClient, query = "", limit = 50): Promise<ProjectSummary[]> {
   const q = query.trim();
@@ -130,6 +140,7 @@ export class ConflictError extends Error {
 }
 
 export async function createDrawing(odoo: OdooClient, projectId: number, name: string, data: unknown) {
+  assertSchematic(data);
   const project = await projectName(odoo, projectId);
   const fileName = attachmentNameFor(name);
   const taken = await odoo.call<number>("ir.attachment", "search_count", [
@@ -146,6 +157,7 @@ export async function createDrawing(odoo: OdooClient, projectId: number, name: s
 
 /** Overwrite — unless someone else saved since `baseWriteDate` and the caller did not insist. */
 export async function saveDrawing(odoo: OdooClient, id: number, data: unknown, baseWriteDate: string, force: boolean) {
+  assertSchematic(data);
   const current = await readDrawingRow(odoo, id, false);
   if (!force && current.write_date !== baseWriteDate) {
     const writtenBy = current.write_uid ? current.write_uid[1] : null;
@@ -186,12 +198,19 @@ export function createDrawingsRouter(
         else res.status(status).json(body);
       } catch (err) {
         if (err instanceof ConflictError) res.status(409).json({ ...err.body, error: err.message });
-        else if (err instanceof NotFoundError) res.status(404).json({ error: err.message });
+        else if (err instanceof BadRequestError) res.status(400).json({ error: err.message });
+        else if (err instanceof NotFoundError || (err instanceof OdooError && err.kind === "missing"))
+          res.status(404).json({ error: "Diese Zeichnung gibt es nicht (mehr) an einem Odoo-Projekt." });
         // A key revoked in Odoo: the app asks the user to sign in again.
         else if (err instanceof OdooError && err.kind === "credentials") res.status(401).json({ error: err.message });
         else if (err instanceof OdooError && err.kind === "access")
           res.status(403).json({ error: `Keine Berechtigung in Odoo: ${err.message}` });
-        else res.status(502).json({ error: err instanceof Error ? err.message : "Odoo-Fehler." });
+        else if (err instanceof OdooError && err.kind === "network") res.status(502).json({ error: err.message });
+        else {
+          // Anything else is a bug or an Odoo surprise: the details belong in the log, not the browser.
+          console.error("[drawings]", req.method, req.originalUrl, err);
+          res.status(502).json({ error: "Odoo hat die Anfrage nicht verarbeitet. Bitte erneut versuchen." });
+        }
       }
     };
 
@@ -207,7 +226,7 @@ export function createDrawingsRouter(
   /** Every tab names itself; without that, locks would have nobody to belong to. */
   const tabIdOf = (req: express.Request): string => {
     const tabId = String(req.body?.tabId ?? "");
-    if (!/^[\w-]{1,64}$/.test(tabId)) throw new ConflictError("Tab-Kennung fehlt.", { reason: "tab" });
+    if (!/^[\w-]{1,64}$/.test(tabId)) throw new BadRequestError("Tab-Kennung fehlt.");
     return tabId;
   };
 
@@ -263,7 +282,7 @@ export function createDrawingsRouter(
     bigJson,
     handle(async (req, res) => {
       const id = Number(req.params.id);
-      if (!presence.holds(id, tabIdOf(req))) {
+      if (!presence.holds(id, user(res).uid, tabIdOf(req))) {
         throw new ConflictError("Diese Zeichnung bearbeitet gerade jemand anderes.", {
           reason: "locked",
           ...presenceOf(id, user(res).uid),
@@ -281,7 +300,7 @@ export function createDrawingsRouter(
       const id = Number(req.params.id);
       const tabId = tabIdOf(req);
       // Only a drawing this user can see may be locked — checked once per tab, not on every heartbeat.
-      if (!presence.knows(id, tabId)) await readDrawingRow(odoo(res), id, false);
+      if (!presence.knows(id, user(res).uid, tabId)) await readDrawingRow(odoo(res), id, false);
       const result = presence.lock(id, user(res).uid, user(res).name, tabId, req.body?.takeOver === true);
       if (!result.ok) {
         throw new ConflictError(`In Bearbeitung von ${result.holder.name}.`, { reason: "locked", ...presenceOf(id, user(res).uid) });
@@ -297,7 +316,7 @@ export function createDrawingsRouter(
     handle(async (req, res) => {
       const id = Number(req.params.id);
       const tabId = tabIdOf(req);
-      if (!presence.knows(id, tabId)) await readDrawingRow(odoo(res), id, false);
+      if (!presence.knows(id, user(res).uid, tabId)) await readDrawingRow(odoo(res), id, false);
       presence.view(id, user(res).uid, user(res).name, tabId);
       return presenceOf(id, user(res).uid);
     }),
@@ -307,8 +326,8 @@ export function createDrawingsRouter(
     "/drawings/:id/unlock",
     withId,
     smallJson,
-    handle(async (req) => {
-      presence.release(Number(req.params.id), tabIdOf(req));
+    handle(async (req, res) => {
+      presence.release(Number(req.params.id), user(res).uid, tabIdOf(req));
       return undefined;
     }),
   );

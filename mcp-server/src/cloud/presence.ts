@@ -42,16 +42,18 @@ export class Presence {
     return undefined;
   }
 
-  /** Take or refresh the lock. Another tab of the same user may take it over; nobody else may. */
+  /** Take or refresh the lock. Another tab of the same user may take it over; nobody else may.
+   *  A tab is a tab of one user: the same tab id under someone else (signed out and in again)
+   *  counts as somebody else. */
   lock(drawingId: number, uid: number, name: string, tabId: string, takeOver = false): LockResult {
     const current = this.editor(drawingId);
-    if (current && current.tabId !== tabId) {
+    if (current && (current.tabId !== tabId || current.uid !== uid)) {
       const sameUser = current.uid === uid;
       if (!(sameUser && takeOver)) {
         return { ok: false, holder: { uid: current.uid, name: current.name, since: current.since }, sameUser };
       }
     }
-    const since = current?.tabId === tabId ? current.since : this.now();
+    const since = current?.tabId === tabId && current.uid === uid ? current.since : this.now();
     this.editors.set(drawingId, { uid, name, tabId, since, lastSeen: this.now() });
     this.readers.get(drawingId)?.delete(tabId);
     return { ok: true };
@@ -59,26 +61,29 @@ export class Presence {
 
   /** Heartbeat of a tab that only reads. */
   view(drawingId: number, uid: number, name: string, tabId: string): void {
-    if (this.editor(drawingId)?.tabId === tabId) return;
+    if (this.holds(drawingId, uid, tabId)) return;
     let tabs = this.readers.get(drawingId);
     if (!tabs) this.readers.set(drawingId, (tabs = new Map()));
     const since = tabs.get(tabId)?.since ?? this.now();
     tabs.set(tabId, { uid, name, tabId, since, lastSeen: this.now() });
   }
 
-  release(drawingId: number, tabId: string): void {
-    if (this.editors.get(drawingId)?.tabId === tabId) this.editors.delete(drawingId);
-    this.readers.get(drawingId)?.delete(tabId);
+  release(drawingId: number, uid: number, tabId: string): void {
+    if (this.holds(drawingId, uid, tabId)) this.editors.delete(drawingId);
+    const reader = this.readers.get(drawingId)?.get(tabId);
+    if (reader?.uid === uid) this.readers.get(drawingId)!.delete(tabId);
   }
 
   /** Whether this tab already has the drawing open (as editor or reader) — it was checked then. */
-  knows(drawingId: number, tabId: string): boolean {
-    if (this.editor(drawingId)?.tabId === tabId) return true;
-    return this.alive(this.readers.get(drawingId)?.get(tabId));
+  knows(drawingId: number, uid: number, tabId: string): boolean {
+    if (this.holds(drawingId, uid, tabId)) return true;
+    const reader = this.readers.get(drawingId)?.get(tabId);
+    return this.alive(reader) && reader.uid === uid;
   }
 
-  holds(drawingId: number, tabId: string): boolean {
-    return this.editor(drawingId)?.tabId === tabId;
+  holds(drawingId: number, uid: number, tabId: string): boolean {
+    const e = this.editor(drawingId);
+    return e?.tabId === tabId && e.uid === uid;
   }
 
   holder(drawingId: number): Holder | null {

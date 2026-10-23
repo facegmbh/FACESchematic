@@ -253,3 +253,72 @@ test("missing write rights in Odoo come back as 403 with Odoo's reason", async (
   assert.equal(res.status, 403);
   assert.match(res.body.error, /Keine Berechtigung in Odoo: Sie dürfen Anhänge/);
 });
+
+// --- Task 12: review findings -------------------------------------------------------
+
+test("a lock belongs to tab AND user: the same tab id under another user is someone else", async () => {
+  const jl = await signIn(MOCK_USER);
+  const max = await signIn(MOCK_USER_2);
+  await post(jl, "/drawings/501/lock", { tabId: "shared-tab" });
+  // Signed out and in again as Max in the same browser tab: same tab id, other person.
+  const max1 = await post(max, "/drawings/501/lock", { tabId: "shared-tab" });
+  assert.equal(max1.status, 409);
+  assert.equal(max1.body.holder.name, MOCK_USER.name);
+  const save = await put(max, "/drawings/501", { data: DATA, tabId: "shared-tab", baseWriteDate: "2026-10-21 16:40:00" });
+  assert.equal(save.status, 409);
+  const unlock = await fetch(`${base}/face/api/drawings/501/unlock`, {
+    method: "POST", headers: { ...json, Cookie: max }, body: JSON.stringify({ tabId: "shared-tab" }),
+  });
+  assert.equal(unlock.status, 204);
+  assert.equal((await post(max, "/drawings/501/lock", { tabId: "max-A" })).status, 409, "Max cannot release Jean-Luc's lock");
+});
+
+test("someone without read access cannot lock even with a tab id that is already known", async () => {
+  const jl = await signIn(MOCK_USER);
+  const max = await signIn(MOCK_USER_2);
+  await post(jl, "/drawings/501/view", { tabId: "t1" });
+  odoo.attachments.find((a) => a.id === 501)!.res_model = "project.task"; // now invisible as a drawing
+  assert.equal((await post(max, "/drawings/501/lock", { tabId: "t1" })).status, 404);
+});
+
+test("only a schematic can be stored: anything else is 400", async () => {
+  const jl = await signIn(MOCK_USER);
+  await post(jl, "/drawings/501/lock", { tabId: "jl-A" });
+  for (const data of [null, "text", [], { nodes: "x" }, undefined]) {
+    const res = await put(jl, "/drawings/501", { data, tabId: "jl-A", baseWriteDate: "2026-10-21 16:40:00" });
+    assert.equal(res.status, 400, JSON.stringify(data));
+  }
+  const created = await post(jl, "/projects/102/drawings", { name: "X", data: null, tabId: "jl-A" });
+  assert.equal(created.status, 400);
+});
+
+test("a missing tab id is a bad request (400)", async () => {
+  const jl = await signIn(MOCK_USER);
+  assert.equal((await post(jl, "/drawings/501/lock", {})).status, 400);
+});
+
+test("the new routes refuse changing requests without X-FACE-Request (403)", async () => {
+  const jl = await signIn(MOCK_USER);
+  const noHeader = { "Content-Type": "application/json", Cookie: jl };
+  for (const [method, p] of [["PUT", "/drawings/501"], ["POST", "/drawings/501/lock"], ["POST", "/projects/102/drawings"]]) {
+    const res = await fetch(`${base}/face/api${p}`, { method, headers: noHeader, body: JSON.stringify({ tabId: "jl-A", data: DATA }) });
+    assert.equal(res.status, 403, `${method} ${p}`);
+  }
+});
+
+test("a drawing deleted in Odoo meanwhile is 404, and internal errors stay internal (502)", async () => {
+  server.close();
+  await odoo.close();
+  odoo = await startMockOdoo({}, {
+    "ir.attachment.read": ["odoo.exceptions.MissingError", "Record does not exist or has been deleted."],
+    "project.project.search_read": ["builtins.TypeError", "secret internal detail"],
+  });
+  const config = loadConfig({ FACE_SECRET: "s".repeat(40), FACE_PUBLIC_URL: "http://localhost:5173", ODOO_URL: odoo.url, DATA_DIR: mkdtempSync(path.join(tmpdir(), "face-drawings-")) });
+  server = createApp(config, { now: () => clock.now }).listen(0);
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const jl = await signIn(MOCK_USER);
+  assert.equal((await get(jl, "/drawings/501")).status, 404);
+  const broken = await get(jl, "/projects");
+  assert.equal(broken.status, 502);
+  assert.ok(!JSON.stringify(broken.body).includes("secret internal detail"));
+});
