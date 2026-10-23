@@ -202,4 +202,23 @@ Bearbeitung von/seit) → öffnen; Rückfrage, wenn die offene Odoo-Zeichnung ge
 
 **Dependencies:** Task 10 · **Files:** `OdooLockBanner.tsx`, `MenuBar.tsx`, `src/i18n/de/menu.ts`, `faceDrawings.ts` · **Scope:** M
 
+## Task 12: Review-Funde beheben
+
+**Description:** Ergebnis der Code-Review vor Checkpoint C.
+1. Antworten auf Speichern/Anlegen/Sperren gelten nur, wenn währenddessen nichts anderes geladen wurde (`loadSeq` + Zeichnungs-ID); sonst verwerfen bzw. die neue Sperre freigeben. „Speichern unter“ lässt sich während des Speicherns nicht schließen.
+2. Die Sperre holt sich ein Beobachter, sobald eine Verknüpfung auftaucht — auch die aus der Sicherung nach dem Neuladen, unabhängig von der Effekt-Reihenfolge.
+3. Öffnen aus Odoo leert Undo/Redo.
+4. Tab-ID je Seitenaufruf (nicht `sessionStorage`); Sperre/Leser prüfen zusätzlich die uid.
+5. Leser ohne Bearbeiter: „Bearbeiten“ (Sperre holen) neben „Neu laden“; Speichern mit 409 ohne Inhaber holt die Sperre und versucht es einmal neu; erneutes Öffnen derselben Zeichnung gibt die Sperre nicht kurz frei.
+6. Backend: `data` muss ein Schaltplan sein (Objekt mit `nodes`-Liste) → sonst 400; fehlende Tab-ID 400; MissingError 404; 502 ohne interne Fehlertexte (Log); Test für CSRF auf den neuen Routen.
+7. Doppeltes Strg+S wartet auf das laufende Speichern.
+
+**Acceptance criteria:**
+- [ ] Je Fund ein Test, der vorher fehlschlägt und danach grün ist
+- [ ] Zwei-Nutzer-Ende-zu-Ende weiterhin grün; Neuladen im Produktions-Build (`vite build` + `vite preview`) holt die Sperre zurück
+
+**Verification:** `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, Playwright
+
+**Dependencies:** Task 11 · **Files:** `faceDrawings.ts`, `presence.ts`, `drawings.ts`, `store.ts`, `OdooLockBanner.tsx`, `OdooSaveDialog.tsx`, `OdooDialogs.tsx`, Tests · **Scope:** L (bewusst als ein Review-Durchgang)
+
 ## Checkpoint C — Freigabe, Push, Abnahme an echtem Projekt
