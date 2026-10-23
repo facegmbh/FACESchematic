@@ -24,6 +24,8 @@ import CsvImportWizard from "./CsvImportWizard";
 import SignalColorPanel from "./SignalColorPanel";
 import { useTheme } from "../hooks/useTheme";
 import { useT } from "../i18n";
+import { FACE_BACKEND } from "../faceBackend";
+import OdooDialogs, { saveToOdooIfLinked, showOdooDialog } from "./OdooDialogs";
 
 // ─── Menu data types ─────────────────────────────────────────────
 
@@ -172,6 +174,7 @@ export default function MenuBar() {
   }, []);
 
   const cloudSchematicId = useSchematicStore((s) => s.cloudSchematicId);
+  const odooDrawing = useSchematicStore((s) => s.odooDrawing);
   const cloudSavedAt = useSchematicStore((s) => s.cloudSavedAt);
   const fileHandle = useSchematicStore((s) => s.fileHandle);
   const isOnline = useSchematicStore((s) => s.isOnline);
@@ -272,6 +275,8 @@ export default function MenuBar() {
 
   // Save: reuse existing handle/cloud, or prompt for first save
   const handleSave = useCallback(async () => {
+    // FACE: a drawing opened from or stored on an Odoo project saves back there.
+    if (FACE_BACKEND && (await saveToOdooIfLinked())) return;
     const store = useSchematicStore.getState();
 
     // Cloud-backed schematic: update cloud (local file handle still used if present)
@@ -643,8 +648,13 @@ export default function MenuBar() {
       { type: "item", label: t("Save As..."), shortcut: "Ctrl+Shift+S", onClick: handleSaveAs },
       { type: "item", label: t("Open..."), shortcut: "Ctrl+O", onClick: handleOpen },
       { type: "separator" },
-      { type: "item", label: cloudSaving ? t("Saving...") : isOnline ? t("Save to Cloud") : t("Save to Cloud (Offline)"), disabled: cloudSaving || !isOnline, onClick: handleCloudSave },
-      { type: "item", label: t("My Schematics..."), disabled: !isLoggedIn, title: isLoggedIn ? undefined : t("Must be logged in"), onClick: () => setShowSchematicBrowser(true) },
+      // FACE: drawings live on Odoo projects; the upstream cloud is walled off by our nginx.
+      ...(FACE_BACKEND
+        ? ([{ type: "item", label: t("Save to Odoo as…"), onClick: () => showOdooDialog("save") }] as MenuEntry[])
+        : ([
+            { type: "item", label: cloudSaving ? t("Saving...") : isOnline ? t("Save to Cloud") : t("Save to Cloud (Offline)"), disabled: cloudSaving || !isOnline, onClick: handleCloudSave },
+            { type: "item", label: t("My Schematics..."), disabled: !isLoggedIn, title: isLoggedIn ? undefined : t("Must be logged in"), onClick: () => setShowSchematicBrowser(true) },
+          ] as MenuEntry[])),
       { type: "separator" },
       { type: "item", label: t("Save Device Archive"), onClick: handleSaveArchive },
       { type: "item", label: t("Import Device Archive..."), onClick: handleOpenArchive },
@@ -884,6 +894,14 @@ export default function MenuBar() {
             />
           ) : (
             <span className="flex items-center gap-1.5">
+              {odooDrawing && (
+                <span
+                  className="text-xs text-[var(--color-text-muted)] truncate max-w-[260px]"
+                  title={t("Stored in Odoo on project {project}", { project: odooDrawing.projectName })}
+                >
+                  {odooDrawing.projectName} ›
+                </span>
+              )}
               <span
                 className="text-sm font-semibold text-[var(--color-text-heading)] cursor-pointer hover:text-blue-600 transition-colors"
                 onDoubleClick={() => {
@@ -1134,6 +1152,7 @@ export default function MenuBar() {
       {showCsvImport && (
         <CsvImportWizard onClose={() => setShowCsvImport(false)} />
       )}
+      {FACE_BACKEND && <OdooDialogs />}
       {showSchematicBrowser && (
         <SchematicBrowser onClose={() => setShowSchematicBrowser(false)} />
       )}

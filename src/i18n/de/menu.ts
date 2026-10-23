@@ -161,4 +161,19 @@ export const DE_MENU: Record<string, string> = {
   "testing new features before they hit production. Your saved schematics are real — don't save anything you can't lose.":
     "Hier werden neue Funktionen getestet, bevor sie produktiv gehen. Gespeicherte Schaltpläne sind echt — nichts speichern, dessen Verlust wehtut.",
   "Dismiss": "Ausblenden",
+  // ─── FACE: Zeichnungen in Odoo ─────────────────────────────────
+  "Save to Odoo as…": "In Odoo speichern unter…",
+  "Saved to Odoo": "In Odoo gespeichert",
+  "Saved to Odoo: {project}": "In Odoo gespeichert: {project}",
+  "Saving to Odoo failed.": "Speichern in Odoo fehlgeschlagen.",
+  "Stored in Odoo on project {project}": "In Odoo gespeichert am Projekt {project}",
+  "Project": "Projekt",
+  "Project: {project}": "Projekt: {project}",
+  "Project or customer, e.g. FACE/26/10/560": "Projekt oder Kunde, z. B. FACE/26/10/560",
+  "Projects could not be loaded.": "Projekte ließen sich nicht laden.",
+  "Loading projects…": "Projekte werden geladen…",
+  "No project found.": "Kein Projekt gefunden.",
+  "Choose a project.": "Ein Projekt auswählen.",
+  "Drawing name": "Name der Zeichnung",
+  "Enter a name for the drawing.": "Einen Namen für die Zeichnung eingeben.",
 };
