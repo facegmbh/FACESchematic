@@ -38,11 +38,33 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
   const secure = config.publicUrl.startsWith("https://");
   const cookieAttrs = `Path=/face; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
   let loginPausedUntil = 0;
+  const clients = new Map<number, OdooClient>();
 
   function currentUser(req: express.Request): UserRecord | undefined {
     const session = store.session(readCookie(req.headers.cookie, SESSION_COOKIE));
     return session ? store.user(session.uid) : undefined;
   }
+
+  /** The Odoo client acting as this user, with the key they signed in with last. */
+  function odooFor(user: UserRecord): OdooClient {
+    let client = clients.get(user.uid);
+    if (!client || client.login !== user.login || client.signedInAt !== user.updatedAt) {
+      client = new OdooClient(config.odooUrl, user.login, store.decrypt(user.apiKeyEnc), user.updatedAt);
+      clients.set(user.uid, client);
+    }
+    return client;
+  }
+
+  /** For the routes behind sign-in: 401 unless signed in; the user is on res.locals.user. */
+  const requireUser: express.RequestHandler = (req, res, next) => {
+    const user = currentUser(req);
+    if (!user) {
+      res.status(401).json({ error: "Nicht angemeldet." });
+      return;
+    }
+    res.locals.user = user;
+    next();
+  };
 
   /** Changing requests must carry X-FACE-Request — a header no other site can make a browser send. */
   const requireFaceHeader: express.RequestHandler = (req, res, next) => {
@@ -116,5 +138,5 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
     res.status(204).end();
   });
 
-  return { router };
+  return { router, requireUser, odooFor };
 }

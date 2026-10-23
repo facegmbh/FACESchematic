@@ -12,6 +12,7 @@ import { loadConfig, type Config } from "./config.js";
 import { createAuth, type AuthOptions } from "./auth.js";
 import { setOdooDb } from "./odoo.js";
 import { Store } from "./store.js";
+import { createDrawingsRouter } from "./drawings.js";
 
 const { version: VERSION } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
@@ -30,6 +31,7 @@ export function createApp(config: Config, opts: AuthOptions = {}): express.Expre
   });
 
   app.use("/face/api", auth.router);
+  app.use("/face/api", auth.requireUser, createDrawingsRouter(auth.odooFor));
 
   return app;
 }

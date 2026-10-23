@@ -44,6 +44,8 @@ export class OdooClient {
     readonly url: string,
     readonly login: string,
     private readonly apiKey: string,
+    /** When the key was stored — a newer sign-in replaces the client (see auth.odooFor). */
+    readonly signedInAt = 0,
   ) {}
 
   private checkBackoff(): void {
