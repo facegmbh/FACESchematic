@@ -63,11 +63,11 @@ Entscheidungen für diese Phase:
 - [x] Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
 - [x] Task 9: „In Odoo speichern…“ und Strg+S-Weiche
 - [x] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
-- [ ] Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
+- [x] Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
 
 ### Checkpoint C (Freigabe, dann Push auf master)
-- [ ] Alle Tests und Build grün
-- [ ] Ende-zu-Ende mit zwei Nutzern (zwei Browser-Kontexte, Mock-Odoo): Speichern, Öffnen beim zweiten → Leiste, Zuschauer beim ersten, Freigabe nach Schließen
+- [x] Alle Tests und Build grün
+- [x] Ende-zu-Ende mit zwei Nutzern (zwei Browser-Kontexte, Mock-Odoo): Speichern, Öffnen beim zweiten → Leiste, Zuschauer beim ersten, Freigabe nach Schließen
 - [ ] Nach Deploy: Jean-Luc speichert an einem echten Projekt, sieht den Anhang in Odoo, öffnet von einem zweiten Gerät
 
 ## Risks and Mitigations
