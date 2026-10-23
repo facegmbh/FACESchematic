@@ -144,10 +144,11 @@ Sperrtabelle mit Herzschlag/90 s-Verfall; Zuschauerliste; `baseWriteDate`/`force
 
 ## Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
 
-**Description:** `src/faceDrawings.ts`: API-Aufrufe, Store `useOdooDrawing` (Zeichnung, Rolle
-editor/viewer, Inhaber, Zuschauer, `baseWriteDate`, Fingerabdruck), `tabId` in
-sessionStorage, Herzschlag alle 30 s, Freigabe per `fetch(keepalive)` bei `pagehide`,
-Ende der Zuordnung bei fremdem Laden.
+**Description:** `odooDrawing` (Projekt, Zeichnung, `baseWriteDate`) im App-Store neben
+`cloudSchematicId` — mit der Sicherung gespeichert, bei Neu/Öffnen/Import/Datei
+zurückgesetzt. `src/faceDrawings.ts`: API-Aufrufe, kleiner Store `useOdooPresence` (Rolle
+editor/viewer, Inhaber, Zuschauer, Fingerabdruck), `tabId` in sessionStorage, Herzschlag alle
+30 s, Freigabe per `fetch(keepalive)` bei `pagehide`.
 
 **Acceptance criteria:**
 - [ ] Öffnen/Anlegen setzt den Zustand und startet den Herzschlag; Freigabe beim Verlassen
@@ -156,7 +157,7 @@ Ende der Zuordnung bei fremdem Laden.
 
 **Verification:** `npx vitest run src/__tests__/faceDrawings.test.ts`, `npx tsc -b`
 
-**Dependencies:** Task 7 · **Files:** `src/faceDrawings.ts`, `src/__tests__/faceDrawings.test.ts` · **Scope:** M
+**Dependencies:** Task 7 · **Files:** `src/store.ts`, `src/faceDrawings.ts`, `src/__tests__/faceDrawings.test.ts` · **Scope:** M
 
 ## Task 9: „In Odoo speichern…“ und Strg+S-Weiche
 

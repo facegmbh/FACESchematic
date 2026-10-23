@@ -46,10 +46,13 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 ### Phase 3: odoo-drawings
 
 Entscheidungen für diese Phase:
-- **Zuordnung Tab ↔ Odoo-Zeichnung in `sessionStorage`**, nicht in der Browser-Sicherung:
-  sie überlebt das Neuladen des Tabs, wandert aber nicht in einen neuen Tab (die Sicherung
-  in `localStorage` teilen sich alle Tabs — sonst würden zwei Tabs dieselbe Zeichnung als
-  „ihre“ ansehen). Lädt der Tab etwas anderes (Neu, Datei öffnen, Import), endet die Zuordnung.
+- **Zuordnung im Inhalt, nicht im Tab** (geändert 23.10. beim Bau von Task 8): Die
+  Browser-Sicherung teilen sich alle Tabs — ein neu geladener Tab kann den Inhalt eines
+  anderen Tabs wiederherstellen. Hinge die Zuordnung am Tab (`sessionStorage`), schriebe
+  Strg+S dann fremden Inhalt in die Odoo-Zeichnung. Deshalb liegt `odooDrawing` im Store
+  und reist mit der Sicherung, genau wie das vorhandene `cloudSchematicId`; Neu, Öffnen,
+  Import und Datei-Übernahme setzen es zurück (dieselben Stellen). Nur die `tabId` (wem die
+  Sperre gehört) liegt in `sessionStorage`.
 - **„Geändert seit Speichern“** über einen Fingerabdruck von `exportToJSON()` beim Öffnen und
   Speichern, nur bei Bedarf berechnet (vor „Öffnen“) — die App kennt sonst keinen Dirty-Zustand.
 - **Eigener kleiner Store** für den Odoo-Zustand (wie `useFaceSession`), damit `store.ts`
