@@ -17,14 +17,20 @@ export interface FaceUser {
 
 export class FaceApiError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  /** The backend's JSON answer — a 409 says why (e.g. `reason: "stale"`). */
+  readonly body: Record<string, unknown>;
+  constructor(message: string, status: number, body: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
 /** Same-origin call; changing requests carry the header the backend's CSRF check wants. */
-async function faceApi<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function faceApi<T>(
+  path: string,
+  init: { method?: string; body?: unknown; keepalive?: boolean } = {},
+): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {};
   if (method !== "GET") headers["X-FACE-Request"] = "1";
@@ -34,10 +40,11 @@ async function faceApi<T>(path: string, init: { method?: string; body?: unknown 
     headers,
     credentials: "same-origin",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    keepalive: init.keepalive,
   });
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new FaceApiError(data.error || `Fehler ${res.status}`, res.status);
+  if (!res.ok) throw new FaceApiError(data.error || `Fehler ${res.status}`, res.status, data);
   return data as T;
 }
 

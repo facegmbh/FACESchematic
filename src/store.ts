@@ -469,6 +469,23 @@ export interface PortEditConflict {
  */
 export type ReconnectOutcome = "reconnected" | "deleted" | "stub-label-end" | "none";
 
+/** FACE: which Odoo drawing the open content is (SPEC-odoo-drawings.md). */
+export interface OdooDrawingRef {
+  drawingId: number;
+  projectId: number;
+  projectName: string;
+  name: string;
+  /** Odoo's write_date when this content was opened or last saved — the stale-save check. */
+  baseWriteDate: string;
+}
+
+function parseOdooDrawingRef(value: unknown): OdooDrawingRef | null {
+  const v = value as Partial<OdooDrawingRef> | null | undefined;
+  return v && typeof v.drawingId === "number" && typeof v.projectId === "number" && typeof v.baseWriteDate === "string"
+    ? { drawingId: v.drawingId, projectId: v.projectId, projectName: String(v.projectName ?? ""), name: String(v.name ?? ""), baseWriteDate: v.baseWriteDate }
+    : null;
+}
+
 interface SchematicState {
   nodes: SchematicNode[];
   edges: ConnectionEdge[];
@@ -1016,6 +1033,11 @@ interface SchematicState {
   cloudSavedAt: string | null;
   setCloudSchematicId: (id: string | null) => void;
   setCloudSavedAt: (ts: string | null) => void;
+  /** FACE: the Odoo drawing this content belongs to (SPEC-odoo-drawings.md). Kept with the
+   *  browser backup like cloudSchematicId and reset by the same loads, so Ctrl+S can never
+   *  write unrelated content into it. */
+  odooDrawing: OdooDrawingRef | null;
+  setOdooDrawing: (ref: OdooDrawingRef | null) => void;
 
   // Rack builder pages
   pages: SchematicPage[];
@@ -2524,6 +2546,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   cableIdMap: {},
   cloudSchematicId: null,
   cloudSavedAt: null,
+  odooDrawing: null,
   fileHandle: null,
   isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
   pendingIncompatibleConnection: null,
@@ -5976,6 +5999,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   setCloudSchematicId: (id) => { set({ cloudSchematicId: id }); get().saveToLocalStorage(); },
   setCloudSavedAt: (ts) => { set({ cloudSavedAt: ts }); get().saveToLocalStorage(); },
+  setOdooDrawing: (ref) => { set({ odooDrawing: ref }); get().saveToLocalStorage(); },
   setFileHandle: (handle) => set({ fileHandle: handle }),
 
   adoptLocalFile: (handle) => {
@@ -5988,6 +6012,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       // Ctrl+S writes to the file rather than the previously-linked cloud copy.
       cloudSchematicId: null,
       cloudSavedAt: null,
+      odooDrawing: null,
     });
     get().saveToLocalStorage();
   },
@@ -7458,6 +7483,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       blob.cloudSchematicId = state.cloudSchematicId;
       blob.cloudSavedAt = state.cloudSavedAt ?? undefined;
     }
+    if (state.odooDrawing) blob.odooDrawing = state.odooDrawing;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
     } catch {
@@ -7666,6 +7692,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         // Restore cloud identity from autosave (not part of SchematicFile)
         cloudSchematicId: parsed.cloudSchematicId ?? null,
         cloudSavedAt: parsed.cloudSavedAt ?? null,
+        odooDrawing: parseOdooDrawingRef(parsed.odooDrawing),
         loadSeq: get().loadSeq + 1,
       });
       // The schematic is committed to state above; arm autosave here, BEFORE the
@@ -7888,6 +7915,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       // File imports and shared schematics always start as local-only
       cloudSchematicId: null,
       cloudSavedAt: null,
+      odooDrawing: null,
       fileHandle: null,
       loadSeq: get().loadSeq + 1,
     });
@@ -7951,6 +7979,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         isDemo: false,
         cloudSchematicId: null,
         cloudSavedAt: null,
+        odooDrawing: null,
         fileHandle: null,
         undoSize: 0,
         redoSize: 0,
@@ -7965,6 +7994,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ownedGear: [],
         cloudSchematicId: null,
         cloudSavedAt: null,
+        odooDrawing: null,
         fileHandle: null,
         titleBlock: { showName: "", venue: "", designer: "", engineer: "", date: "", drawingTitle: "", company: "", revision: "", logo: "", customFields: [] },
         titleBlockLayout: createDefaultLayout(),
