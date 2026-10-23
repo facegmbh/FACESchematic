@@ -25,7 +25,7 @@ import SignalColorPanel from "./SignalColorPanel";
 import { useTheme } from "../hooks/useTheme";
 import { useT } from "../i18n";
 import { FACE_BACKEND } from "../faceBackend";
-import OdooDialogs, { saveToOdooIfLinked, showOdooDialog } from "./OdooDialogs";
+import OdooDialogs, { OdooViewers, saveToOdooIfLinked, showOdooDialog } from "./OdooDialogs";
 
 // ─── Menu data types ─────────────────────────────────────────────
 
@@ -882,7 +882,7 @@ export default function MenuBar() {
         </div>
 
         {/* Center: schematic name */}
-        <div className="flex-1 flex justify-center">
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center leading-tight">
           {editingName ? (
             <input
               className="bg-transparent text-[var(--color-text-heading)] text-sm font-semibold outline-none border-b border-blue-500 max-w-[200px] text-center"
@@ -896,17 +896,9 @@ export default function MenuBar() {
               autoFocus
             />
           ) : (
-            <span className="flex items-center gap-1.5">
-              {odooDrawing && (
-                <span
-                  className="text-xs text-[var(--color-text-muted)] truncate max-w-[260px]"
-                  title={t("Stored in Odoo on project {project}", { project: odooDrawing.projectName })}
-                >
-                  {odooDrawing.projectName} ›
-                </span>
-              )}
+            <span className="flex items-center gap-1.5 min-w-0 max-w-full">
               <span
-                className="text-sm font-semibold text-[var(--color-text-heading)] cursor-pointer hover:text-blue-600 transition-colors"
+                className="text-sm font-semibold text-[var(--color-text-heading)] cursor-pointer hover:text-blue-600 transition-colors truncate"
                 onDoubleClick={() => {
                   setNameValue(schematicName);
                   setEditingName(true);
@@ -942,6 +934,18 @@ export default function MenuBar() {
                   {t("Offline")}
                 </span>
               )}
+            </span>
+          )}
+          {/* FACE: which Odoo project the drawing is stored on, and who else has it open. */}
+          {odooDrawing && !editingName && (
+            <span className="flex items-center gap-1.5 text-[10px] min-w-0 max-w-full">
+              <span
+                className="text-[var(--color-text-muted)] truncate"
+                title={t("Stored in Odoo on project {project}", { project: odooDrawing.projectName })}
+              >
+                {odooDrawing.projectName}
+              </span>
+              <OdooViewers />
             </span>
           )}
         </div>

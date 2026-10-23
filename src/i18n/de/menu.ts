@@ -190,4 +190,18 @@ export const DE_MENU: Record<string, string> = {
   "“{name}” has changes that are not saved to Odoo yet. Open “{other}” anyway and discard them?":
     "„{name}“ hat Änderungen, die noch nicht in Odoo gespeichert sind. Trotzdem „{other}“ öffnen und die Änderungen verwerfen?",
   "Discard and open": "Verwerfen und öffnen",
+  "Being edited by {name} since {time} — read only. Saving stores a new drawing.":
+    "In Bearbeitung von {name} seit {time} — nur lesen. Speichern legt eine neue Zeichnung an.",
+  "You are editing this drawing in another tab.": "Diese Zeichnung bearbeitest du gerade in einem anderen Tab.",
+  "Edit here": "Hier bearbeiten",
+  "Nobody is editing this drawing any more.": "Die Zeichnung bearbeitet niemand mehr.",
+  "Reload and edit": "Neu laden und bearbeiten",
+  "Reloading discards the changes made here while reading. Reload anyway?":
+    "Neu laden verwirft, was hier beim Lesen geändert wurde. Trotzdem neu laden?",
+  "Also open: {names} (reading)": "Auch geöffnet von: {names} (liest mit)",
+  "Saved in the meantime": "Inzwischen gespeichert",
+  "{name} saved this drawing at {when}, after you opened it. Overwrite their version, or keep both by saving yours under a new name?":
+    "{name} hat diese Zeichnung am {when} gespeichert, nachdem du sie geöffnet hast. Diesen Stand überschreiben, oder beide behalten und deinen unter neuem Namen speichern?",
+  "Someone": "Jemand",
+  "Overwrite anyway": "Trotzdem überschreiben",
 };

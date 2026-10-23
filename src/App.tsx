@@ -80,6 +80,8 @@ import { loadTestSchematicFromUrl } from "./testSchematic/load";
 import { refreshCloudCache } from "./cloudSync";
 import { useTheme } from "./hooks/useTheme";
 import { getLocale, t, useT } from "./i18n";
+import { FACE_BACKEND } from "./faceBackend";
+import OdooLockBanner from "./components/OdooLockBanner";
 
 /** Darkens the canvas area left of x=0 and above y=0, marking the printable origin. */
 function CanvasOriginOverlay() {
@@ -2119,6 +2121,7 @@ export default function App() {
       <UpdatePill />
       <BetaBanner />
       <DemoBanner />
+      {FACE_BACKEND && <OdooLockBanner />}
       <PendingSubmissionBanner />
       {printView && isSchematicActive && <PrintViewBar />}
       {isSchematicActive && <PrintTitleBlock />}
