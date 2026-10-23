@@ -62,7 +62,7 @@ Entscheidungen für diese Phase:
 - [x] Task 7: Backend — Anlegen, Speichern, Sperre, Zuschauer, Veraltet-Prüfung
 - [x] Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
 - [x] Task 9: „In Odoo speichern…“ und Strg+S-Weiche
-- [ ] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
+- [x] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
 - [ ] Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
 
 ### Checkpoint C (Freigabe, dann Push auf master)
