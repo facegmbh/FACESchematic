@@ -650,7 +650,10 @@ export default function MenuBar() {
       { type: "separator" },
       // FACE: drawings live on Odoo projects; the upstream cloud is walled off by our nginx.
       ...(FACE_BACKEND
-        ? ([{ type: "item", label: t("Save to Odoo as…"), onClick: () => showOdooDialog("save") }] as MenuEntry[])
+        ? ([
+            { type: "item", label: t("Open from Odoo…"), onClick: () => showOdooDialog("open") },
+            { type: "item", label: t("Save to Odoo as…"), onClick: () => showOdooDialog("save") },
+          ] as MenuEntry[])
         : ([
             { type: "item", label: cloudSaving ? t("Saving...") : isOnline ? t("Save to Cloud") : t("Save to Cloud (Offline)"), disabled: cloudSaving || !isOnline, onClick: handleCloudSave },
             { type: "item", label: t("My Schematics..."), disabled: !isLoggedIn, title: isLoggedIn ? undefined : t("Must be logged in"), onClick: () => setShowSchematicBrowser(true) },

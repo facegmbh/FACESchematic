@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useT } from "../i18n";
 
 /** Generic in-app replacement for window.confirm() (#328): native confirm() clashes with the
@@ -24,6 +24,7 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const t = useT();
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
   // Escape cancels, like the native confirm() this replaces. Listen on the document in
   // the capture phase: the opener's own shortcuts sit on an ANCESTOR wrapper, so a React
@@ -51,11 +52,14 @@ export default function ConfirmDialog({
       onClick={onCancel}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="bg-white border border-[var(--color-border)] rounded-lg shadow-2xl w-[420px] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
-          <span className="text-sm font-semibold text-[var(--color-text-heading)]">{title}</span>
+          <span id={titleId} className="text-sm font-semibold text-[var(--color-text-heading)]">{title}</span>
           <button
             onClick={onCancel}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-lg leading-none cursor-pointer"

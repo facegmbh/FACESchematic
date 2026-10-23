@@ -176,4 +176,18 @@ export const DE_MENU: Record<string, string> = {
   "Choose a project.": "Ein Projekt auswählen.",
   "Drawing name": "Name der Zeichnung",
   "Enter a name for the drawing.": "Einen Namen für die Zeichnung eingeben.",
+  "Open from Odoo…": "Aus Odoo öffnen…",
+  "Drawings on {project}": "Zeichnungen an {project}",
+  "Drawings could not be loaded.": "Zeichnungen ließen sich nicht laden.",
+  "Loading drawings…": "Zeichnungen werden geladen…",
+  "No drawings yet — save one here with “Save to Odoo as…”.":
+    "Noch keine Zeichnungen — mit „In Odoo speichern unter…“ hier eine ablegen.",
+  "Last saved by {name}, {when}": "Zuletzt gespeichert von {name}, {when}",
+  "Last saved {when}": "Zuletzt gespeichert {when}",
+  "Being edited by {name} since {time}": "In Bearbeitung von {name} seit {time}",
+  "Opening failed.": "Öffnen fehlgeschlagen.",
+  "Unsaved changes": "Ungespeicherte Änderungen",
+  "“{name}” has changes that are not saved to Odoo yet. Open “{other}” anyway and discard them?":
+    "„{name}“ hat Änderungen, die noch nicht in Odoo gespeichert sind. Trotzdem „{other}“ öffnen und die Änderungen verwerfen?",
+  "Discard and open": "Verwerfen und öffnen",
 };

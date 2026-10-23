@@ -6,8 +6,9 @@ import { useSchematicStore } from "../store";
 import { t } from "../i18n";
 import FaceLoginDialog from "./FaceLoginDialog";
 import OdooSaveDialog from "./OdooSaveDialog";
+import OdooOpenDialog from "./OdooOpenDialog";
 
-type OdooDialog = "save" | null;
+type OdooDialog = "save" | "open" | null;
 
 /** Which Odoo dialog is open — asked for from the menu, from Ctrl+S, later from Claude. */
 export const useOdooDialogs = create<{ open: OdooDialog }>(() => ({ open: null }));
@@ -49,5 +50,5 @@ export default function OdooDialogs() {
   if (!open) return null;
   // A successful sign-in also "closes" the login dialog — then carry on to the dialog asked for.
   if (!user) return <FaceLoginDialog open onClose={() => !useFaceSession.getState().user && close()} />;
-  return <OdooSaveDialog onClose={close} />;
+  return open === "open" ? <OdooOpenDialog onClose={close} /> : <OdooSaveDialog onClose={close} />;
 }
