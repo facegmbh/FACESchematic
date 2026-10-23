@@ -1,4 +1,4 @@
-# Tasks: backend-deploy + face-identity
+# Tasks: backend-deploy + face-identity + odoo-drawings
 
 ## Task 1: Backend-Grundgerüst mit `/face/health`
 
@@ -110,3 +110,95 @@ deutsche Texte; Flag im `Dockerfile`.
 **Estimated scope:** Medium
 
 ## Checkpoint B — Freigabe, Push, Anmeldung mit echtem Odoo-Konto
+
+## Task 6: Backend — Projekte, Zeichnungsliste, Laden
+
+**Description:** `requireUser` und Odoo-Client je Nutzer in `auth.ts`; `drawings.ts` mit
+`GET /face/api/projects?q=`, `GET /projects/:id/drawings`, `GET /drawings/:id`; Mock-Odoo
+kennt `project.project` und `ir.attachment` und einen zweiten Nutzer.
+
+**Acceptance criteria:**
+- [ ] Ohne Sitzung 401; Projektsuche nach Projekt- und Kundenname
+- [ ] Liste zeigt nur `.faceschematic.json`-Anhänge des Projekts, mit „zuletzt gespeichert von/am“
+- [ ] Ein fremder Anhang (anderes Modell oder andere Endung) wird nicht geladen (404)
+
+**Verification:** `cd mcp-server && npm test`
+
+**Dependencies:** Task 4 · **Files:** `auth.ts`, `drawings.ts`, `drawings.test.ts`, `mockOdoo.ts`, `server.ts` · **Scope:** M
+
+## Task 7: Backend — Anlegen, Speichern, Sperre, Zuschauer, Veraltet-Prüfung
+
+**Description:** `POST /projects/:id/drawings`, `PUT /drawings/:id`, `POST /drawings/:id/lock|view|unlock`;
+Sperrtabelle mit Herzschlag/90 s-Verfall; Zuschauerliste; `baseWriteDate`/`force`.
+
+**Acceptance criteria:**
+- [ ] Anlegen setzt Sperre für den Tab; zweiter Nutzer → 409 mit Name; eigener Tab mit `takeOver` übernimmt
+- [ ] Speichern ohne Sperre → 409 `locked`; mit veraltetem `baseWriteDate` → 409 `stale`, mit `force` → 200
+- [ ] Zuschauer erscheinen in `viewers`, nach 90 s ohne Herzschlag nicht mehr
+
+**Verification:** `cd mcp-server && npm test` (Uhr im Test steuerbar)
+
+**Dependencies:** Task 6 · **Files:** `drawings.ts`, `locks.ts`, `drawings.test.ts`, `mockOdoo.ts` · **Scope:** M
+
+## Checkpoint — Backend vollständig, Tests grün
+
+## Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
+
+**Description:** `src/faceDrawings.ts`: API-Aufrufe, Store `useOdooDrawing` (Zeichnung, Rolle
+editor/viewer, Inhaber, Zuschauer, `baseWriteDate`, Fingerabdruck), `tabId` in
+sessionStorage, Herzschlag alle 30 s, Freigabe per `fetch(keepalive)` bei `pagehide`,
+Ende der Zuordnung bei fremdem Laden.
+
+**Acceptance criteria:**
+- [ ] Öffnen/Anlegen setzt den Zustand und startet den Herzschlag; Freigabe beim Verlassen
+- [ ] Ein anderes Laden (Neu/Datei/Import) beendet die Zuordnung
+- [ ] `isChangedSinceSave()` stimmt nach Öffnen (nein), Bearbeiten (ja), Speichern (nein)
+
+**Verification:** `npx vitest run src/__tests__/faceDrawings.test.ts`, `npx tsc -b`
+
+**Dependencies:** Task 7 · **Files:** `src/faceDrawings.ts`, `src/__tests__/faceDrawings.test.ts` · **Scope:** M
+
+## Task 9: „In Odoo speichern…“ und Strg+S-Weiche
+
+**Description:** Dialog mit Projektsuche und Namensfeld; Menüpunkt in Datei; Strg+S/„Speichern“
+schreibt eine Odoo-Zeichnung nach Odoo (Toast), sonst wie bisher; „Projekt › Zeichnung“ oben.
+
+**Acceptance criteria:**
+- [ ] Speichern unter legt die Zeichnung am gewählten Projekt an und zeigt „Projekt › Zeichnung“
+- [ ] Strg+S einer Odoo-Zeichnung → „In Odoo gespeichert“; einer lokalen Datei → wie bisher
+- [ ] Nicht angemeldet → zuerst der Anmeldedialog
+
+**Verification:** vitest, tsc, i18n:check; Playwright gegen Backend + Mock-Odoo
+
+**Dependencies:** Task 8 · **Files:** `OdooSaveDialog.tsx`, `OdooProjectPicker.tsx`, `MenuBar.tsx`, `src/i18n/de/menu.ts` · **Scope:** M
+
+## Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
+
+**Description:** Dialog: Projekt suchen → Zeichnungen (zuletzt gespeichert von/am, in
+Bearbeitung von/seit) → öffnen; Rückfrage, wenn die offene Odoo-Zeichnung geändert ist.
+
+**Acceptance criteria:**
+- [ ] Öffnen lädt die Zeichnung und setzt Rolle editor oder viewer je nach Sperre
+- [ ] Geänderte offene Zeichnung → Rückfrage vor dem Öffnen
+- [ ] Leeres Projekt → Hinweis „Noch keine Zeichnungen“
+
+**Verification:** vitest, tsc, i18n:check; Playwright
+
+**Dependencies:** Task 9 · **Files:** `OdooOpenDialog.tsx`, `MenuBar.tsx`, `src/i18n/de/menu.ts` · **Scope:** M
+
+## Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
+
+**Description:** Leiste „In Bearbeitung von X seit … — nur lesen“ (Strg+S → Speichern unter),
+„In einem anderen Tab von dir“ mit „Hier bearbeiten“; beim Bearbeiter „Auch geöffnet von: …“;
+409 `stale` → Rückfrage „trotzdem überschreiben / unter neuem Namen“.
+
+**Acceptance criteria:**
+- [ ] Zweiter Nutzer sieht die Leiste und kann nicht zurückspeichern
+- [ ] Bearbeiter sieht den Zuschauer, nach Schließen des Zuschauer-Tabs spätestens nach 90 s nicht mehr
+- [ ] Veralteter Stand → Rückfrage statt stillem Überschreiben
+
+**Verification:** vitest, tsc, i18n:check; Playwright mit zwei Kontexten
+
+**Dependencies:** Task 10 · **Files:** `OdooLockBanner.tsx`, `MenuBar.tsx`, `src/i18n/de/menu.ts`, `faceDrawings.ts` · **Scope:** M
+
+## Checkpoint C — Freigabe, Push, Abnahme an echtem Projekt

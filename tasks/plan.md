@@ -1,6 +1,6 @@
-# Implementation Plan: backend-deploy + face-identity
+# Implementation Plan: backend-deploy + face-identity + odoo-drawings
 
-Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md` · Karte: `CAPABILITY-MAP.md`
+Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md` · Karte: `CAPABILITY-MAP.md`
 
 ## Overview
 
@@ -43,6 +43,30 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 - [x] Lokal Ende-zu-Ende: Backend gegen Mock-Odoo, Vite-Dev mit Proxy, Anmelden/Abmelden im Browser (Playwright)
 - [x] Nach Deploy: Jean-Luc meldet sich mit echtem Odoo-Konto an (22.10.)
 
+### Phase 3: odoo-drawings
+
+Entscheidungen für diese Phase:
+- **Zuordnung Tab ↔ Odoo-Zeichnung in `sessionStorage`**, nicht in der Browser-Sicherung:
+  sie überlebt das Neuladen des Tabs, wandert aber nicht in einen neuen Tab (die Sicherung
+  in `localStorage` teilen sich alle Tabs — sonst würden zwei Tabs dieselbe Zeichnung als
+  „ihre“ ansehen). Lädt der Tab etwas anderes (Neu, Datei öffnen, Import), endet die Zuordnung.
+- **„Geändert seit Speichern“** über einen Fingerabdruck von `exportToJSON()` beim Öffnen und
+  Speichern, nur bei Bedarf berechnet (vor „Öffnen“) — die App kennt sonst keinen Dirty-Zustand.
+- **Eigener kleiner Store** für den Odoo-Zustand (wie `useFaceSession`), damit `store.ts`
+  (≈ 9000 Zeilen) nur die Strg+S-Weiche berührt.
+
+- [ ] Task 6: Backend — Projekte, Zeichnungsliste, Laden
+- [ ] Task 7: Backend — Anlegen, Speichern, Sperre, Zuschauer, Veraltet-Prüfung
+- [ ] Task 8: Frontend-Client — Odoo-Zustand, Herzschlag, Freigabe, Fingerabdruck
+- [ ] Task 9: „In Odoo speichern…“ und Strg+S-Weiche
+- [ ] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
+- [ ] Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
+
+### Checkpoint C (Freigabe, dann Push auf master)
+- [ ] Alle Tests und Build grün
+- [ ] Ende-zu-Ende mit zwei Nutzern (zwei Browser-Kontexte, Mock-Odoo): Speichern, Öffnen beim zweiten → Leiste, Zuschauer beim ersten, Freigabe nach Schließen
+- [ ] Nach Deploy: Jean-Luc speichert an einem echten Projekt, sieht den Anhang in Odoo, öffnet von einem zweiten Gerät
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -52,6 +76,9 @@ Zwei Freigaben: nach Phase 1 geht nur `/face/health` live, nach Phase 2 die Anme
 | Workflow-Checkout löscht `.env` | Mittel | Geheimnis außerhalb des Checkouts, vor `compose up` kopiert |
 | Odoo sperrt die IP nach Fehlversuchen (Fail2Ban) | Hoch | Rate-Limit je IP + 5 min Pause nach abgelehnter Anmeldung (wie face-odoo-mcp) |
 | `/web/database/list` auf Odoo.sh abgeschaltet | Niedrig | `ODOO_DB` setzbar; face-odoo-mcp nutzt dieselbe Ermittlung erfolgreich |
+| Große Zeichnungen (PDF-Unterlage) sprengen Odoo-Upload-Grenze | Mittel | 64 MB-Grenze in nginx; Fehlermeldung von Odoo durchreichen; beim Abnahme-Test eine Zeichnung mit Unterlage speichern |
+| Zuordnung bleibt nach „Neu“/„Datei öffnen“ hängen → Strg+S überschreibt die falsche Odoo-Zeichnung | Hoch | Zuordnung endet bei jedem fremden Laden (loadSeq), Test dafür in Task 8 |
+| Sperre verfällt bei Funkloch, ein anderer speichert dazwischen | Mittel | Veraltet-Prüfung über `write_date` (Task 7/11) |
 
 ## Open Questions
 
