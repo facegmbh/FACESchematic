@@ -120,7 +120,14 @@ function pick<T extends object>(row: T, fields: string[] | undefined): Partial<T
 
 type Handler = (args: unknown[], kwargs: Record<string, unknown>, uid: number) => unknown;
 
-export async function startMockOdoo(extra: Record<string, Handler> = {}): Promise<MockOdoo> {
+/**
+ * `extra` adds or replaces handlers; `errors` makes a call fail the way Odoo does, as
+ * `"model.method": [exception name, message]` — e.g. an AccessError for missing rights.
+ */
+export async function startMockOdoo(
+  extra: Record<string, Handler> = {},
+  errors: Record<string, [string, string]> = {},
+): Promise<MockOdoo> {
   const authCalls: { login: string; key: string }[] = [];
   const projects = seedProjects();
   const attachments = seedAttachments();
@@ -145,6 +152,8 @@ export async function startMockOdoo(extra: Record<string, Handler> = {}): Promis
         .filter((a) => matchDomain(a as unknown as Record<string, unknown>, (args[0] ?? []) as Domain))
         .sort((a, b) => b.write_date.localeCompare(a.write_date))
         .map((a) => pick(a, kw.fields as string[])),
+    "ir.attachment.search_count": (args) =>
+      attachments.filter((a) => matchDomain(a as unknown as Record<string, unknown>, (args[0] ?? []) as Domain)).length,
     "ir.attachment.read": (args, kw) => {
       const ids = args[0] as number[];
       return attachments.filter((a) => ids.includes(a.id)).map((a) => pick(a, kw.fields as string[]));
@@ -190,6 +199,8 @@ export async function startMockOdoo(extra: Record<string, Handler> = {}): Promis
     if (service === "object" && method === "execute_kw") {
       const [, uid, key, model, fn, fnArgs, kwargs] = args as [string, number, string, string, string, unknown[], Record<string, unknown>];
       if (!USERS.some((u) => u.uid === uid && u.apiKey === key)) return fail(res, "odoo.exceptions.AccessDenied", "Access Denied");
+      const err = errors[`${model}.${fn}`];
+      if (err) return fail(res, err[0], err[1]);
       const handler = extra[`${model}.${fn}`] ?? builtin[`${model}.${fn}`];
       if (handler) return reply(res, handler(fnArgs, kwargs ?? {}, uid));
       return fail(res, "builtins.NotImplementedError", `mock: ${model}.${fn} not handled`);

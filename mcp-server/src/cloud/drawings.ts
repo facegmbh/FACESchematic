@@ -10,6 +10,7 @@
 import express from "express";
 import { OdooError, type OdooClient } from "./odoo.js";
 import type { UserRecord } from "./store.js";
+import type { Presence } from "./presence.js";
 
 export const DRAWING_SUFFIX = ".faceschematic.json";
 
@@ -106,6 +107,58 @@ export async function loadDrawing(odoo: OdooClient, id: number) {
   return { ...toSummary(row), projectName: await projectName(odoo, row.res_id), data: JSON.parse(json) as unknown };
 }
 
+/** A file name Odoo and every download accept, from whatever the user typed. */
+export function attachmentNameFor(displayName: string): string {
+  const clean = displayName
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return `${clean || "Zeichnung"}${DRAWING_SUFFIX}`;
+}
+
+const encode = (data: unknown) => Buffer.from(JSON.stringify(data), "utf8").toString("base64");
+
+/** A refusal the client acts on (409): the body says why. */
+export class ConflictError extends Error {
+  constructor(
+    message: string,
+    readonly body: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+export async function createDrawing(odoo: OdooClient, projectId: number, name: string, data: unknown) {
+  const project = await projectName(odoo, projectId);
+  const fileName = attachmentNameFor(name);
+  const taken = await odoo.call<number>("ir.attachment", "search_count", [
+    [["res_model", "=", "project.project"], ["res_id", "=", projectId], ["name", "=", fileName]],
+  ]);
+  if (taken) {
+    throw new ConflictError("Eine Zeichnung mit diesem Namen gibt es in diesem Projekt schon.", { reason: "exists" });
+  }
+  const id = await odoo.call<number>("ir.attachment", "create", [
+    { name: fileName, res_model: "project.project", res_id: projectId, mimetype: "application/json", datas: encode(data) },
+  ]);
+  return { ...toSummary(await readDrawingRow(odoo, id, false)), projectName: project };
+}
+
+/** Overwrite — unless someone else saved since `baseWriteDate` and the caller did not insist. */
+export async function saveDrawing(odoo: OdooClient, id: number, data: unknown, baseWriteDate: string, force: boolean) {
+  const current = await readDrawingRow(odoo, id, false);
+  if (!force && current.write_date !== baseWriteDate) {
+    const writtenBy = current.write_uid ? current.write_uid[1] : null;
+    throw new ConflictError(`${writtenBy ?? "Jemand"} hat seitdem gespeichert.`, {
+      reason: "stale",
+      writtenBy,
+      writeDate: current.write_date,
+    });
+  }
+  await odoo.call("ir.attachment", "write", [[id], { datas: encode(data) }]);
+  return toSummary(await readDrawingRow(odoo, id, false));
+}
+
 // ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
@@ -116,19 +169,28 @@ function idParam(value: string): number | null {
 }
 
 /** Routes under /face/api; the caller mounts requireUser before them. */
-export function createDrawingsRouter(odooFor: (user: UserRecord) => OdooClient): express.Router {
+export function createDrawingsRouter(
+  odooFor: (user: UserRecord) => OdooClient,
+  presence: Presence,
+): express.Router {
   const router = express.Router();
-  const odoo = (res: express.Response) => odooFor(res.locals.user as UserRecord);
+  const user = (res: express.Response) => res.locals.user as UserRecord;
+  const odoo = (res: express.Response) => odooFor(user(res));
 
   const handle =
-    (fn: (req: express.Request, res: express.Response) => Promise<unknown>): express.RequestHandler =>
+    (fn: (req: express.Request, res: express.Response) => Promise<unknown>, status = 200): express.RequestHandler =>
     async (req, res) => {
       try {
-        res.json(await fn(req, res));
+        const body = await fn(req, res);
+        if (body === undefined) res.status(204).end();
+        else res.status(status).json(body);
       } catch (err) {
-        if (err instanceof NotFoundError) res.status(404).json({ error: err.message });
+        if (err instanceof ConflictError) res.status(409).json({ ...err.body, error: err.message });
+        else if (err instanceof NotFoundError) res.status(404).json({ error: err.message });
         // A key revoked in Odoo: the app asks the user to sign in again.
         else if (err instanceof OdooError && err.kind === "credentials") res.status(401).json({ error: err.message });
+        else if (err instanceof OdooError && err.kind === "access")
+          res.status(403).json({ error: `Keine Berechtigung in Odoo: ${err.message}` });
         else res.status(502).json({ error: err instanceof Error ? err.message : "Odoo-Fehler." });
       }
     };
@@ -142,6 +204,25 @@ export function createDrawingsRouter(odooFor: (user: UserRecord) => OdooClient):
     next();
   };
 
+  /** Every tab names itself; without that, locks would have nobody to belong to. */
+  const tabIdOf = (req: express.Request): string => {
+    const tabId = String(req.body?.tabId ?? "");
+    if (!/^[\w-]{1,64}$/.test(tabId)) throw new ConflictError("Tab-Kennung fehlt.", { reason: "tab" });
+    return tabId;
+  };
+
+  /** Lock (or view) state as the client shows it. */
+  const presenceOf = (drawingId: number, uid: number) => {
+    const holder = presence.holder(drawingId);
+    return {
+      holder: holder && { name: holder.name, since: holder.since, sameUser: holder.uid === uid },
+      viewers: presence.viewers(drawingId, uid),
+    };
+  };
+
+  const bigJson = express.json({ limit: "64mb" });
+  const smallJson = express.json({ limit: "4kb" });
+
   router.get(
     "/projects",
     handle((req, res) => listProjects(odoo(res), String(req.query.q ?? ""))),
@@ -151,14 +232,85 @@ export function createDrawingsRouter(odooFor: (user: UserRecord) => OdooClient):
     "/projects/:id/drawings",
     withId,
     handle(async (req, res) =>
-      (await listDrawings(odoo(res), Number(req.params.id))).map((d) => ({ ...d, editedBy: null, editedSince: null })),
+      (await listDrawings(odoo(res), Number(req.params.id))).map((d) => {
+        const holder = presence.holder(d.id);
+        return { ...d, editedBy: holder?.name ?? null, editedSince: holder?.since ?? null };
+      }),
     ),
+  );
+
+  router.post(
+    "/projects/:id/drawings",
+    withId,
+    bigJson,
+    handle(async (req, res) => {
+      const tabId = tabIdOf(req);
+      const drawing = await createDrawing(odoo(res), Number(req.params.id), String(req.body?.name ?? ""), req.body?.data);
+      presence.lock(drawing.id, user(res).uid, user(res).name, tabId);
+      return drawing;
+    }, 201),
   );
 
   router.get(
     "/drawings/:id",
     withId,
     handle((req, res) => loadDrawing(odoo(res), Number(req.params.id))),
+  );
+
+  router.put(
+    "/drawings/:id",
+    withId,
+    bigJson,
+    handle(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!presence.holds(id, tabIdOf(req))) {
+        throw new ConflictError("Diese Zeichnung bearbeitet gerade jemand anderes.", {
+          reason: "locked",
+          ...presenceOf(id, user(res).uid),
+        });
+      }
+      return saveDrawing(odoo(res), id, req.body?.data, String(req.body?.baseWriteDate ?? ""), req.body?.force === true);
+    }),
+  );
+
+  router.post(
+    "/drawings/:id/lock",
+    withId,
+    smallJson,
+    handle(async (req, res) => {
+      const id = Number(req.params.id);
+      const tabId = tabIdOf(req);
+      // Only a drawing this user can see may be locked — checked once per tab, not on every heartbeat.
+      if (!presence.knows(id, tabId)) await readDrawingRow(odoo(res), id, false);
+      const result = presence.lock(id, user(res).uid, user(res).name, tabId, req.body?.takeOver === true);
+      if (!result.ok) {
+        throw new ConflictError(`In Bearbeitung von ${result.holder.name}.`, { reason: "locked", ...presenceOf(id, user(res).uid) });
+      }
+      return { ok: true, viewers: presence.viewers(id, user(res).uid) };
+    }),
+  );
+
+  router.post(
+    "/drawings/:id/view",
+    withId,
+    smallJson,
+    handle(async (req, res) => {
+      const id = Number(req.params.id);
+      const tabId = tabIdOf(req);
+      if (!presence.knows(id, tabId)) await readDrawingRow(odoo(res), id, false);
+      presence.view(id, user(res).uid, user(res).name, tabId);
+      return presenceOf(id, user(res).uid);
+    }),
+  );
+
+  router.post(
+    "/drawings/:id/unlock",
+    withId,
+    smallJson,
+    handle(async (req) => {
+      presence.release(Number(req.params.id), tabIdOf(req));
+      return undefined;
+    }),
   );
 
   return router;
