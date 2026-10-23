@@ -65,7 +65,7 @@ Entscheidungen für diese Phase:
 - [x] Task 10: „Aus Odoo öffnen…“ mit Rückfrage bei Ungespeichertem
 - [x] Task 11: Sperr-Leiste, Zuschauer-Anzeige, Rückfrage vor Überschreiben
 
-- [ ] Task 12: Review-Funde (Code-Review 23.10.) — späte Antwort verknüpft fremden Inhalt; Sperre nach Neuladen im Produktions-Build; Undo über das Öffnen hinweg; Tab-ID je Seitenaufruf und uid in der Sperre; Leser ohne Bearbeiter kann übernehmen; Backend prüft die Daten; CSRF-Test; Fehlercodes
+- [x] Task 12: Review-Funde (Code-Review 23.10.) — späte Antwort verknüpft fremden Inhalt; Sperre nach Neuladen im Produktions-Build; Undo über das Öffnen hinweg; Tab-ID je Seitenaufruf und uid in der Sperre; Leser ohne Bearbeiter kann übernehmen; Backend prüft die Daten; CSRF-Test; Fehlercodes
 
 ### Checkpoint C (Freigabe, dann Push auf master)
 - [x] Alle Tests und Build grün
