@@ -235,6 +235,10 @@ export const DE_SYSTEM: Record<string, string> = {
     "Es konnte keine Zeichenfläche zum Drehen des Bildes erstellt werden.",
   "Pick an image file for the legend.": "Eine Bilddatei für die Legende auswählen.",
   "Pick an image file for the symbol.": "Eine Bilddatei für das Symbol auswählen.",
+  "This file could not be read as a DXF.": "Diese Datei lässt sich nicht als DXF lesen.",
+  "This file could not be read as a DXF: {reason}": "Diese Datei lässt sich nicht als DXF lesen: {reason}",
+  "This DXF draws nothing — it is empty, or everything sits in a layout. Export it from model space.":
+    "Diese DXF zeichnet nichts — sie ist leer, oder alles liegt in einem Layout. Bitte aus dem Modellbereich exportieren.",
   "DWG can't be read in the browser. Export the drawing as PDF (best) or as an image from AutoCAD/BricsCAD and import that.":
     "DWG kann im Browser nicht gelesen werden. Die Zeichnung aus AutoCAD/BricsCAD als PDF (am besten) oder als Bild exportieren und diese Datei importieren.",
   "DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF.":
