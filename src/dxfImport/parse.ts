@@ -10,8 +10,9 @@
  */
 import type { IBlock, IDxf, IEntity, IPoint } from "dxf-parser";
 import { t } from "../i18n";
+import type { DxfUnit } from "../types";
 
-export type DxfUnit = "mm" | "cm" | "m" | "in" | "ft";
+export type { DxfUnit };
 
 /** What one drawing unit is worth, so a plan drawn in metres lands at the same size as one
  *  drawn in millimetres. */

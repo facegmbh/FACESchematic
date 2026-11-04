@@ -58,14 +58,14 @@ kalibriert auf das Blatt. Über der Obergrenze aus der Spec wird gerastert statt
 mit Hinweis.
 
 **Acceptance criteria:**
-- [ ] `.dxf` wird angenommen (Dateiwähler und Ablegen), die alte Ablehnung ist weg
-- [ ] `mmPerPx` stimmt für eine Zeichnung in mm, in cm und in Zoll
-- [ ] Zu große Ausgabe → Raster, mit Toast, statt stillschweigend 20 MB im Projekt
-- [ ] DWG lehnt weiter ab, jetzt mit Verweis auf „als DXF exportieren“
+- [x] `.dxf` wird angenommen (Dateiwähler und Ablegen), die alte Ablehnung ist weg
+- [x] `mmPerPx` stimmt für eine Zeichnung in mm, in cm und in Zoll
+- [x] Zu große Ausgabe → Raster, mit Toast, statt stillschweigend 20 MB im Projekt
+- [x] DWG lehnt weiter ab, jetzt mit Verweis auf „als DXF exportieren“
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/dxfImportUnderlay.test.ts`
-- [ ] `npx tsc -b && npm run build`
+- [x] `npx vitest run src/__tests__/dxfImportUnderlay.test.ts`
+- [x] `npx tsc -b && npm run build`
 
 **Dependencies:** Task 2
 

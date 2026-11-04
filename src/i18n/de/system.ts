@@ -235,14 +235,19 @@ export const DE_SYSTEM: Record<string, string> = {
     "Es konnte keine Zeichenfläche zum Drehen des Bildes erstellt werden.",
   "Pick an image file for the legend.": "Eine Bilddatei für die Legende auswählen.",
   "Pick an image file for the symbol.": "Eine Bilddatei für das Symbol auswählen.",
+  "DWG can't be read in the browser. Save the drawing as DXF in AutoCAD/BricsCAD (best — it stays to scale, with its layers) or plot it to PDF, and import that.":
+    "DWG kann im Browser nicht gelesen werden. Die Zeichnung in AutoCAD/BricsCAD als DXF speichern (am besten — sie bleibt maßstabsgerecht und behält ihre Ebenen) oder als PDF plotten und diese Datei importieren.",
+  "Plan imported to scale at {scale} — no calibration needed.": "Plan maßstabsgerecht im {scale} importiert — Kalibrieren ist nicht nötig.",
+  "The drawing does not state its unit, so millimetres were assumed. If the plan comes out the wrong size, change the unit in the toolbar.":
+    "Die Zeichnung nennt keine Einheit, deshalb wurden Millimeter angenommen. Hat der Plan die falsche Größe, die Einheit in der Werkzeugleiste umstellen.",
+  "At {scale} it is larger than the sheet — pick a larger sheet or a smaller scale.":
+    "Im {scale} ist sie größer als das Blatt — ein größeres Blatt oder einen kleineren Maßstab wählen.",
+  "The drawing was too large to keep as lines and was turned into an image.":
+    "Die Zeichnung war zu groß, um sie als Linien zu behalten, und wurde in ein Bild umgewandelt.",
   "This file could not be read as a DXF.": "Diese Datei lässt sich nicht als DXF lesen.",
   "This file could not be read as a DXF: {reason}": "Diese Datei lässt sich nicht als DXF lesen: {reason}",
   "This DXF draws nothing — it is empty, or everything sits in a layout. Export it from model space.":
     "Diese DXF zeichnet nichts — sie ist leer, oder alles liegt in einem Layout. Bitte aus dem Modellbereich exportieren.",
-  "DWG can't be read in the browser. Export the drawing as PDF (best) or as an image from AutoCAD/BricsCAD and import that.":
-    "DWG kann im Browser nicht gelesen werden. Die Zeichnung aus AutoCAD/BricsCAD als PDF (am besten) oder als Bild exportieren und diese Datei importieren.",
-  "DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF.":
-    "DXF wird als Unterlage noch nicht unterstützt. Die Zeichnung als PDF plotten und das PDF importieren.",
   'Unsupported file type "{type}". Use a PDF or an image.':
     "Dateityp „{type}“ wird nicht unterstützt. Ein PDF oder ein Bild verwenden.",
   "unknown": "unbekannt",

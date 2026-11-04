@@ -1008,8 +1008,8 @@ export interface PlanSymbolSpec {
 export interface FloorplanUnderlay {
   /** Rasterized drawing as a data URL (PNG or JPEG). */
   src: string;
-  /** Where the raster came from — a PDF page or an image file. */
-  kind: "pdf" | "image";
+  /** Where the drawing came from — a PDF page, an image file, or a DXF drawn as vectors. */
+  kind: "pdf" | "image" | "dxf";
   /** Original file name, shown in the toolbar so the source stays traceable. */
   sourceName?: string;
   /** 1-based page number when kind === "pdf". */
@@ -1043,7 +1043,15 @@ export interface FloorplanUnderlay {
    *  different resolution. Absent when the file was too large to keep, or when the project
    *  came from another machine. */
   sourceKey?: string;
+  /** Unit a DXF was read in. Kept so the toolbar can show it and redraw in another one when
+   *  the drawing did not say and the guess was wrong. */
+  dxfUnit?: DxfUnit;
+  /** The DXF did not state its unit; `dxfUnit` is an assumption. */
+  dxfUnitAssumed?: boolean;
 }
+
+/** Units a DXF states in $INSUNITS, as far as a building drawing uses them. */
+export type DxfUnit = "mm" | "cm" | "m" | "in" | "ft";
 
 /** One layer of the source PDF, as offered at import. */
 export interface PdfLayerChoice {

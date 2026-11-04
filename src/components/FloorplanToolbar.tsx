@@ -9,6 +9,8 @@ import {
 import { PAPER_SIZES } from "../printConfig";
 import { createDefaultLegend, drawingAreaMm, fillSheetPlacement, fitRectInArea, layoutDrawingBlock, matchPaperToSize, sheetSizeMm, FLOORPLAN_SCALES, formatScale } from "../floorplan";
 import { UNDERLAY_ACCEPT, UNDERLAY_DPI_CHOICES, UNDERLAY_SIZE_WARN_BYTES, importUnderlayFile, openPdfPage, readPdfLayers } from "../floorplanUnderlay";
+import { placeDxfOnSheet } from "../dxfImport/place";
+import type { DxfUnit } from "../types";
 import { MAX_STORED_SOURCE_BYTES, getUnderlaySource, nextUnderlaySourceKey, putUnderlaySource } from "../underlaySource";
 import { runFloorplanExport } from "../floorplanExport";
 import { useT } from "../i18n";
@@ -56,10 +58,10 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
   const underlay = page.underlay;
   const isCustomPaper = page.paperId === "custom";
 
-  const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>, dpi?: number) => {
+  const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>, dpi?: number, dxfUnit?: DxfUnit) => {
     setImporting(true);
     try {
-      const imported = await importUnderlayFile(file, { pageNumber, layers, dpi });
+      const imported = await importUnderlayFile(file, { pageNumber, layers, dpi, dxfUnit });
       // Keep an existing underlay's placement when only the PDF page changes — the user
       // has usually calibrated it already and every sheet of a set shares one scale.
       const keepPlacement = underlay && underlay.sourceName === imported.sourceName;
@@ -93,9 +95,25 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
           });
         }
       }
-      const fitted = imported.naturalSizeMm
-        ? fillSheetPlacement(sheetPage, imported)
-        : fitRectInArea(imported.naturalWidthPx, imported.naturalHeightPx, drawingAreaMm(sheetPage));
+      // A DXF knows its own scale: it goes on at its real size, at the page's scale when it
+      // fits and at the next standard one when it does not. Never under placed devices,
+      // though — changing the scale there would move every symbol off its spot.
+      const dxfPlacement = imported.kind === "dxf" && imported.mmPerPx
+        ? placeDxfOnSheet(
+          { widthPx: imported.naturalWidthPx, heightPx: imported.naturalHeightPx, mmPerPx: imported.mmPerPx },
+          drawingAreaMm(sheetPage),
+          sheetPage.scaleDenominator,
+          !keepPlacement && page.symbols.length === 0,
+        )
+        : undefined;
+      if (dxfPlacement && dxfPlacement.scaleDenominator !== page.scaleDenominator) {
+        setFloorplanScale(page.id, dxfPlacement.scaleDenominator);
+      }
+      const fitted = dxfPlacement
+        ? dxfPlacement
+        : imported.naturalSizeMm
+          ? fillSheetPlacement(sheetPage, imported)
+          : fitRectInArea(imported.naturalWidthPx, imported.naturalHeightPx, drawingAreaMm(sheetPage));
       const next: FloorplanUnderlay = {
         src: imported.src,
         kind: imported.kind,
@@ -105,15 +123,19 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
         naturalWidthPx: imported.naturalWidthPx,
         naturalHeightPx: imported.naturalHeightPx,
         positionMm: keepPlacement ? underlay.positionMm : fitted.positionMm,
-        sizeMm: keepPlacement ? underlay.sizeMm : fitted.sizeMm,
+        // A redrawn DXF may be in another unit now, so its size is always worked out anew;
+        // its corner stays put.
+        sizeMm: keepPlacement && !dxfPlacement ? underlay.sizeMm : fitted.sizeMm,
         opacity: underlay?.opacity ?? 1,
         locked: underlay?.locked ?? false,
         pdfLayers: imported.layers,
         dpi: imported.dpi,
+        dxfUnit: imported.dxf?.unit,
+        dxfUnitAssumed: imported.dxf?.unitAssumed,
         // Re-rendering the same source — another page of the set, or a different layer
         // choice — must not throw away a calibration the user already did. The raster keeps
         // its resolution, so mm-per-pixel still holds.
-        ...(keepPlacement && underlay?.mmPerPx !== undefined ? { mmPerPx: underlay.mmPerPx } : {}),
+        ...(keepPlacement && !dxfPlacement && underlay?.mmPerPx !== undefined ? { mmPerPx: underlay.mmPerPx } : {}),
       };
       // Keep the source so the plan can be redrawn later — another page, other layers, a
       // different resolution — including after a reload. A re-render of the same source
@@ -142,6 +164,18 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
           "info",
           6000,
         );
+      } else if (dxfPlacement && !keepPlacement) {
+        const scale = formatScale(dxfPlacement.scaleDenominator);
+        addToast(
+          [
+            t("Plan imported to scale at {scale} — no calibration needed.", { scale }),
+            imported.dxf?.unitAssumed ? t("The drawing does not state its unit, so millimetres were assumed. If the plan comes out the wrong size, change the unit in the toolbar.") : "",
+            dxfPlacement.fits ? "" : t("At {scale} it is larger than the sheet — pick a larger sheet or a smaller scale.", { scale }),
+            imported.dxf?.rasterized ? t("The drawing was too large to keep as lines and was turned into an image.") : "",
+          ].filter(Boolean).join(" "),
+          dxfPlacement.fits && !imported.dxf?.unitAssumed ? "success" : "info",
+          imported.dxf?.unitAssumed || !dxfPlacement.fits ? 9000 : 5000,
+        );
       } else if (!keepPlacement) {
         addToast(
           imported.naturalSizeMm
@@ -156,7 +190,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
     } finally {
       setImporting(false);
     }
-  }, [page, underlay, setFloorplanUnderlay, setFloorplanPaper, updateFloorplanLegend, updateFloorplanDrawingBlock, addToast]);
+  }, [page, underlay, setFloorplanUnderlay, setFloorplanPaper, setFloorplanScale, updateFloorplanLegend, updateFloorplanDrawingBlock, addToast]);
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;

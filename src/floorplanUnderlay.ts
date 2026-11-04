@@ -8,11 +8,12 @@
  */
 
 import { PT_TO_MM, rotatedSquareFactor } from "./floorplan";
-import type { PdfLayerChoice } from "./types";
+import type { DxfUnit, PdfLayerChoice } from "./types";
+import type { DxfRasterized } from "./dxfImport";
 import { t } from "./i18n";
 
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
-export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg";
+export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg,.dxf";
 
 /** Long-edge cap for a rasterized *image* underlay. Images carry no physical size, so a
  *  pixel cap is all there is to go on. PDFs are measured in dpi instead — see below. */
@@ -40,7 +41,7 @@ export const UNDERLAY_SIZE_WARN_BYTES = 3_000_000;
 
 export interface ImportedUnderlay {
   src: string;
-  kind: "pdf" | "image";
+  kind: "pdf" | "image" | "dxf";
   naturalWidthPx: number;
   naturalHeightPx: number;
   sourceName: string;
@@ -56,6 +57,17 @@ export interface ImportedUnderlay {
   layers?: PdfLayerChoice[];
   /** Resolution the PDF was rasterized at, in dpi of the real sheet. */
   dpi?: number;
+  /** Real-world mm per pixel, when the source says so itself — a DXF does. Set means the
+   *  underlay can go on the sheet already calibrated. */
+  mmPerPx?: number;
+  /** What a DXF import decided, for the toolbar to show and to redraw from. */
+  dxf?: {
+    unit: DxfUnit;
+    unitAssumed: boolean;
+    /** Too large to embed as vectors, so it was turned into pixels. */
+    rasterized: boolean;
+    skipped: Record<string, number>;
+  };
 }
 
 /** Rough decoded byte count of a data URL (base64 is 4/3 of the payload). */
@@ -83,6 +95,26 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error(t("Could not decode this image file.")));
     img.src = src;
   });
+}
+
+/**
+ * Pixels for a DXF too large to embed as vectors. The long edge goes as high as the browser
+ * will still allocate — this is a plan people zoom into, so it gets every pixel it can.
+ */
+async function rasterizeSvgUnderlay(src: string, width: number, height: number): Promise<DxfRasterized> {
+  const img = await loadImageElement(src);
+  const byEdge = MAX_RASTER_LONG_EDGE_PX / Math.max(width, height);
+  const byArea = Math.sqrt(MAX_RASTER_PIXELS / Math.max(1, width * height));
+  const scale = Math.min(byEdge, byArea);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { src: encodeCanvas(canvas), widthPx: canvas.width, heightPx: canvas.height };
 }
 
 function readAsDataUrl(file: File): Promise<string> {
@@ -368,6 +400,12 @@ export interface ImportUnderlayOptions {
    *  visibility the PDF itself specifies, so leaving this out renders the plan as its
    *  author intended. */
   layers?: Record<string, boolean>;
+  /** DXF only: the unit to read it in, overriding (or supplying) the drawing's own. */
+  dxfUnit?: DxfUnit;
+  /** DXF only: embed limit before rasterizing. Lowered by tests. */
+  maxInlineSvgBytes?: number;
+  /** DXF only: how to turn an oversized drawing into pixels. Defaults to the canvas. */
+  rasterizeSvg?: (src: string, width: number, height: number) => Promise<DxfRasterized>;
 }
 
 /** One layer as the UI sees it. The group object carries its own visibility — the config's
@@ -447,11 +485,29 @@ export async function importUnderlayFile(file: File, opts: ImportUnderlayOptions
 
   if (ext === "dwg") {
     throw new Error(
-      t("DWG can't be read in the browser. Export the drawing as PDF (best) or as an image from AutoCAD/BricsCAD and import that."),
+      t("DWG can't be read in the browser. Save the drawing as DXF in AutoCAD/BricsCAD (best — it stays to scale, with its layers) or plot it to PDF, and import that."),
     );
   }
   if (ext === "dxf") {
-    throw new Error(t("DXF isn't supported as an underlay yet. Plot the drawing to PDF and import the PDF."));
+    // Loaded on demand like pdfjs: nobody who never opens a DXF should carry the parser.
+    const { importDxf } = await import("./dxfImport");
+    const dxf = await importDxf(await file.text(), {
+      layers: opts.layers,
+      unit: opts.dxfUnit,
+      maxInlineSvgBytes: opts.maxInlineSvgBytes,
+      rasterizeSvg: opts.rasterizeSvg ?? rasterizeSvgUnderlay,
+    });
+    return {
+      src: dxf.src,
+      kind: "dxf",
+      naturalWidthPx: dxf.widthPx,
+      naturalHeightPx: dxf.heightPx,
+      sourceName: file.name,
+      approxBytes: dxf.approxBytes,
+      layers: dxf.layers,
+      mmPerPx: dxf.mmPerPx,
+      dxf: { unit: dxf.unit, unitAssumed: dxf.unitAssumed, rasterized: dxf.rasterized, skipped: dxf.skipped },
+    };
   }
   if (isPdf(file)) {
     return renderPdfPage(file, opts.pageNumber ?? 1, opts.dpi ?? DEFAULT_UNDERLAY_DPI, opts.layers);
