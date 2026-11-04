@@ -3,6 +3,7 @@
  * Pure functions — no React or store dependencies.
  */
 
+import { GRID_SIZE } from "./gridConstants";
 import type { SignalType, Port, DeviceTemplate, SchematicNode, DeviceNode, ConnectionEdge } from "./types";
 import { SIGNAL_LABELS, SIGNAL_COLORS } from "./types";
 import { DEFAULT_CONNECTOR } from "./connectorTypes";
@@ -44,7 +45,6 @@ export interface DeviceMatch {
   inferredPorts: Port[]; // used when template is null
 }
 
-const GRID_SIZE = 20;
 
 // ---------- CSV Parsing ----------
 

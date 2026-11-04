@@ -11647,7 +11647,7 @@
     "auxiliaryData": [
       {
         "label": "Kanäle",
-        "value": "4-Kanal Class-D, je bis 3000 W an 4 Ω"
+        "value": "4-Kanal Class-D, je bis 3000 W an 4 Ω, je eine speakON NL4"
       },
       {
         "label": "Gesamt-Leistung",
@@ -11741,7 +11741,15 @@
       },
       {
         "id": "port-7285",
-        "label": "Out CH 1/2",
+        "label": "Out CH 1",
+        "signalType": "speaker-level",
+        "direction": "output",
+        "connectorType": "speakon",
+        "section": "Speaker Outputs"
+      },
+      {
+        "id": "port-7309",
+        "label": "Out CH 2",
         "signalType": "speaker-level",
         "direction": "output",
         "connectorType": "speakon",
@@ -11749,7 +11757,15 @@
       },
       {
         "id": "port-7286",
-        "label": "Out CH 3/4",
+        "label": "Out CH 3",
+        "signalType": "speaker-level",
+        "direction": "output",
+        "connectorType": "speakon",
+        "section": "Speaker Outputs"
+      },
+      {
+        "id": "port-7310",
+        "label": "Out CH 4",
         "signalType": "speaker-level",
         "direction": "output",
         "connectorType": "speakon",
@@ -11865,7 +11881,7 @@
     "auxiliaryData": [
       {
         "label": "Kanäle",
-        "value": "4-Kanal Class-D, je bis 2000 W an 4 Ω"
+        "value": "4-Kanal Class-D, je bis 2000 W an 4 Ω, je eine speakON NL4"
       },
       {
         "label": "Gesamt-Leistung",
@@ -11959,7 +11975,15 @@
       },
       {
         "id": "port-7305",
-        "label": "Out CH 1/2",
+        "label": "Out CH 1",
+        "signalType": "speaker-level",
+        "direction": "output",
+        "connectorType": "speakon",
+        "section": "Speaker Outputs"
+      },
+      {
+        "id": "port-7311",
+        "label": "Out CH 2",
         "signalType": "speaker-level",
         "direction": "output",
         "connectorType": "speakon",
@@ -11967,7 +11991,15 @@
       },
       {
         "id": "port-7306",
-        "label": "Out CH 3/4",
+        "label": "Out CH 3",
+        "signalType": "speaker-level",
+        "direction": "output",
+        "connectorType": "speakon",
+        "section": "Speaker Outputs"
+      },
+      {
+        "id": "port-7312",
+        "label": "Out CH 4",
         "signalType": "speaker-level",
         "direction": "output",
         "connectorType": "speakon",

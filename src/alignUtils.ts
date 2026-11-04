@@ -1,4 +1,5 @@
 import type { SchematicNode, DeviceData } from "./types";
+import { GRID_SIZE, DEVICE_NODE_WIDTH } from "./gridConstants";
 
 export type AlignOperation =
   | "left"
@@ -10,14 +11,13 @@ export type AlignOperation =
   | "distribute-h"
   | "distribute-v";
 
-const DEFAULT_W = 180;
-const DEFAULT_H = 60;
-const GRID_SIZE = 20;
+const DEFAULT_W = DEVICE_NODE_WIDTH;
+const DEFAULT_H = 4 * GRID_SIZE;
 
-// Spacing constants (mirrored from snapUtils/pathfinding to avoid circular dep)
-const STUB = 30;
-const PAD = 20;
-const ROUTING_GAP = 8;
+// Spacing constants, mirrored from snapUtils (px; scaled with the 16px grid in v41)
+const STUB = 24;
+const PAD = 16;
+const ROUTING_GAP = 6;
 const STUB_GAP = 6;
 
 function rightPortCount(node: SchematicNode): number {
