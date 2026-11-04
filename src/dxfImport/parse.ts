@@ -57,7 +57,7 @@ export interface DxfDrawing {
 }
 
 /** A nested INSERT is a block placed inside a block; this is how deep that is followed. */
-const MAX_BLOCK_DEPTH = 8;
+export const MAX_BLOCK_DEPTH = 8;
 
 export async function parseDxf(text: string): Promise<DxfDrawing> {
   const { default: DxfParser } = await import("dxf-parser");
@@ -84,7 +84,7 @@ export async function parseDxf(text: string): Promise<DxfDrawing> {
   return {
     unit: unit ?? "mm",
     unitAssumed: unit === undefined,
-    extents: headerExtents(dxf) ?? entityExtents(entities, blocks),
+    extents: unionExtents(headerExtents(dxf), entityExtents(entities, blocks)),
     layers: layerList(dxf, entities),
     entities,
     blocks,
@@ -115,6 +115,19 @@ function headerExtents(dxf: IDxf): DxfExtents | undefined {
   if (!min || !max) return undefined;
   if (!(max.x > min.x) || !(max.y > min.y)) return undefined;
   return { minX: min.x, minY: min.y, maxX: max.x, maxY: max.y };
+}
+
+/** The header's box is only refreshed when the drawing is regenerated, and drawings get
+ *  edited after that all the time. Taking the union keeps a wall added later on the sheet
+ *  instead of cut off at the edge of a stale box. */
+function unionExtents(header: DxfExtents | undefined, actual: DxfExtents): DxfExtents {
+  if (!header) return actual;
+  return {
+    minX: Math.min(header.minX, actual.minX),
+    minY: Math.min(header.minY, actual.minY),
+    maxX: Math.max(header.maxX, actual.maxX),
+    maxY: Math.max(header.maxY, actual.maxY),
+  };
 }
 
 // ── Layers ──────────────────────────────────────────────────────────
@@ -189,22 +202,47 @@ export function applyTransform(p: { x: number; y: number }, t: DxfTransform): { 
   return { x: sx * cos - sy * sin + t.x, y: sx * sin + sy * cos + t.y };
 }
 
-/** The placement of an INSERT, combined with the placement of whatever contains it. */
-export function insertTransform(entity: IEntity, outer: DxfTransform): DxfTransform {
+/**
+ * The placement of an INSERT, combined with the placement of whatever contains it.
+ *
+ * A block is drawn around its own base point, not around 0,0: a door block usually has
+ * its hinge there, so that placing it puts the hinge on the wall. Leaving the base point
+ * out shifts every door by however far the hinge sits from the block's origin.
+ *
+ * `at` overrides the INSERT's position — that is how one cell of an INSERT array is placed.
+ */
+export function insertTransform(
+  entity: IEntity,
+  outer: DxfTransform,
+  base: { x: number; y: number } = { x: 0, y: 0 },
+  at?: { x: number; y: number },
+): DxfTransform {
   const e = entity as unknown as {
     position?: IPoint;
     xScale?: number;
     yScale?: number;
     rotation?: number;
   };
-  const local = applyTransform({ x: e.position?.x ?? 0, y: e.position?.y ?? 0 }, outer);
-  return {
-    x: local.x,
-    y: local.y,
-    sx: outer.sx * (e.xScale ?? 1),
-    sy: outer.sy * (e.yScale ?? 1),
-    rot: outer.rot + (e.rotation ?? 0),
-  };
+  const sx = outer.sx * (e.xScale ?? 1);
+  const sy = outer.sy * (e.yScale ?? 1);
+  const rot = outer.rot + (e.rotation ?? 0);
+  const origin = applyTransform(at ?? { x: e.position?.x ?? 0, y: e.position?.y ?? 0 }, outer);
+  // applyTransform scales, turns, then moves; folding "minus the base point" into the move
+  // keeps it one transform instead of two.
+  const shifted = applyTransform({ x: base.x, y: base.y }, { x: 0, y: 0, sx, sy, rot });
+  return { x: origin.x - shifted.x, y: origin.y - shifted.y, sx, sy, rot };
+}
+
+/** A block's base point, as the BLOCK record states it. */
+export function blockBase(block: IBlock | undefined): { x: number; y: number } {
+  const p = block?.position;
+  return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : { x: 0, y: 0 };
+}
+
+/** Name of the block an INSERT places, or the block that carries a DIMENSION's lines. */
+export function blockNameOf(entity: IEntity): string | undefined {
+  const e = entity as unknown as { name?: string; block?: string };
+  return entity.type === "DIMENSION" ? e.block : e.name;
 }
 
 function grow(box: Box, p: { x: number; y: number }): void {
@@ -224,11 +262,11 @@ function collect(
 ): void {
   for (const entity of entities) {
     if (entity.type === "INSERT" || entity.type === "DIMENSION") {
-      const name = (entity as unknown as { name?: string; block?: string }).name
-        ?? (entity as unknown as { block?: string }).block;
+      const name = blockNameOf(entity);
       const block = name ? blocks[name] : undefined;
       if (block?.entities && depth < MAX_BLOCK_DEPTH) {
-        const inner = entity.type === "INSERT" ? insertTransform(entity, transform) : transform;
+        // A dimension's block is already drawn in world coordinates; an INSERT's is not.
+        const inner = entity.type === "INSERT" ? insertTransform(entity, transform, blockBase(block)) : transform;
         collect(block.entities, blocks, box, inner, depth + 1);
         continue;
       }

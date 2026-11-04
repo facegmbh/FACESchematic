@@ -36,13 +36,13 @@ seinen Block. SPLINE über Kontrollpunkte angenähert, HATCH übersprungen. Abge
 kommen nicht hinein.
 
 **Acceptance criteria:**
-- [ ] Je Entitätstyp ein Test gegen den erwarteten Pfad
-- [ ] INSERT: Versatz, Skalierung (auch negativ = gespiegelt), Drehung, Verschachtelung
-- [ ] Eine abgewählte Ebene erscheint nicht in der Ausgabe, auch nicht über einen Block
-- [ ] Y-Achse gespiegelt (DXF zählt nach oben, SVG nach unten)
+- [x] Je Entitätstyp ein Test gegen den erwarteten Pfad
+- [x] INSERT: Versatz, Skalierung (auch negativ = gespiegelt), Drehung, Verschachtelung
+- [x] Eine abgewählte Ebene erscheint nicht in der Ausgabe, auch nicht über einen Block
+- [x] Y-Achse gespiegelt (DXF zählt nach oben, SVG nach unten)
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/dxfImportRender.test.ts`
+- [x] `npx vitest run src/__tests__/dxfImportRender.test.ts`
 
 **Dependencies:** Task 1
 

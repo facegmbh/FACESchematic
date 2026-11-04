@@ -64,9 +64,11 @@ e2e/floorplan-dxf.spec.ts
    Hintergrund; die Symbole müssen darauf stehen können. (ACI-Farben später, wenn jemand
    sie vermisst.)
 6. **Entitäten.** LINE, LWPOLYLINE, POLYLINE (auch geschlossen und mit Bögen), CIRCLE, ARC,
-   ELLIPSE, POINT, SOLID, TEXT, MTEXT, INSERT (mit Versatz, Skalierung, Drehung, auch
-   verschachtelt) und DIMENSION über den zugehörigen Block. SPLINE wird über seine
-   Kontrollpunkte angenähert. HATCH wird übersprungen.
+   ELLIPSE, SOLID, TEXT, MTEXT, INSERT (mit Basispunkt, Versatz, Skalierung, Drehung,
+   Spiegelung, Raster aus Zeilen/Spalten, auch verschachtelt) und DIMENSION über den
+   zugehörigen Block. SPLINE läuft durch seine Fit-Punkte, ersatzweise durch die
+   Kontrollpunkte. Übersprungen und gezählt: POINT (fast immer Konstruktionspunkte), HATCH,
+   3DFACE. Elemente auf Layer 0 in einem Block erben den Layer des Einfügepunkts.
 7. **Obergrenze.** Eine Zeichnung, deren SVG über 8 MB ginge, wird stattdessen gerastert —
    mit Hinweis, warum. Das Projekt soll nicht an einer Unterlage ersticken
    (localStorage-Budget, siehe `src/underlaySource.ts`).
