@@ -37,9 +37,22 @@ export default function FloorplansPage() {
         a page selector next to the file name so you can switch floors without re-importing.
       </p>
       <p>
+        A <strong>DXF</strong> is the better source when the architect can send one. It comes in{" "}
+        <em>already to scale</em>: a DXF states the unit it is drawn in, so the plan lands on the
+        sheet at its real size and needs no calibration. If the drawing fits the page&apos;s scale it
+        stays at that scale; if it does not, an empty page moves to the first standard scale it fits
+        at (up to 1:5000 for site plans) — a page with devices on it keeps its scale, because
+        changing it would move every symbol. Its <strong>layers</strong> are offered straight after
+        the import, and it is drawn as lines rather than pixels, so it stays sharp at any zoom. A
+        drawing that does not state its unit is read as millimetres, and the toolbar shows that
+        guess with a <strong>Unit</strong> selector to correct it. For the PDF export the drawing
+        is rasterized at 300 dpi of the sheet. Hatches are left out, and point entities are skipped
+        as the construction points they almost always are.
+      </p>
+      <p>
         <strong>DWG is not supported</strong> — it is a proprietary binary format with no viable
-        browser parser. Plot the drawing to PDF from AutoCAD or BricsCAD and import that; DXF needs
-        the same treatment for now.
+        browser parser. Save the drawing as DXF in AutoCAD or BricsCAD (best — it stays to scale,
+        with its layers), or plot it to PDF, and import that.
       </p>
       <p>
         The underlay is stored inside the project file as a rasterized image, so the plan travels

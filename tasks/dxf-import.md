@@ -122,9 +122,9 @@ erscheint, Ebene abwählen, Export. Dazu ein Abschnitt in der Dokumentation und 
 mit Jean-Luc vor dem Push.
 
 **Acceptance criteria:**
-- [ ] `e2e/floorplan-dxf.spec.ts` grün
-- [ ] Vollständige Prüfung grün: `tsc -b`, `vitest`, `build`, `i18n:check`, `playwright`
-- [ ] Freigabe von Jean-Luc, dann Push auf `master` (= live auf face-docker1)
+- [x] `e2e/floorplan-dxf.spec.ts` grün
+- [x] Vollständige Prüfung grün: `tsc -b`, `vitest`, `build`, `i18n:check`, `playwright`
+- [x] Freigabe von Jean-Luc, dann Push auf `master` (= live auf face-docker1)
 
 **Dependencies:** Task 5
 
