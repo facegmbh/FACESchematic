@@ -60,6 +60,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
 
   const applyImport = useCallback(async (file: File, pageNumber: number, layers?: Record<string, boolean>, dpi?: number, dxfUnit?: DxfUnit) => {
     setImporting(true);
+    let result: Awaited<ReturnType<typeof importUnderlayFile>> | undefined;
     try {
       const imported = await importUnderlayFile(file, { pageNumber, layers, dpi, dxfUnit });
       // Keep an existing underlay's placement when only the PDF page changes — the user
@@ -144,6 +145,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
       const sourceKey = sameSource || nextUnderlaySourceKey();
       const kept = await putUnderlaySource(sourceKey, file);
       setFloorplanUnderlay(page.id, { ...next, sourceKey: kept ? sourceKey : undefined });
+      result = imported;
       if (!kept) {
         addToast(
           t("The plan is too large to keep in the browser (over {mb} MB). Changing its page, layers or resolution will need a re-import after a reload.", { mb: Math.round(MAX_STORED_SOURCE_BYTES / 1_000_000) }),
@@ -190,6 +192,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
     } finally {
       setImporting(false);
     }
+    return result;
   }, [page, underlay, setFloorplanUnderlay, setFloorplanPaper, setFloorplanScale, updateFloorplanLegend, updateFloorplanDrawingBlock, addToast]);
 
   const handleFile = (file: File | undefined) => {
@@ -198,9 +201,11 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
       // A layered plan is worth asking about before it is baked into a raster: an architect
       // ships furniture, electrical and dimensions as layers, and a loudspeaker sheet wants
       // a quieter background than a cable sheet.
-      const layers = await readPdfLayers(file).catch(() => []);
-      await applyImport(file, 1);
-      if (layers.length > 0) setLayerPanel(true);
+      const isDxf = file.name.toLowerCase().endsWith(".dxf");
+      const layers = isDxf ? [] : await readPdfLayers(file).catch(() => []);
+      const imported = await applyImport(file, 1);
+      // A DXF always has its layers — offering them is the point, when there is a choice.
+      if (layers.length > 0 || (isDxf && (imported?.layers?.length ?? 0) > 1)) setLayerPanel(true);
     })();
   };
 
@@ -209,7 +214,15 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
     if (!current) return;
     const choice: Record<string, boolean> = {};
     for (const l of current) choice[l.id] = l.id === id ? visible : l.visible;
-    void withSource((file) => { void applyImport(file, underlay?.pageNumber ?? 1, choice, underlay?.dpi); });
+    void withSource((file) => { void applyImport(file, underlay?.pageNumber ?? 1, choice, underlay?.dpi, chosenDxfUnit(underlay)); });
+  };
+
+  /** The unit to redraw a DXF in: the one the planner picked, or none — so that a drawing
+   *  that never stated its unit keeps saying so instead of the guess turning into a fact. */
+  const chosenDxfUnit = (u: typeof underlay) => (u?.kind === "dxf" && !u.dxfUnitAssumed ? u.dxfUnit : undefined);
+
+  const handleDxfUnitChange = (unit: DxfUnit) => {
+    void withSource((file) => { void applyImport(file, 1, layerChoiceOf(underlay), undefined, unit); });
   };
 
   const layerChoiceOf = (u: typeof underlay) =>
@@ -223,7 +236,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
   const withSource = async (run: (file: File) => void) => {
     const file = await getUnderlaySource(underlay?.sourceKey);
     if (!file) {
-      addToast(t("Re-import the PDF to change this — its source file isn't available any more."), "info", 5000);
+      addToast(t("Re-import the plan to change this — its source file isn't available any more."), "info", 5000);
       return;
     }
     run(file);
@@ -414,6 +427,29 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
           <span className="text-[var(--color-text-muted)] truncate max-w-[160px]" title={underlay.sourceName}>
             {underlay.sourceName}
           </span>
+          {underlay.kind === "dxf" && (
+            <label
+              className={`flex items-center gap-1 ${underlay.dxfUnitAssumed ? "text-amber-700" : "text-[var(--color-text)]"}`}
+              title={underlay.dxfUnitAssumed
+                ? t("The drawing does not say what it is measured in, so millimetres were assumed. If the plan is the wrong size, it is in another unit.")
+                : t("Unit the drawing is measured in. It sets the plan's size on the sheet — no calibration needed.")}
+            >
+              <span style={{ fontSize: 9 }}>{t("UNIT")}</span>
+              <select
+                value={underlay.dxfUnit ?? "mm"}
+                disabled={importing}
+                onChange={(e) => handleDxfUnitChange(e.target.value as DxfUnit)}
+                className="bg-[var(--color-bg)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-1 py-0.5 text-xs outline-none focus:border-emerald-400"
+              >
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+                <option value="m">m</option>
+                <option value="in">{t("inch")}</option>
+                <option value="ft">{t("feet")}</option>
+              </select>
+              {underlay.dxfUnitAssumed && <span style={{ fontSize: 10 }}>{t("(assumed)")}</span>}
+            </label>
+          )}
           {underlay.kind === "pdf" && (underlay.pageCount ?? 1) > 1 && (
             <label className="flex items-center gap-1 text-[var(--color-text)]">
               {t("Page")}
@@ -603,7 +639,9 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
               <button
                 className={`px-2 py-0.5 rounded border text-xs transition-colors ${layerPanel ? "bg-emerald-500/10 border-emerald-400 text-emerald-700" : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-emerald-400"}`}
                 onClick={() => setLayerPanel((v) => !v)}
-                title={t("Layers of the source PDF — pick what gets drawn into the plan")}
+                title={underlay.kind === "dxf"
+                  ? t("Layers of the drawing — pick what is drawn on the plan")
+                  : t("Layers of the source PDF — pick what gets drawn into the plan")}
               >
                 ▤ {t("Layers")} ({underlay.pdfLayers!.filter((l) => l.visible).length}/{underlay.pdfLayers!.length})
               </button>
@@ -611,7 +649,7 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
                 <div className="absolute z-40 mt-1 left-0 w-64 max-h-80 overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg p-2 flex flex-col gap-1" data-allow-scroll>
                   <div className="flex items-center justify-between pb-1 border-b border-[var(--color-border)]">
                     <span className="font-semibold text-[var(--color-text-muted)] uppercase tracking-wider" style={{ fontSize: 9 }}>
-                      {t("PDF layers")}
+                      {underlay.kind === "dxf" ? t("DXF layers") : t("PDF layers")}
                     </span>
                     <button className="px-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" onClick={() => setLayerPanel(false)} title={t("Close")}>✕</button>
                   </div>
@@ -627,7 +665,9 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
                     </label>
                   ))}
                   <p className="text-[var(--color-text-muted)] leading-snug pt-1" style={{ fontSize: 10 }}>
-                    {t("Ticking redraws the plan from the PDF, so the source file has to still be open in this session. The placement and the calibration stay as they are.")}
+                    {underlay.kind === "dxf"
+                      ? t("Ticking redraws the plan from the DXF. Its position and scale stay as they are.")
+                      : t("Ticking redraws the plan from the PDF, so the source file has to still be open in this session. The placement and the calibration stay as they are.")}
                   </p>
                 </div>
               )}

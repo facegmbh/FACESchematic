@@ -45,6 +45,20 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Layers of the source PDF — pick what gets drawn into the plan":
     "Ebenen des Quell-PDFs — auswählen, was in den Plan gezeichnet wird",
   "PDF layers": "PDF-Ebenen",
+  "DXF layers": "DXF-Ebenen",
+  "Layers of the drawing — pick what is drawn on the plan": "Ebenen der Zeichnung — wählen, was auf dem Plan erscheint",
+  "Ticking redraws the plan from the DXF. Its position and scale stay as they are.":
+    "Ein Haken zeichnet den Plan neu aus der DXF. Lage und Maßstab bleiben, wie sie sind.",
+  "Re-import the plan to change this — its source file isn't available any more.":
+    "Den Plan neu importieren, um das zu ändern — seine Quelldatei ist nicht mehr verfügbar.",
+  "UNIT": "EINHEIT",
+  "inch": "Zoll",
+  "feet": "Fuß",
+  "(assumed)": "(angenommen)",
+  "Unit the drawing is measured in. It sets the plan's size on the sheet — no calibration needed.":
+    "Einheit, in der die Zeichnung gemessen ist. Sie bestimmt die Größe des Plans auf dem Blatt — Kalibrieren ist nicht nötig.",
+  "The drawing does not say what it is measured in, so millimetres were assumed. If the plan is the wrong size, it is in another unit.":
+    "Die Zeichnung sagt nicht, worin sie gemessen ist, deshalb wurden Millimeter angenommen. Hat der Plan die falsche Größe, ist er in einer anderen Einheit.",
   "Ticking redraws the plan from the PDF, so the source file has to still be open in this session. The placement and the calibration stay as they are.":
     "Ein Häkchen zeichnet den Plan neu aus dem PDF — die Quelldatei muss in dieser Sitzung noch geöffnet sein. Platzierung und Kalibrierung bleiben erhalten.",
   "Underlay opacity": "Deckkraft des Planhintergrunds",
@@ -86,8 +100,6 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Plan imported — calibrate it against a known dimension next.":
     "Plan importiert — als Nächstes an einem bekannten Maß kalibrieren.",
   "Could not import that file.": "Diese Datei ließ sich nicht importieren.",
-  "Re-import the PDF to change this — its source file isn't available any more.":
-    "Das PDF erneut importieren, um das zu ändern — die Quelldatei steht nicht mehr zur Verfügung.",
 
   // ─── Sidebar (left): what is on the plan ───────────────────────
   "Plan": "Plan",

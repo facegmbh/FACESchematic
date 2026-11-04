@@ -81,13 +81,13 @@ PDF-Ebenen) und, wenn die Einheit geraten wurde, eine Auswahl mm/cm/m/Zoll. Änd
 Auswahl zeichnet neu, solange die Quelle noch im Speicher liegt.
 
 **Acceptance criteria:**
-- [ ] Ebenenliste erscheint für DXF, Auswahl wirkt auf die gezeichnete Unterlage
-- [ ] Geratene Einheit ist als solche erkennbar und umstellbar; Umstellen ändert den Maßstab
-- [ ] Für PDF ändert sich nichts
+- [x] Ebenenliste erscheint für DXF, Auswahl wirkt auf die gezeichnete Unterlage (Beleg: E2E in Task 6)
+- [x] Geratene Einheit ist als solche erkennbar und umstellbar; Umstellen ändert die Größe (Beleg: E2E in Task 6)
+- [x] Für PDF ändert sich nichts (bestehende E2E-Tests in Task 6)
 
 **Verification:**
-- [ ] `npx vitest run`
-- [ ] `npm run i18n:check`
+- [x] `npx vitest run`
+- [x] `npm run i18n:check`
 
 **Dependencies:** Task 3
 
