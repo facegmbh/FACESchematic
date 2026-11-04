@@ -7,7 +7,7 @@
  * page's scale has to get a scale it fits at.
  */
 import { describe, it, expect } from "vitest";
-import { importUnderlayFile } from "../floorplanUnderlay";
+import { MAX_PRINT_PIXELS, MAX_RASTER_LONG_EDGE_PX, importUnderlayFile, printRasterSize } from "../floorplanUnderlay";
 import { placeDxfOnSheet } from "../dxfImport";
 
 function dxf(...pairs: [number | string, string | number][]): string {
@@ -136,5 +136,27 @@ describe("placing it on the sheet", () => {
     const placed = placeDxfOnSheet({ widthPx: 600000, heightPx: 300000, mmPerPx: 1 }, area, 50, true);
     expect(placed.scaleDenominator).toBe(1000);
     expect(placed.fits).toBe(true);
+  });
+});
+
+describe("printing it", () => {
+  // jsPDF takes no SVG, so a vector underlay is rasterized for the PDF — at a resolution
+  // a plotter wants, but never past what the browser can still allocate.
+  it("rasterizes at 300 dpi of the sheet", () => {
+    // 200 × 100 mm at 300 dpi: 200 / 25.4 × 300 = 2362 px.
+    expect(printRasterSize({ w: 200, h: 100 })).toEqual({ width: 2362, height: 1181, dpi: 300 });
+  });
+
+  it("gives a large sheet fewer dots per inch rather than a canvas the browser refuses", () => {
+    // A0 at 300 dpi would be 139 megapixels; the budget is 120, so it prints at about 278.
+    const a0 = printRasterSize({ w: 1189, h: 841 });
+    expect(a0.width * a0.height).toBeLessThanOrEqual(MAX_PRINT_PIXELS);
+    expect(a0.dpi).toBeGreaterThan(270);
+    expect(a0.dpi).toBeLessThan(300);
+  });
+
+  it("never exceeds the longest edge a canvas may have", () => {
+    const banner = printRasterSize({ w: 3000, h: 100 });
+    expect(Math.max(banner.width, banner.height)).toBeLessThanOrEqual(MAX_RASTER_LONG_EDGE_PX);
   });
 });

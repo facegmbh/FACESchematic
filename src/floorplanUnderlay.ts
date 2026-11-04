@@ -98,6 +98,29 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
 }
 
 /**
+ * A canvas of about the asked size that really holds pixels. A browser can accept an
+ * oversized canvas and then quietly draw nothing into it — a blank plan with no error — so
+ * each attempt is probed, and a refused one is retried smaller.
+ */
+function usableCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  let scale = 1;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext("2d");
+    if (ctx && canvasIsUsable(ctx)) {
+      // Paper is white; JPEG has no transparency, and encodeCanvas may pick JPEG.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return { canvas, ctx };
+    }
+    scale /= 1.5;
+  }
+  throw new Error(t("This plan is too large to rasterize in the browser. Pick a lower resolution."));
+}
+
+/**
  * Pixels for a DXF too large to embed as vectors. The long edge goes as high as the browser
  * will still allocate — this is a plan people zoom into, so it gets every pixel it can.
  */
@@ -106,15 +129,49 @@ async function rasterizeSvgUnderlay(src: string, width: number, height: number):
   const byEdge = MAX_RASTER_LONG_EDGE_PX / Math.max(width, height);
   const byArea = Math.sqrt(MAX_RASTER_PIXELS / Math.max(1, width * height));
   const scale = Math.min(byEdge, byArea);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error(t("Could not create a canvas to resize the image."));
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const { canvas, ctx } = usableCanvas(width * scale, height * scale);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return { src: encodeCanvas(canvas), widthPx: canvas.width, heightPx: canvas.height };
+}
+
+/** Print resolution for a vector underlay, in dots per inch of the sheet. Line art at 300
+ *  dpi is what a plotter is fed; more only makes the file larger. */
+export const VECTOR_PRINT_DPI = 300;
+
+/** Pixel budget for one printed underlay. Below the browser's own ceiling on purpose: an
+ *  export walks every sheet of the project, and each holds its canvas while it encodes. */
+export const MAX_PRINT_PIXELS = 120_000_000;
+
+/** Canvas size for printing a vector underlay that covers `sizeMm` of the sheet. A sheet
+ *  too large for the budget prints at fewer dpi, never at a size the browser refuses. */
+export function printRasterSize(sizeMm: { w: number; h: number }, dpi = VECTOR_PRINT_DPI): { width: number; height: number; dpi: number } {
+  const w = (Math.max(0, sizeMm.w) / 25.4) * dpi;
+  const h = (Math.max(0, sizeMm.h) / 25.4) * dpi;
+  const scale = Math.min(
+    1,
+    MAX_RASTER_LONG_EDGE_PX / Math.max(w, h, 1),
+    Math.sqrt(MAX_PRINT_PIXELS / Math.max(1, w * h)),
+  );
+  return {
+    width: Math.max(1, Math.round(w * scale)),
+    height: Math.max(1, Math.round(h * scale)),
+    dpi: Math.round(dpi * scale),
+  };
+}
+
+/** A vector underlay (a DXF drawn as SVG) as pixels for the PDF export — jsPDF embeds
+ *  rasters only. The screen keeps drawing the vectors. */
+export async function rasterizeVectorForPrint(src: string, sizeMm: { w: number; h: number }): Promise<string> {
+  const { width, height } = printRasterSize(sizeMm);
+  const img = await loadImageElement(src);
+  const { canvas, ctx } = usableCanvas(width, height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return encodeCanvas(canvas);
+}
+
+/** Whether an underlay is drawn as vectors rather than pixels. */
+export function isVectorUnderlay(src: string): boolean {
+  return src.startsWith("data:image/svg+xml");
 }
 
 function readAsDataUrl(file: File): Promise<string> {

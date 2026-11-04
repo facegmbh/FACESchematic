@@ -16,7 +16,7 @@ import { t } from "./i18n";
 import { getPaperSize } from "./printConfig";
 import { loadInterFont } from "./rackPdf";
 import { drawTitleBlockMm } from "./printSheetPdf";
-import { fetchImageAsDataUrl, rasterizeLibrarySymbol, rotatedImageDataUrl } from "./floorplanUnderlay";
+import { fetchImageAsDataUrl, isVectorUnderlay, rasterizeLibrarySymbol, rasterizeVectorForPrint, rotatedImageDataUrl } from "./floorplanUnderlay";
 import { symbolLibraryUrl } from "./symbolLibrary";
 import { tintSymbol } from "./symbolTint";
 import {
@@ -609,8 +609,13 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
 
     // Underlay first — everything else is drawn over the architect's drawing.
     if (page.underlay) {
-      const { positionMm: pos, sizeMm: size, src } = page.underlay;
+      const { positionMm: pos, sizeMm: size } = page.underlay;
       try {
+        // A DXF is drawn as vectors on screen; jsPDF embeds rasters only, so it is turned into
+        // pixels here, once, at print resolution for the size it covers on the sheet.
+        const src = isVectorUnderlay(page.underlay.src)
+          ? await rasterizeVectorForPrint(page.underlay.src, size)
+          : page.underlay.src;
         doc.addImage(src, imageFormat(src), pos.x, pos.y, size.w, size.h, undefined, "MEDIUM");
       } catch {
         doc.setTextColor(200, 0, 0);

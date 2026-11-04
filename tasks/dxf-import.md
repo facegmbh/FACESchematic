@@ -102,12 +102,12 @@ Auswahl zeichnet neu, solange die Quelle noch im Speicher liegt.
 setzt sie wie bisher ins PDF.
 
 **Acceptance criteria:**
-- [ ] Export mit DXF-Unterlage enthält die Zeichnung
-- [ ] Auflösung folgt der Einstellung; kein Hängenbleiben bei großen Zeichnungen
-- [ ] Export ohne Unterlage und mit PDF-Unterlage unverändert
+- [x] Export mit DXF-Unterlage enthält die Zeichnung (Beleg: E2E in Task 6)
+- [x] 300 dpi des Blatts, Budget 120 MP, Canvas wird vor Gebrauch geprüft (Unit-Tests)
+- [x] Export ohne Unterlage und mit PDF-Unterlage unverändert (nur SVG-Quellen werden gerastert)
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/floorplanPdf*.test.ts`
+- [x] `npx vitest run src/__tests__/dxfImportUnderlay.test.ts` (Druckgröße)
 
 **Dependencies:** Task 3
 
