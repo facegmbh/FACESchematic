@@ -1,6 +1,6 @@
-# Implementation Plan: backend-deploy + face-identity + odoo-drawings
+# Implementation Plan: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan
 
-Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md` · Karte: `CAPABILITY-MAP.md`
+Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md`, `SPEC-cloud-bridge.md`, `SPEC-odoo-mcp-schaltplan.md` · Karte: `CAPABILITY-MAP.md`
 
 ## Overview
 
@@ -72,6 +72,56 @@ Entscheidungen für diese Phase:
 - [x] Ende-zu-Ende mit zwei Nutzern (zwei Browser-Kontexte, Mock-Odoo): Speichern, Öffnen beim zweiten → Leiste, Zuschauer beim ersten, Freigabe nach Schließen
 - [ ] Nach Deploy: Jean-Luc speichert an einem echten Projekt, sieht den Anhang in Odoo, öffnet von einem zweiten Gerät
 
+### Phase 4: cloud-bridge
+
+Entscheidungen für diese Phase (10.11.):
+- **Werkzeugname = Befehlsname.** `schaltplan_befehl { befehl, parameter }` reicht `befehl`
+  unverändert als `command` durch — wie der lokale Server heute (`index.ts` → `bridge.call(name, args)`).
+  Der Katalog (`/face/service/catalog`) liefert `TOOLS`, `SERVER_INSTRUCTIONS` und `PROMPTS` aus
+  `mcp-server/src/` — dieselbe Quelle wie der lokale Weg, nichts doppelt.
+- **Ein Befehlsausführer, zwei Transporte.** Aus `BridgeController.onMessage` wird
+  `runCommand(command, params)` herausgelöst; WebSocket (lokal) und Long-Polling (Odoo) rufen
+  beide nur diese Funktion. Die 47 Handler bleiben unberührt.
+- **Relay nur im Speicher** (ein Container, wie `Presence`). Startet das Backend neu, antwortet
+  der Poll mit 409 `unbound` und der Tab meldet sich von selbst wieder an.
+- **Der nächste Poll startet sofort nach der Antwort**, nicht per Timer — Chrome drosselt Timer
+  in Hintergrund-Tabs, laufende Anfragen nicht. Nur nach Fehlern wird mit Pause neu versucht.
+- **Odoo-Befehle sind vorsichtig:** `open_odoo_drawing`/`new_odoo_drawing` verweigern, wenn die
+  offene Zeichnung ungespeicherte Änderungen hat (`discardChanges: true` nur, wenn der Nutzer es
+  gesagt hat); `save_odoo_drawing` überschreibt einen inzwischen fremden Stand nur mit
+  `force: true` und meldet sonst, wer gespeichert hat; fremde Sperre → klare Meldung, kein Speichern.
+- **Modus als eigene Einstellung** `mcpBridgeMode: "odoo" | "local"` neben `mcpBridgeEnabled`
+  (wie die vorhandenen `loadMcp…`-Werte in localStorage). Im FACE-Build Standard `"odoo"`,
+  im Upstream-Build gibt es nur `"local"`.
+- **Token zuerst live:** Checkpoint D bringt Relay, Dienst-Zugang und Token auf face-docker1,
+  bevor der Tab etwas davon weiß. Ohne eingeschalteten Tab antwortet der Dienst nur „kein Tab“ —
+  so kann Jean-Luc den Token schon in Odoo eintragen und Phase 5 parallel beginnen.
+
+- [ ] Task 13: Relay im Backend — Tab anmelden, Poll, Antwort, Ablösung, Verfall
+- [ ] Task 14: Dienst-Zugang — `/face/service/call` und `/face/service/catalog` mit Token
+- [ ] Task 15: Deploy — `FACE_SERVICE_TOKEN` einmalig erzeugen und durchreichen
+
+### Checkpoint D (Freigabe, dann Push auf master)
+- [ ] `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, `npm run build` grün
+- [ ] Nach Deploy: `/face/service/catalog` ohne Token 401, mit Token 200; Jean-Luc trägt den Token in Odoo ein
+
+- [ ] Task 16: Long-Polling-Transport im Tab (`runCommand` gemeinsam für beide Wege)
+- [ ] Task 17: Einstellungen → KI mit zwei Wegen
+- [ ] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
+- [ ] Task 19: Ende-zu-Ende und Hilfeseite
+
+### Checkpoint E (Freigabe, dann Push auf master)
+- [ ] Alle Tests und Build grün; lokaler Weg (Claude Desktop) unverändert
+- [ ] Ende-zu-Ende (Playwright, Mock-Odoo, zwei Nutzer): `add_device` über `/face/service/call` erscheint im Tab des richtigen Nutzers, nie beim anderen
+- [ ] Nach Deploy: Jean-Luc schaltet den Tab ein; ein `get_editor_status` mit dem Token (curl von face-docker1) antwortet
+
+### Phase 5: odoo-mcp-schaltplan (Repo `facegmbh/Odoo`, eigener Branch + Pull-Request)
+- [ ] Task 20: `tools/schaltplan.py` mit den vier Werkzeugen, Tests mit gemocktem HTTP
+- [ ] Task 21: Leitfaden-Abschnitt „Schaltplan“, Pull-Request, Odoo.sh-Staging
+
+### Checkpoint F (Jean-Luc merged nach Produktion)
+- [ ] In claude.ai mit dem bestehenden Odoo-Connector: Status, Zeichnung öffnen, Gerät anlegen und verbinden, speichern
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -84,6 +134,11 @@ Entscheidungen für diese Phase:
 | Große Zeichnungen (PDF-Unterlage) sprengen Odoo-Upload-Grenze | Mittel | 64 MB-Grenze in nginx; Fehlermeldung von Odoo durchreichen; beim Abnahme-Test eine Zeichnung mit Unterlage speichern |
 | Zuordnung bleibt nach „Neu“/„Datei öffnen“ hängen → Strg+S überschreibt die falsche Odoo-Zeichnung | Hoch | Zuordnung endet bei jedem fremden Laden (loadSeq), Test dafür in Task 8 |
 | Sperre verfällt bei Funkloch, ein anderer speichert dazwischen | Mittel | Veraltet-Prüfung über `write_date` (Task 7/11) |
+| Nginx Proxy Manager beendet lange Anfragen | Mittel | Poll wartet höchstens 25 s (NPM-Standard 60 s, App-nginx 90 s); Dienst-Aufruf 60 s → Odoo-Seite wartet 65 s |
+| Hintergrund-Tab wird gedrosselt und fällt nach 40 s aus der Bindung | Mittel | Nächster Poll direkt nach der Antwort statt per Timer; Ende-zu-Ende mit verstecktem Tab prüfen |
+| Claude überschreibt Ungespeichertes oder einen fremden Stand | Hoch | Odoo-Befehle verweigern ohne `discardChanges`/`force`; Leitfaden sagt: nur auf ausdrücklichen Wunsch |
+| Befehl landet beim falschen Nutzer | Hoch | uid nur aus dem Token-geschützten Dienst-Aufruf, Bindung je uid aus der Sitzung; Test mit zwei Nutzern in Backend und Ende-zu-Ende |
+| Token-Leck | Hoch | Nur in `backend.env` (umask 077) und Odoo-Systemparameter; zeitkonstanter Vergleich; nie im Browser oder Repo |
 
 ## Open Questions
 
