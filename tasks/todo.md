@@ -290,9 +290,9 @@ herausgelöst (WebSocket nutzt sie unverändert). Neuer Transport `OdooRelayTran
 401 → anhalten, Hinweis „Erst oben rechts mit Odoo anmelden“. Gleiche Status-Werte wie heute.
 
 **Acceptance criteria:**
-- [ ] Ein Befehl aus dem (gemockten) Poll läuft über die vorhandenen Handler und wird beantwortet
-- [ ] `unbound` führt zu neuem `hello`; `superseded` und 401 halten an und setzen den Status-Text
-- [ ] Die bestehenden MCP-Tests (`mcpEditing`, `mcpFloorplan`, `mcpValidation`) bleiben grün
+- [x] Ein Befehl aus dem (gemockten) Poll läuft über die vorhandenen Handler und wird beantwortet
+- [x] `unbound` führt zu neuem `hello`; `superseded` und 401 halten an und setzen den Status-Text
+- [x] Die bestehenden MCP-Tests (`mcpEditing`, `mcpFloorplan`, `mcpValidation`) bleiben grün
 
 **Verification:** `npx vitest run`, `npx tsc -b`
 

@@ -29,7 +29,7 @@ export class FaceApiError extends Error {
 /** Same-origin call; changing requests carry the header the backend's CSRF check wants. */
 export async function faceApi<T>(
   path: string,
-  init: { method?: string; body?: unknown; keepalive?: boolean } = {},
+  init: { method?: string; body?: unknown; keepalive?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {};
@@ -41,6 +41,7 @@ export async function faceApi<T>(
     credentials: "same-origin",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     keepalive: init.keepalive,
+    signal: init.signal,
   });
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as { error?: string };

@@ -154,6 +154,7 @@ export const DE_SETTINGS: Record<string, string> = {
   "Invalid pairing token.": "Kopplungs-Token passt nicht.",
   "Protocol version mismatch — update the MCP server.": "Protokollversion passt nicht — MCP-Server aktualisieren.",
   "Another tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
+  "Sign in with Odoo first (top right).": "Erst oben rechts mit Odoo anmelden.",
   "Another EasySchematic tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
   "Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.":
     "Die Einrichtung steht in der Dokumentation unter „AI Assistant (MCP)“. Das ist eine frühe Beta — bisher wird nur ein Grundstock an Aktionen unterstützt.",

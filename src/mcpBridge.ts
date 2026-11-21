@@ -11,10 +11,16 @@
  * Security: the connection is gated by a pairing token (sent in the handshake)
  * and the server additionally checks the request Origin. Both must pass before
  * any command runs.
+ *
+ * FACE: a second way in, `relayBridge`, reaches the same handlers through the FACE backend
+ * (long polling under /face/bridge, SPEC-cloud-bridge.md) so Claude can work here via the
+ * Odoo connector, with nothing installed. Both ways run commands through `runCommand`.
  */
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
+import { faceApi, FaceApiError } from "./faceBackend";
+import { getTabId } from "./faceDrawings";
 import { getPortAbsolutePositions } from "./snapUtils";
 import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates } from "./templateApi";
 import { inferRackForm, inferRackHeightU } from "./rackUtils";
@@ -1839,25 +1845,147 @@ class BridgeController {
     }
     if (msg.type === "command") {
       const { requestId, command, params } = msg;
-      const reply = (ok: boolean, payload: { result?: unknown; error?: string }) =>
-        this.ws?.send(JSON.stringify({ type: "response", requestId, ok, ...payload }));
-      const handler = handlers[command];
-      if (!handler) {
-        reply(false, { error: `Unknown command "${command}".` });
-        return;
-      }
-      try {
-        const result = await handler(params ?? {});
-        reply(true, { result });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        reply(false, { error: message });
-      }
+      const answer = await runCommand(command, params ?? {});
+      this.ws?.send(JSON.stringify({ type: "response", requestId, ...answer }));
     }
   }
 }
 
 export const mcpBridge = new BridgeController();
+
+export type CommandAnswer = { ok: true; result: unknown } | { ok: false; error: string };
+
+/** Run one command through the handlers — the same for the local and the Odoo way in. */
+export async function runCommand(command: string, params: Record<string, unknown>): Promise<CommandAnswer> {
+  const handler = (handlers as Record<string, (p: Record<string, unknown>) => unknown>)[command];
+  if (!handler) return { ok: false, error: `Unknown command "${command}".` };
+  try {
+    return { ok: true, result: await handler(params) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+const SIGN_IN_FIRST = "Sign in with Odoo first (top right).";
+const SUPERSEDED = "Another tab took the AI connection.";
+
+type RelayMessage =
+  | { type: "command"; requestId: string; command: string; params?: Record<string, unknown> }
+  | { type: "superseded" };
+
+/**
+ * FACE: the Odoo-connector way in (SPEC-cloud-bridge.md). Says hello to the FACE backend,
+ * then keeps exactly one long poll open. The next poll starts right after an answer — not
+ * on a timer, which Chrome throttles in background tabs; only errors wait before retrying.
+ * Commands run without holding up the poll, so a slow one doesn't make the tab look gone.
+ */
+class RelayBridge {
+  private enabled = false;
+  /** Bumped by start()/stop(); a loop that sees another generation ends. */
+  private generation = 0;
+  private abort: AbortController | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private backoffMs = 1000;
+
+  start() {
+    if (this.enabled) return; // StrictMode-safe
+    this.enabled = true;
+    this.generation++;
+    this.backoffMs = 1000;
+    void this.run(this.generation);
+  }
+
+  stop() {
+    this.enabled = false;
+    this.generation++;
+    this.abort?.abort();
+    this.abort = null;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    setStatus("off");
+  }
+
+  private live(generation: number) {
+    return this.enabled && generation === this.generation;
+  }
+
+  private halt(generation: number, detail: string) {
+    if (!this.live(generation)) return;
+    this.enabled = false;
+    this.generation++;
+    setStatus("error", detail);
+  }
+
+  private retry(generation: number) {
+    if (!this.live(generation)) return;
+    setStatus("connecting", "Reconnecting…");
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.run(generation);
+    }, this.backoffMs);
+    this.backoffMs = Math.min(this.backoffMs * 2, 15000);
+  }
+
+  private async run(generation: number) {
+    if (!this.live(generation)) return;
+    setStatus("connecting");
+    try {
+      await faceApi("/face/bridge/hello", {
+        method: "POST",
+        body: { tabId: getTabId(), schematicName: st().schematicName, protocolVersion: PROTOCOL_VERSION },
+      });
+    } catch (err) {
+      this.fail(generation, err);
+      return;
+    }
+    if (!this.live(generation)) return;
+    setStatus("connected");
+    this.backoffMs = 1000;
+
+    while (this.live(generation)) {
+      this.abort = new AbortController();
+      let msg: RelayMessage | undefined;
+      try {
+        msg = await faceApi<RelayMessage | undefined>(`/face/bridge/poll?tabId=${encodeURIComponent(getTabId())}`, {
+          signal: this.abort.signal,
+        });
+      } catch (err) {
+        if (!this.live(generation)) return;
+        if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "unbound") {
+          void this.run(generation); // the backend forgot us (restart): hello again
+          return;
+        }
+        this.fail(generation, err);
+        return;
+      }
+      if (!this.live(generation) || !msg) continue;
+      if (msg.type === "superseded") {
+        this.halt(generation, SUPERSEDED);
+        return;
+      }
+      if (msg.type === "command") void this.answer(msg);
+    }
+  }
+
+  private async answer(msg: Extract<RelayMessage, { type: "command" }>) {
+    const answer = await runCommand(msg.command, msg.params ?? {});
+    try {
+      await faceApi("/face/bridge/respond", { method: "POST", body: { tabId: getTabId(), requestId: msg.requestId, ...answer } });
+    } catch {
+      /* the caller times out and says so; the poll loop handles a lost connection */
+    }
+  }
+
+  private fail(generation: number, err: unknown) {
+    if (err instanceof FaceApiError && err.status === 401) this.halt(generation, SIGN_IN_FIRST);
+    else if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "protocol") this.halt(generation, err.message);
+    else this.retry(generation);
+  }
+}
+
+export const relayBridge = new RelayBridge();
 
 /** Mount once (in App). Starts/stops the bridge as the Beta setting changes. */
 export function useMcpBridge() {
