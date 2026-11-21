@@ -868,6 +868,31 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "rename_room",
+    description:
+      "Rename a room. Use it to restructure a drawing by location: a room that holds one place's gear but is named after a trade (\"Netzwerk\") becomes the location (\"Technik\"). Nothing moves.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "The room to rename." },
+        label: { type: "string", description: "The new name, e.g. the location." },
+      },
+      required: ["roomId", "label"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "dissolve_room",
+    description:
+      "Remove a room's frame and keep everything in it: devices and nested rooms stay where they are on the canvas, with their connections, and move into the room around it (or to the top level). One undo step. Use it to take apart trade rooms (\"Mikrofone\", \"Beschallung\") before putting the devices into their locations with place_device_in_room. Refused for a room the user locked. A linked rack elevation stays.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string", description: "The room to dissolve." } },
+      required: ["roomId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "arrange_rooms",
     description:
       "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",

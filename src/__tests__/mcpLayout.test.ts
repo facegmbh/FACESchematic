@@ -262,3 +262,86 @@ describe("G1 findings (21.11.)", () => {
     expect(store.getState().activePage).toBe(before);
   });
 });
+
+describe("restructuring an existing drawing (rename_room, dissolve_room)", () => {
+  const node = (id: string) => store.getState().nodes.find((n) => n.id === id);
+  const absolute = (id: string) => {
+    let n = node(id);
+    let { x, y } = n!.position;
+    while (n?.parentId) {
+      n = node(n.parentId);
+      x += n!.position.x;
+      y += n!.position.y;
+    }
+    return { x, y };
+  };
+
+  it("rename_room gives a trade room its location's name, nothing else changes", async () => {
+    const before = node("room-8")!;
+    const r = await run("rename_room", { roomId: "room-8", label: "Technik" });
+    expect(r).toMatchObject({ ok: true, result: { roomId: "room-8", label: "Technik" } });
+    const after = node("room-8")!;
+    expect((after.data as { label: string }).label).toBe("Technik");
+    expect(after.position).toEqual(before.position);
+    expect(node("device-27")?.parentId).toBe("room-8");
+  });
+
+  it("rename_room needs a room and a name", async () => {
+    expect((await run("rename_room", { roomId: "device-27", label: "X" })).ok).toBe(false);
+    expect((await run("rename_room", { roomId: "room-8", label: "  " })).ok).toBe(false);
+  });
+
+  it("dissolve_room removes the frame and keeps the devices where they are, and their lines", async () => {
+    const devices = ["device-15", "device-16", "device-17", "device-18"];
+    const where = Object.fromEntries(devices.map((id) => [id, absolute(id)]));
+    const edgeCount = store.getState().edges.length;
+    const r = await run("dissolve_room", { roomId: "room-4" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.result).toMatchObject({ roomId: "room-4", label: "Mikrofone", movedInto: null });
+    expect((r.result as { released: string[] }).released.sort()).toEqual(devices);
+    expect(node("room-4")).toBeUndefined();
+    for (const id of devices) {
+      expect(node(id)?.parentId).toBeUndefined();
+      expect(absolute(id)).toEqual(where[id]);
+    }
+    expect(store.getState().edges.length).toBe(edgeCount);
+  });
+
+  it("dissolve_room is one undo step", async () => {
+    const before = JSON.stringify(store.getState().nodes.map((n) => [n.id, n.parentId, n.position]));
+    await run("dissolve_room", { roomId: "room-4" });
+    store.getState().undo();
+    expect(JSON.stringify(store.getState().nodes.map((n) => [n.id, n.parentId, n.position]))).toBe(before);
+  });
+
+  it("the contents of a nested room fall into the room around it, not out of everything", async () => {
+    store.setState({
+      nodes: [
+        { id: "ort", type: "room", position: { x: 0, y: 0 }, data: { label: "Technik" }, style: { width: 800, height: 600 } },
+        { id: "ecke", type: "room", position: { x: 32, y: 48 }, parentId: "ort", data: { label: "Netzwerk" }, style: { width: 400, height: 300 } },
+        { id: "sw", type: "device", position: { x: 16, y: 48 }, parentId: "ecke", measured: { width: 176, height: 96 }, data: { label: "Switch", deviceType: "switch", ports: [] } },
+      ] as never,
+      edges: [], routedEdges: {},
+    });
+    const r = await run("dissolve_room", { roomId: "ecke" });
+    expect(r).toMatchObject({ ok: true, result: { movedInto: "ort", released: ["sw"] } });
+    expect(node("sw")?.parentId).toBe("ort");
+    expect(absolute("sw")).toEqual({ x: 48, y: 96 });
+  });
+
+  it("a locked room is not dissolved — the user locked it on purpose", async () => {
+    store.setState({
+      nodes: [{ id: "ort", type: "room", position: { x: 0, y: 0 }, data: { label: "Kirche", locked: true }, style: { width: 400, height: 300 } }] as never,
+      edges: [], routedEdges: {},
+    });
+    const r = await run("dissolve_room", { roomId: "ort" });
+    expect(r.ok).toBe(false);
+    expect(node("ort")).toBeDefined();
+  });
+
+  it("dissolve_room needs a room", async () => {
+    expect((await run("dissolve_room", { roomId: "device-27" })).ok).toBe(false);
+    expect(node("device-27")).toBeDefined();
+  });
+});

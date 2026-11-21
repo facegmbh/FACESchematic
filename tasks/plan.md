@@ -155,6 +155,7 @@ Entscheidungen:
   Lücke für bestehende Zeichnungen: kein Befehl, um Räume umzubenennen oder aufzulösen
 
 - [x] Task 25: `arrange_rooms` und `route_connections`
+- [x] Task 25a: `rename_room` und `dissolve_room` — bestehende Gewerke-Räume in Orte umbauen (G1-Lücke)
 - [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen
 - [ ] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call`
 

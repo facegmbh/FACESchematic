@@ -48,6 +48,8 @@ import {
   type AddRackToRoomParams,
   type ArrangeRoomParams,
   type FitRoomParams,
+  type RenameRoomParams,
+  type DissolveRoomParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -132,6 +134,7 @@ import type {
   RackData,
   RackDevicePlacement,
   RackElevationPage,
+  RoomData,
   SchematicNode,
 } from "./types";
 import { PAPER_SIZES } from "./printConfig";
@@ -1803,6 +1806,39 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     s.resizeRoom(roomId, nodeSizeOf(roomId), { skipUndo: false }); // undo point with the current size
     const size = fitRooms(roomId, true);
     return { roomId, size };
+  },
+
+  rename_room: (params) => {
+    const { roomId, label } = (params ?? {}) as unknown as RenameRoomParams;
+    requireRoom(roomId);
+    if (typeof label !== "string" || label.trim() === "") throw new CommandError("label is required (a non-empty room name).");
+    st().updateRoomLabel(roomId, label.trim());
+    return { roomId, label: label.trim() };
+  },
+
+  dissolve_room: (params) => {
+    const { roomId } = (params ?? {}) as unknown as DissolveRoomParams;
+    const room = requireRoom(roomId);
+    const data = room.data as RoomData;
+    const label = data.label ?? roomId;
+    if (data.locked) {
+      throw new CommandError(`"${label}" is locked — the user locked it on purpose. Ask them to unlock it (right-click the room) first.`);
+    }
+    const released = st().nodes.filter((n) => n.parentId === roomId).map((n) => n.id);
+    const outer = room.parentId;
+    // deleteNode is the editor's own Delete: one undo step, content keeps its place on the
+    // canvas, connections stay, a linked rack loses only its link. It drops the content to the
+    // top level, so inside a location let geometry put it back into the room around it.
+    st().deleteNode(roomId);
+    if (outer) for (const id of released) st().reparentNode(id, absolutePositionOf(id), { skipUndo: true });
+    return {
+      roomId,
+      label,
+      released,
+      movedInto: outer ?? null,
+      ...(data.linkedRackId ? { note: "The rack elevation stays; it is no longer linked to a room (add_rack_to_room creates a new box)." } : {}),
+      hint: "Put the released devices into their locations (place_device_in_room), then check_layout.",
+    };
   },
 
   arrange_rooms: (params) => {

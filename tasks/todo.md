@@ -454,6 +454,22 @@ Wegpunkte nur, wenn ausdrücklich genannt.
 
 **Dependencies:** Task 24 · **Files:** `src/layoutArrange.ts`, `src/mcpBridge.ts`, Tests · **Scope:** M
 
+## Task 25a: `rename_room` und `dissolve_room`
+
+**Description:** Lücke aus G1: Claude soll eine bestehende Zeichnung mit Gewerke-Räumen örtlich
+umbauen können. `rename_room` ändert nur den Namen; `dissolve_room` entfernt den Rahmen, der
+Inhalt bleibt liegen und kommt in den umgebenden Raum.
+
+**Acceptance criteria:**
+- [x] Umbenennen ändert nur das Label, Inhalt und Lage bleiben
+- [x] Auflösen: Geräte behalten ihre absolute Lage und ihre Leitungen; ein Undo-Schritt
+- [x] Inhalt eines verschachtelten Raums landet im Raum drumherum
+- [x] Gesperrter Raum wird nicht aufgelöst; Nicht-Räume werden abgelehnt
+
+**Verification:** `npx vitest run`, `npx tsc -b`, `cd mcp-server && npm test`
+
+**Dependencies:** Task 23 · **Files:** `src/mcpBridge.ts`, `src/mcp/protocol.ts`, `mcp-server/src/tools.ts`, `src/__tests__/mcpLayout.test.ts` · **Scope:** S
+
 ## Task 26: `render_schematic`
 
 **Description:** PNG der Zeichnung oder eines Raums (`roomId`, `maxWidth`) über den vorhandenen

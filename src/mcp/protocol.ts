@@ -88,7 +88,9 @@ export type CommandType =
   | "arrange_room"
   | "fit_room"
   | "arrange_rooms"
-  | "route_connections";
+  | "route_connections"
+  | "rename_room"
+  | "dissolve_room";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -666,6 +668,17 @@ export interface RouteConnectionsParams {
 }
 
 export interface FitRoomParams {
+  roomId: string;
+}
+
+/** FACE: rename a room — e.g. a trade room ("Netzwerk") becomes its location ("Technik"). */
+export interface RenameRoomParams {
+  roomId: string;
+  label: string;
+}
+
+/** FACE: remove a room's frame and keep its content where it is. */
+export interface DissolveRoomParams {
   roomId: string;
 }
 

@@ -39,6 +39,8 @@ User Stories:
 | `fit_room` `{ roomId, padding? }` | Raum an Inhalt anpassen (wachsen und schrumpfen), Eltern-Räume mit |
 | `arrange_rooms` `{ order?: roomId[] }` | Räume oberster Ebene ohne Überlappung anordnen (Zeilen, Abstand), in der gegebenen Reihenfolge |
 | `route_connections` `{ connectionIds? }` | Leitungen mit dem Auto-Routing des Editors neu verlegen (alle oder Auswahl); eigene Wegpunkte gehen dabei verloren, deshalb nur auf Wunsch für bereits von Hand gelegte |
+| `rename_room` `{ roomId, label }` | Raum umbenennen, z. B. Gewerk-Raum „Netzwerk“ → Ort „Technik“; nichts bewegt sich |
+| `dissolve_room` `{ roomId }` | Rahmen entfernen, Inhalt bleibt an seinem Platz (mit Leitungen) und rutscht in den umgebenden Raum oder auf die oberste Ebene; ein Undo-Schritt; gesperrte Räume nicht; verknüpfte Rack-Ansicht bleibt |
 | `render_schematic` `{ roomId?, maxWidth? }` | PNG der Zeichnung (oder eines Raums) als `{ image: { mimeType, data } }` |
 
 Alle schreibenden Befehle laufen über vorhandene Store-Aktionen (Undo, Autosave). Was der
@@ -106,6 +108,8 @@ Wie `SPEC-cloud-bridge.md`.
    (Seite mit HE-Belegung). Neuer Befehl `add_rack_to_room` legt beides verknüpft an.
    Ein Gerät, das in die Rack-Ansicht gesetzt wird, landet auch im Rack-Kasten des
    Schaltplans.
+3. Bestehende Zeichnungen mit Gewerke-Räumen umbauen: `rename_room` und `dissolve_room` gehören
+   in diese Phase (Jean-Luc, 21.11.).
 
 ## Open Questions
 
