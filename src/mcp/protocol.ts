@@ -91,7 +91,8 @@ export type CommandType =
   | "route_connections"
   | "rename_room"
   | "dissolve_room"
-  | "render_schematic";
+  | "render_schematic"
+  | "choose_port_sides";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -681,6 +682,12 @@ export interface RenameRoomParams {
 /** FACE: remove a room's frame and keep its content where it is. */
 export interface DissolveRoomParams {
   roomId: string;
+}
+
+/** FACE: two-sided ports face the device they connect to (SPEC-schaltplan-leitungen.md). */
+export interface ChoosePortSidesParams {
+  /** Only these connections; the only way to include one with the user's own waypoints. */
+  connectionIds?: string[];
 }
 
 /** FACE: a PNG of the schematic (or one room) for the assistant to look at. */

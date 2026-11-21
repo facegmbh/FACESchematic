@@ -906,6 +906,16 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "choose_port_sides",
+    description:
+      "Two-sided ports (network, serial — bidirectional) have a connection point on the left and on the right of the device. This turns each connection's ends to the side facing the other device (devices on top of each other, e.g. in a rack, meet on one side), so lines stop looping round devices. Connection ids stay; one undo step; pass-through ports (rear/front) are never changed. Call it after connecting and before route_connections. Connections with the user's own waypoints are only changed when named in connectionIds.",
+    inputSchema: {
+      type: "object",
+      properties: { connectionIds: { type: "array", items: { type: "string" }, description: "Only these connections (default: all)." } },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "arrange_rooms",
     description:
       "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",

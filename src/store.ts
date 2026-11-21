@@ -642,6 +642,9 @@ interface SchematicState {
   setNodePositions: (positions: Record<string, { x: number; y: number }>, options?: { skipUndo?: boolean }) => void;
   /** FACE: drop the waypoints (own or auto) of these connections so auto-routing lays them anew. */
   clearEdgeWaypoints: (edgeIds: string[]) => void;
+  /** FACE: switch connections to other handles of the same ports (choose_port_sides) — ids stay,
+   *  one undo step. Waypoints the router laid for the old side go; the user's own stay. */
+  setConnectionHandles: (changes: { id: string; sourceHandle: string; targetHandle: string }[]) => void;
   /** Re-evaluate room membership for every non-room node. Used after a room is
    *  created, resized, or moved so devices get parented/unparented to match
    *  the new layout. */
@@ -4614,6 +4617,26 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     if (!options?.skipUndo) pushUndo({ nodes: state.nodes, edges: state.edges });
     const moved = state.nodes.map((n) => (ids.has(n.id) ? { ...n, position: positions[n.id] } : n));
     set({ nodes: settleTagsAfterMove(moved, state.edges, ids) ?? moved });
+    get().saveToLocalStorage();
+  },
+
+  setConnectionHandles: (changes) => {
+    const state = get();
+    const byId = new Map(changes.map((c) => [c.id, c] as const));
+    if (!state.edges.some((e) => byId.has(e.id))) return;
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const updatedEdges = state.edges.map((e) => {
+      const c = byId.get(e.id);
+      if (!c) return e;
+      let data = e.data;
+      if (data?.autoRouteWaypoints) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { manualWaypoints, autoRouteWaypoints, ...rest } = data;
+        data = rest as typeof data;
+      }
+      return { ...e, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle, data };
+    }) as typeof state.edges;
+    set({ edges: updatedEdges, nodes: reconcileWaypointNodes(state.nodes, updatedEdges) });
     get().saveToLocalStorage();
   },
 

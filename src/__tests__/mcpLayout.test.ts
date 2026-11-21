@@ -345,3 +345,31 @@ describe("restructuring an existing drawing (rename_room, dissolve_room)", () =>
     expect(node("device-27")).toBeDefined();
   });
 });
+
+describe("choose_port_sides (Task 28)", () => {
+  const handles = () => Object.fromEntries(store.getState().edges.map((e) => [e.id, [e.sourceHandle, e.targetHandle]]));
+
+  it("turns two-sided ports towards each other, keeps every connection id, one undo step", async () => {
+    const before = handles();
+    const r = await run("choose_port_sides", {});
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const result = r.result as { changed: { connectionId: string }[] };
+    expect(result.changed.length).toBeGreaterThan(0);
+    const after = handles();
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    expect(result.changed.every((c) => JSON.stringify(after[c.connectionId]) !== JSON.stringify(before[c.connectionId]))).toBe(true);
+    store.getState().undo();
+    expect(handles()).toEqual(before);
+  });
+
+  it("a second run changes nothing", async () => {
+    await run("choose_port_sides", {});
+    const again = await run("choose_port_sides", {});
+    expect(again).toMatchObject({ ok: true, result: { changed: [] } });
+  });
+
+  it("unknown connection ids are refused", async () => {
+    expect((await run("choose_port_sides", { connectionIds: ["nope"] })).ok).toBe(false);
+  });
+});

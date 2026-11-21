@@ -21,6 +21,7 @@ import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
 import { arrangeRoom, arrangeRooms, fitRoomSize } from "./layoutArrange";
+import { choosePortSides } from "./portSides";
 import { blobToBase64, captureSchematicPng, renderBounds, renderPixelRatio } from "./renderSchematic";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
@@ -52,6 +53,7 @@ import {
   type RenameRoomParams,
   type DissolveRoomParams,
   type RenderSchematicParams,
+  type ChoosePortSidesParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -1884,6 +1886,22 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     } finally {
       if (pageBefore !== "schematic") st().setActivePage(pageBefore);
     }
+  },
+
+  choose_port_sides: (params) => {
+    const { connectionIds } = (params ?? {}) as ChoosePortSidesParams;
+    if (connectionIds !== undefined) {
+      if (!Array.isArray(connectionIds)) throw new CommandError("connectionIds must be a list of connection ids.");
+      const known = new Set(st().edges.map((e) => e.id));
+      const unknown = connectionIds.filter((id) => !known.has(id));
+      if (unknown.length) throw new CommandError(`Unknown connection id(s): ${unknown.join(", ")}.`);
+    }
+    const changes = choosePortSides(st().nodes, st().edges, connectionIds);
+    if (changes.length) st().setConnectionHandles(changes);
+    return {
+      changed: changes.map((c) => ({ connectionId: c.id, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle })),
+      hint: changes.length ? "route_connections next — the lines follow the new sides." : "Every two-sided port already faces its counterpart.",
+    };
   },
 
   arrange_rooms: (params) => {

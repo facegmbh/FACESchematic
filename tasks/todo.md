@@ -518,14 +518,14 @@ verbinden → `route_connections` → `check_layout` bis leer (max. 3 Runden) �
 
 **Description:** Bei Verbindungen mit zweiseitigen Ports (`-in` links / `-out` rechts) die Seite
 zum Gegenüber wählen; übereinander liegende Geräte (Rack) nehmen dieselbe Seite. Verbindungs-ID
-bleibt, ein Undo-Schritt. Durchgangsports und Verbindungen mit eigenen Stützpunkten nur, wenn
-genannt (Stützpunkte nie: die bleiben unberührt).
+bleibt, ein Undo-Schritt. Durchgangsports nie; Verbindungen mit eigenen Stützpunkten nur, wenn
+genannt (die Stützpunkte selbst bleiben; vom Router gelegte gehen mit der alten Seite).
 
 **Acceptance criteria:**
-- [ ] Gegenüber rechts → `-out`, links → `-in`, auf beiden Enden
-- [ ] Übereinander (waagerecht überlappend) → beide dieselbe Seite
-- [ ] `rear`/`front` und einseitige Ports unverändert; eigene Stützpunkte unverändert
-- [ ] Befehl am Store: ID bleibt, ein Undo-Schritt, meldet geänderte Verbindungen
+- [x] Gegenüber rechts → `-out`, links → `-in`, auf beiden Enden
+- [x] Übereinander (waagerecht überlappend) → beide dieselbe Seite (die feste Seite des anderen Endes, sonst links)
+- [x] `rear`/`front` und einseitige Ports unverändert; Stub-Leitungen unverändert; eigene Stützpunkte nur, wenn genannt
+- [x] Befehl am Store: ID bleibt, ein Undo-Schritt, meldet geänderte Verbindungen; zweiter Lauf ändert nichts
 
 **Verification:** `npx vitest run`, `npx tsc -b`, `cd mcp-server && npm test`
 
