@@ -168,7 +168,50 @@ export function buildObstacles(
       nodeId: n.id,
     });
   }
+  // FACE: no lines over text (SPEC-schaltplan-leitungen.md) — room names and notes are obstacles too.
+  rects.push(...textObstacleRects(nodes.filter((n) => !excludeIds.includes(n.id)), getAbsPos));
   return { rects };
+}
+
+/** Width of one character relative to the font size — generous for the semibold room name. */
+const LABEL_CHAR_EM = 0.62;
+/** The name's box: `px-2 py-1` around the text (RoomNode.tsx), plus the rack icon on rack boxes. */
+const LABEL_PAD_X = 16;
+const LABEL_PAD_Y = 8;
+const RACK_ICON_W = 20;
+
+/**
+ * FACE: where text sits that lines must not cross — a room's name (top-left of the room, size
+ * estimated from its length and `labelSize`; the router has no DOM to measure) and every note.
+ * Gerätetexte need nothing extra: devices are obstacles already.
+ */
+export function textObstacleRects(
+  nodes: readonly { id: string; position: { x: number; y: number }; parentId?: string; measured?: { width?: number; height?: number }; type?: string; data?: unknown; style?: unknown }[],
+  getAbsPos: (node: (typeof nodes)[number]) => { x: number; y: number },
+): Rect[] {
+  const rects: Rect[] = [];
+  for (const n of nodes) {
+    if (n.type === "room") {
+      const data = (n.data ?? {}) as { label?: string; labelSize?: number; isEquipmentRack?: boolean };
+      const text = String(data.label ?? "").trim();
+      if (!text) continue;
+      const fontSize = data.labelSize ?? 12;
+      const roomWidth = n.measured?.width ?? (n.style as { width?: number } | undefined)?.width ?? Infinity;
+      const width = Math.min(
+        roomWidth,
+        Math.ceil(text.length * fontSize * LABEL_CHAR_EM) + LABEL_PAD_X + (data.isEquipmentRack ? RACK_ICON_W : 0),
+      );
+      const pos = getAbsPos(n);
+      rects.push({ left: pos.x, top: pos.y, right: pos.x + width, bottom: pos.y + Math.ceil(fontSize * 1.5) + LABEL_PAD_Y, nodeId: `${n.id}#label` });
+    } else if (n.type === "note") {
+      const w = n.measured?.width;
+      const h = n.measured?.height;
+      if (!w || !h) continue;
+      const pos = getAbsPos(n);
+      rects.push({ left: pos.x, top: pos.y, right: pos.x + w, bottom: pos.y + h, nodeId: `${n.id}#text` });
+    }
+  }
+  return rects;
 }
 
 /** Convert pixel-coordinate obstacle rects to grid-coordinate rects. */

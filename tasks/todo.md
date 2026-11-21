@@ -537,8 +537,8 @@ genannt (die Stützpunkte selbst bleiben; vom Router gelegte gehen mit der alten
 Notizen auf. Gilt auch beim Zeichnen von Hand.
 
 **Acceptance criteria:**
-- [ ] Leitung, deren kürzester Weg über einen Ortsnamen ginge, läuft daran vorbei
-- [ ] Vorhandene Routing-Tests und Harness grün; Abweichungen begründet
+- [x] Leitung, deren kürzester Weg über einen Ortsnamen ginge, läuft daran vorbei
+- [x] Vorhandene Routing-Tests und Harness grün: `routing:check` 13/13 ohne Änderung, keine Baseline neu geschrieben
 
 **Dependencies:** — · **Files:** `src/pathfinding.ts`, Tests · **Scope:** S–M
 
