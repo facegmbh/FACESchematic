@@ -16,8 +16,10 @@ FACE-Odoo-Connector, den alle schon verbunden haben. Ersetzt in diesem Punkt die
 | ~~`claude-connector`~~ | entfällt (10.11.): kein zweiter Connector mit eigener Anmeldung | — |
 | `odoo-mcp-schaltplan` | Schaltplan-Werkzeuge im Odoo-Connector (`face_mcp_server`, Repo `facegmbh/Odoo`), rufen das Backend mit Dienst-Token + Odoo-Nutzer | cloud-bridge, odoo-drawings |
 | `odoo-device-library` | Eigene Geräte zentral in Odoo statt nur im Browser, verknüpft mit dem Odoo-Artikel — **vorgemerkt, Spec folgt** | face-identity |
+| `schaltplan-layout` | Claude gliedert örtlich (Orte → Racks), prüft Überlappungen und Leitungsführung, ordnet, verlegt neu und sieht das Ergebnis als Bild (21.11.) | cloud-bridge |
+| `schaltplan-lebenszyklus` | Zeichnung durch Kalkulation → Angebot → Auftrag → Montage/Abnahme → Wartung: Abgleich Zeichnung ↔ Positionen, Seriennummern/Asset-IDs, Verknüpfung mit der Anlage (`face.installation`) — **vorgemerkt, Spec folgt** | odoo-mcp-schaltplan, odoo-device-library |
 
-Reihenfolge: backend-deploy + face-identity → odoo-drawings, cloud-bridge → odoo-mcp-schaltplan → odoo-device-library
+Reihenfolge: backend-deploy + face-identity → odoo-drawings, cloud-bridge → odoo-mcp-schaltplan → schaltplan-layout → odoo-device-library → schaltplan-lebenszyklus
 
 ## Übergreifende Entscheidungen
 
