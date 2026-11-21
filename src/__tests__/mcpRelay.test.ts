@@ -67,6 +67,8 @@ beforeEach(() => {
       return next ? next() : hanging(init);
     }
     if (url.startsWith("/face/bridge/respond")) return reply(204)();
+    if (url.startsWith("/face/bridge/bye")) return reply(204)();
+    if (url.startsWith("/face/api/me")) return reply(401, { error: "Nicht angemeldet." })();
     return reply(404)();
   });
 });
@@ -181,11 +183,11 @@ describe("relay bridge (Odoo connector)", () => {
 });
 
 describe("which way in runs (Preferences → AI)", () => {
-  const base = { faceBackend: true, mode: "odoo" as const, enabled: true, token: "", signedIn: true };
+  const base = { faceBackend: true, mode: "odoo" as const, localEnabled: true, relayEnabled: true, token: "abc", signedIn: true };
 
-  it("off when the switch is off, whatever else is set", () => {
-    expect(bridge.bridgeTransport({ ...base, enabled: false })).toBe("off");
-    expect(bridge.bridgeTransport({ ...base, mode: "local", token: "abc", enabled: false })).toBe("off");
+  it("each way has its own switch — an old local switch does not turn on the Odoo way", () => {
+    expect(bridge.bridgeTransport({ ...base, relayEnabled: false })).toBe("off");
+    expect(bridge.bridgeTransport({ ...base, mode: "local", localEnabled: false })).toBe("off");
   });
 
   it("FACE build, Odoo way: runs only while signed in", () => {
@@ -194,12 +196,12 @@ describe("which way in runs (Preferences → AI)", () => {
   });
 
   it("local way: the WebSocket, and only with a pairing token", () => {
-    expect(bridge.bridgeTransport({ ...base, mode: "local", token: "abc" })).toBe("websocket");
+    expect(bridge.bridgeTransport({ ...base, mode: "local" })).toBe("websocket");
     expect(bridge.bridgeTransport({ ...base, mode: "local", token: "" })).toBe("off");
   });
 
   it("without the FACE backend there is only the local way", () => {
-    expect(bridge.bridgeTransport({ ...base, faceBackend: false, token: "abc" })).toBe("websocket");
+    expect(bridge.bridgeTransport({ ...base, faceBackend: false })).toBe("websocket");
     expect(bridge.bridgeTransport({ ...base, faceBackend: false, token: "" })).toBe("off");
   });
 });
@@ -210,6 +212,13 @@ describe("default way in", () => {
     expect(defaultMcpMode(true, "")).toBe("odoo");
     expect(defaultMcpMode(true, "abc")).toBe("local");
     expect(defaultMcpMode(false, "")).toBe("local");
+  });
+
+  it("the Odoo switch is remembered on its own key, off by default", () => {
+    expect(store.getState().mcpRelayEnabled).toBe(false);
+    store.getState().setMcpRelayEnabled(true);
+    expect(localStorage.getItem("easyschematic-mcp-odoo-enabled")).toBe("1");
+    store.getState().setMcpRelayEnabled(false);
   });
 
   it("the choice is remembered", () => {
@@ -235,5 +244,68 @@ describe("leaving", () => {
   it("stop() without a hello sends nothing", () => {
     bridge.relayBridge.stop();
     expect(callsTo("/face/bridge/bye")).toHaveLength(0);
+  });
+});
+
+describe("review findings (21.11.)", () => {
+  it("a page load says hello without taking over; switching on here does take over", async () => {
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(callsTo("/face/bridge/hello")).toHaveLength(1));
+    expect(bodyOf(callsTo("/face/bridge/hello")[0]).takeOver).toBe(false);
+    bridge.relayBridge.stop();
+    bridge.relayBridge.armTakeOver();
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(callsTo("/face/bridge/hello")).toHaveLength(2));
+    expect(bodyOf(callsTo("/face/bridge/hello")[1]).takeOver).toBe(true);
+  });
+
+  it("another tab is connected (409 bound-elsewhere) → says so, no poll, and quietly asks again later", async () => {
+    vi.useFakeTimers();
+    try {
+      helloReplies.push(reply(409, { reason: "bound-elsewhere", error: "x" }));
+      bridge.relayBridge.start();
+      await vi.waitFor(() => expect(status()).toEqual({ status: "error", detail: "Claude is connected to another tab." }));
+      expect(callsTo("/face/bridge/poll")).toHaveLength(0);
+      // The other tab may have crashed: once the backend lets it go, this one binds by itself.
+      await vi.advanceTimersByTimeAsync(15_100);
+      expect(callsTo("/face/bridge/hello")).toHaveLength(2);
+      expect(bodyOf(callsTo("/face/bridge/hello")[1]).takeOver).toBe(false);
+      await vi.waitFor(() => expect(status().status).toBe("connected"));
+    } finally {
+      bridge.relayBridge.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("takeOverHere() connects this tab with takeOver", async () => {
+    helloReplies.push(reply(409, { reason: "bound-elsewhere", error: "x" }));
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(status().status).toBe("error"));
+    bridge.relayBridge.takeOverHere();
+    await vi.waitFor(() => expect(status().status).toBe("connected"));
+    expect(bodyOf(callsTo("/face/bridge/hello")[1]).takeOver).toBe(true);
+  });
+
+  it("signed out (401) refreshes the session, so signing in again restarts the bridge", async () => {
+    helloReplies.push(reply(401, { error: "Nicht angemeldet." }));
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(callsTo("/face/api/me")).toHaveLength(1));
+  });
+
+  it("stopped while hello is under way → says bye, so no binding lingers", async () => {
+    let finishHello: (r: Response) => void = () => {};
+    helloReplies.push(() => new Promise<Response>((r) => (finishHello = r)));
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(callsTo("/face/bridge/hello")).toHaveLength(1));
+    bridge.relayBridge.stop();
+    finishHello(new Response(null, { status: 204 }));
+    await vi.waitFor(() => expect(callsTo("/face/bridge/bye")).toHaveLength(1));
+  });
+
+  it("the poll carries the FACE header too", async () => {
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(callsTo("/face/bridge/poll")).toHaveLength(1));
+    const init = callsTo("/face/bridge/poll")[0][1] as RequestInit;
+    expect((init.headers as Record<string, string>)["X-FACE-Request"]).toBe("1");
   });
 });

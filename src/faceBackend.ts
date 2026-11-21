@@ -26,14 +26,15 @@ export class FaceApiError extends Error {
   }
 }
 
-/** Same-origin call; changing requests carry the header the backend's CSRF check wants. */
+/** Same-origin call carrying the header the backend's CSRF check wants — on GETs too, since
+ *  the bridge's poll hands out commands. */
 export async function faceApi<T>(
   path: string,
   init: { method?: string; body?: unknown; keepalive?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {};
-  if (method !== "GET") headers["X-FACE-Request"] = "1";
+  headers["X-FACE-Request"] = "1";
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(path, {
     method,

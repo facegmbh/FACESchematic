@@ -7,12 +7,13 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
-import { CallTimeoutError, NoTabError, type Relay } from "./relay.js";
+import { CallTimeoutError, NoTabError, TabLostError, type Relay } from "./relay.js";
 import { TOOLS } from "../tools.js";
 import { PROMPTS, SERVER_INSTRUCTIONS, getPrompt } from "../prompts.js";
 
-/** Odoo waits a little longer than this, so it hears the timeout instead of hanging up. */
-export const SERVICE_CALL_TIMEOUT_MS = 60 * 1000;
+/** Below nginx proxy manager's 60 s read timeout, so Odoo gets our sentence and not the proxy's
+ *  HTML 504; Odoo itself waits a little longer than that. */
+export const SERVICE_CALL_TIMEOUT_MS = 50 * 1000;
 
 export interface ServiceOptions {
   token?: string;
@@ -37,12 +38,14 @@ export function createServiceRouter(opts: ServiceOptions): express.Router {
   const known = new Set(TOOLS.map((t) => t.name));
   const expected = opts.token ? digest(opts.token) : null;
 
-  // Only failed attempts count: Odoo itself calls often, a guesser fails often.
+  // Only a wrong token counts: Odoo itself calls often from one address, and "no tab" (409),
+  // timeouts or bad parameters are answers to a valid caller — they must never lock Odoo out.
   router.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
       limit: 30,
       skipSuccessfulRequests: true,
+      requestWasSuccessful: (_req, res) => res.statusCode !== 401,
       standardHeaders: "draft-8",
       legacyHeaders: false,
       message: { error: "Zu viele Fehlversuche." },
@@ -97,6 +100,14 @@ export function createServiceRouter(opts: ServiceOptions): express.Router {
       if (err instanceof NoTabError) {
         opts.log(`[service] uid ${uid} ${command} → kein Tab`);
         res.status(409).json({ reason: "no-tab", message: noTabMessage(opts.publicUrl) });
+      } else if (err instanceof TabLostError) {
+        opts.log(`[service] uid ${uid} ${command} → Tab während des Befehls getrennt`);
+        res.status(409).json({
+          reason: "tab-lost",
+          message:
+            "Der Schaltplan-Tab wurde während des Befehls getrennt — ob er ausgeführt wurde, ist unklar. " +
+            "Erst den Status prüfen, bevor er wiederholt wird.",
+        });
       } else if (err instanceof CallTimeoutError) {
         opts.log(`[service] uid ${uid} ${command} → Zeitüberschreitung`);
         res.status(504).json({

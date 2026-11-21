@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Relay, NoTabError, CallTimeoutError, TAB_GONE_MS } from "./relay.js";
+import { Relay, NoTabError, CallTimeoutError, TabLostError, TAB_GONE_MS } from "./relay.js";
 import { createApp } from "./server.js";
 import { loadConfig } from "./config.js";
 import { startMockOdoo, MOCK_USER, MOCK_USER_2, type MockOdoo } from "./mockOdoo.js";
@@ -172,21 +172,24 @@ async function signIn(user: { login: string; apiKey: string }): Promise<string> 
   return (res.headers.get("set-cookie") ?? "").split(";")[0];
 }
 
-function hello(cookie: string, tabId: string, protocolVersion = PROTOCOL_VERSION) {
+function hello(cookie: string, tabId: string, protocolVersion = PROTOCOL_VERSION, takeOver = true) {
   return fetch(`${base}/face/bridge/hello`, {
     method: "POST",
     headers: { ...json, Cookie: cookie },
-    body: JSON.stringify({ tabId, schematicName: "Pier 99", protocolVersion }),
+    body: JSON.stringify({ tabId, schematicName: "Pier 99", protocolVersion, takeOver }),
   });
 }
 
 function poll(cookie: string, tabId: string) {
-  return fetch(`${base}/face/bridge/poll?tabId=${tabId}`, { headers: { Cookie: cookie } });
+  return fetch(`${base}/face/bridge/poll?tabId=${tabId}`, { headers: { Cookie: cookie, "X-FACE-Request": "1" } });
 }
 
-test("bridge routes need a session, and changing ones the FACE header", async () => {
-  assert.equal((await fetch(`${base}/face/bridge/poll?tabId=t1`)).status, 401);
+test("bridge routes need a session, and every one of them the FACE header", async () => {
+  assert.equal((await fetch(`${base}/face/bridge/poll?tabId=t1`, { headers: { "X-FACE-Request": "1" } })).status, 401);
   const cookie = await signIn(MOCK_USER);
+  await hello(cookie, "t1");
+  // A poll hands out commands — it changes state, so it needs the header like the POSTs.
+  assert.equal((await fetch(`${base}/face/bridge/poll?tabId=t1`, { headers: { Cookie: cookie } })).status, 403);
   const noHeader = await fetch(`${base}/face/bridge/hello`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
@@ -299,4 +302,45 @@ test("signing out forgets the user's tab", async () => {
   const res = await fetch(`${base}/face/api/logout`, { method: "POST", headers: { ...json, Cookie: cookie } });
   assert.equal(res.status, 204);
   assert.equal(relay.status(MOCK_USER.uid), null);
+});
+
+// --- Review findings (21.11.) -------------------------------------------------------
+
+test("a tab that vanished without bye: the queued command fails as 'no tab', not as a timeout", async () => {
+  const { relay, clock } = relayWithClock();
+  relay.hello(8, "tab-a", "A");
+  const answer = relay.call(8, "list_devices", {}, 20);
+  clock.now += TAB_GONE_MS + 1;
+  await assert.rejects(answer, NoTabError);
+});
+
+test("a command the tab already received and then lost → TabLostError (it may have run)", async () => {
+  const { relay } = relayWithClock();
+  relay.hello(8, "tab-a", "A");
+  const answer = relay.call(8, "save_odoo_drawing", {}, 1000);
+  const polled = await relay.poll(8, "tab-a");
+  assert.equal(polled.type, "command");
+  relay.hello(8, "tab-b", "B");
+  await assert.rejects(answer, TabLostError);
+});
+
+test("hello without takeOver does not push out a live tab of the same user", async () => {
+  const { relay } = relayWithClock();
+  relay.hello(8, "tab-a", "A");
+  assert.equal(relay.hello(8, "tab-b", "B", false), false);
+  assert.equal(relay.status(8)?.tabId, "tab-a");
+  // …the same tab saying hello again is fine, and with no live tab a plain hello binds.
+  assert.equal(relay.hello(8, "tab-a", "A2", false), true);
+  relay.bye(8, "tab-a");
+  assert.equal(relay.hello(8, "tab-b", "B", false), true);
+});
+
+test("hello route: a reload (takeOver false) gets 409 bound-elsewhere while another tab is connected", async () => {
+  const cookie = await signIn(MOCK_USER);
+  await hello(cookie, "t1");
+  const res = await hello(cookie, "t2", PROTOCOL_VERSION, false);
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { reason: string };
+  assert.equal(body.reason, "bound-elsewhere");
+  assert.equal(relay.status(MOCK_USER.uid)?.tabId, "t1");
 });

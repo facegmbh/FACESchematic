@@ -109,6 +109,7 @@ Entscheidungen für diese Phase (10.11.):
 - [x] Task 17: Einstellungen → KI mit zwei Wegen
 - [x] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
 - [x] Task 19: Ende-zu-Ende und Hilfeseite
+- [x] Review-Funde (Code-Review 21.11.): Bremse zählt nur falsche Tokens; Grundriss/Rack zählt als ungespeichert; Prüfung direkt vor dem Ersetzen; Laden/Neuladen übernimmt nicht (eigener Odoo-Schalter, „Diesen Tab verbinden“, leises Nachfragen); Tab während Befehl verloren → „tab-lost“; 50 s statt 60 s; Header auch beim Poll; nach 401 Sitzung neu laden; `.env` 600
 
 ### Checkpoint E (Freigabe, dann Push auf master)
 - [x] Alle Tests und Build grün; lokaler Weg (Claude Desktop) unverändert

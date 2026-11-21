@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import { FACE_BACKEND, useFaceSession } from "../faceBackend";
+import { relayBridge, SUPERSEDED, BOUND_ELSEWHERE } from "../mcpBridge";
 import { importLegendImage } from "../floorplanUnderlay";
 import { HEADER_COLOR_SWATCH_FALLBACK, resolveDefaultDeviceHeaderColor } from "../deviceHeaderColor";
 import type { CompanyProfile } from "../types";
@@ -226,6 +227,8 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   const mcpMode = useSchematicStore((s) => s.mcpBridgeMode);
   const setMcpMode = useSchematicStore((s) => s.setMcpBridgeMode);
   const faceSignedIn = useFaceSession((s) => s.user !== null);
+  const relayEnabled = useSchematicStore((s) => s.mcpRelayEnabled);
+  const setRelayEnabled = useSchematicStore((s) => s.setMcpRelayEnabled);
   /** FACE: the Odoo-connector way — no token, no port, just the switch (SPEC-cloud-bridge.md). */
   const odooWay = FACE_BACKEND && mcpMode === "odoo";
   const mcpStatus = useSchematicStore((s) => s.mcpBridgeStatus);
@@ -881,8 +884,16 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   <span className="text-xs text-[var(--color-text)]">{t("Let Claude read & edit this schematic")}</span>
                   <input
                     type="checkbox"
-                    checked={mcpEnabled}
-                    onChange={(e) => setMcpEnabled(e.target.checked)}
+                    checked={odooWay ? relayEnabled : mcpEnabled}
+                    onChange={(e) => {
+                      if (!odooWay) {
+                        setMcpEnabled(e.target.checked);
+                        return;
+                      }
+                      // Switching on here is the explicit choice that may take over from another tab.
+                      if (e.target.checked) relayBridge.armTakeOver();
+                      setRelayEnabled(e.target.checked);
+                    }}
                     className="cursor-pointer accent-blue-600"
                   />
                 </label>
@@ -945,6 +956,15 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 </div>
                 {mcpStatusDetail && (
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{t(mcpStatusDetail)}</p>
+                )}
+                {odooWay && relayEnabled && (mcpStatusDetail === SUPERSEDED || mcpStatusDetail === BOUND_ELSEWHERE) && (
+                  <button
+                    type="button"
+                    onClick={() => relayBridge.takeOverHere()}
+                    className="mt-2 px-3 py-1 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)]"
+                  >
+                    {t("Connect this tab")}
+                  </button>
                 )}
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
                   {odooWay

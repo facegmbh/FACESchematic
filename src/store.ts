@@ -231,6 +231,9 @@ const MCP_ENABLED_KEY = "easyschematic-mcp-enabled";
 const MCP_TOKEN_KEY = "easyschematic-mcp-token";
 const MCP_PORT_KEY = "easyschematic-mcp-port";
 const MCP_MODE_KEY = "easyschematic-mcp-mode";
+/** FACE: the Odoo-connector switch, separate from the local one — an old local switch must
+ *  not turn the Odoo way on by itself. */
+const MCP_RELAY_ENABLED_KEY = "easyschematic-mcp-odoo-enabled";
 
 export type McpBridgeMode = "odoo" | "local";
 
@@ -264,6 +267,13 @@ function loadMcpToken(): string {
     return localStorage.getItem(MCP_TOKEN_KEY) ?? "";
   } catch {
     return "";
+  }
+}
+function loadMcpRelayEnabled(): boolean {
+  try {
+    return localStorage.getItem(MCP_RELAY_ENABLED_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 function loadMcpMode(): McpBridgeMode {
@@ -974,12 +984,14 @@ interface SchematicState {
   mcpBridgeToken: string;
   mcpBridgePort: number;
   mcpBridgeMode: McpBridgeMode;
+  mcpRelayEnabled: boolean;
   mcpBridgeStatus: "off" | "connecting" | "connected" | "error";
   mcpBridgeStatusDetail?: string;
   setMcpBridgeEnabled: (enabled: boolean) => void;
   setMcpBridgeToken: (token: string) => void;
   setMcpBridgePort: (port: number) => void;
   setMcpBridgeMode: (mode: McpBridgeMode) => void;
+  setMcpRelayEnabled: (enabled: boolean) => void;
 
   /** Rack: show connector-level face-plate detail (default off; advanced) */
   showFacePlateDetail: boolean;
@@ -2546,6 +2558,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   mcpBridgeToken: loadMcpToken(),
   mcpBridgePort: loadMcpPort(),
   mcpBridgeMode: loadMcpMode(),
+  mcpRelayEnabled: loadMcpRelayEnabled(),
   mcpBridgeStatus: "off",
   mcpBridgeStatusDetail: undefined,
   showFacePlateDetail: false,
@@ -5708,6 +5721,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setMcpBridgeMode: (mode) => {
     try { localStorage.setItem(MCP_MODE_KEY, mode); } catch { /* ignore */ }
     set({ mcpBridgeMode: mode });
+  },
+  setMcpRelayEnabled: (enabled) => {
+    try { localStorage.setItem(MCP_RELAY_ENABLED_KEY, enabled ? "1" : "0"); } catch { /* ignore */ }
+    set({ mcpRelayEnabled: enabled });
   },
 
   setShowFacePlateDetail: (show) => {

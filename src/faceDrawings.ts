@@ -244,11 +244,14 @@ function link(d: DrawingSummary, projectName: string): void {
   }
 }
 
-export async function openOdooDrawing(drawingId: number): Promise<void> {
+/** `beforeReplace` runs right before the content is replaced, after the download — a check made
+ *  before the download could be out of date by then (the user kept drawing). Throwing aborts. */
+export async function openOdooDrawing(drawingId: number, opts: { beforeReplace?: () => void } = {}): Promise<void> {
   watchLink();
   const asked = snapshot();
   const d = await faceApi<DrawingSummary & { projectName: string; data: SchematicFile }>(`/face/api/drawings/${drawingId}`);
   if (!unchanged(asked)) return; // the user opened something else meanwhile
+  opts.beforeReplace?.();
   const previous = store().odooDrawing?.drawingId;
   relinking = true;
   try {

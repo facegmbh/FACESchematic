@@ -19,7 +19,7 @@
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
-import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession } from "./faceBackend";
+import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
   getTabId,
   isChangedSinceOdooSave,
@@ -1611,7 +1611,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     requireSignedIn();
     if (!Number.isInteger(drawingId) || drawingId <= 0) throw new CommandError("drawingId muss eine Zahl sein (aus schaltplan_zeichnungen).");
     guardUnsaved(discardChanges);
-    await openOdooDrawing(drawingId);
+    // …and once more right before replacing: the download may take a while, the user may draw on.
+    await openOdooDrawing(drawingId, { beforeReplace: () => guardUnsaved(discardChanges) });
     return editorStatus();
   },
 
@@ -1682,7 +1683,8 @@ function guardUnsaved(discardChanges: boolean | undefined) {
     return;
   }
   const devices = s.nodes.filter((n) => n.type === "device").length;
-  if (s.nodes.length > 0) {
+  // Floorplan and rack pages (underlay, walls, racks…) are work too, even without a device.
+  if (s.nodes.length > 0 || s.edges.length > 0 || s.pages.length > 0) {
     throw new CommandError(
       `Im Tab ist „${s.schematicName}“ offen (${devices} Geräte) und nicht in Odoo gespeichert. ` +
         "Erst mit new_odoo_drawing und keepContent: true an einem Projekt ablegen — oder, nur wenn der Nutzer ihn verwerfen will, discardChanges: true.",
@@ -1989,7 +1991,8 @@ export async function runCommand(command: string, params: Record<string, unknown
 }
 
 const SIGN_IN_FIRST = "Sign in with Odoo first (top right).";
-const SUPERSEDED = "Another tab took the AI connection.";
+export const SUPERSEDED = "Another tab took the AI connection.";
+export const BOUND_ELSEWHERE = "Claude is connected to another tab.";
 
 type RelayMessage =
   | { type: "command"; requestId: string; command: string; params?: Record<string, unknown> }
@@ -2011,6 +2014,21 @@ class RelayBridge {
   /** Whether the backend has this tab bound — then leaving says bye. */
   private bound = false;
   private listening = false;
+  /** Set by an explicit switch-on in this tab: only that may push out another tab. A page load
+   *  or reload must not silently take Claude away from the tab it is working in. */
+  private takeOverNext = false;
+  private takeOver = false;
+
+  armTakeOver() {
+    this.takeOverNext = true;
+  }
+
+  /** "Connect this tab" after another tab had the connection. */
+  takeOverHere() {
+    this.stop();
+    this.armTakeOver();
+    this.start();
+  }
 
   start() {
     if (this.enabled) return; // StrictMode-safe
@@ -2023,6 +2041,8 @@ class RelayBridge {
     this.enabled = true;
     this.generation++;
     this.backoffMs = 1000;
+    this.takeOver = this.takeOverNext;
+    this.takeOverNext = false;
     void this.run(this.generation);
   }
 
@@ -2067,20 +2087,24 @@ class RelayBridge {
     this.backoffMs = Math.min(this.backoffMs * 2, 15000);
   }
 
-  private async run(generation: number) {
+  /** quiet: asking again while another tab has the connection — keep showing that. */
+  private async run(generation: number, quiet = false) {
     if (!this.live(generation)) return;
-    setStatus("connecting");
+    if (!quiet) setStatus("connecting");
     try {
       await faceApi("/face/bridge/hello", {
         method: "POST",
-        body: { tabId: getTabId(), schematicName: st().schematicName, protocolVersion: PROTOCOL_VERSION },
+        body: { tabId: getTabId(), schematicName: st().schematicName, protocolVersion: PROTOCOL_VERSION, takeOver: this.takeOver },
       });
     } catch (err) {
       this.fail(generation, err);
       return;
     }
     this.bound = true;
-    if (!this.live(generation)) return;
+    if (!this.live(generation)) {
+      if (!this.enabled) this.bye(); // switched off while saying hello: don't leave a binding behind
+      return;
+    }
     setStatus("connected");
     this.backoffMs = 1000;
 
@@ -2109,6 +2133,8 @@ class RelayBridge {
     }
   }
 
+  /** A command that arrived just before the switch went off still runs and is answered — it was
+   *  already on its way, and dropping it would leave Claude waiting for the timeout. */
   private async answer(msg: Extract<RelayMessage, { type: "command" }>) {
     const answer = await runCommand(msg.command, msg.params ?? {});
     try {
@@ -2119,8 +2145,21 @@ class RelayBridge {
   }
 
   private fail(generation: number, err: unknown) {
-    if (err instanceof FaceApiError && err.status === 401) this.halt(generation, SIGN_IN_FIRST);
-    else if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "protocol") this.halt(generation, err.message);
+    if (err instanceof FaceApiError && err.status === 401) {
+      this.halt(generation, SIGN_IN_FIRST);
+      // The session ended: let the app see it, so signing in again starts the bridge afresh.
+      void loadFaceSession();
+    } else if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "protocol") this.halt(generation, err.message);
+    else if (err instanceof FaceApiError && err.status === 409 && err.body.reason === "bound-elsewhere") {
+      // Wait, don't push: the other tab may be in use. If it crashed, the backend lets it go after
+      // 40 s and the next quiet hello binds this one. "Connect this tab" takes over right away.
+      if (!this.live(generation)) return;
+      setStatus("error", BOUND_ELSEWHERE);
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
+        void this.run(generation, true);
+      }, 15_000);
+    }
     else this.retry(generation);
   }
 }
@@ -2133,13 +2172,15 @@ export type BridgeTransport = "off" | "relay" | "websocket";
 export function bridgeTransport(s: {
   faceBackend: boolean;
   mode: "odoo" | "local";
-  enabled: boolean;
+  /** The local switch (with token and port). */
+  localEnabled: boolean;
+  /** The Odoo-connector switch. */
+  relayEnabled: boolean;
   token: string;
   signedIn: boolean;
 }): BridgeTransport {
-  if (!s.enabled) return "off";
-  if (s.faceBackend && s.mode === "odoo") return s.signedIn ? "relay" : "off";
-  return s.token ? "websocket" : "off";
+  if (s.faceBackend && s.mode === "odoo") return s.relayEnabled && s.signedIn ? "relay" : "off";
+  return s.localEnabled && s.token ? "websocket" : "off";
 }
 
 /** Mount once (in App). Starts/stops the bridge as the Beta setting changes. */
@@ -2148,8 +2189,16 @@ export function useMcpBridge() {
   const token = useSchematicStore((s) => s.mcpBridgeToken);
   const port = useSchematicStore((s) => s.mcpBridgePort);
   const mode = useSchematicStore((s) => s.mcpBridgeMode);
+  const relayEnabled = useSchematicStore((s) => s.mcpRelayEnabled);
   const uid = useFaceSession((s) => s.user?.uid ?? null);
-  const transport = bridgeTransport({ faceBackend: FACE_BACKEND, mode, enabled, token, signedIn: uid !== null });
+  const transport = bridgeTransport({
+    faceBackend: FACE_BACKEND,
+    mode,
+    localEnabled: enabled,
+    relayEnabled,
+    token,
+    signedIn: uid !== null,
+  });
   useEffect(() => {
     // A sign-out stops the Odoo way; another user signing in starts it afresh for them.
     if (transport === "relay") relayBridge.start();

@@ -30,6 +30,9 @@ export type CallResult = { ok: true; result: unknown } | { ok: false; error: str
 export class NoTabError extends Error {}
 /** The tab did not answer in time. */
 export class CallTimeoutError extends Error {}
+/** The tab had received the command and then went away (taken over, closed, signed out) —
+ *  whether it ran is unknown, so the caller must not simply repeat it. */
+export class TabLostError extends Error {}
 
 interface Command {
   requestId: string;
@@ -51,6 +54,8 @@ interface Binding {
   queue: Command[];
   waiter: ((m: PollMessage) => void) | null;
   pending: Map<string, Pending>;
+  /** Requests handed to the tab and not answered yet. */
+  delivered: Set<string>;
 }
 
 export interface TabStatus {
@@ -87,20 +92,29 @@ export class Relay {
 
   private drop(uid: number, b: Binding): void {
     this.bindings.delete(uid);
-    for (const p of b.pending.values()) {
+    for (const [requestId, p] of b.pending) {
       clearTimeout(p.timer);
-      p.reject(new NoTabError("Der Tab ist nicht mehr verbunden."));
+      p.reject(
+        b.delivered.has(requestId)
+          ? new TabLostError("Der Tab wurde während des Befehls getrennt.")
+          : new NoTabError("Der Tab ist nicht mehr verbunden."),
+      );
     }
     b.pending.clear();
+    b.delivered.clear();
   }
 
-  hello(uid: number, tabId: string, schematicName: string): void {
-    const current = this.bindings.get(uid);
+  /** Bind this tab for the user. Another live tab of theirs is only pushed out with takeOver —
+   *  a page load or reload must not silently take Claude away from the tab it works in.
+   *  False when refused for that reason. */
+  hello(uid: number, tabId: string, schematicName: string, takeOver = true): boolean {
+    const current = this.binding(uid);
     if (current?.tabId === tabId) {
       current.schematicName = schematicName;
       current.lastSeen = this.now();
-      return;
+      return true;
     }
+    if (current && !takeOver) return false;
     if (current) {
       let set = this.superseded.get(uid);
       if (!set) this.superseded.set(uid, (set = new Set()));
@@ -121,7 +135,9 @@ export class Relay {
       queue: [],
       waiter: null,
       pending: new Map(),
+      delivered: new Set(),
     });
+    return true;
   }
 
   /** The tab leaves (switched off, closed): calls fail at once instead of waiting for the timeout. */
@@ -151,7 +167,10 @@ export class Relay {
     if (!b || b.tabId !== tabId) return Promise.resolve({ type: "unbound" });
     b.lastSeen = this.now();
     const next = b.queue.shift();
-    if (next) return Promise.resolve({ type: "command", ...next });
+    if (next) {
+      b.delivered.add(next.requestId);
+      return Promise.resolve({ type: "command", ...next });
+    }
 
     // A second poll of the same tab replaces the first (the first gets "idle").
     b.waiter?.({ type: "idle" });
@@ -181,6 +200,7 @@ export class Relay {
     const p = b.pending.get(requestId);
     if (!p) return false;
     b.pending.delete(requestId);
+    b.delivered.delete(requestId);
     b.lastSeen = this.now();
     clearTimeout(p.timer);
     p.resolve(result);
@@ -194,15 +214,25 @@ export class Relay {
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
+        const wasDelivered = b.delivered.has(requestId);
         b.pending.delete(requestId);
+        b.delivered.delete(requestId);
         b.queue = b.queue.filter((c) => c.requestId !== requestId);
+        // Gone without a bye (crashed, offline): say so, rather than "too slow".
+        if (!wasDelivered && (this.bindings.get(uid) !== b || !this.alive(b))) {
+          if (this.bindings.get(uid) === b) this.drop(uid, b);
+          reject(new NoTabError("Der Tab ist nicht mehr verbunden."));
+          return;
+        }
         reject(new CallTimeoutError(`Der Tab hat nicht rechtzeitig auf „${command}“ geantwortet.`));
       }, timeoutMs);
       b.pending.set(requestId, { resolve, reject, timer });
       const msg = { requestId, command, params };
       const waiter = b.waiter;
-      if (waiter) waiter({ type: "command", ...msg });
-      else b.queue.push(msg);
+      if (waiter) {
+        b.delivered.add(requestId);
+        waiter({ type: "command", ...msg });
+      } else b.queue.push(msg);
     });
   }
 }
@@ -214,8 +244,17 @@ export function createBridgeRouter(relay: Relay): express.Router {
   const router = express.Router();
   const uidOf = (res: express.Response): number => (res.locals.user as { uid: number }).uid;
 
+  // Every bridge route needs the FACE header — a poll hands out commands, so it changes state too.
+  router.use((req, res, next) => {
+    if (req.get("X-FACE-Request") !== "1") {
+      res.status(403).json({ error: "Anfrage abgelehnt." });
+      return;
+    }
+    next();
+  });
+
   router.post("/hello", express.json({ limit: "4kb" }), (req, res) => {
-    const { tabId, schematicName, protocolVersion } = req.body ?? {};
+    const { tabId, schematicName, protocolVersion, takeOver } = req.body ?? {};
     if (typeof tabId !== "string" || !TAB_ID.test(tabId)) {
       res.status(400).json({ error: "Tab-Kennung fehlt." });
       return;
@@ -224,7 +263,11 @@ export function createBridgeRouter(relay: Relay): express.Router {
       res.status(409).json({ reason: "protocol", error: "Bitte die Seite neu laden — die App passt nicht zum Server." });
       return;
     }
-    relay.hello(uidOf(res), tabId, typeof schematicName === "string" ? schematicName.slice(0, 200) : "");
+    const name = typeof schematicName === "string" ? schematicName.slice(0, 200) : "";
+    if (!relay.hello(uidOf(res), tabId, name, takeOver === true)) {
+      res.status(409).json({ reason: "bound-elsewhere", error: "Claude ist mit einem anderen Tab verbunden." });
+      return;
+    }
     res.status(204).end();
   });
 

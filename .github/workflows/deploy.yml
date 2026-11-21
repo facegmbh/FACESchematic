@@ -63,6 +63,7 @@ jobs:
             echo "Backend: Dienst-Token in $env_file ergaenzt — einmal in Odoo als face_schematic.token eintragen"
           fi
           cp "$env_file" .env
+          chmod 600 .env
 
       - name: Build & deploy (docker compose)
         run: docker compose -p faceschematic up -d --build --remove-orphans

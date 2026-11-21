@@ -156,3 +156,29 @@ test("the token never appears in the log", async () => {
   assert.ok(logged.length > 0, "calls are logged");
   assert.ok(logged.every((m) => !m.includes(TOKEN) && !m.includes("falsch")));
 });
+
+test("a valid token never runs into the brake, however many calls find no tab", async () => {
+  const statuses = new Set<number>();
+  for (let i = 0; i < 35; i++) statuses.add((await call({ uid: 8, command: "get_editor_status" })).status);
+  assert.deepEqual([...statuses], [409]);
+});
+
+test("a tab lost mid-command → 409 tab-lost with a sentence that it may have run", async () => {
+  relay.hello(8, "tab-a", "Pier 99");
+  const pending = call({ uid: 8, command: "list_devices" });
+  const msg = await relay.poll(8, "tab-a");
+  assert.equal(msg.type, "command");
+  relay.hello(8, "tab-b", "B");
+  const res = await pending;
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { reason: string; message: string };
+  assert.equal(body.reason, "tab-lost");
+  assert.match(body.message, /unklar/);
+});
+
+test("wrong tokens still hit the brake", async () => {
+  const statuses: number[] = [];
+  for (let i = 0; i < 32; i++) statuses.push((await call({ uid: 8, command: "list_devices" }, "falsch")).status);
+  assert.equal(statuses[0], 401);
+  assert.equal(statuses.at(-1), 429);
+});

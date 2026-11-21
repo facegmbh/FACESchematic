@@ -363,6 +363,7 @@ Hintergrund bleibt verbunden. Hilfeseite „KI-Assistent“ um den Odoo-Weg erg�
 
 **Acceptance criteria:**
 - [ ] Ohne Token keine Werkzeuge; die uid im Aufruf ist immer der angemeldete Nutzer
+- [ ] `data/neutralize.sql` löscht `face_schematic.token` (Staging/Entwicklung rufen die Produktion nie mit Token)
 - [ ] 409/504/401/nicht erreichbar → klare Sätze; `schaltplan_zeichnungen` nur `.faceschematic.json` an Projekten
 - [ ] Bestehende Tests des Moduls unverändert grün
 

@@ -162,6 +162,28 @@ describe("open_odoo_drawing", () => {
   });
 });
 
+describe("review findings (21.11.)", () => {
+  it("floorplan or rack work without devices also counts as unsaved", async () => {
+    store.setState({ pages: [{ id: "fp1", type: "floorplan", label: "EG" } as never] });
+    const r = await run("open_odoo_drawing", { drawingId: 501 });
+    expect(r.ok).toBe(false);
+    expect(calls()).toEqual([]);
+  });
+
+  it("an edit made while the drawing downloads stops the open — nothing is thrown away", async () => {
+    let finish: (r: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (finish = r)));
+    const opening = run("open_odoo_drawing", { drawingId: 501 });
+    await vi.waitFor(() => expect(calls()).toEqual(["GET /face/api/drawings/501"]));
+    addLocalDevice(); // the user keeps drawing meanwhile
+    finish(new Response(JSON.stringify({ ...DRAWING, data: fileFixture }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const r = await opening;
+    expect(r.ok).toBe(false);
+    expect(store.getState().nodes.map((n) => n.id)).toEqual(["d1"]);
+    expect(store.getState().odooDrawing).toBeNull();
+  });
+});
+
 describe("save_odoo_drawing", () => {
   it("saves the open Odoo drawing back", async () => {
     await openAsEditor();

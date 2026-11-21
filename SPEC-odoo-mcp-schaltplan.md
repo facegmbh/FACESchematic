@@ -33,6 +33,12 @@ Bewusst wenige, damit eine Odoo-Unterhaltung nicht 47 zusätzliche Werkzeuge sie
 - Systemparameter (Einstellungen → Technisch → Systemparameter, mit sudo gelesen):
   `face_schematic.url` (Standard `https://schematic.face-gmbh.com`), `face_schematic.token`.
   Fehlt das Token, bietet der Server die Werkzeuge nicht an.
+- **Staging und Entwicklung bekommen den Token nicht** (Review 21.11.): Odoo.sh kopiert die
+  Produktionsdatenbank samt Systemparametern. Mit dem Token glaubt das Backend jede uid — eine
+  Staging-Datenbank, deren Nutzer-IDs abweichen, könnte so in fremde Produktions-Tabs schreiben.
+  Deshalb `data/neutralize.sql` im Modul, das `face_schematic.token` löscht; Odoo.sh führt es
+  beim Neutralisieren jeder Nicht-Produktions-Datenbank aus. Ohne Token zeigt Staging die
+  Werkzeuge nicht — dort wird mit gemocktem HTTP getestet.
 - Rechte: alle internen Benutzer (Gruppe Benutzer). Schreiben passiert im Tab mit den Rechten,
   mit denen der Nutzer dort angemeldet ist; gespeichert wird nur, wenn Claude ausdrücklich
   `save_odoo_drawing` aufruft.
@@ -49,7 +55,7 @@ gemocktem HTTP-Aufruf. Auslieferung über Branch + Pull-Request; Odoo.sh baut St
 
 ## Testing Strategy
 
-- Odoo-Tests: Werkzeuge erscheinen nur mit gesetztem Token; `uid` im Aufruf ist der angemeldete
+- Odoo-Tests: `neutralize.sql` entfernt den Token; Werkzeuge erscheinen nur mit gesetztem Token; `uid` im Aufruf ist der angemeldete
   Nutzer, auch wenn die Argumente etwas anderes behaupten; Backend-Fehler (409 kein Tab, 504,
   401, nicht erreichbar) werden zu klaren Sätzen; `schaltplan_zeichnungen` liefert nur
   `.faceschematic.json` an Projekten.

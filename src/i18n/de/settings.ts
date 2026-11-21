@@ -155,6 +155,8 @@ export const DE_SETTINGS: Record<string, string> = {
   "Protocol version mismatch — update the MCP server.": "Protokollversion passt nicht — MCP-Server aktualisieren.",
   "Another tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
   "Sign in with Odoo first (top right).": "Erst oben rechts mit Odoo anmelden.",
+  "Claude is connected to another tab.": "Claude ist mit einem anderen Tab verbunden.",
+  "Connect this tab": "Diesen Tab verbinden",
   // FACE: two ways in (SPEC-cloud-bridge.md)
   "How Claude reaches this tab": "Wie Claude diesen Tab erreicht",
   "Through the Odoo connector": "Über den Odoo-Connector",
