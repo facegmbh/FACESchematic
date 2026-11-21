@@ -342,8 +342,8 @@ Gerät erscheint nur bei Nutzer 8; `get_editor_status` für uid 9 nennt dessen Z
 Hintergrund bleibt verbunden. Hilfeseite „KI-Assistent“ um den Odoo-Weg ergänzen.
 
 **Acceptance criteria:**
-- [ ] Ende-zu-Ende grün, inkl. Ablösung durch einen zweiten Tab
-- [ ] Hilfeseite erklärt: anmelden, Schalter, in claude.ai „Schaltplan“ fragen; der lokale Weg bleibt beschrieben
+- [x] Ende-zu-Ende grün, inkl. Ablösung durch einen zweiten Tab
+- [x] Hilfeseite erklärt: anmelden, Schalter, in claude.ai „Schaltplan“ fragen; der lokale Weg bleibt beschrieben
 
 **Verification:** Playwright-Skript, `npm run build`
 

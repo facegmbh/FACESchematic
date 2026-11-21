@@ -108,11 +108,11 @@ Entscheidungen für diese Phase (10.11.):
 - [x] Task 16: Long-Polling-Transport im Tab (`runCommand` gemeinsam für beide Wege)
 - [x] Task 17: Einstellungen → KI mit zwei Wegen
 - [x] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
-- [ ] Task 19: Ende-zu-Ende und Hilfeseite
+- [x] Task 19: Ende-zu-Ende und Hilfeseite
 
 ### Checkpoint E (Freigabe, dann Push auf master)
-- [ ] Alle Tests und Build grün; lokaler Weg (Claude Desktop) unverändert
-- [ ] Ende-zu-Ende (Playwright, Mock-Odoo, zwei Nutzer): `add_device` über `/face/service/call` erscheint im Tab des richtigen Nutzers, nie beim anderen
+- [x] Alle Tests und Build grün; lokaler Weg (Claude Desktop) unverändert
+- [x] Ende-zu-Ende (Playwright, Mock-Odoo, zwei Nutzer): `add_device` über `/face/service/call` erscheint im Tab des richtigen Nutzers, nie beim anderen (21.11., 19 Prüfungen; Hintergrund-Drosselung headless nicht prüfbar → bei der Abnahme)
 - [ ] Nach Deploy: Jean-Luc schaltet den Tab ein; ein `get_editor_status` mit dem Token (curl von face-docker1) antwortet
 
 ### Phase 5: odoo-mcp-schaltplan (Repo `facegmbh/Odoo`, eigener Branch + Pull-Request)

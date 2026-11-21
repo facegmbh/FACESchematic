@@ -23,6 +23,45 @@ export default function AiAssistantPage() {
         one-time <strong>pairing token</strong> is matched.
       </div>
 
+      <h2>At FACE: through the Odoo connector (nothing to install)</h2>
+
+      <p>
+        On <strong>schematic.face-gmbh.com</strong> Claude reaches your tab through the{" "}
+        <strong>FACE Odoo connector</strong> you already use in claude.ai, Claude Desktop, on the
+        phone and with Jarvis — no MCP server, no token, no port.
+      </p>
+
+      <ol>
+        <li>
+          Sign in with Odoo at the top right of the editor.
+        </li>
+        <li>
+          Open <strong>Preferences → AI (Beta)</strong>, choose{" "}
+          <strong>“Through the Odoo connector”</strong> and turn on{" "}
+          <strong>“Let Claude read &amp; edit this schematic.”</strong> The status changes to{" "}
+          <em>Connected</em>.
+        </li>
+        <li>
+          In a chat with the FACE Odoo connector, ask about your schematic — for example{" "}
+          <em>“Which drawing do I have open?”</em>, <em>“Open ‘Beschallung EG’ in project
+          Soccerbeat and add two ceiling speakers to the amplifier”</em> or{" "}
+          <em>“Save the drawing.”</em>
+        </li>
+      </ol>
+
+      <p>
+        Claude only ever works in <strong>your own</strong> tab, as the Odoo user signed in there,
+        and only while the switch is on and the tab is open. If you turn it on in a second tab, that
+        tab takes over. Claude opens, creates and saves drawings on Odoo projects, but it never
+        throws away unsaved work or overwrites a version someone else saved unless you tell it to —
+        it asks first. When nothing is connected, Claude says what to switch on.
+      </p>
+
+      <p>
+        The local way below (Claude Desktop with the MCP server on your computer) still works; pick{" "}
+        <strong>“Local (Claude Desktop)”</strong> in the same place.
+      </p>
+
       <h2>1. Start the MCP server</h2>
 
       <p>
