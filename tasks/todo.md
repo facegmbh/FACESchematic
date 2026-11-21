@@ -511,3 +511,64 @@ verbinden → `route_connections` → `check_layout` bis leer (max. 3 Runden) �
 **Dependencies:** Tasks 25, 26 · **Files:** `mcp-server/src/prompts.ts`, Odoo `data/leitfaden.md`, `tools/schaltplan.py` · **Scope:** S
 
 ## Checkpoint G — Freigabe, Push (FACESchematic master, Odoo main)
+
+# Phase 7: schaltplan-leitungen (SPEC-schaltplan-leitungen.md)
+
+## Task 28: `choose_port_sides`
+
+**Description:** Bei Verbindungen mit zweiseitigen Ports (`-in` links / `-out` rechts) die Seite
+zum Gegenüber wählen; übereinander liegende Geräte (Rack) nehmen dieselbe Seite. Verbindungs-ID
+bleibt, ein Undo-Schritt. Durchgangsports und Verbindungen mit eigenen Stützpunkten nur, wenn
+genannt (Stützpunkte nie: die bleiben unberührt).
+
+**Acceptance criteria:**
+- [ ] Gegenüber rechts → `-out`, links → `-in`, auf beiden Enden
+- [ ] Übereinander (waagerecht überlappend) → beide dieselbe Seite
+- [ ] `rear`/`front` und einseitige Ports unverändert; eigene Stützpunkte unverändert
+- [ ] Befehl am Store: ID bleibt, ein Undo-Schritt, meldet geänderte Verbindungen
+
+**Verification:** `npx vitest run`, `npx tsc -b`, `cd mcp-server && npm test`
+
+**Dependencies:** — · **Files:** `src/portSides.ts`, `src/mcpBridge.ts`, `src/store.ts` (Aktion), `src/mcp/protocol.ts`, `mcp-server/src/tools.ts`, Tests · **Scope:** S
+
+## Task 29: Ortsnamen und Notizen als Hindernisse
+
+**Description:** `buildObstacles` nimmt den Ortsnamen jedes Raums (geschätzte Textbreite) und
+Notizen auf. Gilt auch beim Zeichnen von Hand.
+
+**Acceptance criteria:**
+- [ ] Leitung, deren kürzester Weg über einen Ortsnamen ginge, läuft daran vorbei
+- [ ] Vorhandene Routing-Tests und Harness grün; Abweichungen begründet
+
+**Dependencies:** — · **Files:** `src/pathfinding.ts`, Tests · **Scope:** S–M
+
+## Task 30: Prüfen und Platz schaffen
+
+**Description:** `check_layout`: `line_outside` (mit Länge) und `over_text`. `arrange_rooms`
+bekommt `gap`, `arrange_room`/`fit_room` bekommen `margin`.
+
+**Acceptance criteria:**
+- [ ] Befunde mit Leitungs-IDs und Abhilfe-Satz; Gerätetexte nicht doppelt gemeldet
+- [ ] `gap`/`margin` auf dem Raster, Grenzen geprüft
+
+**Dependencies:** Task 29 (gleiche Text-Rechtecke) · **Files:** `src/layoutCheck.ts`, `src/layoutArrange.ts`, `src/mcpBridge.ts`, Tests · **Scope:** M
+
+## Task 31: `set_connection_path`
+
+**Description:** Claude legt eine Leitung mit Stützpunkten selbst (`setManualWaypoints`); leere
+Liste gibt sie dem Routing zurück.
+
+**Acceptance criteria:**
+- [ ] Stützpunkte gerundet, höchstens 50, unbekannte Verbindung abgelehnt; Routing behält den Weg
+
+**Dependencies:** — · **Files:** `src/mcpBridge.ts`, Protokoll, Katalog, Tests · **Scope:** S
+
+## Checkpoint H1 — Zwischenstand zeigen (kein Push)
+
+## Task 32: Playbook, Leitfaden, Ende-zu-Ende
+
+**Acceptance criteria:**
+- [ ] Playbook und Odoo-Leitfaden mit neuem Ablauf
+- [ ] Kapelle über `/face/service/call`: `line_outside` = 0, `over_text` = 0
+
+## Checkpoint H — Freigabe, Push (FACESchematic master, Odoo main)

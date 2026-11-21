@@ -163,6 +163,22 @@ Entscheidungen:
 - [ ] Alle Tests und Build grün; Ende-zu-Ende: Kapelle neu ordnen, `check_layout` leer, Bild kommt an
 - [ ] In claude.ai: „Mach aus KALK-0003 eine Zeichnung“ gliedert örtlich mit Rack und Rack-Ansicht
 
+### Phase 7: schaltplan-leitungen (SPEC-schaltplan-leitungen.md)
+Ausgangsmessung Kapelle (G-Anordnung): 2432 px Leitung außerhalb der Orte, 5 Abschnitte über
+Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
+- [ ] Task 28: `choose_port_sides` — zweiseitige Ports zum Gegenüber (reine Funktion + Befehl, ein Undo-Schritt)
+- [ ] Task 29: Router — Ortsnamen und Notizen als Hindernisse (`buildObstacles`), Routing-Tests/Harness grün
+- [ ] Task 30: `check_layout` meldet `line_outside` und `over_text`; `gap` für `arrange_rooms`, `margin` für `arrange_room`/`fit_room`
+- [ ] Task 31: `set_connection_path` — Claude legt eine Leitung selbst (Stützpunkte, Raster, Undo)
+
+### Checkpoint H1 (Zwischenstand zeigen, kein Push)
+- [ ] Kapelle mit neuem Ablauf: Messwerte vorher/nachher, Bild
+
+- [ ] Task 32: Playbook + Odoo-Leitfaden, Ende-zu-Ende über `/face/service/call`
+
+### Checkpoint H (Freigabe, Push)
+- [ ] Kapelle Ende-zu-Ende: `line_outside` = 0, `over_text` = 0; alle Tests grün
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
