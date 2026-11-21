@@ -11,9 +11,15 @@ import type { Store, UserRecord } from "./store.js";
 
 const SESSION_COOKIE = "face_session";
 const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
-/** After a refused sign-in nobody signs in for this long: every user shares one IP towards
- *  Odoo, and Odoo.sh bans an IP after a few failed logins (Fail2Ban). */
+/** After a refused sign-in, that e-mail waits this long before Odoo is asked again. */
 const LOGIN_PAUSE_MS = 5 * 60 * 1000;
+/** Every user shares one IP towards Odoo, and Odoo.sh bans an IP after a few failed logins
+ *  (Fail2Ban) — then nobody at FACE could sign in. So this many refusals within the window,
+ *  from whichever e-mails, pause everybody. One colleague's expired key alone does not. */
+const GLOBAL_PAUSE_AFTER = 3;
+const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+
+const minutes = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
 
 export interface AuthOptions {
   now?: () => number;
@@ -39,7 +45,10 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
   const now = opts.now ?? Date.now;
   const secure = config.publicUrl.startsWith("https://");
   const cookieAttrs = `Path=/face; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
-  let loginPausedUntil = 0;
+  let globalPausedUntil = 0;
+  /** Lower-cased e-mail → paused until. */
+  const pausedLogins = new Map<string, number>();
+  let refusals: number[] = [];
   const clients = new Map<number, OdooClient>();
 
   function currentUser(req: express.Request): UserRecord | undefined {
@@ -95,8 +104,20 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
       res.status(400).json({ error: "Odoo-E-Mail und API-Schlüssel eingeben." });
       return;
     }
-    if (now() < loginPausedUntil) {
-      res.status(429).json({ error: "Nach einer fehlgeschlagenen Anmeldung kurz pausiert — bitte in ein paar Minuten erneut versuchen." });
+    const key = login.toLowerCase();
+    if (now() < globalPausedUntil) {
+      res.status(429).json({
+        error: `Nach mehreren Fehlversuchen kurz pausiert, damit Odoo uns nicht sperrt — bitte in ${minutes(globalPausedUntil - now())} Minuten erneut versuchen.`,
+      });
+      return;
+    }
+    const pausedUntil = pausedLogins.get(key) ?? 0;
+    if (now() < pausedUntil) {
+      res.status(429).json({
+        error:
+          `Für diese E-Mail nach einem Fehlversuch kurz pausiert — bitte in ${minutes(pausedUntil - now())} Minuten erneut versuchen. ` +
+          "Ist der API-Schlüssel abgelaufen, in Odoo unter Mein Profil → Kontosicherheit einen neuen erzeugen.",
+      });
       return;
     }
     const odoo = new OdooClient(config.odooUrl, login, apiKey);
@@ -108,14 +129,19 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
       name = row?.name ?? login;
     } catch (err) {
       if (err instanceof OdooError && err.kind === "credentials") {
-        loginPausedUntil = now() + LOGIN_PAUSE_MS;
+        for (const [k, until] of pausedLogins) if (until <= now()) pausedLogins.delete(k);
+        pausedLogins.set(key, now() + LOGIN_PAUSE_MS);
+        refusals = [...refusals.filter((t) => now() - t < GLOBAL_WINDOW_MS), now()];
+        if (refusals.length >= GLOBAL_PAUSE_AFTER) {
+          globalPausedUntil = now() + LOGIN_PAUSE_MS;
+          refusals = [];
+        }
         res.status(401).json({ error: err.message });
       } else {
         res.status(502).json({ error: err instanceof Error ? err.message : "Odoo ist nicht erreichbar." });
       }
       return;
     }
-    loginPausedUntil = 0;
     store.putUser(uid, login, name, apiKey);
     const sessionId = store.createSession(uid, SESSION_TTL_MS);
     res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${sessionId}; ${cookieAttrs}; Max-Age=${SESSION_TTL_MS / 1000}`);

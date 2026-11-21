@@ -7,7 +7,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "./server.js";
 import { loadConfig } from "./config.js";
-import { startMockOdoo, MOCK_USER, type MockOdoo } from "./mockOdoo.js";
+import { startMockOdoo, MOCK_USER, MOCK_USER_2, type MockOdoo } from "./mockOdoo.js";
 
 let odoo: MockOdoo;
 before(async () => {
@@ -75,7 +75,7 @@ test("/me without a session is 401", async () => {
   }
 });
 
-test("wrong credentials: 401 in German, no cookie, and Odoo is left alone for five minutes", async () => {
+test("wrong credentials: 401 in German, no cookie — and only this e-mail pauses for five minutes", async () => {
   const app = start();
   try {
     const before = odoo.authCalls.length;
@@ -84,12 +84,50 @@ test("wrong credentials: 401 in German, no cookie, and Odoo is left alone for fi
     assert.equal(res.headers.get("set-cookie"), null);
     assert.match(((await res.json()) as { error: string }).error, /API-Schlüssel/);
 
-    // Even the right key waits out the pause — and never reaches Odoo meanwhile.
-    const paused = await login(app.base, MOCK_USER.login, MOCK_USER.apiKey);
+    // The same e-mail — in any spelling — waits out the pause, and never reaches Odoo meanwhile.
+    const paused = await login(app.base, MOCK_USER.login.toUpperCase(), MOCK_USER.apiKey);
     assert.equal(paused.status, 429);
+    assert.match(((await paused.json()) as { error: string }).error, /diese E-Mail/);
     assert.equal(odoo.authCalls.length, before + 1);
 
+    // A colleague signs in as usual.
+    assert.equal((await login(app.base, MOCK_USER_2.login, MOCK_USER_2.apiKey)).status, 200);
+
     app.clock.now += 5 * 60 * 1000 + 1;
+    assert.equal((await login(app.base, MOCK_USER.login, MOCK_USER.apiKey)).status, 200);
+  } finally {
+    app.close();
+  }
+});
+
+test("three refused sign-ins within fifteen minutes pause everybody for five minutes (Odoo.sh Fail2Ban)", async () => {
+  const app = start();
+  try {
+    assert.equal((await login(app.base, "a@face-gmbh.com", "x")).status, 401);
+    app.clock.now += 6 * 60 * 1000; // past a's own pause — the count still holds
+    assert.equal((await login(app.base, "b@face-gmbh.com", "x")).status, 401);
+    assert.equal((await login(app.base, "c@face-gmbh.com", "x")).status, 401);
+
+    const before = odoo.authCalls.length;
+    const res = await login(app.base, MOCK_USER_2.login, MOCK_USER_2.apiKey);
+    assert.equal(res.status, 429);
+    assert.match(((await res.json()) as { error: string }).error, /Fehlversuche/);
+    assert.equal(odoo.authCalls.length, before);
+
+    app.clock.now += 5 * 60 * 1000 + 1;
+    assert.equal((await login(app.base, MOCK_USER_2.login, MOCK_USER_2.apiKey)).status, 200);
+  } finally {
+    app.close();
+  }
+});
+
+test("refused sign-ins older than fifteen minutes no longer count toward the global pause", async () => {
+  const app = start();
+  try {
+    assert.equal((await login(app.base, "a@face-gmbh.com", "x")).status, 401);
+    assert.equal((await login(app.base, "b@face-gmbh.com", "x")).status, 401);
+    app.clock.now += 16 * 60 * 1000;
+    assert.equal((await login(app.base, "c@face-gmbh.com", "x")).status, 401);
     assert.equal((await login(app.base, MOCK_USER.login, MOCK_USER.apiKey)).status, 200);
   } finally {
     app.close();

@@ -36,7 +36,9 @@ Backend wie `SPEC-backend-deploy.md`. Frontend: React 19 + Zustand wie die App, 
 - Speicherung: API-Schlüssel AES-256-GCM-verschlüsselt (Schlüssel aus `FACE_SECRET`),
   Sitzungs-IDs nur als SHA-256-Hash.
 - Schutz vor IP-Sperre durch Odoo (Fail2Ban): max. 10 Anmeldeversuche je 15 min und IP;
-  nach einer abgelehnten Anmeldung 5 min Pause für weitere Versuche — wie face-odoo-mcp.
+  nach einer abgelehnten Anmeldung 5 min Pause für diese E-Mail; erst 3 abgelehnte Anmeldungen
+  in 15 min (gleich von wem) pausieren alle für 5 min (geändert 21.11.: vorher pausierte schon
+  ein einzelner abgelaufener Schlüssel alle).
 
 ## Frontend
 

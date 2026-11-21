@@ -110,6 +110,7 @@ Entscheidungen für diese Phase (10.11.):
 - [x] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
 - [x] Task 19: Ende-zu-Ende und Hilfeseite
 - [x] Review-Funde (Code-Review 21.11.): Bremse zählt nur falsche Tokens; Grundriss/Rack zählt als ungespeichert; Prüfung direkt vor dem Ersetzen; Laden/Neuladen übernimmt nicht (eigener Odoo-Schalter, „Diesen Tab verbinden“, leises Nachfragen); Tab während Befehl verloren → „tab-lost“; 50 s statt 60 s; Header auch beim Poll; nach 401 Sitzung neu laden; `.env` 600
+- [x] Anmeldesperre je E-Mail statt für alle (21.11., Wunsch Jean-Luc)
 
 ### Checkpoint E (Freigabe, dann Push auf master)
 - [x] Alle Tests und Build grün; lokaler Weg (Claude Desktop) unverändert
@@ -130,7 +131,7 @@ Entscheidungen für diese Phase (10.11.):
 | Kaputtes nginx.conf ersetzt die laufende App | Hoch | `nginx -t` im Image-Build; Laufzeit-Auflösung von `backend` |
 | Kein Docker lokal, Container erst auf face-docker1 testbar | Mittel | Backend lokal per Node getestet; Healthcheck im Workflow durch den App-nginx |
 | Workflow-Checkout löscht `.env` | Mittel | Geheimnis außerhalb des Checkouts, vor `compose up` kopiert |
-| Odoo sperrt die IP nach Fehlversuchen (Fail2Ban) | Hoch | Rate-Limit je IP + 5 min Pause nach abgelehnter Anmeldung (wie face-odoo-mcp) |
+| Odoo sperrt die IP nach Fehlversuchen (Fail2Ban) | Hoch | Rate-Limit je IP; 5 min Pause je E-Mail nach abgelehnter Anmeldung, 5 min für alle erst nach 3 Ablehnungen in 15 min (21.11.) |
 | `/web/database/list` auf Odoo.sh abgeschaltet | Niedrig | `ODOO_DB` setzbar; face-odoo-mcp nutzt dieselbe Ermittlung erfolgreich |
 | Große Zeichnungen (PDF-Unterlage) sprengen Odoo-Upload-Grenze | Mittel | 64 MB-Grenze in nginx; Fehlermeldung von Odoo durchreichen; beim Abnahme-Test eine Zeichnung mit Unterlage speichern |
 | Zuordnung bleibt nach „Neu“/„Datei öffnen“ hängen → Strg+S überschreibt die falsche Odoo-Zeichnung | Hoch | Zuordnung endet bei jedem fremden Laden (loadSeq), Test dafür in Task 8 |
