@@ -1,6 +1,6 @@
-# Implementation Plan: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan
+# Implementation Plan: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan + schaltplan-layout
 
-Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md`, `SPEC-cloud-bridge.md`, `SPEC-odoo-mcp-schaltplan.md` · Karte: `CAPABILITY-MAP.md`
+Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md`, `SPEC-cloud-bridge.md`, `SPEC-odoo-mcp-schaltplan.md`, `SPEC-schaltplan-layout.md` · Karte: `CAPABILITY-MAP.md`
 
 ## Overview
 
@@ -118,11 +118,37 @@ Entscheidungen für diese Phase (10.11.):
 - [ ] Nach Deploy: Jean-Luc schaltet den Tab ein; ein `get_editor_status` mit dem Token (curl von face-docker1) antwortet
 
 ### Phase 5: odoo-mcp-schaltplan (Repo `facegmbh/Odoo`, eigener Branch + Pull-Request)
-- [ ] Task 20: `tools/schaltplan.py` mit den vier Werkzeugen, Tests mit gemocktem HTTP
-- [ ] Task 21: Leitfaden-Abschnitt „Schaltplan“, Pull-Request, Odoo.sh-Staging
+- [x] Task 20: `tools/schaltplan.py` mit fünf Werkzeugen (+ `schaltplan_geraeteliste`), Tests mit gemocktem HTTP — facegmbh/Odoo#2, auf Wunsch direkt nach main (Prelive ging nicht), 21.11.
+- [x] Task 21: Leitfaden-Abschnitt „Schaltplan“, Pull-Request (gemergt 21.11., Produktion 19.0.6.51.0)
 
 ### Checkpoint F (Jean-Luc merged nach Produktion)
-- [ ] In claude.ai mit dem bestehenden Odoo-Connector: Status, Zeichnung öffnen, Gerät anlegen und verbinden, speichern
+- [x] In claude.ai: Zeichnung „Medientechnik Kapelle“ aus KALK-0003 am Projekt Kapelle Spelle, 17 Geräte, 19 Verbindungen (21.11.) — Aufbau schlecht → Phase 6
+
+### Phase 6: schaltplan-layout (SPEC-schaltplan-layout.md)
+
+Entscheidungen:
+- **Erst messen, dann bauen:** Task 22 klärt als Spike, woher Gerätegrößen (`measured`) und
+  verlegte Linien kommen und ob der Bild-Export im Hintergrund-Tab geht. Erst danach stehen die
+  Befunde von `check_layout` fest.
+- **Reine Funktionen** für Prüfen (`src/layoutCheck.ts`) und Anordnen (`src/layoutArrange.ts`),
+  Handler nur als dünne Schicht: testbar ohne DOM, wie `alignUtils`.
+- **Kapelle-Zeichnung vom 21.11. als Fixture** (aus `get_schematic` nachgebaut): Vorher-Befunde
+  und Nachher-Ziel sind Tests.
+
+- [ ] Task 22: Spike + `check_layout` (Überlappung, Ragen, Raum/Raum, Raster; Linien durch Geräte, Kreuzungen, Umwege)
+- [ ] Task 23: Verschachtelte Orte und Racks — `create_room` mit `parentRoomId`, `add_rack_to_room` (Kasten + Rack-Ansicht), `place_device_in_rack` setzt in beide
+- [ ] Task 24: `arrange_room` (Signalfluss, Raster, Racks als Block) und `fit_room`
+
+### Checkpoint G1 (Zwischenstand zeigen, kein Push)
+- [ ] Kapelle-Fixture: nach Ordnen keine `overlap`/`outside`; Screenshot an Jean-Luc
+
+- [ ] Task 25: `arrange_rooms` und `route_connections`
+- [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen
+- [ ] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call`
+
+### Checkpoint G (Freigabe, Push auf master; Odoo-Teil direkt auf main)
+- [ ] Alle Tests und Build grün; Ende-zu-Ende: Kapelle neu ordnen, `check_layout` leer, Bild kommt an
+- [ ] In claude.ai: „Mach aus KALK-0003 eine Zeichnung“ gliedert örtlich mit Rack und Rack-Ansicht
 
 ## Risks and Mitigations
 
@@ -141,6 +167,9 @@ Entscheidungen für diese Phase (10.11.):
 | Claude überschreibt Ungespeichertes oder einen fremden Stand | Hoch | Odoo-Befehle verweigern ohne `discardChanges`/`force`; Leitfaden sagt: nur auf ausdrücklichen Wunsch |
 | Befehl landet beim falschen Nutzer | Hoch | uid nur aus dem Token-geschützten Dienst-Aufruf, Bindung je uid aus der Sitzung; Test mit zwei Nutzern in Backend und Ende-zu-Ende |
 | Token-Leck | Hoch | Nur in `backend.env` (umask 077) und Odoo-Systemparameter; zeitkonstanter Vergleich; nie im Browser oder Repo |
+| Gerätegrößen nur im DOM gemessen, Linienverläufe nur in der Ansicht berechnet | Hoch | Task 22 als Spike zuerst; notfalls Größen aus Ports schätzen wie der Editor beim Einfügen |
+| Bild-Export braucht sichtbaren Tab | Mittel | Spike in Task 22; sonst Export aus dem Datenmodell (SVG) statt DOM |
+| Auto-Anordnen zerstört eine von Hand geordnete Zeichnung | Mittel | Undo; Leitfaden: nur auf Wunsch bei bestehenden Zeichnungen |
 
 ## Open Questions
 

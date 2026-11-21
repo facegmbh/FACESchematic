@@ -32,7 +32,8 @@ User Stories:
 
 | Befehl | Zweck |
 |---|---|
-| `create_room` + `parentRoomId`, `kind: "location" \| "rack"` | Ort anlegen oder Rack/Schrank als Unterraum eines Orts; Rack-Kasten mit eigener Optik (Rahmen, „Rack“-Kennung) |
+| `create_room` + `parentRoomId` | Ort anlegen, auch verschachtelt |
+| `add_rack_to_room` `{ roomId, name, heightU, rackType? }` | Rack/Schrank als Kasten im Ort **und** Rack-Ansicht (HE-Belegung), verknüpft; `place_device_in_rack` setzt das Gerät dann in beide |
 | `check_layout` `{ roomId? }` | Befunde: `overlap` (Gerät/Gerät, Raum/Raum ohne Verschachtelung), `outside` (Gerät ragt aus dem Raum), `crosses_device` (Leitung durch ein Gerät), `crossings` (Anzahl je Leitung), `detour` (Leitung > 2 × kürzester Weg), `off_grid`; je Befund IDs und ein Satz zur Abhilfe. Leer = sauber |
 | `arrange_room` `{ roomId, flow?: "left-right" }` | Geräte eines Raums in Spalten nach Signalfluss setzen (Abstand nach Raster, keine Überlappung), Unterräume (Racks) als Block; danach `fit_room` |
 | `fit_room` `{ roomId, padding? }` | Raum an Inhalt anpassen (wachsen und schrumpfen), Eltern-Räume mit |
@@ -97,10 +98,15 @@ Wie `SPEC-cloud-bridge.md`.
 3. Ein neuer Durchlauf „Zeichnung aus KALK-0003“ gliedert örtlich, ohne dass man es sagen
    muss.
 
+## Entscheidungen (21.11.)
+
+1. Orte für das Kapelle-Fixture: Kapelle (Altar/Ambo), Sakristei, Technik (Wandschrank), Kirche
+   (Kamera/TX2), Haus-TV. Im Betrieb fragt Claude oder kennt sie aus dem Chat.
+2. Rack: Zum Rack-Kasten auf dem Schaltplan legt Claude **immer auch die Rack-Ansicht** an
+   (Seite mit HE-Belegung). Neuer Befehl `add_rack_to_room` legt beides verknüpft an.
+   Ein Gerät, das in die Rack-Ansicht gesetzt wird, landet auch im Rack-Kasten des
+   Schaltplans.
+
 ## Open Questions
 
-1. **Orte der Kapelle:** Welche Orte gibt es dort wirklich? Kapelle (Altar/Ambo),
-   Sakristei, Technik (Wandschrank), Kirche (Kamera/TX2), Haus-TV? Der Chat kennt das
-   Projekt. Fürs Fixture reicht eine plausible Annahme.
-2. **Rack auf dem Schaltplan:** Reicht ein Rack als Kasten (Unterraum) mit den Geräten? Oder
-   soll es zusätzlich automatisch eine Rack-Ansicht (Seite mit HE-Belegung) geben?
+Keine.

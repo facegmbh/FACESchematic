@@ -1,4 +1,4 @@
-# Tasks: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan
+# Tasks: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan + schaltplan-layout
 
 ## Task 1: Backend-Grundgerüst mit `/face/health`
 
@@ -384,3 +384,101 @@ ausdrücklichen Wunsch); Branch + Pull-Request mit Beschreibung; Staging-Build p
 **Dependencies:** Task 20, Checkpoint E · **Files:** `data/leitfaden.md` · **Scope:** S
 
 ## Checkpoint F — Jean-Luc merged, Abnahme in claude.ai
+
+---
+
+# Phase 6: schaltplan-layout (SPEC-schaltplan-layout.md)
+
+## Task 22: Spike + `check_layout`
+
+**Description:** Erst klären (Notiz in `tasks/plan.md`): Haben Geräte im Store `measured`-Größen?
+Wo liegen die verlegten Linien (Auto-Routing-Wegpunkte, eigene Wegpunkte, sonst L-Form)? Geht
+`exportImage` in einem Hintergrund-Tab? Dann `src/layoutCheck.ts` (reine Funktionen) und Befehl
+`check_layout { roomId? }` mit Befunden `overlap`, `outside`, `room_overlap`, `off_grid`,
+`crosses_device`, `crossings`, `detour` – je mit IDs und einem Satz zur Abhilfe.
+
+**Acceptance criteria:**
+- [ ] Kapelle-Fixture: Switch `outside` (ragt aus „Netzwerk“), RX1/PureLink `overlap`
+- [ ] Eine saubere Zeichnung liefert keine Befunde; `check_layout` ändert nichts
+- [ ] Linie durch ein Gerät und Umweg (> 2 × kürzester Weg) werden erkannt
+
+**Verification:** `npx vitest run`, `npx tsc -b`
+
+**Dependencies:** None · **Files:** `src/layoutCheck.ts`, `src/__tests__/layoutCheck.test.ts`, Fixture, `src/mcp/protocol.ts`, `src/mcpBridge.ts`, `mcp-server/src/tools.ts` · **Scope:** M
+
+## Task 23: Verschachtelte Orte und Racks
+
+**Description:** `create_room` bekommt `parentRoomId` (Ort im Ort, Position relativ). Neuer Befehl
+`add_rack_to_room { roomId, name, heightU, rackType? }`: Rack-Kasten als Unterraum (Rahmen,
+Kennung „Rack“) **und** Rack in der Rack-Ansicht (vorhandenes `create_rack`), verknüpft über die
+Rack-ID am Kasten. `place_device_in_rack` setzt ein Gerät dann zusätzlich in den Kasten.
+
+**Acceptance criteria:**
+- [ ] Ort → Rack → Gerät verschachtelt; Positionen bleiben relativ zum Eltern-Raum
+- [ ] `add_rack_to_room` legt Kasten und Rack-Ansicht an; Gerät ins Rack → in beiden
+- [ ] Löschen/Undo lassen keinen verwaisten Kasten oder Rack zurück
+
+**Verification:** `npx vitest run`, `npx tsc -b`, `npm run i18n:check`
+
+**Dependencies:** None · **Files:** `src/mcpBridge.ts`, `src/mcp/protocol.ts`, `src/store.ts` (Verknüpfung), Raum-Darstellung, Tests · **Scope:** M
+
+## Task 24: `arrange_room` und `fit_room`
+
+**Description:** `src/layoutArrange.ts`: Geräte eines Raums in Spalten nach Signalfluss
+(Quellen links, Senken rechts; innerhalb der Spalte nach Verbindungen sortiert, damit Linien
+kurz bleiben), Abstand und Position auf dem Raster; Rack-Kästen als Block. `fit_room` passt den
+Raum (und seine Eltern) an den Inhalt an.
+
+**Acceptance criteria:**
+- [ ] Nach `arrange_room` keine Überlappung im Raum; Quellen links von ihren Zielen
+- [ ] `fit_room` umschließt alle Kinder mit Rand, auch verschachtelt
+- [ ] Ein Schritt Undo stellt den Raum wieder her
+
+**Verification:** `npx vitest run`, `npx tsc -b`
+
+**Dependencies:** Tasks 22, 23 · **Files:** `src/layoutArrange.ts`, Tests, `src/mcpBridge.ts`, `src/mcp/protocol.ts`, `mcp-server/src/tools.ts` · **Scope:** M
+
+## Checkpoint G1 — Zwischenstand zeigen (kein Push)
+
+## Task 25: `arrange_rooms` und `route_connections`
+
+**Description:** Räume oberster Ebene ohne Überlappung in Zeilen anordnen (Reihenfolge optional).
+`route_connections { connectionIds? }` verlegt mit dem Auto-Routing des Editors neu; eigene
+Wegpunkte nur, wenn ausdrücklich genannt.
+
+**Acceptance criteria:**
+- [ ] Kapelle-Fixture nach `arrange_room` je Raum + `arrange_rooms` + `route_connections`: keine `overlap`, `outside`, `room_overlap`
+- [ ] Eigene Wegpunkte bleiben ohne ausdrückliche Nennung erhalten
+
+**Verification:** `npx vitest run`, `npx tsc -b`
+
+**Dependencies:** Task 24 · **Files:** `src/layoutArrange.ts`, `src/mcpBridge.ts`, Tests · **Scope:** M
+
+## Task 26: `render_schematic`
+
+**Description:** PNG der Zeichnung oder eines Raums (`roomId`, `maxWidth`) über den vorhandenen
+Export, als `{ image: { mimeType, data } }`. Im Odoo-Connector gibt `schaltplan_befehl` ein Bild
+als Bildinhalt weiter (`registry.text_und_bild`).
+
+**Acceptance criteria:**
+- [ ] Liefert ein gültiges PNG ≤ ~1 MB, auch für den ganzen Plan
+- [ ] In claude.ai erscheint das Bild
+
+**Verification:** `npx vitest run`, Playwright gegen den Tab, Odoo-Test für die Bildweitergabe
+
+**Dependencies:** Task 22 (Spike) · **Files:** `src/mcpBridge.ts`, Export-Helfer, Odoo `tools/schaltplan.py` + Test · **Scope:** M
+
+## Task 27: Playbook, Leitfaden, Ende-zu-Ende
+
+**Description:** „build-schematic“ und Odoo-Leitfaden „Schaltplan“: Orte klären → Orte und
+Racks (`add_rack_to_room`, Rack-Ansicht immer) → Geräte → `arrange_room` → `arrange_rooms` →
+verbinden → `route_connections` → `check_layout` bis leer (max. 3 Runden) → `render_schematic`.
+`schaltplan_geraeteliste` → `naechster_schritt` entsprechend (Räume = Orte, Schränke = Racks).
+
+**Acceptance criteria:**
+- [ ] Ende-zu-Ende über `/face/service/call`: Kapelle örtlich mit Rack neu aufgebaut, `check_layout` leer, Bild kommt
+- [ ] Odoo-Leitfaden und Geräteliste nennen die Regeln
+
+**Dependencies:** Tasks 25, 26 · **Files:** `mcp-server/src/prompts.ts`, Odoo `data/leitfaden.md`, `tools/schaltplan.py` · **Scope:** S
+
+## Checkpoint G — Freigabe, Push (FACESchematic master, Odoo main)
