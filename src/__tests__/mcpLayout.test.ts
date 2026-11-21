@@ -113,9 +113,11 @@ describe("locations and racks (Task 23)", () => {
   it("place_device_in_rack also puts the device into the rack box, stacked without overlap", async () => {
     const ort = await ok("create_room", { label: "Technik", x: 0, y: 0, width: 800, height: 700 });
     const rack = await ok("add_rack_to_room", { roomId: ort.roomId, name: "Wandschrank", heightU: 12 });
-    const a = await ok("place_device_in_rack", { deviceId: "device-1", rackId: rack.rackId, uPosition: 10 });
     const b = await ok("place_device_in_rack", { deviceId: "device-2", rackId: rack.rackId, uPosition: 5 });
+    const a = await ok("place_device_in_rack", { deviceId: "device-1", rackId: rack.rackId, uPosition: 10 });
     expect(a.rackRoomId).toBe(rack.rackRoomId);
+    // The box mirrors the rack: higher U on top (device-1 at U10 above device-2 at U5).
+    expect(node("device-1")!.position.y).toBeLessThan(node("device-2")!.position.y);
     expect(node("device-1")?.parentId).toBe(rack.rackRoomId);
     expect(node("device-2")?.parentId).toBe(rack.rackRoomId);
     const check = await ok("check_layout", { roomId: ort.roomId as string });
@@ -221,5 +223,42 @@ describe("arrange_rooms and route_connections (Task 25)", () => {
 
   it("unknown connection ids are refused", async () => {
     expect((await run("route_connections", { connectionIds: ["nope"], waitMs: 0 })).ok).toBe(false);
+  });
+});
+
+describe("G1 findings (21.11.)", () => {
+  it("place_device_in_room lets a small room grow for a tall device instead of refusing", async () => {
+    store.setState({
+      nodes: [
+        { id: "room-x", type: "room", position: { x: 0, y: 0 }, data: { label: "Technik" }, style: { width: 240, height: 160 } },
+        { id: "sw", type: "device", position: { x: 900, y: 900 }, measured: { width: 176, height: 608 }, data: { label: "Switch", deviceType: "switch", ports: [] } },
+      ] as never,
+      edges: [], routedEdges: {},
+    });
+    const r = await run("place_device_in_room", { deviceId: "sw", roomId: "room-x", x: 16, y: 48 });
+    expect(r.ok).toBe(true);
+    expect(store.getState().nodes.find((n) => n.id === "sw")?.parentId).toBe("room-x");
+    const check = await run("check_layout", {});
+    if (!check.ok) throw new Error(check.error);
+    expect((check.result as { findings: { kind: string }[] }).findings.map((f) => f.kind)).not.toContain("outside");
+  });
+
+  it("a position outside the room is still refused", async () => {
+    store.setState({
+      nodes: [
+        { id: "room-x", type: "room", position: { x: 0, y: 0 }, data: { label: "Technik" }, style: { width: 240, height: 160 } },
+        { id: "d", type: "device", position: { x: 900, y: 900 }, measured: { width: 176, height: 96 }, data: { label: "D", deviceType: "x", ports: [] } },
+      ] as never,
+      edges: [], routedEdges: {},
+    });
+    expect((await run("place_device_in_room", { deviceId: "d", roomId: "room-x", x: 500, y: 48 })).ok).toBe(false);
+  });
+
+  it("add_rack_to_room leaves the user on the page they were looking at", async () => {
+    store.setState({ nodes: [{ id: "ort", type: "room", position: { x: 0, y: 0 }, data: { label: "Technik" }, style: { width: 600, height: 400 } }] as never, edges: [], pages: [] });
+    const before = store.getState().activePage;
+    const r = await run("add_rack_to_room", { roomId: "ort", name: "Schrank", heightU: 12 });
+    expect(r.ok).toBe(true);
+    expect(store.getState().activePage).toBe(before);
   });
 });

@@ -147,7 +147,12 @@ Entscheidungen:
 
 ### Checkpoint G1 (Zwischenstand zeigen, kein Push)
 - [x] Kapelle-Fixture: je Raum nach `arrange_room` keine `overlap`/`outside` (Test)
-- [ ] Screenshot an Jean-Luc — nach Task 25, weil die Räume erst mit `arrange_rooms` nicht mehr übereinanderliegen
+- [x] Kapelle örtlich mit den neuen Befehlen in der laufenden App aufgebaut (21.11.): keine Überlappung,
+  nichts ragt heraus, Schrank in HE-Reihenfolge, Technik in der Mitte. Dabei gefunden und behoben:
+  Gerät in keinem Raum wurde nicht gemeldet (`no_room`), großes Gerät passte nicht in kleinen Raum
+  (Raum wächst jetzt), Rack anlegen schaltete die Ansicht weg, Kasten-Reihenfolge verkehrt,
+  Rack-interne Leitungen galten als Umweg, Orte ohne Reihenfolge ungünstig (Mittelpunkt-Regel).
+  Lücke für bestehende Zeichnungen: kein Befehl, um Räume umzubenennen oder aufzulösen
 
 - [x] Task 25: `arrange_rooms` und `route_connections`
 - [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen

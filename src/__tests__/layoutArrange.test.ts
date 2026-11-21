@@ -133,3 +133,20 @@ describe("arrangeRooms", () => {
     expect(kinds).not.toContain("off_grid");
   });
 });
+
+describe("arrangeRooms without an order", () => {
+  it("puts the room with the most connections in the middle, the others around it", () => {
+    // The hub comes first in reading order — without the rule it would end up at the edge.
+    const nodes = [
+      room("hub", 0, 0, 400, 300), device("h1", 16, 48, "hub"),
+      room("a", 0, 0, 400, 300), device("da", 16, 48, "a"),
+      room("b", 0, 0, 400, 300), device("db", 16, 48, "b"),
+      room("c", 0, 0, 400, 300), device("dc", 16, 48, "c"),
+    ];
+    const edges = [edge("1", "da", "h1"), edge("2", "db", "h1"), edge("3", "dc", "h1"), edge("4", "da", "h1")];
+    const pos = arrangeRooms(nodes, [], edges);
+    const order = ["a", "hub", "b", "c"].sort((x, y) => pos[x].x - pos[y].x);
+    expect(order.indexOf("hub")).toBeGreaterThan(0);
+    expect(order.indexOf("hub")).toBeLessThan(3);
+  });
+});

@@ -135,18 +135,43 @@ export function fitRoomSize(nodes: SchematicNode[], roomId: string): { width: nu
   };
 }
 
+function hubInMiddle(nodes: SchematicNode[], rooms: SchematicNode[], edges: ConnectionEdge[]): SchematicNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const topOf = (id: string): string | undefined => {
+    let n = byId.get(id);
+    while (n?.parentId) n = byId.get(n.parentId);
+    return n?.type === "room" ? n.id : undefined;
+  };
+  const links = new Map<string, number>(rooms.map((r) => [r.id, 0]));
+  for (const e of edges) {
+    const a = topOf(e.source);
+    const b = topOf(e.target);
+    if (a && b && a !== b) {
+      if (links.has(a)) links.set(a, links.get(a)! + 1);
+      if (links.has(b)) links.set(b, links.get(b)! + 1);
+    }
+  }
+  const ranked = [...rooms].sort((a, b) => links.get(b.id)! - links.get(a.id)!);
+  const sequence: SchematicNode[] = [];
+  ranked.forEach((r, i) => (i % 2 === 1 ? sequence.unshift(r) : sequence.push(r)));
+  return sequence;
+}
+
 /** Gap between rooms, and the width after which the next row starts. */
 const ROOM_GAP = 96;
 const MAX_ROW_WIDTH = 2400;
 
 /** New positions for the top-level rooms: rows left to right, no overlap, on the grid. Rooms keep
- *  their content (nested rooms and devices move with them). Order: as given, then reading order. */
-export function arrangeRooms(nodes: SchematicNode[], order: string[] = []): Record<string, Point> {
+ *  their content (nested rooms and devices move with them). Order: as given; without one, the room
+ *  with the most connections to other rooms (the technical room) goes in the middle and the others
+ *  around it by their number of connections, so lines between rooms stay short. */
+export function arrangeRooms(nodes: SchematicNode[], order: string[] = [], edges: ConnectionEdge[] = []): Record<string, Point> {
   const tops = nodes.filter((n) => n.type === "room" && !n.parentId);
   if (!tops.length) return {};
   const reading = (a: SchematicNode, b: SchematicNode) => a.position.y - b.position.y || a.position.x - b.position.x;
   const given = order.map((id) => tops.find((t) => t.id === id)).filter((t): t is SchematicNode => !!t);
-  const rest = tops.filter((t) => !given.includes(t)).sort(reading);
+  let rest = tops.filter((t) => !given.includes(t)).sort(reading);
+  if (!given.length && edges.length && rest.length > 2) rest = hubInMiddle(nodes, rest, edges);
   const x0 = Math.floor(Math.min(...tops.map((t) => t.position.x)) / GRID_SIZE) * GRID_SIZE;
   const y0 = Math.floor(Math.min(...tops.map((t) => t.position.y)) / GRID_SIZE) * GRID_SIZE;
 

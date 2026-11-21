@@ -125,4 +125,19 @@ describe("checkLayout — small cases", () => {
     expect(f).toHaveLength(1);
     expect(f[0].ids).toEqual(["a"]);
   });
+
+  it("devices outside every room are listed once the drawing has rooms", () => {
+    const f = checkLayout([room("ort", 0, 0, 400, 300), device("in", 16, 48, "ort"), device("lost", 800, 0)], [], {});
+    expect(f.filter((x) => x.kind === "no_room").map((x) => x.ids)).toEqual([["lost"]]);
+    // A drawing without any room has nothing to complain about here.
+    expect(checkLayout([device("a", 0, 0)], [], {}).filter((x) => x.kind === "no_room")).toEqual([]);
+  });
+
+  it("lines between devices in the same rack box are not detours — they sit on top of each other", () => {
+    const rackBox = { ...room("rack", 0, 0, 208, 400), data: { label: "Schrank", isEquipmentRack: true } } as SchematicNode;
+    const n = [rackBox, device("dsp", 16, 48, "rack"), device("amp", 16, 200, "rack")];
+    const e = [edge("e1", "dsp", "amp")];
+    const routes = { e1: { waypoints: [{ x: 192, y: 96 }, { x: 600, y: 96 }, { x: 600, y: 900 }, { x: 0, y: 900 }, { x: 0, y: 248 }, { x: 16, y: 248 }] } };
+    expect(checkLayout(n, e, routes).filter((f) => f.kind === "detour")).toEqual([]);
+  });
 });

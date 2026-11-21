@@ -738,9 +738,12 @@ function moveIntoRackBox(rackId: string, deviceId: string): string | undefined {
   };
   if (need.width !== boxSize.width || need.height !== boxSize.height) st().resizeRoom(box.id, need, { skipUndo: true });
   if (!st().placeDeviceInRoom(deviceId, box.id, { x: RACK_BOX_PAD, y })) return undefined;
+  restackRackBox(box.id, rackId);
   fitRooms(box.id, false); // the location grows with its rack box
   return box.id;
 }
+
+const snapUp = (v: number) => Math.ceil(v / GRID_SIZE) * GRID_SIZE;
 
 function requireRoom(roomId: unknown): SchematicNode {
   const room = typeof roomId === "string" ? st().nodes.find((n) => n.id === roomId) : undefined;
@@ -766,6 +769,26 @@ function fitRooms(roomId: string, shrink: boolean): { width: number; height: num
     id = st().nodes.find((n) => n.id === id)?.parentId;
   }
   return first!;
+}
+
+/** The box mirrors the rack: highest U on top, then downwards. */
+function restackRackBox(boxId: string, rackId: string) {
+  const uOf = new Map(
+    rackPages()
+      .flatMap((pg) => pg.placements)
+      .filter((pl) => pl.rackId === rackId)
+      .map((pl) => [pl.deviceNodeId, pl.uPosition] as const),
+  );
+  const children = st()
+    .nodes.filter((n) => n.parentId === boxId && n.type === "device")
+    .sort((a, b) => (uOf.get(b.id) ?? 0) - (uOf.get(a.id) ?? 0));
+  const positions: Record<string, { x: number; y: number }> = {};
+  let y = RACK_BOX_TOP;
+  for (const c of children) {
+    positions[c.id] = { x: RACK_BOX_PAD, y };
+    y = snapUp(y + nodeSize(c).height + RACK_BOX_PAD);
+  }
+  st().setNodePositions(positions, { skipUndo: true });
 }
 
 function absolutePositionOf(id: string): { x: number; y: number } {
@@ -1106,6 +1129,20 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       const pos = validatePosition(x, y);
       if (!pos.ok) throw new CommandError(pos.error);
       rel = pos.position;
+    }
+    // FACE: a spot inside the room but a device too big for it (a 30-port switch in a fresh room)
+    // lets the room grow first — refusing would leave the device outside every room.
+    const roomSize = nodeSize(room);
+    const devSize = nodeSize(requireDevice(deviceId));
+    if (rel.x >= 0 && rel.y >= 0 && rel.x < roomSize.width && rel.y < roomSize.height) {
+      const need = {
+        width: Math.max(roomSize.width, snapUp(rel.x + devSize.width + RACK_BOX_PAD)),
+        height: Math.max(roomSize.height, snapUp(rel.y + devSize.height + RACK_BOX_PAD)),
+      };
+      if (need.width !== roomSize.width || need.height !== roomSize.height) {
+        st().resizeRoom(roomId, need);
+        fitRooms(roomId, false);
+      }
     }
     // The store action is atomic and returns whether it actually committed: it mutates
     // only if the device's center lands inside the requested room, otherwise it changes
@@ -1718,7 +1755,9 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const room = st().nodes.find((n) => n.id === roomId);
     if (!room || room.type !== "room") throw new CommandError(`No room found with id "${roomId}".`);
     if (typeof name !== "string" || !name.trim()) throw new CommandError("name is required (e.g. \"Wandschrank Technik\").");
-    // All racks share one rack-elevation page, side by side — like the editor does.
+    // All racks share one rack-elevation page, side by side — like the editor does. Creating
+    // that page switches the editor to it; switch back so Claude never pulls the view away.
+    const pageBefore = st().activePage;
     const pageId = rackPages()[0]?.id;
     const rack = handlers.create_rack({ label: name.trim(), heightU, rackType, ...(pageId ? { pageId } : { pageLabel: "Racks" }) }) as {
       pageId: string;
@@ -1736,6 +1775,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     }) as { roomId: string };
     st().toggleEquipmentRack(box.roomId);
     st().linkRoomToRack(box.roomId, rack.pageId, rack.rackId);
+    if (pageBefore && st().activePage !== pageBefore) st().setActivePage(pageBefore);
     return {
       rackRoomId: box.roomId,
       rackId: rack.rackId,
@@ -1774,7 +1814,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
         if (room.parentId) throw new CommandError(`"${id}" is inside another room — order only lists top-level rooms.`);
       }
     }
-    const positions = arrangeRooms(st().nodes, order);
+    const positions = arrangeRooms(st().nodes, order, st().edges);
     st().setNodePositions(positions);
     return { moved: Object.keys(positions).length, hint: "route_connections next (lines follow the new positions), then check_layout." };
   },

@@ -15,6 +15,7 @@ export type LayoutFindingKind =
   | "outside"
   | "room_overlap"
   | "off_grid"
+  | "no_room"
   | "crosses_device"
   | "crossings"
   | "detour"
@@ -183,6 +184,18 @@ export function checkLayout(
     }
   }
 
+  // Devices in no room at all, once the drawing is organised by rooms (locations).
+  if (rooms.length && !opts.roomId) {
+    const loose = devices.filter((d) => !d.parentId || byId.get(d.parentId)?.type !== "room");
+    if (loose.length) {
+      findings.push({
+        kind: "no_room",
+        ids: loose.map((d) => d.id),
+        message: `${loose.length} device(s) are not in any room: ${loose.map((d) => `"${label(d)}"`).join(", ")} — put each into its location (place_device_in_room, or place_device_in_rack for rack gear).`,
+      });
+    }
+  }
+
   // Devices off the grid (one finding for all).
   const offGrid = devices.filter((d) => {
     if (!inScope(d)) return false;
@@ -223,7 +236,14 @@ export function checkLayout(
     }
     const shortest = Math.abs(wps[wps.length - 1].x - wps[0].x) + Math.abs(wps[wps.length - 1].y - wps[0].y);
     const actual = length(wps);
-    if (actual > DETOUR_RATIO * shortest && actual - shortest > DETOUR_MIN_EXTRA) {
+    // Devices in the same rack sit on top of each other, outputs right, inputs left: their lines
+    // have to go round, and that is the drawing being true to the rack, not a detour.
+    const rackOf = (id: string) => {
+      const parent = byId.get(byId.get(id)?.parentId ?? "");
+      return (parent?.data as { isEquipmentRack?: boolean } | undefined)?.isEquipmentRack ? parent!.id : undefined;
+    };
+    const sameRack = rackOf(e.source) !== undefined && rackOf(e.source) === rackOf(e.target);
+    if (!sameRack && actual > DETOUR_RATIO * shortest && actual - shortest > DETOUR_MIN_EXTRA) {
       findings.push({
         kind: "detour",
         ids: [e.id],
