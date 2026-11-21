@@ -868,6 +868,29 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "arrange_rooms",
+    description:
+      "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",
+    inputSchema: {
+      type: "object",
+      properties: { order: { type: "array", items: { type: "string" }, description: "Top-level room ids, wanted order." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "route_connections",
+    description:
+      "Lay the lines with the editor's auto-routing (switches it on) and wait for the result. Connections the user laid by hand keep their waypoints unless named in connectionIds — name them only when the user wants them re-laid. Use after arranging, then check_layout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectionIds: { type: "array", items: { type: "string" }, description: "Only these connections, re-laid from scratch." },
+        waitMs: { type: "number", description: "How long to wait for the new routes (ms, default 4000)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "add_rack_to_room",
     description:
       "Add a rack or wall cabinet to a location: creates the rack in the rack elevation (U layout, on the shared rack page) AND a rack box inside the location on the schematic, linked to each other. Then mount devices with place_device_in_rack — each lands in the elevation and in the box. Use for every rack/cabinet (e.g. a wall-mount enclosure in the estimate).",

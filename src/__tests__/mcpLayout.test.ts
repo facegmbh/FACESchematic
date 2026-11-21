@@ -173,3 +173,53 @@ describe("arrange_room and fit_room (Task 24)", () => {
     expect((await run("fit_room", {})).ok).toBe(false);
   });
 });
+
+describe("arrange_rooms and route_connections (Task 25)", () => {
+  const edgeData = (id: string) => store.getState().edges.find((e) => e.id === id)?.data as { manualWaypoints?: unknown[]; autoRouteWaypoints?: boolean } | undefined;
+
+  it("arrange_rooms moves the rooms apart in one undo step", async () => {
+    for (const r of store.getState().nodes.filter((n) => n.type === "room")) await run("arrange_room", { roomId: r.id });
+    const r = await run("arrange_rooms", {});
+    expect(r.ok).toBe(true);
+    const check = await run("check_layout", {});
+    if (!check.ok) throw new Error(check.error);
+    const kinds = (check.result as { findings: { kind: string }[] }).findings.map((f) => f.kind);
+    expect(kinds).not.toContain("room_overlap");
+    expect(kinds).not.toContain("overlap");
+    const before = JSON.stringify(store.getState().nodes.map((n) => n.position));
+    await run("arrange_rooms", { order: ["room-10", "room-4"] });
+    store.getState().undo();
+    expect(JSON.stringify(store.getState().nodes.map((n) => n.position))).toBe(before);
+  });
+
+  it("route_connections turns auto-routing on and keeps the user's own waypoints", async () => {
+    store.setState({
+      autoRoute: false,
+      edges: store.getState().edges.map((e, i) =>
+        i === 0 ? { ...e, data: { ...e.data, manualWaypoints: [{ x: 1, y: 1 }] } } : e,
+      ) as never,
+    });
+    const own = store.getState().edges[0].id;
+    const r = await run("route_connections", { waitMs: 0 });
+    expect(r.ok).toBe(true);
+    expect(store.getState().autoRoute).toBe(true);
+    expect(edgeData(own)?.manualWaypoints).toEqual([{ x: 1, y: 1 }]);
+  });
+
+  it("named connections lose their own waypoints so the router lays them anew", async () => {
+    store.setState({
+      autoRoute: true,
+      edges: store.getState().edges.map((e, i) =>
+        i === 0 ? { ...e, data: { ...e.data, manualWaypoints: [{ x: 1, y: 1 }] } } : e,
+      ) as never,
+    });
+    const own = store.getState().edges[0].id;
+    const r = await run("route_connections", { connectionIds: [own], waitMs: 0 });
+    expect(r.ok).toBe(true);
+    expect(edgeData(own)?.manualWaypoints).toBeUndefined();
+  });
+
+  it("unknown connection ids are refused", async () => {
+    expect((await run("route_connections", { connectionIds: ["nope"], waitMs: 0 })).ok).toBe(false);
+  });
+});

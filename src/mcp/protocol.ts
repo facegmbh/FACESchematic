@@ -86,7 +86,9 @@ export type CommandType =
   | "check_layout"
   | "add_rack_to_room"
   | "arrange_room"
-  | "fit_room";
+  | "fit_room"
+  | "arrange_rooms"
+  | "route_connections";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -648,6 +650,19 @@ export interface AddRackToRoomParams {
 
 export interface ArrangeRoomParams {
   roomId: string;
+}
+
+export interface ArrangeRoomsParams {
+  /** Room ids in the wanted order (left to right, row by row); the rest follow. */
+  order?: string[];
+}
+
+export interface RouteConnectionsParams {
+  /** Only these connections — their own waypoints are dropped so they are laid anew. Without
+   *  ids, auto-routing is switched on and hand-laid connections keep their waypoints. */
+  connectionIds?: string[];
+  /** How long to wait for the new routes (ms, default 4000). */
+  waitMs?: number;
 }
 
 export interface FitRoomParams {

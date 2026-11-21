@@ -20,7 +20,7 @@ import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
-import { arrangeRoom, fitRoomSize } from "./layoutArrange";
+import { arrangeRoom, arrangeRooms, fitRoomSize } from "./layoutArrange";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
@@ -48,6 +48,8 @@ import {
   type AddRackToRoomParams,
   type ArrangeRoomParams,
   type FitRoomParams,
+  type ArrangeRoomsParams,
+  type RouteConnectionsParams,
   type BridgeServerMessage,
   type AddDeviceParams,
   type AddDevicesParams,
@@ -1761,6 +1763,49 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     s.resizeRoom(roomId, nodeSizeOf(roomId), { skipUndo: false }); // undo point with the current size
     const size = fitRooms(roomId, true);
     return { roomId, size };
+  },
+
+  arrange_rooms: (params) => {
+    const { order } = (params ?? {}) as ArrangeRoomsParams;
+    if (order !== undefined) {
+      if (!Array.isArray(order)) throw new CommandError("order must be a list of room ids.");
+      for (const id of order) {
+        const room = requireRoom(id);
+        if (room.parentId) throw new CommandError(`"${id}" is inside another room — order only lists top-level rooms.`);
+      }
+    }
+    const positions = arrangeRooms(st().nodes, order);
+    st().setNodePositions(positions);
+    return { moved: Object.keys(positions).length, hint: "route_connections next (lines follow the new positions), then check_layout." };
+  },
+
+  route_connections: async (params) => {
+    const { connectionIds, waitMs } = (params ?? {}) as RouteConnectionsParams;
+    if (connectionIds !== undefined) {
+      if (!Array.isArray(connectionIds)) throw new CommandError("connectionIds must be a list of connection ids.");
+      const known = new Set(st().edges.map((e) => e.id));
+      const unknown = connectionIds.filter((id) => !known.has(id));
+      if (unknown.length) throw new CommandError(`Unknown connection id(s): ${unknown.join(", ")}.`);
+    }
+    const before = st().routedEdges;
+    if (connectionIds?.length) st().clearEdgeWaypoints(connectionIds);
+    if (!st().autoRoute) st().toggleAutoRoute();
+    // The editor re-routes on its own once the drawing changed; wait for the result.
+    const deadline = Date.now() + (typeof waitMs === "number" ? Math.max(0, Math.min(waitMs, 15000)) : 4000);
+    while (st().routedEdges === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    const routes = st().routedEdges;
+    const edges = st().edges;
+    const ownKept = edges.filter((e) => e.data?.manualWaypoints?.length && !e.data?.autoRouteWaypoints).length;
+    return {
+      autoRoute: true,
+      newRoutes: routes !== before,
+      routed: edges.filter((e) => (routes[e.id]?.waypoints?.length ?? 0) >= 2).length,
+      unrouted: edges.filter((e) => (routes[e.id]?.waypoints?.length ?? 0) < 2).length,
+      keptOwnWaypoints: ownKept,
+      hint: ownKept
+        ? `${ownKept} connection(s) keep the user's own waypoints; name them in connectionIds only if the user wants them re-laid.`
+        : undefined,
+    };
   },
 
   check_layout: (params) => {

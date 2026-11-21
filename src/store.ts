@@ -640,6 +640,8 @@ interface SchematicState {
   /** FACE: move several nodes at once (positions relative to their parent, as stored) — one undo
    *  step, cable tags re-anchored like after a drag. Used by the bridge's arrange_room. */
   setNodePositions: (positions: Record<string, { x: number; y: number }>, options?: { skipUndo?: boolean }) => void;
+  /** FACE: drop the waypoints (own or auto) of these connections so auto-routing lays them anew. */
+  clearEdgeWaypoints: (edgeIds: string[]) => void;
   /** Re-evaluate room membership for every non-room node. Used after a room is
    *  created, resized, or moved so devices get parented/unparented to match
    *  the new layout. */
@@ -4612,6 +4614,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     if (!options?.skipUndo) pushUndo({ nodes: state.nodes, edges: state.edges });
     const moved = state.nodes.map((n) => (ids.has(n.id) ? { ...n, position: positions[n.id] } : n));
     set({ nodes: settleTagsAfterMove(moved, state.edges, ids) ?? moved });
+    get().saveToLocalStorage();
+  },
+
+  clearEdgeWaypoints: (edgeIds) => {
+    const state = get();
+    const ids = new Set(edgeIds);
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const updatedEdges = state.edges.map((e) => {
+      if (!ids.has(e.id) || !e.data?.manualWaypoints) return e;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { manualWaypoints, autoRouteWaypoints, ...restData } = e.data;
+      return { ...e, data: restData };
+    }) as typeof state.edges;
+    set({ edges: updatedEdges, nodes: reconcileWaypointNodes(state.nodes, updatedEdges) });
     get().saveToLocalStorage();
   },
 

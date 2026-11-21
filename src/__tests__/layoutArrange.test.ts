@@ -4,7 +4,7 @@
  * block; the room then fits its content.
  */
 import { describe, it, expect } from "vitest";
-import { arrangeRoom, fitRoomSize, applyPositions } from "../layoutArrange";
+import { arrangeRoom, arrangeRooms, fitRoomSize, applyPositions } from "../layoutArrange";
 import { checkLayout } from "../layoutCheck";
 import type { ConnectionEdge, SchematicNode } from "../types";
 import kapelle from "./fixtures/layout/kapelle-2026-11-21.json";
@@ -97,5 +97,39 @@ describe("fitRoomSize", () => {
 
   it("never goes below the editor's minimum", () => {
     expect(fitRoomSize([room("r", 0, 0, 400, 300)], "r")).toEqual({ width: 200, height: 150 });
+  });
+});
+
+describe("arrangeRooms", () => {
+  it("lays top-level rooms out in rows without overlap, on the grid, nested rooms untouched", () => {
+    const nodes = [room("a", 0, 0, 600, 400), room("b", 100, 100, 600, 800), room("c", 50, 50, 900, 300), room("rack", 16, 48, 208, 300, "b")];
+    const pos = arrangeRooms(nodes);
+    expect(Object.keys(pos).sort()).toEqual(["a", "b", "c"]);
+    const placed = applyPositions(nodes, pos);
+    expect(checkLayout(placed, [], {}).filter((f) => f.kind === "room_overlap")).toEqual([]);
+    for (const p of Object.values(pos)) expect([p.x % 16, p.y % 16]).toEqual([0, 0]);
+  });
+
+  it("keeps the given order, left to right", () => {
+    const nodes = [room("a", 0, 0, 400, 300), room("b", 0, 0, 400, 300), room("c", 0, 0, 400, 300)];
+    const pos = arrangeRooms(nodes, ["c", "a", "b"]);
+    expect(pos.c.x).toBeLessThan(pos.a.x);
+    expect(pos.a.x).toBeLessThan(pos.b.x);
+  });
+
+  it("the Kapelle: rooms arranged and fitted, then laid out — nothing overlaps or sticks out anywhere", () => {
+    let nodes = kapelle.nodes as unknown as SchematicNode[];
+    const edges = kapelle.edges as unknown as ConnectionEdge[];
+    for (const r of nodes.filter((n) => n.type === "room")) {
+      nodes = applyPositions(nodes, arrangeRoom(nodes, edges, r.id));
+      const size = fitRoomSize(nodes, r.id);
+      nodes = nodes.map((n) => (n.id === r.id ? { ...n, style: { ...n.style, width: size.width, height: size.height }, measured: undefined } : n));
+    }
+    nodes = applyPositions(nodes, arrangeRooms(nodes));
+    const kinds = checkLayout(nodes, edges, {}).map((f) => f.kind);
+    expect(kinds).not.toContain("overlap");
+    expect(kinds).not.toContain("outside");
+    expect(kinds).not.toContain("room_overlap");
+    expect(kinds).not.toContain("off_grid");
   });
 });

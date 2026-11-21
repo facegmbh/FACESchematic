@@ -447,8 +447,8 @@ Raum (und seine Eltern) an den Inhalt an.
 Wegpunkte nur, wenn ausdrücklich genannt.
 
 **Acceptance criteria:**
-- [ ] Kapelle-Fixture nach `arrange_room` je Raum + `arrange_rooms` + `route_connections`: keine `overlap`, `outside`, `room_overlap`
-- [ ] Eigene Wegpunkte bleiben ohne ausdrückliche Nennung erhalten
+- [x] Kapelle-Fixture nach `arrange_room` je Raum + `arrange_rooms` + `route_connections`: keine `overlap`, `outside`, `room_overlap`
+- [x] Eigene Wegpunkte bleiben ohne ausdrückliche Nennung erhalten
 
 **Verification:** `npx vitest run`, `npx tsc -b`
 

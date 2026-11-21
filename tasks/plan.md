@@ -149,7 +149,7 @@ Entscheidungen:
 - [x] Kapelle-Fixture: je Raum nach `arrange_room` keine `overlap`/`outside` (Test)
 - [ ] Screenshot an Jean-Luc — nach Task 25, weil die Räume erst mit `arrange_rooms` nicht mehr übereinanderliegen
 
-- [ ] Task 25: `arrange_rooms` und `route_connections`
+- [x] Task 25: `arrange_rooms` und `route_connections`
 - [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen
 - [ ] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call`
 

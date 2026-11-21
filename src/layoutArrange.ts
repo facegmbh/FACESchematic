@@ -134,3 +134,36 @@ export function fitRoomSize(nodes: SchematicNode[], roomId: string): { width: nu
     height: Math.max(MIN_ROOM.height, snap(bottom + FIT_MARGIN)),
   };
 }
+
+/** Gap between rooms, and the width after which the next row starts. */
+const ROOM_GAP = 96;
+const MAX_ROW_WIDTH = 2400;
+
+/** New positions for the top-level rooms: rows left to right, no overlap, on the grid. Rooms keep
+ *  their content (nested rooms and devices move with them). Order: as given, then reading order. */
+export function arrangeRooms(nodes: SchematicNode[], order: string[] = []): Record<string, Point> {
+  const tops = nodes.filter((n) => n.type === "room" && !n.parentId);
+  if (!tops.length) return {};
+  const reading = (a: SchematicNode, b: SchematicNode) => a.position.y - b.position.y || a.position.x - b.position.x;
+  const given = order.map((id) => tops.find((t) => t.id === id)).filter((t): t is SchematicNode => !!t);
+  const rest = tops.filter((t) => !given.includes(t)).sort(reading);
+  const x0 = Math.floor(Math.min(...tops.map((t) => t.position.x)) / GRID_SIZE) * GRID_SIZE;
+  const y0 = Math.floor(Math.min(...tops.map((t) => t.position.y)) / GRID_SIZE) * GRID_SIZE;
+
+  const positions: Record<string, Point> = {};
+  let x = x0;
+  let y = y0;
+  let rowHeight = 0;
+  for (const room of [...given, ...rest]) {
+    const s = layoutSize(room);
+    if (x > x0 && x - x0 + s.width > MAX_ROW_WIDTH) {
+      x = x0;
+      y = snap(y + rowHeight + ROOM_GAP);
+      rowHeight = 0;
+    }
+    positions[room.id] = { x, y };
+    x = snap(x + s.width + ROOM_GAP);
+    rowHeight = Math.max(rowHeight, s.height);
+  }
+  return positions;
+}
