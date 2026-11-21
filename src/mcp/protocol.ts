@@ -81,7 +81,9 @@ export type CommandType =
   | "get_editor_status"
   | "open_odoo_drawing"
   | "save_odoo_drawing"
-  | "new_odoo_drawing";
+  | "new_odoo_drawing"
+  // FACE: layout (SPEC-schaltplan-layout.md)
+  | "check_layout";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -624,6 +626,11 @@ export interface OpenOdooDrawingParams {
 export interface SaveOdooDrawingParams {
   force?: boolean;
 }
+export interface CheckLayoutParams {
+  /** Only this room and what is inside it (nested rooms, racks, devices). */
+  roomId?: string;
+}
+
 export interface NewOdooDrawingParams {
   projectId: number;
   name: string;

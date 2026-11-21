@@ -398,9 +398,9 @@ Wo liegen die verlegten Linien (Auto-Routing-Wegpunkte, eigene Wegpunkte, sonst 
 `crosses_device`, `crossings`, `detour` – je mit IDs und einem Satz zur Abhilfe.
 
 **Acceptance criteria:**
-- [ ] Kapelle-Fixture: Switch `outside` (ragt aus „Netzwerk“), RX1/PureLink `overlap`
-- [ ] Eine saubere Zeichnung liefert keine Befunde; `check_layout` ändert nichts
-- [ ] Linie durch ein Gerät und Umweg (> 2 × kürzester Weg) werden erkannt
+- [x] Kapelle-Fixture: Switch `outside` (ragt aus „Netzwerk“), RX1/PureLink `overlap`
+- [x] Eine saubere Zeichnung liefert keine Befunde; `check_layout` ändert nichts
+- [x] Linie durch ein Gerät und Umweg (> 2 × kürzester Weg) werden erkannt
 
 **Verification:** `npx vitest run`, `npx tsc -b`
 

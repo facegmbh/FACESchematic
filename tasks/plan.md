@@ -135,7 +135,13 @@ Entscheidungen:
 - **Kapelle-Zeichnung vom 21.11. als Fixture** (aus `get_schematic` nachgebaut): Vorher-Befunde
   und Nachher-Ziel sind Tests.
 
-- [ ] Task 22: Spike + `check_layout` (Überlappung, Ragen, Raum/Raum, Raster; Linien durch Geräte, Kreuzungen, Umwege)
+- [x] Task 22: Spike + `check_layout` (Überlappung, Ragen, Raum/Raum, Raster; Linien durch Geräte, Kreuzungen, Umwege)
+  Spike-Ergebnis (21.11.): Gerätegrößen stehen im Store (`measured`), verlegte Linien in
+  `routedEdges` (Wegpunkte); headless routet `routingHarness/routeFixture`. `computeRoutingMetrics`
+  zählt Kreuzungen/Umwege nur gesamt – `layoutCheck.ts` rechnet je Linie selbst (mit
+  `extractSegments`/`segmentsCross`). Bild-Export im Hintergrund-Tab: offen bis Task 26.
+  Kapelle-Fixture (Größen im Browser gemessen) meldet: 3 Überlappungen, Switch ragt heraus, Linie
+  durch Control Server, 4 Umwege, 22 Kreuzungen, 17 Geräte neben dem Raster.
 - [ ] Task 23: Verschachtelte Orte und Racks — `create_room` mit `parentRoomId`, `add_rack_to_room` (Kasten + Rack-Ansicht), `place_device_in_rack` setzt in beide
 - [ ] Task 24: `arrange_room` (Signalfluss, Raster, Racks als Block) und `fit_room`
 

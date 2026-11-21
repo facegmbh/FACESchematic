@@ -1,0 +1,1631 @@
+{
+ "version": 49,
+ "name": "Medientechnik Kapelle",
+ "nodes": [
+  {
+   "id": "room-10",
+   "type": "room",
+   "position": {
+    "x": 550,
+    "y": 900
+   },
+   "data": {
+    "label": "Steuerung"
+   },
+   "style": {
+    "width": 500,
+    "height": 300
+   },
+   "measured": {
+    "width": 500,
+    "height": 300
+   }
+  },
+  {
+   "id": "room-9",
+   "type": "room",
+   "position": {
+    "x": 1100,
+    "y": 450
+   },
+   "data": {
+    "label": "Bildschirm"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "room-8",
+   "type": "room",
+   "position": {
+    "x": 550,
+    "y": 450
+   },
+   "data": {
+    "label": "Netzwerk"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "room-7",
+   "type": "room",
+   "position": {
+    "x": 0,
+    "y": 450
+   },
+   "data": {
+    "label": "Kamera und Übertragung"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "room-6",
+   "type": "room",
+   "position": {
+    "x": 1100,
+    "y": 0
+   },
+   "data": {
+    "label": "Projektion"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "room-5",
+   "type": "room",
+   "position": {
+    "x": 550,
+    "y": 0
+   },
+   "data": {
+    "label": "Beschallung"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "room-4",
+   "type": "room",
+   "position": {
+    "x": 0,
+    "y": 0
+   },
+   "data": {
+    "label": "Mikrofone"
+   },
+   "style": {
+    "width": 500,
+    "height": 400
+   },
+   "measured": {
+    "width": 500,
+    "height": 400
+   }
+  },
+  {
+   "id": "device-15",
+   "type": "device",
+   "position": {
+    "x": 260,
+    "y": 40
+   },
+   "parentId": "room-4",
+   "data": {
+    "label": "Shure MXWAPX4 Access Point",
+    "deviceType": "access-point",
+    "manufacturer": "Shure",
+    "ports": [
+     {
+      "id": "p1795264674124-0-0",
+      "label": "Input 1",
+      "direction": "input",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-1",
+      "label": "Input 2",
+      "direction": "input",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-2",
+      "label": "Input 3",
+      "direction": "input",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-3",
+      "label": "Input 4",
+      "direction": "input",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-4",
+      "label": "USB Audio",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674124-0-5",
+      "label": "Output 1",
+      "direction": "output",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-6",
+      "label": "Output 2",
+      "direction": "output",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-7",
+      "label": "Output 3",
+      "direction": "output",
+      "signalType": "dante"
+     },
+     {
+      "id": "p1795264674124-0-8",
+      "label": "Analog Audio",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674124-0-9",
+      "label": "LAN 1",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674124-0-10",
+      "label": "LAN 2",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 160
+   }
+  },
+  {
+   "id": "device-16",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-4",
+   "data": {
+    "label": "Shure MXWNDX4E Ladestation",
+    "deviceType": "charging-station",
+    "manufacturer": "Shure",
+    "ports": [
+     {
+      "id": "p1795264674125-1-0",
+      "label": "IN 1",
+      "direction": "input",
+      "signalType": "power"
+     },
+     {
+      "id": "p1795264674125-1-1",
+      "label": "IO 2",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674125-1-2",
+      "label": "IO 1",
+      "direction": "bidirectional",
+      "signalType": "dante"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 96
+   }
+  },
+  {
+   "id": "device-17",
+   "type": "device",
+   "position": {
+    "x": 260,
+    "y": 230
+   },
+   "parentId": "room-4",
+   "data": {
+    "label": "Shure SLXD4+E Empfänger",
+    "deviceType": "wireless-mic-receiver",
+    "manufacturer": "Shure",
+    "ports": [
+     {
+      "id": "p1795264674127-2-0",
+      "label": "Analog Out 1",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674127-2-1",
+      "label": "Inst/Aux out 1",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674127-2-2",
+      "label": "Ethernet",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674127-2-3",
+      "label": "DC Power 15V",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 96
+   }
+  },
+  {
+   "id": "device-18",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 230
+   },
+   "parentId": "room-4",
+   "data": {
+    "label": "Shure SLXD2+ Beta87A Handsender",
+    "deviceType": "wired-mic",
+    "manufacturer": "Shure",
+    "ports": [
+     {
+      "id": "p1795264674128-3-0",
+      "label": "RF Out",
+      "direction": "output",
+      "signalType": "rf"
+     },
+     {
+      "id": "p1795264674128-3-1",
+      "label": "Charging Contacts",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 64
+   }
+  },
+  {
+   "id": "device-19",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-5",
+   "data": {
+    "label": "Bose ESP-880A",
+    "deviceType": "audio-dsp",
+    "manufacturer": "Bose Professional",
+    "ports": [
+     {
+      "id": "p1795264674130-4-0",
+      "label": "Mic/Line In 1",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-1",
+      "label": "Mic/Line In 2",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-2",
+      "label": "Mic/Line In 3",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-3",
+      "label": "Mic/Line In 4",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-4",
+      "label": "Mic/Line In 5",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-5",
+      "label": "Mic/Line In 6",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-6",
+      "label": "Mic/Line In 7",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-7",
+      "label": "Mic/Line In 8",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-8",
+      "label": "Analog Out 1",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-9",
+      "label": "Analog Out 2",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-10",
+      "label": "Analog Out 3",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-11",
+      "label": "Analog Out 4",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-12",
+      "label": "Analog Out 5",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-13",
+      "label": "Analog Out 6",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-14",
+      "label": "Analog Out 7",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-15",
+      "label": "Analog Out 8",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674130-4-16",
+      "label": "AmpLink Out",
+      "direction": "output",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674130-4-17",
+      "label": "Control LAN (rear)",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674130-4-18",
+      "label": "Control LAN (front)",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674130-4-19",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674130-4-20",
+      "label": "GPI 1",
+      "direction": "input",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-21",
+      "label": "GPI 2",
+      "direction": "input",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-22",
+      "label": "GPI 3",
+      "direction": "input",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-23",
+      "label": "GPI 4",
+      "direction": "input",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-24",
+      "label": "GPI 5",
+      "direction": "input",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-25",
+      "label": "GPO 1",
+      "direction": "output",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-26",
+      "label": "GPO 2",
+      "direction": "output",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-27",
+      "label": "GPO 3",
+      "direction": "output",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-28",
+      "label": "GPO 4",
+      "direction": "output",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-29",
+      "label": "GPO 5",
+      "direction": "output",
+      "signalType": "gpio"
+     },
+     {
+      "id": "p1795264674130-4-30",
+      "label": "AC Power",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 320
+   }
+  },
+  {
+   "id": "device-20",
+   "type": "device",
+   "position": {
+    "x": 280,
+    "y": 40
+   },
+   "parentId": "room-5",
+   "data": {
+    "label": "Bose P2600A",
+    "deviceType": "amplifier",
+    "manufacturer": "Bose Professional",
+    "ports": [
+     {
+      "id": "p1795264674132-5-0",
+      "label": "Line In 1",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674132-5-1",
+      "label": "Line In 2",
+      "direction": "input",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674132-5-2",
+      "label": "Speaker Out 1",
+      "direction": "output",
+      "signalType": "speaker-level"
+     },
+     {
+      "id": "p1795264674132-5-3",
+      "label": "Speaker Out 2",
+      "direction": "output",
+      "signalType": "speaker-level"
+     },
+     {
+      "id": "p1795264674132-5-4",
+      "label": "AmpLink In",
+      "direction": "input",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674132-5-5",
+      "label": "AmpLink Thru",
+      "direction": "output",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674132-5-6",
+      "label": "Mute NO/NC",
+      "direction": "input",
+      "signalType": "contact-closure"
+     },
+     {
+      "id": "p1795264674132-5-7",
+      "label": "AC Power",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 128
+   }
+  },
+  {
+   "id": "device-21",
+   "type": "device",
+   "position": {
+    "x": 280,
+    "y": 40
+   },
+   "parentId": "room-6",
+   "data": {
+    "label": "Epson EB-PU1007W",
+    "deviceType": "projector",
+    "manufacturer": "Epson",
+    "ports": [
+     {
+      "id": "p1795264674134-6-0",
+      "label": "LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674134-6-1",
+      "label": "HDMI",
+      "direction": "input",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674134-6-2",
+      "label": "HDBaseT",
+      "direction": "input",
+      "signalType": "hdbaset"
+     },
+     {
+      "id": "p1795264674134-6-3",
+      "label": "DVI-D",
+      "direction": "input",
+      "signalType": "dvi"
+     },
+     {
+      "id": "p1795264674134-6-4",
+      "label": "Computer",
+      "direction": "input",
+      "signalType": "vga"
+     },
+     {
+      "id": "p1795264674134-6-5",
+      "label": "RS-232",
+      "direction": "input",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674134-6-6",
+      "label": "Audio Out",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674134-6-7",
+      "label": "AC Power",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 160
+   }
+  },
+  {
+   "id": "device-22",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-6",
+   "data": {
+    "label": "PureLink BYOD200",
+    "deviceType": "wireless-presentation",
+    "manufacturer": "PureLink",
+    "ports": [
+     {
+      "id": "p1795264674135-7-0",
+      "label": "USB-C In",
+      "direction": "input",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674135-7-1",
+      "label": "HDMI In",
+      "direction": "input",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674135-7-2",
+      "label": "USB Host",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674135-7-3",
+      "label": "HDMI Out",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674135-7-4",
+      "label": "HDBT Out",
+      "direction": "output",
+      "signalType": "hdbaset"
+     },
+     {
+      "id": "p1795264674135-7-5",
+      "label": "Utility LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674135-7-6",
+      "label": "Secure LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674135-7-7",
+      "label": "DC Power 20V",
+      "direction": "input",
+      "signalType": "power"
+     },
+     {
+      "id": "p1795264674135-7-8",
+      "label": "USB 3.0 1",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674135-7-9",
+      "label": "USB 3.0 2",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674135-7-10",
+      "label": "USB 3.0 3",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674135-7-11",
+      "label": "Audio Out",
+      "direction": "output",
+      "signalType": "analog-audio"
+     },
+     {
+      "id": "p1795264674135-7-12",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674135-7-13",
+      "label": "Pairing",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 224
+   }
+  },
+  {
+   "id": "device-23",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 250
+   },
+   "parentId": "room-6",
+   "data": {
+    "label": "JAP MC-RX1 Beamer/Display",
+    "deviceType": "av-over-ip",
+    "manufacturer": "Just Add Power",
+    "ports": [
+     {
+      "id": "p1795264674138-8-0",
+      "label": "HDMI Out",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674138-8-1",
+      "label": "Network / PoE",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674138-8-2",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674138-8-3",
+      "label": "IR In",
+      "direction": "input",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674138-8-4",
+      "label": "IR Out",
+      "direction": "output",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674138-8-5",
+      "label": "DC Power (alt.)",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 112
+   }
+  },
+  {
+   "id": "device-24",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-7",
+   "data": {
+    "label": "JAP MC-TX1 Kamera",
+    "deviceType": "av-over-ip",
+    "manufacturer": "Just Add Power",
+    "ports": [
+     {
+      "id": "p1795264674140-9-0",
+      "label": "HDMI In",
+      "direction": "input",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674140-9-1",
+      "label": "Network / PoE",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674140-9-2",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674140-9-3",
+      "label": "IR In",
+      "direction": "input",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674140-9-4",
+      "label": "IR Out",
+      "direction": "output",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674140-9-5",
+      "label": "DC Power (alt.)",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 128
+   }
+  },
+  {
+   "id": "device-25",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 200
+   },
+   "parentId": "room-7",
+   "data": {
+    "label": "JAP MC-TX2 Kirche (SFP)",
+    "deviceType": "av-over-ip",
+    "manufacturer": "Just Add Power",
+    "ports": [
+     {
+      "id": "p1795264674142-10-0",
+      "label": "HDMI In",
+      "direction": "input",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674142-10-1",
+      "label": "HDMI Out (Mirror)",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674142-10-2",
+      "label": "Fiber SFP",
+      "direction": "bidirectional",
+      "signalType": "fiber"
+     },
+     {
+      "id": "p1795264674142-10-3",
+      "label": "Network / PoE (Cat)",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674142-10-4",
+      "label": "USB-A",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674142-10-5",
+      "label": "USB-C",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674142-10-6",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674142-10-7",
+      "label": "IR In",
+      "direction": "input",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674142-10-8",
+      "label": "IR Out",
+      "direction": "output",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674142-10-9",
+      "label": "DC Power (alt.)",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 176
+   }
+  },
+  {
+   "id": "device-26",
+   "type": "device",
+   "position": {
+    "x": 280,
+    "y": 120
+   },
+   "parentId": "room-7",
+   "data": {
+    "label": "JAP MC-RX1 Haus-TV",
+    "deviceType": "av-over-ip",
+    "manufacturer": "Just Add Power",
+    "ports": [
+     {
+      "id": "p1795264674144-11-0",
+      "label": "HDMI Out",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674144-11-1",
+      "label": "Network / PoE",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674144-11-2",
+      "label": "RS-232",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674144-11-3",
+      "label": "IR In",
+      "direction": "input",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674144-11-4",
+      "label": "IR Out",
+      "direction": "output",
+      "signalType": "ir"
+     },
+     {
+      "id": "p1795264674144-11-5",
+      "label": "DC Power (alt.)",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 112
+   }
+  },
+  {
+   "id": "device-27",
+   "type": "device",
+   "position": {
+    "x": 150,
+    "y": 0
+   },
+   "parentId": "room-8",
+   "data": {
+    "label": "NETGEAR M4250-26G4F",
+    "deviceType": "network-switch",
+    "manufacturer": "NETGEAR",
+    "ports": [
+     {
+      "id": "p1795264674147-12-0",
+      "label": "AC Power In",
+      "direction": "input",
+      "signalType": "power"
+     },
+     {
+      "id": "p1795264674147-12-1",
+      "label": "Out-of-Band (OOB) 1G Management Port",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-2",
+      "label": "RS-232 Serial Console (RJ-45)",
+      "direction": "bidirectional",
+      "signalType": "serial"
+     },
+     {
+      "id": "p1795264674147-12-3",
+      "label": "USB Type-C Local Management Console",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674147-12-4",
+      "label": "USB Type-A Storage / Firmware Port",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674147-12-5",
+      "label": "Port 1",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-6",
+      "label": "Port 2",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-7",
+      "label": "Port 3",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-8",
+      "label": "Port 4",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-9",
+      "label": "Port 5",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-10",
+      "label": "Port 6",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-11",
+      "label": "Port 7",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-12",
+      "label": "Port 8",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-13",
+      "label": "Port 9",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-14",
+      "label": "Port 10",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-15",
+      "label": "Port 11",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-16",
+      "label": "Port 12",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-17",
+      "label": "Port 13",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-18",
+      "label": "Port 14",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-19",
+      "label": "Port 15",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-20",
+      "label": "Port 16",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-21",
+      "label": "Port 17",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-22",
+      "label": "Port 18",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-23",
+      "label": "Port 19",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-24",
+      "label": "Port 20",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-25",
+      "label": "Port 21",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-26",
+      "label": "Port 22",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-27",
+      "label": "Port 23",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-28",
+      "label": "Port 24",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-29",
+      "label": "Port 25",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-30",
+      "label": "Port 26",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674147-12-31",
+      "label": "SFP Port 27",
+      "direction": "bidirectional",
+      "signalType": "fiber"
+     },
+     {
+      "id": "p1795264674147-12-32",
+      "label": "SFP Port 28",
+      "direction": "bidirectional",
+      "signalType": "fiber"
+     },
+     {
+      "id": "p1795264674147-12-33",
+      "label": "SFP Port 29",
+      "direction": "bidirectional",
+      "signalType": "fiber"
+     },
+     {
+      "id": "p1795264674147-12-34",
+      "label": "SFP Port 30",
+      "direction": "bidirectional",
+      "signalType": "fiber"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 608
+   }
+  },
+  {
+   "id": "device-28",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-9",
+   "data": {
+    "label": "Vuelogic VB300-PRO",
+    "deviceType": "video-bar",
+    "manufacturer": "PureLink (Vuelogic)",
+    "ports": [
+     {
+      "id": "p1795264674149-13-0",
+      "label": "HDMI In",
+      "direction": "input",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674149-13-1",
+      "label": "HDMI Out",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674149-13-2",
+      "label": "LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674149-13-3",
+      "label": "USB-B (zum Host-PC)",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674149-13-4",
+      "label": "USB-A",
+      "direction": "output",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674149-13-5",
+      "label": "USB-C (Dongle/PD)",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674149-13-6",
+      "label": "Power In",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 128
+   }
+  },
+  {
+   "id": "device-29",
+   "type": "device",
+   "position": {
+    "x": 20,
+    "y": 40
+   },
+   "parentId": "room-10",
+   "data": {
+    "label": "FACE Control Server",
+    "deviceType": "control-processor",
+    "manufacturer": "Symcon",
+    "ports": [
+     {
+      "id": "p1795264674152-14-0",
+      "label": "LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674152-14-1",
+      "label": "USB-C (Service)",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674152-14-2",
+      "label": "DC In 24V",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 96
+   }
+  },
+  {
+   "id": "device-30",
+   "type": "device",
+   "position": {
+    "x": 280,
+    "y": 40
+   },
+   "parentId": "room-10",
+   "data": {
+    "label": "FACE Control Panel (iPad)",
+    "deviceType": "touch-screen",
+    "manufacturer": "Apple",
+    "ports": [
+     {
+      "id": "p1795264674154-15-0",
+      "label": "Wi-Fi (Steuerung)",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674154-15-1",
+      "label": "USB-C / Lightning",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 80
+   }
+  },
+  {
+   "id": "device-31",
+   "type": "device",
+   "position": {
+    "x": 280,
+    "y": 170
+   },
+   "parentId": "room-10",
+   "data": {
+    "label": "FACE Ferneinwahl PC",
+    "deviceType": "computer",
+    "manufacturer": "FACE",
+    "ports": [
+     {
+      "id": "p1795264674157-16-0",
+      "label": "LAN",
+      "direction": "bidirectional",
+      "signalType": "ethernet"
+     },
+     {
+      "id": "p1795264674157-16-1",
+      "label": "HDMI Out",
+      "direction": "output",
+      "signalType": "hdmi"
+     },
+     {
+      "id": "p1795264674157-16-2",
+      "label": "USB",
+      "direction": "bidirectional",
+      "signalType": "usb"
+     },
+     {
+      "id": "p1795264674157-16-3",
+      "label": "DC In",
+      "direction": "input",
+      "signalType": "power"
+     }
+    ]
+   },
+   "measured": {
+    "width": 176,
+    "height": 96
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "edge-20",
+   "source": "device-15",
+   "sourceHandle": "p1795264674124-0-8",
+   "target": "device-19",
+   "targetHandle": "p1795264674130-4-0",
+   "data": {
+    "signalType": "analog-audio"
+   }
+  },
+  {
+   "id": "edge-21",
+   "source": "device-17",
+   "sourceHandle": "p1795264674127-2-0",
+   "target": "device-19",
+   "targetHandle": "p1795264674130-4-1",
+   "data": {
+    "signalType": "analog-audio"
+   }
+  },
+  {
+   "id": "edge-22",
+   "source": "device-19",
+   "sourceHandle": "p1795264674130-4-8",
+   "target": "device-20",
+   "targetHandle": "p1795264674132-5-0",
+   "data": {
+    "signalType": "analog-audio"
+   }
+  },
+  {
+   "id": "edge-23",
+   "source": "device-19",
+   "sourceHandle": "p1795264674130-4-9",
+   "target": "device-20",
+   "targetHandle": "p1795264674132-5-1",
+   "data": {
+    "signalType": "analog-audio"
+   }
+  },
+  {
+   "id": "edge-24",
+   "source": "device-23",
+   "sourceHandle": "p1795264674138-8-0",
+   "target": "device-22",
+   "targetHandle": "p1795264674135-7-1",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-25",
+   "source": "device-22",
+   "sourceHandle": "p1795264674135-7-3",
+   "target": "device-21",
+   "targetHandle": "p1795264674134-6-1",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-26",
+   "source": "device-25",
+   "sourceHandle": "p1795264674142-10-2-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-31-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-27",
+   "source": "device-15",
+   "sourceHandle": "p1795264674124-0-9-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-5-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-28",
+   "source": "device-16",
+   "sourceHandle": "p1795264674125-1-1-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-6-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-29",
+   "source": "device-17",
+   "sourceHandle": "p1795264674127-2-2-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-7-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-30",
+   "source": "device-19",
+   "sourceHandle": "p1795264674130-4-17-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-8-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-31",
+   "source": "device-21",
+   "sourceHandle": "p1795264674134-6-0-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-9-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-32",
+   "source": "device-22",
+   "sourceHandle": "p1795264674135-7-5-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-10-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-33",
+   "source": "device-23",
+   "sourceHandle": "p1795264674138-8-1-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-11-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-34",
+   "source": "device-24",
+   "sourceHandle": "p1795264674140-9-1-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-12-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-35",
+   "source": "device-26",
+   "sourceHandle": "p1795264674144-11-1-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-13-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-36",
+   "source": "device-28",
+   "sourceHandle": "p1795264674149-13-2-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-14-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-37",
+   "source": "device-29",
+   "sourceHandle": "p1795264674152-14-0-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-15-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  },
+  {
+   "id": "edge-38",
+   "source": "device-31",
+   "sourceHandle": "p1795264674157-16-0-out",
+   "target": "device-27",
+   "targetHandle": "p1795264674147-12-16-in",
+   "data": {
+    "signalType": "hdmi"
+   }
+  }
+ ]
+}

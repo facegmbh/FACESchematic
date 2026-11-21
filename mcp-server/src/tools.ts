@@ -843,6 +843,18 @@ export const TOOLS: ToolDef[] = [
     },
   },
 
+  // --- FACE: layout (SPEC-schaltplan-layout.md) ----------------------------------------
+  {
+    name: "check_layout",
+    description:
+      "Check how clean the drawing is, without changing anything: devices on top of each other (overlap), devices or rack boxes sticking out of their room (outside), rooms overlapping (room_overlap), devices off the grid (off_grid), lines running through a device (crosses_device), lines taking a detour (detour), crossing lines (crossings), and connections not routed yet (unrouted). Each finding names the ids involved and what to do. Run it after building or changing a schematic and fix overlap/outside/room_overlap before reporting back; clean = true means nothing to fix.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string", description: "Only check this room and what is inside it." } },
+      additionalProperties: false,
+    },
+  },
+
   // --- FACE: drawings stored on Odoo projects (SPEC-cloud-bridge.md) ---------------------
   {
     name: "get_editor_status",

@@ -19,6 +19,7 @@
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
+import { checkLayout } from "./layoutCheck";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
   getTabId,
@@ -41,6 +42,7 @@ import {
   type OpenOdooDrawingParams,
   type SaveOdooDrawingParams,
   type NewOdooDrawingParams,
+  type CheckLayoutParams,
   type BridgeServerMessage,
   type AddDeviceParams,
   type AddDevicesParams,
@@ -1600,6 +1602,27 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       amplifierCount: amps.length,
       amplifiers: amplifierSummaries(results),
       hint: amps.length === 0 ? "No amplifier with speaker-level outputs on the schematic." : undefined,
+    };
+  },
+
+  // --- FACE: layout (SPEC-schaltplan-layout.md) ------------------------------------
+  check_layout: (params) => {
+    const { roomId } = (params ?? {}) as CheckLayoutParams;
+    if (roomId !== undefined) {
+      const room = st().nodes.find((n) => n.id === roomId);
+      if (!room || room.type !== "room") throw new CommandError(`No room found with id "${roomId}".`);
+    }
+    const s = st();
+    const findings = checkLayout(s.nodes, s.edges, s.routedEdges, { roomId });
+    const summary: Record<string, number> = {};
+    for (const f of findings) summary[f.kind] = (summary[f.kind] ?? 0) + 1;
+    return {
+      clean: findings.length === 0,
+      summary,
+      findings,
+      hint: findings.length
+        ? "Fix overlap/outside/room_overlap first (arrange_room, fit_room, arrange_rooms), then route_connections, then check again."
+        : undefined,
     };
   },
 
