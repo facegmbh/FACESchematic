@@ -10,6 +10,8 @@ export interface Config {
   odooDb?: string;
   dataDir: string;
   port: number;
+  /** Shared with the Odoo connector (system parameter face_schematic.token); unset → /face/service is off. */
+  serviceToken?: string;
 }
 
 const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
@@ -24,8 +26,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (!/^https:\/\//.test(publicUrl) && !LOOPBACK.test(publicUrl)) {
     throw new Error("FACE_PUBLIC_URL fehlt oder ist keine https-Adresse — der Server startet nicht.");
   }
+  const serviceToken = env.FACE_SERVICE_TOKEN || undefined;
+  if (serviceToken !== undefined && serviceToken.length < 32) {
+    throw new Error("FACE_SERVICE_TOKEN ist kürzer als 32 Zeichen — der Server startet nicht.");
+  }
   return {
     secret,
+    serviceToken,
     publicUrl,
     odooUrl: (env.ODOO_URL || "https://facegmbh-odoo.odoo.com").replace(/\/+$/, ""),
     odooDb: env.ODOO_DB || undefined,

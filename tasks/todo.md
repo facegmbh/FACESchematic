@@ -256,9 +256,9 @@ prüft die Eingaben (uid positive Ganzzahl, command bekannter Name), ruft `Relay
 `SERVER_INSTRUCTIONS`, `PROMPTS` (mit Texten). Eigenes Rate-Limit auf Fehlversuche.
 
 **Acceptance criteria:**
-- [ ] Ohne/mit falschem Token 401, ohne konfigurierten Token 503, unbekannter Befehl 400
-- [ ] Mit Token und gebundenem Tab kommt das Tab-Ergebnis zurück; ohne Tab 409 mit Anleitung; 504 nach Zeitüberschreitung
-- [ ] `catalog` enthält alle Werkzeuge aus `tools.ts` und die Playbooks; Token-Wert erscheint in keinem Log
+- [x] Ohne/mit falschem Token 401, ohne konfigurierten Token 503, unbekannter Befehl 400
+- [x] Mit Token und gebundenem Tab kommt das Tab-Ergebnis zurück; ohne Tab 409 mit Anleitung; 504 nach Zeitüberschreitung
+- [x] `catalog` enthält alle Werkzeuge aus `tools.ts` und die Playbooks; Token-Wert erscheint in keinem Log
 
 **Verification:** `cd mcp-server && npm test`
 

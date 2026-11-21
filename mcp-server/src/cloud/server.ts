@@ -15,12 +15,15 @@ import { Store } from "./store.js";
 import { createDrawingsRouter } from "./drawings.js";
 import { Presence } from "./presence.js";
 import { Relay, createBridgeRouter } from "./relay.js";
+import { createServiceRouter } from "./service.js";
 
 const { version: VERSION } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
 export interface AppOptions extends AuthOptions {
   /** Injected by tests to reach the relay directly and shorten the poll. */
   relay?: Relay;
+  serviceCallTimeoutMs?: number;
+  log?: (msg: string) => void;
 }
 
 export function createApp(config: Config, opts: AppOptions = {}): express.Express {
@@ -42,6 +45,16 @@ export function createApp(config: Config, opts: AppOptions = {}): express.Expres
 
   const relay = opts.relay ?? new Relay(opts.now);
   app.use("/face/bridge", auth.requireFaceHeader, auth.requireUser, createBridgeRouter(relay));
+  app.use(
+    "/face/service",
+    createServiceRouter({
+      token: config.serviceToken,
+      relay,
+      publicUrl: config.publicUrl,
+      callTimeoutMs: opts.serviceCallTimeoutMs,
+      log: opts.log ?? ((m) => process.stderr.write(`${m}\n`)),
+    }),
+  );
 
   return app;
 }
