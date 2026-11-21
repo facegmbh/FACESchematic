@@ -851,7 +851,10 @@ export const TOOLS: ToolDef[] = [
       "Tidy one room: its devices (and rack boxes, as one block) go into columns by signal flow — a device feeding another stands left of it — on the grid, without overlap, then the room fits its content (its parents grow if needed). One undo step. Use after filling a room; then arrange_rooms if rooms now overlap, then check_layout. Only on the user's wish for a room they arranged by hand.",
     inputSchema: {
       type: "object",
-      properties: { roomId: { type: "string", description: "The room to arrange." } },
+      properties: {
+        roomId: { type: "string", description: "The room to arrange." },
+        margin: { type: "number", description: "Room for lines inside the room, px (16–160; default 32). Kept on the room for later fits. Raise it (64–96) when check_layout reports line_outside by this room." },
+      },
       required: ["roomId"],
       additionalProperties: false,
     },
@@ -862,7 +865,10 @@ export const TOOLS: ToolDef[] = [
       "Resize a room to its content (grow or shrink, with a margin, on the grid) without moving anything; parent rooms grow if it no longer fits. Fixes 'outside' findings from check_layout.",
     inputSchema: {
       type: "object",
-      properties: { roomId: { type: "string", description: "The room to fit." } },
+      properties: {
+        roomId: { type: "string", description: "The room to fit." },
+        margin: { type: "number", description: "Room for lines inside the room, px (16–160; default 32). Kept on the room for later fits. Raise it (64–96) when check_layout reports line_outside by this room." },
+      },
       required: ["roomId"],
       additionalProperties: false,
     },
@@ -921,7 +927,10 @@ export const TOOLS: ToolDef[] = [
       "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",
     inputSchema: {
       type: "object",
-      properties: { order: { type: "array", items: { type: "string" }, description: "Top-level room ids, wanted order." } },
+      properties: {
+        order: { type: "array", items: { type: "string" }, description: "Top-level room ids, wanted order." },
+        gap: { type: "number", description: "Gap between the locations, px (32–480; default 96) — a channel for lines between them." },
+      },
       additionalProperties: false,
     },
   },
@@ -959,7 +968,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "check_layout",
     description:
-      "Check how clean the drawing is, without changing anything: devices on top of each other (overlap), devices or rack boxes sticking out of their room (outside), rooms overlapping (room_overlap), devices off the grid (off_grid), lines running through a device (crosses_device), lines taking a detour (detour), crossing lines (crossings), and connections not routed yet (unrouted). Each finding names the ids involved and what to do. Run it after building or changing a schematic and fix overlap/outside/room_overlap before reporting back; clean = true means nothing to fix.",
+      "Check how clean the drawing is, without changing anything: devices on top of each other (overlap), devices or rack boxes sticking out of their room (outside), rooms overlapping (room_overlap), devices off the grid (off_grid), lines running through a device (crosses_device), lines taking a detour (detour), crossing lines (crossings), lines leaving the drawing — the frame around all locations (line_outside, naming the location they pass), lines over a location's name or a note (over_text), and connections not routed yet (unrouted). Each finding names the ids involved and what to do. Run it after building or changing a schematic and fix overlap/outside/room_overlap before reporting back; clean = true means nothing to fix.",
     inputSchema: {
       type: "object",
       properties: { roomId: { type: "string", description: "Only check this room and what is inside it." } },

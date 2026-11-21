@@ -373,3 +373,23 @@ describe("choose_port_sides (Task 28)", () => {
     expect((await run("choose_port_sides", { connectionIds: ["nope"] })).ok).toBe(false);
   });
 });
+
+describe("margin and gap commands (Task 30)", () => {
+  it("arrange_room with margin keeps that margin for later fits", async () => {
+    const r = await run("arrange_room", { roomId: "room-8", margin: 96 });
+    expect(r.ok).toBe(true);
+    const room = store.getState().nodes.find((n) => n.id === "room-8")!;
+    expect((room.data as { layoutMargin?: number }).layoutMargin).toBe(96);
+    const fit = await run("fit_room", { roomId: "room-8" });
+    const again = await run("arrange_room", { roomId: "room-8" });
+    if (!r.ok || !fit.ok || !again.ok) throw new Error("command failed");
+    expect((fit.result as { size: unknown }).size).toEqual((r.result as { size: unknown }).size);
+  });
+
+  it("margin and gap are checked", async () => {
+    expect((await run("arrange_room", { roomId: "room-8", margin: 1000 })).ok).toBe(false);
+    expect((await run("fit_room", { roomId: "room-8", margin: "x" })).ok).toBe(false);
+    expect((await run("arrange_rooms", { gap: 5 })).ok).toBe(false);
+    expect((await run("arrange_rooms", { gap: 192 })).ok).toBe(true);
+  });
+});

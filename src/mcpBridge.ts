@@ -20,7 +20,7 @@ import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
-import { arrangeRoom, arrangeRooms, fitRoomSize } from "./layoutArrange";
+import { arrangeRoom, arrangeRooms, fitRoomSize, roomMargin } from "./layoutArrange";
 import { choosePortSides } from "./portSides";
 import { blobToBase64, captureSchematicPng, renderBounds, renderPixelRatio } from "./renderSchematic";
 import { GRID_SIZE } from "./gridConstants";
@@ -781,6 +781,23 @@ function fitRooms(roomId: string, shrink: boolean): { width: number; height: num
     id = st().nodes.find((n) => n.id === id)?.parentId;
   }
   return first!;
+}
+
+/** FACE: an optional px amount (margin, gap) — a number in range, rounded up to the grid. */
+function validateGridAmount(value: unknown, name: string, min: number, max: number): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+    throw new CommandError(`${name} must be a number of pixels between ${min} and ${max}.`);
+  }
+  return Math.ceil(value / GRID_SIZE) * GRID_SIZE;
+}
+
+function withRoomMargin(nodes: SchematicNode[], roomId: string, margin: number): SchematicNode[] {
+  return nodes.map((n) => (n.id === roomId ? ({ ...n, data: { ...n.data, layoutMargin: margin } } as SchematicNode) : n));
+}
+
+function roomMarginOf(roomId: string): number {
+  return roomMargin(st().nodes.find((n) => n.id === roomId));
 }
 
 /** The box mirrors the rack: highest U on top, then downwards. */
@@ -1800,21 +1817,30 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
   },
 
   arrange_room: (params) => {
-    const { roomId } = (params ?? {}) as unknown as ArrangeRoomParams;
+    const { roomId, margin } = (params ?? {}) as unknown as ArrangeRoomParams;
     requireRoom(roomId);
-    const positions = arrangeRoom(st().nodes, st().edges, roomId);
+    const m = validateGridAmount(margin, "margin", 16, 160);
+    // Positions with the new margin; it is written after the undo point so one undo takes both back.
+    const nodes = m === undefined ? st().nodes : withRoomMargin(st().nodes, roomId, m);
+    const positions = arrangeRoom(nodes, st().edges, roomId);
     st().setNodePositions(positions); // the one undo step; fitting below rides along
+    if (m !== undefined) useSchematicStore.setState({ nodes: withRoomMargin(st().nodes, roomId, m) });
     const size = fitRooms(roomId, true);
-    return { roomId, moved: Object.keys(positions).length, size, hint: "check_layout next; then arrange_rooms if rooms now overlap." };
+    return {
+      roomId, moved: Object.keys(positions).length, size, margin: roomMarginOf(roomId),
+      hint: "check_layout next; then arrange_rooms if rooms now overlap.",
+    };
   },
 
   fit_room: (params) => {
-    const { roomId } = (params ?? {}) as unknown as FitRoomParams;
+    const { roomId, margin } = (params ?? {}) as unknown as FitRoomParams;
     requireRoom(roomId);
+    const m = validateGridAmount(margin, "margin", 16, 160);
     const s = st();
     s.resizeRoom(roomId, nodeSizeOf(roomId), { skipUndo: false }); // undo point with the current size
+    if (m !== undefined) useSchematicStore.setState({ nodes: withRoomMargin(st().nodes, roomId, m) });
     const size = fitRooms(roomId, true);
-    return { roomId, size };
+    return { roomId, size, margin: roomMarginOf(roomId) };
   },
 
   rename_room: (params) => {
@@ -1913,7 +1939,8 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
         if (room.parentId) throw new CommandError(`"${id}" is inside another room — order only lists top-level rooms.`);
       }
     }
-    const positions = arrangeRooms(st().nodes, order, st().edges);
+    const gap = validateGridAmount((params as ArrangeRoomsParams | undefined)?.gap, "gap", 32, 480);
+    const positions = arrangeRooms(st().nodes, order, st().edges, gap);
     st().setNodePositions(positions);
     return { moved: Object.keys(positions).length, hint: "route_connections next (lines follow the new positions), then check_layout." };
   },

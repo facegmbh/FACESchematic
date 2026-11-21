@@ -26,6 +26,14 @@ const MIN_ROOM = { width: 200, height: 150 };
 
 const snap = (v: number) => Math.ceil(v / GRID_SIZE) * GRID_SIZE;
 
+/** FACE: a room's margin for lines (SPEC-schaltplan-leitungen.md) — stored on the room as
+ *  `layoutMargin` so every later fit keeps it; the default reproduces the plain layout. */
+export const DEFAULT_ROOM_MARGIN = FIT_MARGIN;
+export function roomMargin(room: SchematicNode | undefined): number {
+  const m = (room?.data as { layoutMargin?: number } | undefined)?.layoutMargin;
+  return typeof m === "number" && m >= 0 ? m : DEFAULT_ROOM_MARGIN;
+}
+
 export function applyPositions(nodes: SchematicNode[], positions: Record<string, Point>): SchematicNode[] {
   return nodes.map((n) => (positions[n.id] ? { ...n, position: positions[n.id] } : n));
 }
@@ -103,10 +111,11 @@ export function arrangeRoom(nodes: SchematicNode[], edges: ConnectionEdge[], roo
   }
 
   const positions: Record<string, Point> = {};
-  let x = START_X;
+  const extra = roomMargin(byId.get(roomId)) - DEFAULT_ROOM_MARGIN;
+  let x = START_X + extra;
   for (const col of columns) {
     if (!col?.length) continue;
-    let y = START_Y;
+    let y = START_Y + extra;
     let width = 0;
     for (const v of col) {
       const size = layoutSize(byId.get(v)!);
@@ -129,9 +138,10 @@ export function fitRoomSize(nodes: SchematicNode[], roomId: string): { width: nu
     right = Math.max(right, n.position.x + s.width);
     bottom = Math.max(bottom, n.position.y + s.height);
   }
+  const margin = roomMargin(nodes.find((n) => n.id === roomId));
   return {
-    width: Math.max(MIN_ROOM.width, snap(right + FIT_MARGIN)),
-    height: Math.max(MIN_ROOM.height, snap(bottom + FIT_MARGIN)),
+    width: Math.max(MIN_ROOM.width, snap(right + margin)),
+    height: Math.max(MIN_ROOM.height, snap(bottom + margin)),
   };
 }
 
@@ -165,7 +175,12 @@ const MAX_ROW_WIDTH = 2400;
  *  their content (nested rooms and devices move with them). Order: as given; without one, the room
  *  with the most connections to other rooms (the technical room) goes in the middle and the others
  *  around it by their number of connections, so lines between rooms stay short. */
-export function arrangeRooms(nodes: SchematicNode[], order: string[] = [], edges: ConnectionEdge[] = []): Record<string, Point> {
+export function arrangeRooms(
+  nodes: SchematicNode[],
+  order: string[] = [],
+  edges: ConnectionEdge[] = [],
+  gap: number = ROOM_GAP,
+): Record<string, Point> {
   const tops = nodes.filter((n) => n.type === "room" && !n.parentId);
   if (!tops.length) return {};
   const reading = (a: SchematicNode, b: SchematicNode) => a.position.y - b.position.y || a.position.x - b.position.x;
@@ -183,11 +198,11 @@ export function arrangeRooms(nodes: SchematicNode[], order: string[] = [], edges
     const s = layoutSize(room);
     if (x > x0 && x - x0 + s.width > MAX_ROW_WIDTH) {
       x = x0;
-      y = snap(y + rowHeight + ROOM_GAP);
+      y = snap(y + rowHeight + gap);
       rowHeight = 0;
     }
     positions[room.id] = { x, y };
-    x = snap(x + s.width + ROOM_GAP);
+    x = snap(x + s.width + gap);
     rowHeight = Math.max(rowHeight, s.height);
   }
   return positions;

@@ -405,6 +405,8 @@ export type DeviceNode = Node<DeviceData, "device">;
 export interface RoomData {
   [key: string]: unknown;
   label: string;
+  /** FACE: room kept free around the content for lines, px (arrange_room/fit_room margin). */
+  layoutMargin?: number;
   color?: string;
   borderColor?: string;
   borderStyle?: "dashed" | "solid" | "dotted";

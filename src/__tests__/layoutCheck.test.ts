@@ -141,3 +141,43 @@ describe("checkLayout — small cases", () => {
     expect(checkLayout(n, e, routes).filter((f) => f.kind === "detour")).toEqual([]);
   });
 });
+
+describe("checkLayout — lines outside the drawing and over text (Task 30)", () => {
+  const two = [room("kapelle", 0, 0, 400, 300), room("technik", 600, 0, 400, 300)];
+
+  it("a line leaving the drawing is reported with how far, and the location it passes", () => {
+    const n = [...two, device("a", 32, 96, "kapelle"), device("b", 32, 96, "technik")];
+    const routes = { e1: { waypoints: [{ x: 100, y: 100 }, { x: 100, y: -100 }, { x: 700, y: -100 }, { x: 700, y: 100 }] } };
+    const f = checkLayout(n, [edge("e1", "a", "b")], routes).filter((x) => x.kind === "line_outside");
+    expect(f).toHaveLength(1);
+    expect(f[0].ids[0]).toBe("e1");
+    expect(f[0].message).toContain("800 px");
+    expect(f[0].ids.some((id) => id === "kapelle" || id === "technik")).toBe(true);
+  });
+
+  it("lines inside the drawing — also in the gap between locations — are fine", () => {
+    const n = [...two, device("a", 32, 96, "kapelle"), device("b", 32, 96, "technik")];
+    const routes = { e1: { waypoints: [{ x: 192, y: 144 }, { x: 500, y: 144 }, { x: 500, y: 200 }, { x: 632, y: 200 }] } };
+    expect(checkLayout(n, [edge("e1", "a", "b")], routes).filter((x) => x.kind === "line_outside")).toEqual([]);
+  });
+
+  it("without locations there is no drawing frame to leave", () => {
+    const routes = { e1: { waypoints: [{ x: 160, y: 48 }, { x: 160, y: -400 }, { x: 640, y: -400 }, { x: 640, y: 48 }] } };
+    expect(checkLayout([device("a", 0, 0), device("b", 640, 0)], [edge("e1", "a", "b")], routes).filter((x) => x.kind === "line_outside")).toEqual([]);
+  });
+
+  it("a line over a location's name is reported with the location", () => {
+    const n = [...two, device("a", 32, 96, "kapelle"), device("b", 32, 96, "technik")];
+    const routes = { e1: { waypoints: [{ x: 192, y: 144 }, { x: 560, y: 144 }, { x: 560, y: 10 }, { x: 760, y: 10 }, { x: 760, y: 96 }] } };
+    const f = checkLayout(n, [edge("e1", "a", "b")], routes).filter((x) => x.kind === "over_text");
+    expect(f).toHaveLength(1);
+    expect(f[0].ids).toEqual(["e1", "technik"]);
+  });
+
+  it("a line over a note is reported too", () => {
+    const note = { id: "note-1", type: "note", position: { x: 300, y: 400 }, data: {}, measured: { width: 200, height: 80 } } as unknown as SchematicNode;
+    const routes = { e1: { waypoints: [{ x: 160, y: 440 }, { x: 640, y: 440 }] } };
+    const f = checkLayout([device("a", 0, 392), device("b", 640, 392), note], [edge("e1", "a", "b")], routes).filter((x) => x.kind === "over_text");
+    expect(f.map((x) => x.ids)).toEqual([["e1", "note-1"]]);
+  });
+});

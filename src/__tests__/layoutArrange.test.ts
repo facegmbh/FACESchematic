@@ -150,3 +150,25 @@ describe("arrangeRooms without an order", () => {
     expect(order.indexOf("hub")).toBeLessThan(3);
   });
 });
+
+describe("room margin and gap between locations (Task 30)", () => {
+  it("a room's layoutMargin is room for lines: content starts further in, the fitted room is bigger", () => {
+    const plain = [room("r", 0, 0, 400, 300), device("a", 0, 0, "r")];
+    const wide = [{ ...room("r", 0, 0, 400, 300), data: { label: "r", layoutMargin: 96 } } as SchematicNode, device("a", 0, 0, "r")];
+    const p = arrangeRoom(plain, [], "r").a;
+    const w = arrangeRoom(wide, [], "r").a;
+    expect(w.x - p.x).toBe(64);
+    expect(w.y - p.y).toBe(64);
+    const sp = fitRoomSize(applyPositions(plain, { a: p }), "r");
+    const sw = fitRoomSize(applyPositions(wide, { a: w }), "r");
+    expect(sw.width - sp.width).toBe(128);
+    expect(sw.height - sp.height).toBe(128);
+  });
+
+  it("arrangeRooms takes a gap between the locations", () => {
+    const nodes = [room("a", 0, 0, 400, 300), room("b", 0, 0, 400, 300)];
+    const narrow = arrangeRooms(nodes, ["a", "b"]);
+    const wide = arrangeRooms(nodes, ["a", "b"], [], 256);
+    expect(wide.b.x - wide.a.x - (narrow.b.x - narrow.a.x)).toBe(256 - 96);
+  });
+});

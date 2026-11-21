@@ -548,8 +548,8 @@ Notizen auf. Gilt auch beim Zeichnen von Hand.
 bekommt `gap`, `arrange_room`/`fit_room` bekommen `margin`.
 
 **Acceptance criteria:**
-- [ ] Befunde mit Leitungs-IDs und Abhilfe-Satz; Gerätetexte nicht doppelt gemeldet
-- [ ] `gap`/`margin` auf dem Raster, Grenzen geprüft
+- [x] Befunde mit Leitungs-IDs und Abhilfe-Satz; `line_outside` nennt Länge und den Ort, an dem die Leitung vorbeiläuft; Gerätetexte nicht doppelt (Geräte sind schon `crosses_device`)
+- [x] `gap`/`margin` auf dem Raster, Grenzen geprüft; `margin` bleibt am Raum (`layoutMargin`)
 
 **Dependencies:** Task 29 (gleiche Text-Rechtecke) · **Files:** `src/layoutCheck.ts`, `src/layoutArrange.ts`, `src/mcpBridge.ts`, Tests · **Scope:** M
 

@@ -9,6 +9,7 @@
 import type { ConnectionEdge, SchematicNode } from "./types";
 import { extractSegments, segmentsCross } from "./edgeRouter";
 import { GRID_SIZE } from "./gridConstants";
+import { textObstacleRects } from "./pathfinding";
 
 export type LayoutFindingKind =
   | "overlap"
@@ -19,6 +20,8 @@ export type LayoutFindingKind =
   | "crosses_device"
   | "crossings"
   | "detour"
+  | "line_outside"
+  | "over_text"
   | "unrouted";
 
 export interface LayoutFinding {
@@ -115,6 +118,24 @@ function segmentEnters(a: Point, b: Point, r: Rect): boolean {
   }
   // Diagonal (shouldn't happen with orthogonal routing): test its bounding box.
   return intersects({ left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) }, inset);
+}
+
+/** Length of an axis-aligned segment that lies outside a rect. */
+function lengthOutside(a: Point, b: Point, r: Rect): number {
+  const total = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  let inside = 0;
+  if (a.y === b.y && a.y >= r.top - TOLERANCE && a.y <= r.bottom + TOLERANCE) {
+    inside = Math.max(0, Math.min(Math.max(a.x, b.x), r.right) - Math.max(Math.min(a.x, b.x), r.left));
+  } else if (a.x === b.x && a.x >= r.left - TOLERANCE && a.x <= r.right + TOLERANCE) {
+    inside = Math.max(0, Math.min(Math.max(a.y, b.y), r.bottom) - Math.max(Math.min(a.y, b.y), r.top));
+  }
+  return total - inside;
+}
+
+function distance(p: Point, r: Rect): number {
+  const dx = Math.max(r.left - p.x, 0, p.x - r.right);
+  const dy = Math.max(r.top - p.y, 0, p.y - r.bottom);
+  return Math.hypot(dx, dy);
 }
 
 function length(wps: Point[]): number {
@@ -248,6 +269,49 @@ export function checkLayout(
         kind: "detour",
         ids: [e.id],
         message: `The line ${label(byId.get(e.source))} → ${label(byId.get(e.target))} is ${Math.round(actual)} px long for ${Math.round(shortest)} px of distance — bring the devices closer or re-route.`,
+      });
+    }
+  }
+
+  // FACE (SPEC-schaltplan-leitungen.md): no line outside the drawing — the frame around all
+  // locations — and none over a location's name or a note. Same text boxes the router avoids.
+  const tops = rooms.filter((r) => !r.parentId);
+  const frame = tops.length
+    ? tops.map((r) => rects.get(r.id)!).reduce((f, r) => ({
+        left: Math.min(f.left, r.left), top: Math.min(f.top, r.top), right: Math.max(f.right, r.right), bottom: Math.max(f.bottom, r.bottom),
+      }))
+    : undefined;
+  const texts = textObstacleRects(nodes, (n) => absolute(n as SchematicNode, byId));
+  for (const e of routed) {
+    const wps = routes[e.id]!.waypoints;
+    const route = `${label(byId.get(e.source))} → ${label(byId.get(e.target))}`;
+    if (frame) {
+      let outside = 0;
+      const near = new Set<string>();
+      for (let k = 1; k < wps.length; k++) {
+        const off = lengthOutside(wps[k - 1], wps[k], frame);
+        if (off <= TOLERANCE) continue;
+        outside += off;
+        const mid = { x: (wps[k - 1].x + wps[k].x) / 2, y: (wps[k - 1].y + wps[k].y) / 2 };
+        const closest = tops.reduce((best, r) => (distance(mid, rects.get(r.id)!) < distance(mid, rects.get(best.id)!) ? r : best));
+        near.add(closest.id);
+      }
+      if (outside > TOLERANCE) {
+        const names = [...near].map((id) => `"${label(byId.get(id))}"`).join(", ");
+        findings.push({
+          kind: "line_outside",
+          ids: [e.id, ...near],
+          message: `The line ${route} runs ${Math.round(outside)} px outside the drawing (by ${names}) — give ${names} more room for lines (arrange_room or fit_room with margin, e.g. 64–96) or the locations more gap (arrange_rooms gap), then route_connections.`,
+        });
+      }
+    }
+    const over = texts.filter((t) => wps.slice(1).some((p, k) => segmentEnters(wps[k], p, t)));
+    if (over.length) {
+      const owners = [...new Set(over.map((t) => (t.nodeId ?? "").replace(/#(label|text)$/, "")))];
+      findings.push({
+        kind: "over_text",
+        ids: [e.id, ...owners],
+        message: `The line ${route} runs over ${owners.map((id) => `"${label(byId.get(id))}"`).join(", ")} — route_connections avoids names and notes; if it stays, give the location more margin or lay the line with set_connection_path.`,
       });
     }
   }

@@ -654,11 +654,15 @@ export interface AddRackToRoomParams {
 
 export interface ArrangeRoomParams {
   roomId: string;
+  /** FACE: room for lines inside the room, px (16–160, on the grid); kept on the room. */
+  margin?: number;
 }
 
 export interface ArrangeRoomsParams {
   /** Room ids in the wanted order (left to right, row by row); the rest follow. */
   order?: string[];
+  /** FACE: gap between the locations, px (32–480, on the grid; default 96). */
+  gap?: number;
 }
 
 export interface RouteConnectionsParams {
@@ -671,6 +675,8 @@ export interface RouteConnectionsParams {
 
 export interface FitRoomParams {
   roomId: string;
+  /** FACE: room for lines inside the room, px (16–160, on the grid); kept on the room. */
+  margin?: number;
 }
 
 /** FACE: rename a room — e.g. a trade room ("Netzwerk") becomes its location ("Technik"). */

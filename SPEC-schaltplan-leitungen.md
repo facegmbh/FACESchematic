@@ -33,8 +33,9 @@ User Stories:
 
 ## Begriffe
 
-- **Zeichnung:** das Rechteck um alle Orte (Räume oberster Ebene). Gibt es keine Räume, gilt das
-  Rechteck um alle Geräte.
+- **Zeichnung:** das Rechteck um alle Orte (Räume oberster Ebene). Ohne Räume gibt es keinen
+  Rahmen und keinen `line_outside`-Befund. Das Rechteck um die Geräte wäre zu eng: Jede rückwärts
+  laufende Leitung würde gemeldet (entschieden beim Bauen, 21.11.).
 - **Text:** Ortsnamen (Beschriftung oben links im Raum, Schriftgröße `labelSize`, Standard 12 px)
   und Notizen (`note`-Knoten). Gerätetexte sind schon heute geschützt, weil Geräte Hindernisse
   sind. Stub-Beschriftungen haben eigene Regeln im Router und bleiben unverändert.
@@ -46,7 +47,7 @@ User Stories:
 | `choose_port_sides` `{ connectionIds? }` | Bei zweiseitigen Ports (`-in`/`-out`) die Seite zum Gegenüber wählen. Liegt das Gegenüber rechts, rechts; liegt es links, links. Liegen beide übereinander, etwa im Rack, nehmen beide dieselbe Seite. Die Verbindung behält ihre ID (Kabelnummern hängen daran). Ein Undo-Schritt. Durchgangsports (`rear`/`front`) bleiben, ebenso Verbindungen mit eigenen Stützpunkten, außer sie sind ausdrücklich genannt |
 | `check_layout` | Neue Befunde: `line_outside` (Leitung verlässt die Zeichnung, mit Länge) und `over_text` (Leitung über einem Ortsnamen oder einer Notiz) |
 | `arrange_rooms` `{ order?, gap? }` | `gap`: Abstand zwischen den Orten in px (Raster, Standard 96, höchstens 480) |
-| `arrange_room` / `fit_room` `{ …, margin? }` | `margin`: Rand im Ort für Leitungen (Standard 32, höchstens 160) |
+| `arrange_room` / `fit_room` `{ …, margin? }` | `margin`: Rand im Ort für Leitungen (16–160, Standard 32), am Raum gespeichert (`layoutMargin`), damit spätere Anpassungen ihn behalten; ein Undo nimmt Rand und Lage zurück |
 | `set_connection_path` `{ connectionId, waypoints }` | Eine Leitung selbst legen: Stützpunkte in Zeichnungskoordinaten, auf das Raster gerundet, höchstens 50, über die vorhandene Editor-Aktion `setManualWaypoints`. Leere Liste = wieder dem Routing überlassen |
 
 Router (betrifft auch das Zeichnen von Hand): Ortsnamen und Notizen werden Hindernisse in
