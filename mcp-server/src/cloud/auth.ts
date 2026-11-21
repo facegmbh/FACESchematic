@@ -17,6 +17,8 @@ const LOGIN_PAUSE_MS = 5 * 60 * 1000;
 
 export interface AuthOptions {
   now?: () => number;
+  /** Called with the uid when someone signs out (the relay forgets their tab). */
+  onSignOut?: (uid: number) => void;
 }
 
 export interface SignedInUser {
@@ -133,7 +135,9 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
 
   router.post("/logout", (req, res) => {
     const id = readCookie(req.headers.cookie, SESSION_COOKIE);
+    const uid = id ? store.session(id)?.uid : undefined;
     if (id) store.deleteSession(id);
+    if (uid !== undefined) opts.onSignOut?.(uid);
     res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; ${cookieAttrs}; Max-Age=0`);
     res.status(204).end();
   });

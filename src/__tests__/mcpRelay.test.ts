@@ -220,3 +220,20 @@ describe("default way in", () => {
     expect(localStorage.getItem("easyschematic-mcp-mode")).toBe("odoo");
   });
 });
+
+describe("leaving", () => {
+  it("stop() after a hello says bye, so Claude hears 'no tab' at once instead of waiting", async () => {
+    bridge.relayBridge.start();
+    await vi.waitFor(() => expect(status().status).toBe("connected"));
+    bridge.relayBridge.stop();
+    const bye = callsTo("/face/bridge/bye");
+    expect(bye).toHaveLength(1);
+    expect(bodyOf(bye[0]).tabId).toBe(bodyOf(callsTo("/face/bridge/hello")[0]).tabId);
+    expect((bye[0][1] as RequestInit).keepalive).toBe(true);
+  });
+
+  it("stop() without a hello sends nothing", () => {
+    bridge.relayBridge.stop();
+    expect(callsTo("/face/bridge/bye")).toHaveLength(0);
+  });
+});

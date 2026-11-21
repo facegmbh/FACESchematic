@@ -261,3 +261,42 @@ test("a malformed tab id is refused", async () => {
   assert.equal((await hello(cookie, "../x")).status, 400);
   assert.equal((await poll(cookie, "")).status, 400);
 });
+
+// --- Leaving: the tab says bye, or its user signs out --------------------------------
+
+test("bye: a call right after fails at once with NoTabError instead of waiting for the timeout", async () => {
+  const { relay } = relayWithClock();
+  relay.hello(8, "tab-a", "A");
+  const waiting = relay.call(8, "list_devices", {}, 5000);
+  relay.bye(8, "tab-a");
+  await assert.rejects(waiting, NoTabError);
+  await assert.rejects(relay.call(8, "list_devices", {}, 5000), NoTabError);
+});
+
+test("bye from a tab that no longer has the connection changes nothing", async () => {
+  const { relay } = relayWithClock();
+  relay.hello(8, "tab-a", "A");
+  relay.hello(8, "tab-b", "B");
+  relay.bye(8, "tab-a");
+  assert.equal(relay.status(8)?.tabId, "tab-b");
+});
+
+test("POST /face/bridge/bye unbinds the tab", async () => {
+  const cookie = await signIn(MOCK_USER);
+  await hello(cookie, "t1");
+  const res = await fetch(`${base}/face/bridge/bye`, {
+    method: "POST",
+    headers: { ...json, Cookie: cookie },
+    body: JSON.stringify({ tabId: "t1" }),
+  });
+  assert.equal(res.status, 204);
+  assert.equal(relay.status(MOCK_USER.uid), null);
+});
+
+test("signing out forgets the user's tab", async () => {
+  const cookie = await signIn(MOCK_USER);
+  await hello(cookie, "t1");
+  const res = await fetch(`${base}/face/api/logout`, { method: "POST", headers: { ...json, Cookie: cookie } });
+  assert.equal(res.status, 204);
+  assert.equal(relay.status(MOCK_USER.uid), null);
+});

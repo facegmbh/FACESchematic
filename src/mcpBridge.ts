@@ -2008,16 +2008,32 @@ class RelayBridge {
   private abort: AbortController | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1000;
+  /** Whether the backend has this tab bound — then leaving says bye. */
+  private bound = false;
+  private listening = false;
 
   start() {
     if (this.enabled) return; // StrictMode-safe
+    if (!this.listening && typeof window !== "undefined") {
+      // Closing the tab: say bye so Claude hears "no tab" at once. The loop itself keeps going —
+      // a page restored from the back/forward cache gets "unbound" and says hello again.
+      window.addEventListener("pagehide", () => this.bye());
+      this.listening = true;
+    }
     this.enabled = true;
     this.generation++;
     this.backoffMs = 1000;
     void this.run(this.generation);
   }
 
+  private bye() {
+    if (!this.bound) return;
+    this.bound = false;
+    void faceApi("/face/bridge/bye", { method: "POST", body: { tabId: getTabId() }, keepalive: true }).catch(() => {});
+  }
+
   stop() {
+    this.bye();
     this.enabled = false;
     this.generation++;
     this.abort?.abort();
@@ -2035,6 +2051,7 @@ class RelayBridge {
 
   private halt(generation: number, detail: string) {
     if (!this.live(generation)) return;
+    this.bound = false; // superseded or signed out: the backend has let go already
     this.enabled = false;
     this.generation++;
     setStatus("error", detail);
@@ -2062,6 +2079,7 @@ class RelayBridge {
       this.fail(generation, err);
       return;
     }
+    this.bound = true;
     if (!this.live(generation)) return;
     setStatus("connected");
     this.backoffMs = 1000;

@@ -29,7 +29,8 @@ export interface AppOptions extends AuthOptions {
 export function createApp(config: Config, opts: AppOptions = {}): express.Express {
   setOdooDb(config.odooUrl, config.odooDb);
   const store = new Store(config.dataDir, config.secret);
-  const auth = createAuth(config, store, opts);
+  const relay = opts.relay ?? new Relay(opts.now);
+  const auth = createAuth(config, store, { ...opts, onSignOut: (uid) => relay.forget(uid) });
 
   const app = express();
   app.disable("x-powered-by");
@@ -43,7 +44,6 @@ export function createApp(config: Config, opts: AppOptions = {}): express.Expres
   app.use("/face/api", auth.router);
   app.use("/face/api", auth.requireUser, createDrawingsRouter(auth.odooFor, new Presence(opts.now)));
 
-  const relay = opts.relay ?? new Relay(opts.now);
   app.use("/face/bridge", auth.requireFaceHeader, auth.requireUser, createBridgeRouter(relay));
   app.use(
     "/face/service",

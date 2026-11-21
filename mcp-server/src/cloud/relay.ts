@@ -124,6 +124,21 @@ export class Relay {
     });
   }
 
+  /** The tab leaves (switched off, closed): calls fail at once instead of waiting for the timeout. */
+  bye(uid: number, tabId: string): void {
+    if (this.bindings.get(uid)?.tabId === tabId) this.forget(uid);
+  }
+
+  /** The user signed out: their tab no longer acts for them. */
+  forget(uid: number): void {
+    const b = this.bindings.get(uid);
+    if (!b) return;
+    const waiter = b.waiter;
+    b.waiter = null;
+    waiter?.({ type: "idle" });
+    this.drop(uid, b);
+  }
+
   status(uid: number): TabStatus | null {
     const b = this.binding(uid);
     return b ? { tabId: b.tabId, schematicName: b.schematicName, since: b.since } : null;
@@ -210,6 +225,16 @@ export function createBridgeRouter(relay: Relay): express.Router {
       return;
     }
     relay.hello(uidOf(res), tabId, typeof schematicName === "string" ? schematicName.slice(0, 200) : "");
+    res.status(204).end();
+  });
+
+  router.post("/bye", express.json({ limit: "4kb" }), (req, res) => {
+    const tabId = req.body?.tabId;
+    if (typeof tabId !== "string" || !TAB_ID.test(tabId)) {
+      res.status(400).json({ error: "Tab-Kennung fehlt." });
+      return;
+    }
+    relay.bye(uidOf(res), tabId);
     res.status(204).end();
   });
 
