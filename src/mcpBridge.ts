@@ -199,6 +199,14 @@ function portSummary(p: Port) {
  *  is nested inside another room. Size follows the same `measured ?? width ?? style ??
  *  default` chain the rest of the app uses (snapUtils.nodeRect), so a room whose live
  *  measured size differs from its style isn't misreported; defaults mirror addRoom (400x300). */
+/** FACE: where a node is on the canvas — absolute, nested rooms resolved — so Claude can lay a
+ *  line with set_connection_path through the gaps it sees. */
+function canvasRect(n: SchematicNode): { x: number; y: number; width: number; height: number } {
+  const p = absolutePositionOf(n.id);
+  const s = nodeSize(n);
+  return { x: p.x, y: p.y, width: s.width, height: s.height };
+}
+
 function roomSummary(n: SchematicNode) {
   const style = (n.style ?? {}) as { width?: number; height?: number };
   return {
@@ -720,6 +728,8 @@ const RACK_BOX_PAD = 16;
 /** render_schematic: longest side by default (about what Claude looks at), the size it aims
  *  for, and the most it will send. */
 const RENDER_MAX_SIZE = 1600;
+/** route_connections: the router counts as settled after this long without a new result. */
+const ROUTE_QUIET_MS = 600;
 const RENDER_MAX_BYTES = 1_000_000;
 const RENDER_HARD_MAX_BYTES = 4_000_000;
 const RACK_BOX_TOP = 48; // room label
@@ -751,8 +761,7 @@ function moveIntoRackBox(rackId: string, deviceId: string): string | undefined {
   };
   if (need.width !== boxSize.width || need.height !== boxSize.height) st().resizeRoom(box.id, need, { skipUndo: true });
   if (!st().placeDeviceInRoom(deviceId, box.id, { x: RACK_BOX_PAD, y })) return undefined;
-  restackRackBox(box.id, rackId);
-  fitRooms(box.id, false); // the location grows with its rack box
+  arrangeRackBox(box.id);
   return box.id;
 }
 
@@ -801,24 +810,11 @@ function roomMarginOf(roomId: string): number {
   return roomMargin(st().nodes.find((n) => n.id === roomId));
 }
 
-/** The box mirrors the rack: highest U on top, then downwards. */
-function restackRackBox(boxId: string, rackId: string) {
-  const uOf = new Map(
-    rackPages()
-      .flatMap((pg) => pg.placements)
-      .filter((pl) => pl.rackId === rackId)
-      .map((pl) => [pl.deviceNodeId, pl.uPosition] as const),
-  );
-  const children = st()
-    .nodes.filter((n) => n.parentId === boxId && n.type === "device")
-    .sort((a, b) => (uOf.get(b.id) ?? 0) - (uOf.get(a.id) ?? 0));
-  const positions: Record<string, { x: number; y: number }> = {};
-  let y = RACK_BOX_TOP;
-  for (const c of children) {
-    positions[c.id] = { x: RACK_BOX_PAD, y };
-    y = snapUp(y + nodeSize(c).height + RACK_BOX_PAD);
-  }
-  st().setNodePositions(positions, { skipUndo: true });
+/** The box on the schematic shows its gear side by side by signal flow, like any room (Jean-Luc,
+ *  21.11.) — the U order lives in the linked rack elevation. Fits the box; the location grows. */
+function arrangeRackBox(boxId: string) {
+  st().setNodePositions(arrangeRoom(st().nodes, st().edges, boxId), { skipUndo: true });
+  fitRooms(boxId, true);
 }
 
 function absolutePositionOf(id: string): { x: number; y: number } {
@@ -947,6 +943,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
         manufacturer: d.manufacturer,
         position: n.position,
         parentId: n.parentId,
+        canvas: canvasRect(n),
         slotCount: (d.slots ?? []).length,
         ports: (d.ports ?? []).map(portSummary),
       };
@@ -958,7 +955,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       target: e.target,
       targetHandle: e.targetHandle,
     }));
-    const rooms = st().nodes.filter((n) => n.type === "room").map(roomSummary);
+    const rooms = st().nodes.filter((n) => n.type === "room").map((n) => ({ ...roomSummary(n), canvas: canvasRect(n) }));
     const notes = st().nodes.filter((n) => n.type === "note").map(noteSummary);
     return {
       schematicName: st().schematicName,
@@ -1857,6 +1854,11 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const room = requireRoom(roomId);
     const data = room.data as RoomData;
     const label = data.label ?? roomId;
+    if (data.isEquipmentRack && data.linkedRackId) {
+      throw new CommandError(
+        `"${label}" is the box of a rack, linked to its rack elevation — keep it. To show its gear side by side instead of stacked, use arrange_room on it.`,
+      );
+    }
     if (data.locked) {
       throw new CommandError(`"${label}" is locked — the user locked it on purpose. Ask them to unlock it (right-click the room) first.`);
     }
@@ -1979,9 +1981,21 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const before = st().routedEdges;
     if (connectionIds?.length) st().clearEdgeWaypoints(connectionIds);
     if (!st().autoRoute) st().toggleAutoRoute();
-    // The editor re-routes on its own once the drawing changed; wait for the result.
-    const deadline = Date.now() + (typeof waitMs === "number" ? Math.max(0, Math.min(waitMs, 15000)) : 4000);
-    while (st().routedEdges === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    // The editor re-routes on its own once the drawing changed; wait for the result — and for the
+    // router to settle: after a re-arrange it can publish an intermediate result first (positions not
+    // yet measured), and judging that one made check_layout report lines that no longer exist.
+    const deadline = Date.now() + (typeof waitMs === "number" ? Math.max(0, Math.min(waitMs, 15000)) : 6000);
+    const sleep = () => new Promise((r) => setTimeout(r, 100));
+    while (st().routedEdges === before && Date.now() < deadline) await sleep();
+    let last = st().routedEdges;
+    let quietSince = Date.now();
+    while (last !== before && Date.now() - quietSince < ROUTE_QUIET_MS && Date.now() < deadline) {
+      await sleep();
+      if (st().routedEdges !== last) {
+        last = st().routedEdges;
+        quietSince = Date.now();
+      }
+    }
     const routes = st().routedEdges;
     const edges = st().edges;
     const ownKept = edges.filter((e) => e.data?.manualWaypoints?.length && !e.data?.autoRouteWaypoints).length;

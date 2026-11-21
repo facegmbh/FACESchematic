@@ -177,7 +177,12 @@ Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
   3 / 1392 px, 48 Paare → eine Runde `margin` 80 für die drei genannten Orte + `gap` 128: **0 außerhalb,
   0 über Text**, 46 Paare, kein Umweg
 
-- [ ] Task 32: Playbook + Odoo-Leitfaden, Ende-zu-Ende über `/face/service/call`
+- [x] Task 32: Playbook + Odoo-Leitfaden mit Jean-Lucs Wünschen (Bereiche, Schrank nebeneinander, Reihenfolge,
+  Bild ansehen, Switch-Ports nur auf Wunsch); Kapelle nach Leitfaden im Browser: 0 außerhalb, 0 über Text,
+  20 Kreuzungspaare, kein Umweg, zweimal gleich (`scratchpad/kapelle/leitfaden.png`)
+- [x] Task 33: Schrank-Kasten nach Signalfluss (verknüpft), `dissolve_room` lehnt Schrank-Kästen ab
+- [x] Task 34: kompakt anordnen (Bereichs-Spalten umbrechen, Orte in Bändern), `route_connections` wartet auf
+  den fertigen Router, `get_schematic` mit `canvas`-Rechtecken
 
 ### Checkpoint H (Freigabe, Push)
 - [ ] Kapelle Ende-zu-Ende: `line_outside` = 0, `over_text` = 0; alle Tests grün

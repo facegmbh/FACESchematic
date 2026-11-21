@@ -172,3 +172,49 @@ describe("room margin and gap between locations (Task 30)", () => {
     expect(wide.b.x - wide.a.x - (narrow.b.x - narrow.a.x)).toBe(256 - 96);
   });
 });
+
+describe("compact arrangement (Task 34, Jean-Luc 21.11.: no big empty areas)", () => {
+  it("areas of a location that are not wired to each other do not end up in one long column", () => {
+    const areas = ["kamera", "bodentank", "decke", "beamer", "altar", "bedienung"].map((id) => room(id, 0, 0, 240, 208, "kapelle"));
+    const nodes = [room("kapelle", 0, 0, 2000, 2000), ...areas];
+    const placed = applyPositions(nodes, arrangeRoom(nodes, [], "kapelle"));
+    const xs = new Set(areas.map((a) => placed.find((n) => n.id === a.id)!.position.x));
+    expect(xs.size).toBeGreaterThanOrEqual(2);
+    const size = fitRoomSize(placed, "kapelle");
+    expect(size.height).toBeLessThan(6 * 208);
+    const fitted = placed.map((n) => (n.id === "kapelle" ? { ...n, style: { width: size.width, height: size.height } } : n));
+    expect(checkLayout(fitted, [], {}).filter((f) => f.kind === "room_overlap" || f.kind === "outside")).toEqual([]);
+  });
+
+  it("a column of devices (one source feeding eight displays) stays one column", () => {
+    const nodes = [room("r", 0, 0, 400, 300), device("src", 0, 0, "r"), ...Array.from({ length: 8 }, (_, i) => device(`d${i}`, 0, 0, "r"))];
+    const edges = Array.from({ length: 8 }, (_, i) => edge(`e${i}`, "src", `d${i}`));
+    const pos = arrangeRoom(nodes, edges, "r");
+    expect(new Set(Array.from({ length: 8 }, (_, i) => pos[`d${i}`].x)).size).toBe(1);
+  });
+
+  it("short locations stack beside a tall one instead of opening a second row", () => {
+    // Sizes as in the Kapelle built by the guide (21.11.): together wider than one 2400 px row.
+    const nodes = [room("kirche", 0, 0, 352, 368), room("kapelle", 0, 0, 800, 1648), room("technik", 0, 0, 1040, 1136), room("sakristei", 0, 0, 352, 272), room("haustv", 0, 0, 352, 288)];
+    const pos = arrangeRooms(nodes, ["kirche", "kapelle", "technik", "sakristei", "haustv"], [], 128);
+    const placed = applyPositions(nodes, pos);
+    expect(checkLayout(placed, [], {}).filter((f) => f.kind === "room_overlap")).toEqual([]);
+    const bottom = Math.max(...placed.map((n) => n.position.y + (n.style as { height: number }).height));
+    const top = Math.min(...placed.map((n) => n.position.y));
+    expect(bottom - top).toBe(1648); // one band, as high as the tallest location
+    // Reading order is kept: left to right, top to bottom within a column.
+    expect(pos.kirche.x).toBeLessThan(pos.kapelle.x);
+    expect(pos.kapelle.x).toBeLessThan(pos.technik.x);
+    expect(pos.sakristei.x).toBeGreaterThanOrEqual(pos.technik.x);
+  });
+});
+
+describe("compact arrangement — bands", () => {
+  it("a second band starts right under the first band's content, not under the tallest location", () => {
+    // a and b are wide and low; c is tall and no longer fits beside them, so it opens band two.
+    const nodes = [room("a", 0, 0, 1008, 400), room("b", 0, 0, 1008, 400), room("c", 0, 0, 608, 912)];
+    const pos = arrangeRooms(nodes, ["a", "b", "c"], [], 128);
+    expect(pos.c.x).toBe(pos.a.x);
+    expect(pos.c.y - pos.a.y).toBe(400 + 128);
+  });
+});

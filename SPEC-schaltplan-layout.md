@@ -108,6 +108,8 @@ Wie `SPEC-cloud-bridge.md`.
    (Seite mit HE-Belegung). Neuer Befehl `add_rack_to_room` legt beides verknüpft an.
    Ein Gerät, das in die Rack-Ansicht gesetzt wird, landet auch im Rack-Kasten des
    Schaltplans.
+   *Abgelöst am 21.11. abends (SPEC-schaltplan-leitungen.md, Entscheidung 2): Im Kasten stehen die
+   Geräte nebeneinander nach Signalfluss, die HE-Reihenfolge zeigt die Rack-Ansicht.*
 3. Bestehende Zeichnungen mit Gewerke-Räumen umbauen: `rename_room` und `dissolve_room` gehören
    in diese Phase (Jean-Luc, 21.11.).
 

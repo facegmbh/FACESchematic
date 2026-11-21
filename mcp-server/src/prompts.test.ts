@@ -40,9 +40,9 @@ test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
   }
 });
 
-test("build-schematic: rooms are locations with racks, then arrange, route, check, look — in that order", () => {
+test("build-schematic: locations and areas, racks, connect BEFORE arranging (signal flow needs the connections), arrange, THEN sides (they depend on where devices ended up), route, check, look", () => {
   const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
-  const order = ["create_room", "add_rack_to_room", "place_device_in_rack", "arrange_room", "arrange_rooms", "connect_devices_batch", "route_connections", "check_layout", "render_schematic"];
+  const order = ["create_room", "parentRoomId", "add_rack_to_room", "place_device_in_rack", "connect_devices_batch", "arrange_room", "margin", "arrange_rooms", "gap", "choose_port_sides", "route_connections", "check_layout", "set_connection_path", "render_schematic"];
   let last = -1;
   for (const step of order) {
     const at = text.indexOf(step, last + 1);
@@ -62,4 +62,20 @@ test("build-schematic: an existing drawing by trade is restructured, not rebuilt
 
 test("SERVER_INSTRUCTIONS: says how a drawing is laid out and checked", () => {
   for (const word of ["location", "check_layout", "render_schematic"]) assert.match(SERVER_INSTRUCTIONS, new RegExp(word));
+});
+
+test("build-schematic: Jean-Luc's wishes (21.11.) are in the playbook", () => {
+  const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
+  // Areas inside a location: gear that sits together physically, with distance to the rest.
+  assert.match(text, /area/i);
+  assert.match(text, /encoder/i);
+  // The rack box stays, gear side by side by signal flow; never dissolved.
+  assert.match(text, /side by side/i);
+  assert.match(text, /never dissolve/i);
+  // No lines outside the drawing or over text; look at the picture, not only the numbers.
+  assert.match(text, /outside the drawing/i);
+  assert.match(text, /over .*text|over .*name/i);
+  assert.match(text, /empty/i);
+  // Switch ports are only renumbered when the user agrees.
+  assert.match(text, /switch port/i);
 });

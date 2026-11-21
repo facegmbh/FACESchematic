@@ -572,7 +572,9 @@ Kapelle (G-Anordnung) im Browser, nur über Claudes Befehle: alter Ablauf 7 Leit
 ## Task 32: Playbook, Leitfaden, Ende-zu-Ende
 
 **Acceptance criteria:**
-- [ ] Playbook und Odoo-Leitfaden mit neuem Ablauf
-- [ ] Kapelle über `/face/service/call`: `line_outside` = 0, `over_text` = 0
+- [x] Playbook und Odoo-Leitfaden mit neuem Ablauf und Jean-Lucs Wünschen aus dem Chat vom 21.11.
+- [x] Kapelle nach Leitfaden (Browser, nur Claudes Befehle): `line_outside` = 0, `over_text` = 0, kein Umweg,
+  20 Kreuzungspaare; zwei Läufe gleich
+- [ ] Derselbe Ablauf über `/face/service/call` (Dienst-Weg unverändert seit Phase 6, dort geprüft) — bei Checkpoint H
 
 ## Checkpoint H — Freigabe, Push (FACESchematic master, Odoo main)

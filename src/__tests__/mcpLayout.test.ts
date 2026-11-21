@@ -110,14 +110,19 @@ describe("locations and racks (Task 23)", () => {
     expect(page.racks.find((r) => r.id === rack.rackId)).toMatchObject({ linkedRoomId: rack.rackRoomId, heightU: 12 });
   });
 
-  it("place_device_in_rack also puts the device into the rack box, stacked without overlap", async () => {
+  it("place_device_in_rack also puts the device into the rack box, side by side by signal flow, without overlap", async () => {
+    // Jean-Luc, 21.11.: the box need not stack the gear — the U order lives in the rack elevation.
+    store.setState({ edges: [{ id: "sig", source: "device-2", target: "device-1", sourceHandle: "o", targetHandle: "i", data: { signalType: "analog-audio" } }] as never });
     const ort = await ok("create_room", { label: "Technik", x: 0, y: 0, width: 800, height: 700 });
     const rack = await ok("add_rack_to_room", { roomId: ort.roomId, name: "Wandschrank", heightU: 12 });
     const b = await ok("place_device_in_rack", { deviceId: "device-2", rackId: rack.rackId, uPosition: 5 });
     const a = await ok("place_device_in_rack", { deviceId: "device-1", rackId: rack.rackId, uPosition: 10 });
     expect(a.rackRoomId).toBe(rack.rackRoomId);
-    // The box mirrors the rack: higher U on top (device-1 at U10 above device-2 at U5).
-    expect(node("device-1")!.position.y).toBeLessThan(node("device-2")!.position.y);
+    // device-2 feeds device-1: left of it, although it sits lower in the rack.
+    expect(node("device-2")!.position.x).toBeLessThan(node("device-1")!.position.x);
+    // The rack elevation still has the U positions.
+    const page = store.getState().pages.find((p) => p.id === rack.pageId) as { placements: { deviceNodeId: string; uPosition: number }[] };
+    expect(page.placements.find((pl) => pl.deviceNodeId === "device-1")?.uPosition).toBe(10);
     expect(node("device-1")?.parentId).toBe(rack.rackRoomId);
     expect(node("device-2")?.parentId).toBe(rack.rackRoomId);
     const check = await ok("check_layout", { roomId: ort.roomId as string });
@@ -125,6 +130,15 @@ describe("locations and racks (Task 23)", () => {
     expect(kinds).not.toContain("overlap");
     expect(kinds).not.toContain("outside");
     void b;
+  });
+
+  it("a rack box is not dissolved — it is the link to the rack elevation", async () => {
+    const ort = await ok("create_room", { label: "Technik", x: 0, y: 0, width: 800, height: 700 });
+    const rack = await ok("add_rack_to_room", { roomId: ort.roomId, name: "Wandschrank", heightU: 12 });
+    const r = await run("dissolve_room", { roomId: rack.rackRoomId });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/arrange_room/);
+    expect(node(rack.rackRoomId as string)).toBeDefined();
   });
 
   it("add_rack_to_room needs a room", async () => {
@@ -424,5 +438,36 @@ describe("set_connection_path (Task 31)", () => {
     expect((await run("set_connection_path", { connectionId: id, waypoints: [{ x: "a", y: 1 }] })).ok).toBe(false);
     const many = Array.from({ length: 51 }, (_, i) => ({ x: i * 16, y: 0 }));
     expect((await run("set_connection_path", { connectionId: id, waypoints: many })).ok).toBe(false);
+  });
+});
+
+describe("get_schematic gives canvas rectangles (for set_connection_path)", () => {
+  it("devices and rooms carry where they are on the canvas, nested rooms resolved", async () => {
+    store.setState({
+      nodes: [
+        { id: "ort", type: "room", position: { x: 1000, y: 500 }, data: { label: "Kapelle" }, style: { width: 800, height: 600 } },
+        { id: "ber", type: "room", position: { x: 32, y: 48 }, parentId: "ort", data: { label: "Kamera" }, style: { width: 300, height: 200 } },
+        { id: "cam", type: "device", position: { x: 16, y: 48 }, parentId: "ber", measured: { width: 176, height: 96 }, data: { label: "Kamera", deviceType: "x", ports: [] } },
+      ] as never,
+      edges: [], routedEdges: {},
+    });
+    const r = await run("get_schematic", {});
+    if (!r.ok) throw new Error(r.error);
+    const res = r.result as { devices: { nodeId: string; canvas: unknown }[]; rooms: { roomId: string; canvas: unknown }[] };
+    expect(res.devices.find((d) => d.nodeId === "cam")?.canvas).toEqual({ x: 1048, y: 596, width: 176, height: 96 });
+    expect(res.rooms.find((d) => d.roomId === "ber")?.canvas).toEqual({ x: 1032, y: 548, width: 300, height: 200 });
+  });
+});
+
+describe("route_connections waits until the router has settled", () => {
+  it("a first intermediate result is not taken for the final one", async () => {
+    store.setState({ autoRoute: true, routedEdges: {} } as never);
+    const first = { e: { waypoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }] } };
+    const final = { e: { waypoints: [{ x: 0, y: 0 }, { x: 9, y: 0 }] }, f: { waypoints: [{ x: 0, y: 0 }, { x: 2, y: 0 }] } };
+    setTimeout(() => store.setState({ routedEdges: first } as never), 100);
+    setTimeout(() => store.setState({ routedEdges: final } as never), 450);
+    await run("route_connections", { waitMs: 5000 });
+    expect(store.getState().routedEdges).toBe(final);
+    // …and route_connections only returned after the final one arrived.
   });
 });

@@ -333,7 +333,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "place_device_in_rack",
     description:
-      "Mount a device from the schematic into a rack at a U position. The device's height in U is inferred from its physical dimensions, and half-rack gear is placed on a free side automatically. Gear too small to rack-mount directly is placed on an auto-created 1U shelf (the response includes that shelfId; remove_device_from_rack cleans the shelf up for you unless you've since edited it in the editor). Fails if the U span is occupied or out of the rack's bounds, if the device is already placed in a rack (remove it first), for a rear placement on a 2-post rack, or if the device is too wide to fit a 19\" rack. uPosition is 1-based from the bottom. If the rack has a box on the schematic (add_rack_to_room), the device is also moved into that box (rackRoomId in the response) and the box grows to fit.",
+      "Mount a device from the schematic into a rack at a U position. The device's height in U is inferred from its physical dimensions, and half-rack gear is placed on a free side automatically. Gear too small to rack-mount directly is placed on an auto-created 1U shelf (the response includes that shelfId; remove_device_from_rack cleans the shelf up for you unless you've since edited it in the editor). Fails if the U span is occupied or out of the rack's bounds, if the device is already placed in a rack (remove it first), for a rear placement on a 2-post rack, or if the device is too wide to fit a 19\" rack. uPosition is 1-based from the bottom. If the rack has a box on the schematic (add_rack_to_room), the device is also moved into that box (rackRoomId in the response); the box shows its gear side by side by signal flow and fits itself.",
     inputSchema: {
       type: "object",
       properties: {
@@ -890,7 +890,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "dissolve_room",
     description:
-      "Remove a room's frame and keep everything in it: devices and nested rooms stay where they are on the canvas, with their connections, and move into the room around it (or to the top level). One undo step. Use it to take apart trade rooms (\"Mikrofone\", \"Beschallung\") before putting the devices into their locations with place_device_in_room. Refused for a room the user locked. A linked rack elevation stays.",
+      "Remove a room's frame and keep everything in it: devices and nested rooms stay where they are on the canvas, with their connections, and move into the room around it (or to the top level). One undo step. Use it to take apart trade rooms (\"Mikrofone\", \"Beschallung\") before putting the devices into their locations with place_device_in_room. Refused for a room the user locked, and for a rack box (it links the schematic to the rack elevation — arrange_room on it puts its gear side by side).",
     inputSchema: {
       type: "object",
       properties: { roomId: { type: "string", description: "The room to dissolve." } },
@@ -924,7 +924,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "set_connection_path",
     description:
-      "Lay one line yourself: the points (canvas coordinates, snapped to the 16 px grid) it passes on its way from port to port, in order; the line runs orthogonally through them. The editor and route_connections keep this path, as if drawn by hand. Use it as a last resort for a line check_layout still reports (line_outside, over_text, crosses_device) after choose_port_sides, margins and route_connections — read the device and room positions from get_schematic and look with render_schematic afterwards. An empty list gives the line back to the auto-routing. One undo step.",
+      "Lay one line yourself: the points (canvas coordinates, snapped to the 16 px grid) it passes on its way from port to port, in order; the line runs orthogonally through them. The editor and route_connections keep this path, as if drawn by hand. Use it as a last resort for a line check_layout still reports (line_outside, over_text, crosses_device) after choose_port_sides, margins and route_connections — get_schematic gives every device and room its canvas rectangle (canvas: x, y, width, height), so lead the line through the gaps between locations and areas; look with render_schematic afterwards. An empty list gives the line back to the auto-routing. One undo step.",
     inputSchema: {
       type: "object",
       properties: {

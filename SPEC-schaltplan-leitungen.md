@@ -102,6 +102,27 @@ Wie schaltplan-layout:
   vorher (2432 px, 37 Paare bei gleicher Anordnung).
 - Alle vorhandenen Tests grün; Routing-Harness ohne unbegründete Verschlechterung.
 
+## Entscheidungen (21.11. abends, aus Jean-Lucs Chat „Medientechnik Kapelle“)
+
+1. **Bereiche im Ort:** Stellen, an denen Geräte räumlich zusammen sitzen (Kamera mit Encoder, Bodentank,
+   Decke, Sakristeiwand mit Beamer und Decoder, Rollwagen), sind Unterräume im Ort, nicht eigene Orte
+   („Kapelle – Kamera“).
+2. **Schrank-Kasten nach Signalfluss** (Jean-Luc: „1. 33“): Der Kasten bleibt mit der Rack-Ansicht
+   verknüpft, die Geräte darin stehen nebeneinander nach Signalfluss. `place_device_in_rack` ordnet den
+   Kasten so; die Höheneinheiten zeigt nur die Rack-Ansicht. Löst Entscheidung 2 aus schaltplan-layout
+   („Kasten zeigt die HE-Reihenfolge“) ab. `dissolve_room` lehnt Schrank-Kästen ab.
+3. **Kompakt anordnen (Task 34):** Eine Spalte aus Bereichen bricht ab 720 px um. Orte füllen Spalten in
+   einem Band so hoch wie der höchste Ort; ein neues Band beginnt unter dem tatsächlichen Inhalt.
+4. **Reihenfolge im Ablauf:** erst verbinden, dann ordnen, dann `choose_port_sides`. Das Ordnen sortiert
+   nach Signalfluss, die Seitenwahl hängt von der endgültigen Lage ab.
+5. **`route_connections` wartet, bis der Router fertig ist** (600 ms ohne neues Ergebnis). Vorher kam
+   manchmal ein Zwischenstand zurück. `check_layout` meldete dann Leitungen außerhalb und durch Geräte,
+   die es gar nicht gab, und dieselbe Kapelle ergab bei jedem Lauf etwas anderes.
+6. **Rand höchstens einmal anheben** (96 / Abstand 160). Größere Ränder machen nur leere Fläche.
+   Danach einzelne Leitungen mit `set_connection_path`. Dafür liefert `get_schematic` jetzt für jedes
+   Gerät und jeden Raum das Rechteck auf der Zeichnung (`canvas`).
+7. **Switch-Ports** bleiben, wie verbunden. Neu belegen nur auf Wunsch (noch offen bei Jean-Luc).
+
 ## Open Questions
 
 1. Sollen Notizen wirklich Hindernisse sein? Annahme: ja. Wer eine Leitung bewusst über eine

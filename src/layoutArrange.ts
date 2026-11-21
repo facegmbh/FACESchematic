@@ -20,6 +20,8 @@ const START_Y = 48;
 /** Room between columns for the lines, and between devices in a column. */
 const COL_GAP = 96;
 const ROW_GAP = 32;
+/** A column of areas wraps once it would grow past this height (or past its tallest area). */
+const AREA_COLUMN_MAX = 720;
 /** Margin a fitted room keeps around its content; the editor's minimum room size. */
 const FIT_MARGIN = 32;
 const MIN_ROOM = { width: 200, height: 150 };
@@ -113,16 +115,28 @@ export function arrangeRoom(nodes: SchematicNode[], edges: ConnectionEdge[], roo
   const positions: Record<string, Point> = {};
   const extra = roomMargin(byId.get(roomId)) - DEFAULT_ROOM_MARGIN;
   let x = START_X + extra;
+  const top = START_Y + extra;
   for (const col of columns) {
     if (!col?.length) continue;
-    let y = START_Y + extra;
+    // FACE: a column of areas or rack boxes (not wired to each other, so all in one signal-flow column)
+    // wraps into the next column instead of growing into one long strip (Jean-Luc, 21.11.). Columns
+    // of devices stay whole — a source feeding eight displays reads best as one column.
+    const sizes = col.map((v) => layoutSize(byId.get(v)!));
+    const roomsOnly = col.every((v) => byId.get(v)?.type === "room");
+    const cap = roomsOnly ? Math.max(AREA_COLUMN_MAX, ...sizes.map((sz) => sz.height)) : Infinity;
+    let y = top;
     let width = 0;
-    for (const v of col) {
-      const size = layoutSize(byId.get(v)!);
+    col.forEach((v, i) => {
+      const size = sizes[i];
+      if (y > top && y + size.height > top + cap) {
+        x = snap(x + width + COL_GAP);
+        y = top;
+        width = 0;
+      }
       positions[v] = { x, y };
       y = snap(y + size.height + ROW_GAP);
       width = Math.max(width, size.width);
-    }
+    });
     x = snap(x + width + COL_GAP);
   }
   return positions;
@@ -190,20 +204,41 @@ export function arrangeRooms(
   const x0 = Math.floor(Math.min(...tops.map((t) => t.position.x)) / GRID_SIZE) * GRID_SIZE;
   const y0 = Math.floor(Math.min(...tops.map((t) => t.position.y)) / GRID_SIZE) * GRID_SIZE;
 
+  // FACE: locations fill columns inside a band as high as the tallest location — a short location
+  // stacks under the one before it while there is height left, instead of opening a second row and
+  // leaving the space beside a tall location empty (Jean-Luc, 21.11.). Reading order is kept: column
+  // by column, top to bottom. A band that gets wider than a landscape sheet starts the next band.
+  const sequence = [...given, ...rest];
+  const bandHeight = Math.max(...sequence.map((r) => layoutSize(r).height));
+  const maxWidth = Math.max(MAX_ROW_WIDTH, 2 * bandHeight);
   const positions: Record<string, Point> = {};
-  let x = x0;
-  let y = y0;
-  let rowHeight = 0;
-  for (const room of [...given, ...rest]) {
+  let bandTop = y0;
+  let bandBottom = y0;
+  let colX = x0;
+  let colY = y0;
+  let colWidth = 0;
+  for (const room of sequence) {
     const s = layoutSize(room);
-    if (x > x0 && x - x0 + s.width > MAX_ROW_WIDTH) {
-      x = x0;
-      y = snap(y + rowHeight + gap);
-      rowHeight = 0;
+    if (colWidth > 0 && snap(colY + gap) + s.height <= bandTop + bandHeight) {
+      colY = snap(colY + gap);
+      positions[room.id] = { x: colX, y: colY };
+      colY += s.height;
+      colWidth = Math.max(colWidth, s.width);
+      bandBottom = Math.max(bandBottom, colY);
+      continue;
     }
-    positions[room.id] = { x, y };
-    x = snap(x + s.width + gap);
-    rowHeight = Math.max(rowHeight, s.height);
+    let nextX = colWidth > 0 ? snap(colX + colWidth + gap) : colX;
+    if (nextX > x0 && nextX - x0 + s.width > maxWidth) {
+      // The next band starts under what this band really holds, not under the tallest location.
+      bandTop = snap(bandBottom + gap);
+      nextX = x0;
+    }
+    colX = nextX;
+    colY = bandTop;
+    positions[room.id] = { x: colX, y: colY };
+    colY += s.height;
+    colWidth = s.width;
+    bandBottom = Math.max(bandBottom, colY);
   }
   return positions;
 }
