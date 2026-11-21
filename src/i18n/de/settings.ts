@@ -155,6 +155,17 @@ export const DE_SETTINGS: Record<string, string> = {
   "Protocol version mismatch — update the MCP server.": "Protokollversion passt nicht — MCP-Server aktualisieren.",
   "Another tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
   "Sign in with Odoo first (top right).": "Erst oben rechts mit Odoo anmelden.",
+  // FACE: two ways in (SPEC-cloud-bridge.md)
+  "How Claude reaches this tab": "Wie Claude diesen Tab erreicht",
+  "Through the Odoo connector": "Über den Odoo-Connector",
+  "Claude in claude.ai, Claude Desktop or on the phone, in a chat with the FACE Odoo connector. Nothing to install.":
+    "Claude in claude.ai, Claude Desktop oder am Handy, in einem Chat mit dem FACE-Odoo-Connector. Nichts zu installieren.",
+  "Local (Claude Desktop)": "Lokal (Claude Desktop)",
+  "The MCP server on this computer, paired with a token.": "Der MCP-Server auf diesem Rechner, gekoppelt mit einem Token.",
+  "Lets Claude work in this tab through the FACE Odoo connector — only for you, as the Odoo user signed in here. Off by default; your drawing is only reachable while this is on and the tab is open.":
+    "Lässt Claude über den FACE-Odoo-Connector in diesem Tab arbeiten — nur für dich, als der hier angemeldete Odoo-Nutzer. Standardmäßig aus; die Zeichnung ist nur erreichbar, solange das an ist und der Tab offen ist.",
+  "Then ask Claude in a chat with the FACE Odoo connector, e.g. “Which drawing do I have open?”. Setup help is in the docs under “AI Assistant (MCP)”.":
+    "Dann Claude in einem Chat mit dem FACE-Odoo-Connector fragen, z. B. „Welche Zeichnung habe ich offen?“. Die Einrichtung steht in der Dokumentation unter „AI Assistant (MCP)“.",
   "Another EasySchematic tab took the AI connection.": "Ein anderer Tab hat die KI-Verbindung übernommen.",
   "Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.":
     "Die Einrichtung steht in der Dokumentation unter „AI Assistant (MCP)“. Das ist eine frühe Beta — bisher wird nur ein Grundstock an Aktionen unterstützt.",

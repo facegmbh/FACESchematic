@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
+import { FACE_BACKEND, useFaceSession } from "../faceBackend";
 import { importLegendImage } from "../floorplanUnderlay";
 import { HEADER_COLOR_SWATCH_FALLBACK, resolveDefaultDeviceHeaderColor } from "../deviceHeaderColor";
 import type { CompanyProfile } from "../types";
@@ -222,6 +223,11 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   const setMcpToken = useSchematicStore((s) => s.setMcpBridgeToken);
   const mcpPort = useSchematicStore((s) => s.mcpBridgePort);
   const setMcpPort = useSchematicStore((s) => s.setMcpBridgePort);
+  const mcpMode = useSchematicStore((s) => s.mcpBridgeMode);
+  const setMcpMode = useSchematicStore((s) => s.setMcpBridgeMode);
+  const faceSignedIn = useFaceSession((s) => s.user !== null);
+  /** FACE: the Odoo-connector way — no token, no port, just the switch (SPEC-cloud-bridge.md). */
+  const odooWay = FACE_BACKEND && mcpMode === "odoo";
   const mcpStatus = useSchematicStore((s) => s.mcpBridgeStatus);
   const mcpStatusDetail = useSchematicStore((s) => s.mcpBridgeStatusDetail);
   const companyProfile = useSchematicStore((s) => s.companyProfile);
@@ -845,6 +851,32 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
                   {t("AI Assistant (MCP) — Beta")}
                 </div>
+                {FACE_BACKEND && (
+                  <fieldset className="mb-3">
+                    <legend className="text-xs text-[var(--color-text)] mb-1">{t("How Claude reaches this tab")}</legend>
+                    {(
+                      [
+                        ["odoo", "Through the Odoo connector", "Claude in claude.ai, Claude Desktop or on the phone, in a chat with the FACE Odoo connector. Nothing to install."],
+                        ["local", "Local (Claude Desktop)", "The MCP server on this computer, paired with a token."],
+                      ] as const
+                    ).map(([value, label, hint]) => (
+                      <label key={value} className="flex items-start gap-2 py-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="mcp-mode"
+                          value={value}
+                          checked={mcpMode === value}
+                          onChange={() => setMcpMode(value)}
+                          className="mt-0.5 cursor-pointer accent-blue-600"
+                        />
+                        <span>
+                          <span className="block text-xs text-[var(--color-text)]">{t(label)}</span>
+                          <span className="block text-[10px] text-[var(--color-text-muted)]">{t(hint)}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
                 <label className="flex items-center justify-between py-1 cursor-pointer">
                   <span className="text-xs text-[var(--color-text)]">{t("Let Claude read & edit this schematic")}</span>
                   <input
@@ -854,10 +886,23 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                     className="cursor-pointer accent-blue-600"
                   />
                 </label>
+                {odooWay ? (
+                  <>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                      {t("Lets Claude work in this tab through the FACE Odoo connector — only for you, as the Odoo user signed in here. Off by default; your drawing is only reachable while this is on and the tab is open.")}
+                    </p>
+                    {!faceSignedIn && (
+                      <p className="text-xs text-[var(--color-text)] mt-2">{t("Sign in with Odoo first (top right).")}</p>
+                    )}
+                  </>
+                ) : (
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                   {t("Connects this tab to the EasySchematic MCP server running on your computer, so an AI assistant (Claude) can add devices, set properties, and make connections live. Off by default; your drawing is only reachable while this is on.")}
                 </p>
+                )}
 
+                {!odooWay && (
+                <>
                 <div className="flex items-center justify-between py-1 mt-3">
                   <span className="text-xs text-[var(--color-text)]">{t("Pairing token")}</span>
                   <input
@@ -881,6 +926,8 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                     className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1 text-xs outline-none w-[100px]"
                   />
                 </div>
+                </>
+                )}
 
                 <div className="flex items-center justify-between py-1 mt-3">
                   <span className="text-xs text-[var(--color-text)]">{t("Status")}</span>
@@ -900,7 +947,9 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{t(mcpStatusDetail)}</p>
                 )}
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
-                  {t("Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.")}
+                  {odooWay
+                    ? t("Then ask Claude in a chat with the FACE Odoo connector, e.g. “Which drawing do I have open?”. Setup help is in the docs under “AI Assistant (MCP)”.")
+                    : t("Setup help is in the docs under “AI Assistant (MCP)”. This is an early Beta — only a core set of actions is supported.")}
                 </p>
               </div>
             </>

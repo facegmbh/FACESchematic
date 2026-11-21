@@ -230,6 +230,15 @@ function hasProfileContent(p: CompanyProfile): boolean {
 const MCP_ENABLED_KEY = "easyschematic-mcp-enabled";
 const MCP_TOKEN_KEY = "easyschematic-mcp-token";
 const MCP_PORT_KEY = "easyschematic-mcp-port";
+const MCP_MODE_KEY = "easyschematic-mcp-mode";
+
+export type McpBridgeMode = "odoo" | "local";
+
+/** FACE: which way Claude reaches this tab when nothing was chosen yet. The FACE build defaults
+ *  to the Odoo connector — but someone who already paired the local server keeps that. */
+export function defaultMcpMode(faceBackend: boolean, token: string): McpBridgeMode {
+  return faceBackend && !token ? "odoo" : "local";
+}
 
 /** Minimap visibility is an editor preference (not document data), persisted to
  *  localStorage and shared across schematics/sessions. Default visible. (#210) */
@@ -256,6 +265,15 @@ function loadMcpToken(): string {
   } catch {
     return "";
   }
+}
+function loadMcpMode(): McpBridgeMode {
+  try {
+    const raw = localStorage.getItem(MCP_MODE_KEY);
+    if (raw === "odoo" || raw === "local") return raw;
+  } catch {
+    /* fall through */
+  }
+  return defaultMcpMode(FACE_BACKEND, loadMcpToken());
 }
 function loadMcpPort(): number {
   try {
@@ -334,6 +352,7 @@ let hydrated = false;
 // the store causes a TDZ error on first load because of the cycle.
 export { GRID_SIZE } from "./gridConstants";
 import { GRID_SIZE } from "./gridConstants";
+import { FACE_BACKEND } from "./faceBackend";
 
 /** Snap all node positions to the grid. Mutates the array in place.
  *  Stub labels are skipped — they store sub-grid Y to center the box on a
@@ -954,11 +973,13 @@ interface SchematicState {
   mcpBridgeEnabled: boolean;
   mcpBridgeToken: string;
   mcpBridgePort: number;
+  mcpBridgeMode: McpBridgeMode;
   mcpBridgeStatus: "off" | "connecting" | "connected" | "error";
   mcpBridgeStatusDetail?: string;
   setMcpBridgeEnabled: (enabled: boolean) => void;
   setMcpBridgeToken: (token: string) => void;
   setMcpBridgePort: (port: number) => void;
+  setMcpBridgeMode: (mode: McpBridgeMode) => void;
 
   /** Rack: show connector-level face-plate detail (default off; advanced) */
   showFacePlateDetail: boolean;
@@ -2524,6 +2545,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   mcpBridgeEnabled: loadMcpEnabled(),
   mcpBridgeToken: loadMcpToken(),
   mcpBridgePort: loadMcpPort(),
+  mcpBridgeMode: loadMcpMode(),
   mcpBridgeStatus: "off",
   mcpBridgeStatusDetail: undefined,
   showFacePlateDetail: false,
@@ -5682,6 +5704,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   setMcpBridgePort: (port) => {
     try { localStorage.setItem(MCP_PORT_KEY, String(port)); } catch { /* ignore */ }
     set({ mcpBridgePort: port });
+  },
+  setMcpBridgeMode: (mode) => {
+    try { localStorage.setItem(MCP_MODE_KEY, mode); } catch { /* ignore */ }
+    set({ mcpBridgeMode: mode });
   },
 
   setShowFacePlateDetail: (show) => {

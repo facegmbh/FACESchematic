@@ -307,9 +307,9 @@ anderen `mcp…`-Werte). Im FACE-Build zeigt Einstellungen → KI die Wahl „Ü
 Odoo-Weg. Ohne FACE-Build unverändert.
 
 **Acceptance criteria:**
-- [ ] FACE-Build, angemeldet: Schalter ein → Status „Verbunden“ (gegen Backend + Mock-Odoo)
-- [ ] Nicht angemeldet → Hinweis, kein Start; Umschalten auf „Lokal“ zeigt Token/Port und nutzt den WebSocket
-- [ ] Upstream-Build zeigt die Einstellung wie bisher; `npm run i18n:check` grün
+- [x] FACE-Build, angemeldet: Schalter ein → Status „Verbunden“ (gegen Backend + Mock-Odoo)
+- [x] Nicht angemeldet → Hinweis, kein Start; Umschalten auf „Lokal“ zeigt Token/Port und nutzt den WebSocket
+- [x] Upstream-Build zeigt die Einstellung wie bisher; `npm run i18n:check` grün
 
 **Verification:** `npx vitest run`, `npx tsc -b`, `npm run i18n:check`; Playwright-Blick auf den Dialog
 

@@ -179,3 +179,44 @@ describe("relay bridge (Odoo connector)", () => {
     expect(callsTo("/face/bridge/poll")).toHaveLength(1);
   });
 });
+
+describe("which way in runs (Preferences → AI)", () => {
+  const base = { faceBackend: true, mode: "odoo" as const, enabled: true, token: "", signedIn: true };
+
+  it("off when the switch is off, whatever else is set", () => {
+    expect(bridge.bridgeTransport({ ...base, enabled: false })).toBe("off");
+    expect(bridge.bridgeTransport({ ...base, mode: "local", token: "abc", enabled: false })).toBe("off");
+  });
+
+  it("FACE build, Odoo way: runs only while signed in", () => {
+    expect(bridge.bridgeTransport(base)).toBe("relay");
+    expect(bridge.bridgeTransport({ ...base, signedIn: false })).toBe("off");
+  });
+
+  it("local way: the WebSocket, and only with a pairing token", () => {
+    expect(bridge.bridgeTransport({ ...base, mode: "local", token: "abc" })).toBe("websocket");
+    expect(bridge.bridgeTransport({ ...base, mode: "local", token: "" })).toBe("off");
+  });
+
+  it("without the FACE backend there is only the local way", () => {
+    expect(bridge.bridgeTransport({ ...base, faceBackend: false, token: "abc" })).toBe("websocket");
+    expect(bridge.bridgeTransport({ ...base, faceBackend: false, token: "" })).toBe("off");
+  });
+});
+
+describe("default way in", () => {
+  it("FACE build: Odoo — unless a pairing token is already set (keep a working local setup)", async () => {
+    const { defaultMcpMode } = await import("../store");
+    expect(defaultMcpMode(true, "")).toBe("odoo");
+    expect(defaultMcpMode(true, "abc")).toBe("local");
+    expect(defaultMcpMode(false, "")).toBe("local");
+  });
+
+  it("the choice is remembered", () => {
+    store.getState().setMcpBridgeMode("local");
+    expect(localStorage.getItem("easyschematic-mcp-mode")).toBe("local");
+    store.getState().setMcpBridgeMode("odoo");
+    expect(store.getState().mcpBridgeMode).toBe("odoo");
+    expect(localStorage.getItem("easyschematic-mcp-mode")).toBe("odoo");
+  });
+});

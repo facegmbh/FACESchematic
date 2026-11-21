@@ -106,7 +106,7 @@ Entscheidungen für diese Phase (10.11.):
 - [ ] Nach Deploy: `/face/service/catalog` ohne Token 401, mit Token 200; Jean-Luc trägt den Token in Odoo ein
 
 - [x] Task 16: Long-Polling-Transport im Tab (`runCommand` gemeinsam für beide Wege)
-- [ ] Task 17: Einstellungen → KI mit zwei Wegen
+- [x] Task 17: Einstellungen → KI mit zwei Wegen
 - [ ] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
 - [ ] Task 19: Ende-zu-Ende und Hilfeseite
 

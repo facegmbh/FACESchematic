@@ -19,7 +19,7 @@
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
-import { faceApi, FaceApiError } from "./faceBackend";
+import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession } from "./faceBackend";
 import { getTabId } from "./faceDrawings";
 import { getPortAbsolutePositions } from "./snapUtils";
 import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates } from "./templateApi";
@@ -1987,14 +1987,36 @@ class RelayBridge {
 
 export const relayBridge = new RelayBridge();
 
+export type BridgeTransport = "off" | "relay" | "websocket";
+
+/** Which way in runs: the Odoo connector (FACE build, signed in) or the local MCP server. */
+export function bridgeTransport(s: {
+  faceBackend: boolean;
+  mode: "odoo" | "local";
+  enabled: boolean;
+  token: string;
+  signedIn: boolean;
+}): BridgeTransport {
+  if (!s.enabled) return "off";
+  if (s.faceBackend && s.mode === "odoo") return s.signedIn ? "relay" : "off";
+  return s.token ? "websocket" : "off";
+}
+
 /** Mount once (in App). Starts/stops the bridge as the Beta setting changes. */
 export function useMcpBridge() {
   const enabled = useSchematicStore((s) => s.mcpBridgeEnabled);
   const token = useSchematicStore((s) => s.mcpBridgeToken);
   const port = useSchematicStore((s) => s.mcpBridgePort);
+  const mode = useSchematicStore((s) => s.mcpBridgeMode);
+  const uid = useFaceSession((s) => s.user?.uid ?? null);
+  const transport = bridgeTransport({ faceBackend: FACE_BACKEND, mode, enabled, token, signedIn: uid !== null });
   useEffect(() => {
-    if (enabled && token) mcpBridge.start(token, port);
-    else mcpBridge.stop();
-    return () => mcpBridge.stop();
-  }, [enabled, token, port]);
+    // A sign-out stops the Odoo way; another user signing in starts it afresh for them.
+    if (transport === "relay") relayBridge.start();
+    else if (transport === "websocket") mcpBridge.start(token, port);
+    return () => {
+      mcpBridge.stop();
+      relayBridge.stop();
+    };
+  }, [transport, token, port, uid]);
 }
