@@ -238,9 +238,9 @@ Befehle → Fehler). Poll wartet bis 25 s; Tab ohne Poll seit 40 s gilt als weg.
 Schnittstelle für Task 14.
 
 **Acceptance criteria:**
-- [ ] `call` für uid 8 landet beim Poll von uid 8 und nie bei uid 9; die Antwort kommt bei `call` an
-- [ ] Zweiter Tab desselben Nutzers übernimmt, der erste bekommt `superseded`; ohne Poll 40 s → `call` meldet „kein Tab“
-- [ ] Poll ohne Sitzung 401, ohne `X-FACE-Request` 403, falsche Protokollversion 409 mit Hinweis
+- [x] `call` für uid 8 landet beim Poll von uid 8 und nie bei uid 9; die Antwort kommt bei `call` an
+- [x] Zweiter Tab desselben Nutzers übernimmt, der erste bekommt `superseded`; ohne Poll 40 s → `call` meldet „kein Tab“
+- [x] Poll ohne Sitzung 401, ohne `X-FACE-Request` 403, falsche Protokollversion 409 mit Hinweis
 
 **Verification:** `cd mcp-server && npm test` (Relay-Einheitstests mit Fake-Zeit + Routen gegen Mock-Odoo)
 

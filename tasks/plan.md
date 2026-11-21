@@ -97,7 +97,7 @@ Entscheidungen für diese Phase (10.11.):
   bevor der Tab etwas davon weiß. Ohne eingeschalteten Tab antwortet der Dienst nur „kein Tab“ —
   so kann Jean-Luc den Token schon in Odoo eintragen und Phase 5 parallel beginnen.
 
-- [ ] Task 13: Relay im Backend — Tab anmelden, Poll, Antwort, Ablösung, Verfall
+- [x] Task 13: Relay im Backend — Tab anmelden, Poll, Antwort, Ablösung, Verfall
 - [ ] Task 14: Dienst-Zugang — `/face/service/call` und `/face/service/catalog` mit Token
 - [ ] Task 15: Deploy — `FACE_SERVICE_TOKEN` einmalig erzeugen und durchreichen
 

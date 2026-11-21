@@ -14,10 +14,16 @@ import { setOdooDb } from "./odoo.js";
 import { Store } from "./store.js";
 import { createDrawingsRouter } from "./drawings.js";
 import { Presence } from "./presence.js";
+import { Relay, createBridgeRouter } from "./relay.js";
 
 const { version: VERSION } = createRequire(import.meta.url)("../../package.json") as { version: string };
 
-export function createApp(config: Config, opts: AuthOptions = {}): express.Express {
+export interface AppOptions extends AuthOptions {
+  /** Injected by tests to reach the relay directly and shorten the poll. */
+  relay?: Relay;
+}
+
+export function createApp(config: Config, opts: AppOptions = {}): express.Express {
   setOdooDb(config.odooUrl, config.odooDb);
   const store = new Store(config.dataDir, config.secret);
   const auth = createAuth(config, store, opts);
@@ -33,6 +39,9 @@ export function createApp(config: Config, opts: AuthOptions = {}): express.Expre
 
   app.use("/face/api", auth.router);
   app.use("/face/api", auth.requireUser, createDrawingsRouter(auth.odooFor, new Presence(opts.now)));
+
+  const relay = opts.relay ?? new Relay(opts.now);
+  app.use("/face/bridge", auth.requireFaceHeader, auth.requireUser, createBridgeRouter(relay));
 
   return app;
 }

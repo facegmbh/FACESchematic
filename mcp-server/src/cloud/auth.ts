@@ -138,5 +138,5 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
     res.status(204).end();
   });
 
-  return { router, requireUser, odooFor };
+  return { router, requireUser, requireFaceHeader, odooFor };
 }
