@@ -565,6 +565,10 @@ Liste gibt sie dem Routing zurück.
 
 ## Checkpoint H1 — Zwischenstand zeigen (kein Push)
 
+Kapelle (G-Anordnung) im Browser, nur über Claudes Befehle: alter Ablauf 7 Leitungen / 4048 px außerhalb,
+57 Kreuzungspaare, 1 Umweg; nach `choose_port_sides` 3 / 1392 px, 48; nach einer Runde Rand 80 + Abstand 128:
+0 außerhalb, 0 über Text, 46 Paare, kein Umweg.
+
 ## Task 32: Playbook, Leitfaden, Ende-zu-Ende
 
 **Acceptance criteria:**

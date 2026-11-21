@@ -172,7 +172,10 @@ Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
 - [x] Task 31: `set_connection_path` — Claude legt eine Leitung selbst (Stützpunkte, Raster, Undo)
 
 ### Checkpoint H1 (Zwischenstand zeigen, kein Push)
-- [ ] Kapelle mit neuem Ablauf: Messwerte vorher/nachher, Bild
+- [x] Kapelle mit neuem Ablauf, nur über Claudes Befehle (21.11., App im Browser, Bild `scratchpad/kapelle/h1.png`):
+  alter Ablauf 7 Leitungen / 4048 px außerhalb, 57 Kreuzungspaare, 1 Umweg → `choose_port_sides` (7 gedreht):
+  3 / 1392 px, 48 Paare → eine Runde `margin` 80 für die drei genannten Orte + `gap` 128: **0 außerhalb,
+  0 über Text**, 46 Paare, kein Umweg
 
 - [ ] Task 32: Playbook + Odoo-Leitfaden, Ende-zu-Ende über `/face/service/call`
 
