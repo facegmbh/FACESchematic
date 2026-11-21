@@ -107,7 +107,7 @@ Entscheidungen für diese Phase (10.11.):
 
 - [x] Task 16: Long-Polling-Transport im Tab (`runCommand` gemeinsam für beide Wege)
 - [x] Task 17: Einstellungen → KI mit zwei Wegen
-- [ ] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
+- [x] Task 18: Vier Odoo-Befehle (`get_editor_status`, `open_odoo_drawing`, `save_odoo_drawing`, `new_odoo_drawing`)
 - [ ] Task 19: Ende-zu-Ende und Hilfeseite
 
 ### Checkpoint E (Freigabe, dann Push auf master)

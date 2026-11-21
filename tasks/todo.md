@@ -326,9 +326,9 @@ Odoo-Weg. Ohne FACE-Build unverändert.
 - `new_odoo_drawing { projectId, name, discardChanges? }` (leerer Schaltplan, sofort am Projekt angelegt)
 
 **Acceptance criteria:**
-- [ ] Ungespeicherte Änderungen → Öffnen/Neu verweigern mit Satz, mit `discardChanges` erlaubt
-- [ ] Speichern bei fremder Sperre oder veraltetem Stand verweigert mit Namen; mit `force` nur der Veraltet-Fall
-- [ ] Nicht angemeldet → klarer Fehler; die Befehle erscheinen im Katalog
+- [x] Ungespeicherte Änderungen → Öffnen/Neu verweigern mit Satz, mit `discardChanges` erlaubt
+- [x] Speichern bei fremder Sperre oder veraltetem Stand verweigert mit Namen; mit `force` nur der Veraltet-Fall
+- [x] Nicht angemeldet → klarer Fehler; die Befehle erscheinen im Katalog
 
 **Verification:** `npx vitest run` (mit gemocktem `faceApi`), `cd mcp-server && npm test`, `npx tsc -b`
 

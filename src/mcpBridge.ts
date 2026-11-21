@@ -20,7 +20,16 @@ import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession } from "./faceBackend";
-import { getTabId } from "./faceDrawings";
+import {
+  getTabId,
+  isChangedSinceOdooSave,
+  openOdooDrawing,
+  saveOdooDrawing,
+  createOdooDrawing,
+  useOdooPresence,
+  StaleError,
+  LockedError,
+} from "./faceDrawings";
 import { getPortAbsolutePositions } from "./snapUtils";
 import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates } from "./templateApi";
 import { inferRackForm, inferRackHeightU } from "./rackUtils";
@@ -29,6 +38,9 @@ import {
   PROTOCOL_VERSION,
   MAX_BATCH_ITEMS,
   type CommandType,
+  type OpenOdooDrawingParams,
+  type SaveOdooDrawingParams,
+  type NewOdooDrawingParams,
   type BridgeServerMessage,
   type AddDeviceParams,
   type AddDevicesParams,
@@ -1590,7 +1602,117 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       hint: amps.length === 0 ? "No amplifier with speaker-level outputs on the schematic." : undefined,
     };
   },
+
+  // --- FACE: Odoo drawings (SPEC-cloud-bridge.md) ---------------------------------
+  get_editor_status: () => editorStatus(),
+
+  open_odoo_drawing: async (params) => {
+    const { drawingId, discardChanges } = (params ?? {}) as unknown as OpenOdooDrawingParams;
+    requireSignedIn();
+    if (!Number.isInteger(drawingId) || drawingId <= 0) throw new CommandError("drawingId muss eine Zahl sein (aus schaltplan_zeichnungen).");
+    guardUnsaved(discardChanges);
+    await openOdooDrawing(drawingId);
+    return editorStatus();
+  },
+
+  save_odoo_drawing: async (params) => {
+    const { force } = (params ?? {}) as unknown as SaveOdooDrawingParams;
+    requireSignedIn();
+    const ref = st().odooDrawing;
+    if (!ref) {
+      throw new CommandError(
+        "Der Schaltplan im Tab ist keine Odoo-Zeichnung. Zum Ablegen an einem Projekt new_odoo_drawing mit keepContent: true verwenden.",
+      );
+    }
+    try {
+      await saveOdooDrawing({ force: force === true });
+    } catch (err) {
+      if (err instanceof StaleError) {
+        throw new CommandError(
+          `Nicht gespeichert: ${err.writtenBy ?? "Jemand"} hat „${ref.name}“ am ${err.writeDate} (UTC) gespeichert, nachdem sie hier geöffnet wurde. ` +
+            "Nur wenn der Nutzer das ausdrücklich will, mit force: true überschreiben.",
+        );
+      }
+      if (err instanceof LockedError) {
+        throw new CommandError(
+          err.holder
+            ? `Nicht gespeichert: ${err.holder.sameUser ? "Du selbst (in einem anderen Tab)" : err.holder.name} bearbeitet „${ref.name}“ gerade. Warten oder mit new_odoo_drawing und keepContent: true unter neuem Namen ablegen.`
+            : `Nicht gespeichert: Dieser Tab hat „${ref.name}“ nicht zum Bearbeiten offen.`,
+        );
+      }
+      throw err;
+    }
+    const saved = st().odooDrawing ?? ref;
+    return { saved: true, drawingId: saved.drawingId, name: saved.name, projectName: saved.projectName, savedAt: saved.baseWriteDate };
+  },
+
+  new_odoo_drawing: async (params) => {
+    const { projectId, name, keepContent, discardChanges } = (params ?? {}) as unknown as NewOdooDrawingParams;
+    requireSignedIn();
+    if (!Number.isInteger(projectId) || projectId <= 0) throw new CommandError("projectId muss eine Zahl sein (die Odoo-Projekt-ID).");
+    if (typeof name !== "string" || !name.trim()) throw new CommandError("name fehlt — wie soll die Zeichnung heißen?");
+    if (!keepContent) {
+      guardUnsaved(discardChanges);
+      st().newSchematic();
+    }
+    await createOdooDrawing(projectId, name);
+    return editorStatus();
+  },
 };
+
+// --- FACE: helpers for the Odoo commands ---------------------------------------------
+
+function requireSignedIn() {
+  if (!useFaceSession.getState().user) {
+    throw new CommandError("Nicht mit Odoo angemeldet — im Tab oben rechts anmelden.");
+  }
+}
+
+/** Refuse to replace content the user would lose: unsaved changes to the open Odoo drawing,
+ *  or anything on a canvas that is not an Odoo drawing at all (it lives only in this browser). */
+function guardUnsaved(discardChanges: boolean | undefined) {
+  if (discardChanges === true) return;
+  const s = st();
+  if (s.odooDrawing) {
+    if (isChangedSinceOdooSave()) {
+      throw new CommandError(
+        `„${s.odooDrawing.name}“ hat ungespeicherte Änderungen. Erst save_odoo_drawing — oder, nur wenn der Nutzer sie verwerfen will, discardChanges: true.`,
+      );
+    }
+    return;
+  }
+  const devices = s.nodes.filter((n) => n.type === "device").length;
+  if (s.nodes.length > 0) {
+    throw new CommandError(
+      `Im Tab ist „${s.schematicName}“ offen (${devices} Geräte) und nicht in Odoo gespeichert. ` +
+        "Erst mit new_odoo_drawing und keepContent: true an einem Projekt ablegen — oder, nur wenn der Nutzer ihn verwerfen will, discardChanges: true.",
+    );
+  }
+}
+
+function editorStatus() {
+  const s = st();
+  const ref = s.odooDrawing;
+  const presence = useOdooPresence.getState();
+  return {
+    signedInAs: useFaceSession.getState().user?.name ?? null,
+    schematicName: s.schematicName,
+    deviceCount: s.nodes.filter((n) => n.type === "device").length,
+    odooDrawing: ref
+      ? {
+          drawingId: ref.drawingId,
+          name: ref.name,
+          projectId: ref.projectId,
+          projectName: ref.projectName,
+          access: presence.role === "editor" ? "edit" : presence.role === "viewer" ? "read" : "unknown",
+          editedBy: presence.role === "viewer" && presence.holder ? (presence.holder.sameUser ? "du selbst, in einem anderen Tab" : presence.holder.name) : undefined,
+          alsoOpenBy: presence.viewers.length ? presence.viewers : undefined,
+          unsavedChanges: isChangedSinceOdooSave(),
+          lastSaved: ref.baseWriteDate,
+        }
+      : null,
+  };
+}
 
 function channelSummary(c: ChannelLoadResult) {
   const r1 = (v: number | undefined) => (v === undefined ? undefined : Math.round(v * 10) / 10);

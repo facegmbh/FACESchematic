@@ -24,6 +24,8 @@ Golden rules:
 
 - Floorplans are scaled plan drawings: positions there are real-world METRES from the drawing area's corner, never canvas pixels. The architect's drawing (underlay) is imported and calibrated by the user in the editor — you fill in groups, symbols, legend text, the drawing block and notes.
 
+FACE — drawings on Odoo projects: call get_editor_status first to see what is open and whether this tab may edit it. open_odoo_drawing, new_odoo_drawing and save_odoo_drawing never throw away unsaved work or overwrite a newer version on their own: when one refuses, tell the user why and ask. Pass discardChanges: true or force: true only after the user said so. Save only when the user asks.
+
 Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), and "floorplan" (annotate an architect's plan with device symbols, legend and drawing block).`;
 
 /** Definitions returned by the prompts/list handler. */

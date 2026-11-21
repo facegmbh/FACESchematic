@@ -76,7 +76,12 @@ export type CommandType =
   | "list_floorplan_lines"
   | "sync_floorplan_lines"
   | "update_floorplan_line"
-  | "speaker_load_report";
+  | "speaker_load_report"
+  // FACE: drawings stored on Odoo projects (SPEC-cloud-bridge.md)
+  | "get_editor_status"
+  | "open_odoo_drawing"
+  | "save_odoo_drawing"
+  | "new_odoo_drawing";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -606,6 +611,26 @@ export interface SpeakerLoadReportParams {
 // never corrupt a drawing through a blind merge.
 // ---------------------------------------------------------------------------
 export type SafeFieldKind = "label" | "shortName" | "patch";
+
+// ---------------------------------------------------------------------------
+// FACE: Odoo drawings. Careful by design — Claude may act while the user is not
+// watching: unsaved content is only dropped with discardChanges, a newer stand in
+// Odoo only overwritten with force, and both only when the user said so.
+// ---------------------------------------------------------------------------
+export interface OpenOdooDrawingParams {
+  drawingId: number;
+  discardChanges?: boolean;
+}
+export interface SaveOdooDrawingParams {
+  force?: boolean;
+}
+export interface NewOdooDrawingParams {
+  projectId: number;
+  name: string;
+  /** Store what is on the canvas as the new drawing instead of starting empty. */
+  keepContent?: boolean;
+  discardChanges?: boolean;
+}
 
 export const SAFE_DEVICE_FIELDS: Record<string, SafeFieldKind> = {
   label: "label",

@@ -842,4 +842,54 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
   },
+
+  // --- FACE: drawings stored on Odoo projects (SPEC-cloud-bridge.md) ---------------------
+  {
+    name: "get_editor_status",
+    description:
+      "Who is signed in with Odoo in the editor tab, which schematic is open, and — if it is a drawing from an Odoo project — its drawingId, name, project, whether this tab may edit it or only read it (and who edits it), who else has it open, and whether it has unsaved changes. Call this first when the user talks about Odoo drawings or saving.",
+    inputSchema: noArgs,
+  },
+  {
+    name: "open_odoo_drawing",
+    description:
+      "Open a drawing stored on an Odoo project in the editor tab and take it for editing (if someone else edits it, it opens read-only and get_editor_status says who). Refuses when the tab holds unsaved work — unsaved changes of an open Odoo drawing, or a schematic that is not in Odoo at all — and says how to keep it; pass discardChanges: true ONLY when the user said to throw that work away.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        drawingId: { type: "number", description: "The drawing's id (from the Odoo connector's schaltplan_zeichnungen, or get_editor_status)." },
+        discardChanges: { type: "boolean", description: "Throw away unsaved work in the tab. Only on the user's explicit wish." },
+      },
+      required: ["drawingId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "save_odoo_drawing",
+    description:
+      "Save the open Odoo drawing back to its project (overwrites the stored version; Odoo keeps no history). Only save when the user asked for it. Refuses when someone else edits the drawing, or when someone saved it after it was opened here — then report who and when, and pass force: true ONLY if the user explicitly wants their version stored over that one. For a schematic that is not an Odoo drawing yet, use new_odoo_drawing with keepContent: true.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        force: { type: "boolean", description: "Overwrite a version someone saved in between. Only on the user's explicit wish." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "new_odoo_drawing",
+    description:
+      "Create a new drawing on an Odoo project and open it for editing. By default it starts empty (refused when the tab holds unsaved work, unless discardChanges: true on the user's explicit wish); with keepContent: true the schematic now on the canvas is stored as the new drawing — the way to put work into Odoo. Fails if the project already has a drawing of that name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The Odoo project id (project.project)." },
+        name: { type: "string", description: "Name of the drawing, e.g. \"Beschallung EG\"." },
+        keepContent: { type: "boolean", description: "Store the current canvas as this drawing instead of starting empty." },
+        discardChanges: { type: "boolean", description: "Start empty even though the tab holds unsaved work. Only on the user's explicit wish." },
+      },
+      required: ["projectId", "name"],
+      additionalProperties: false,
+    },
+  },
 ];
