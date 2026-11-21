@@ -559,7 +559,7 @@ bekommt `gap`, `arrange_room`/`fit_room` bekommen `margin`.
 Liste gibt sie dem Routing zurück.
 
 **Acceptance criteria:**
-- [ ] Stützpunkte gerundet, höchstens 50, unbekannte Verbindung abgelehnt; Routing behält den Weg
+- [x] Stützpunkte auf das Raster gerundet, höchstens 50, ungültige Punkte und unbekannte Verbindung abgelehnt; ein Undo-Schritt; leere Liste gibt die Leitung dem Routing zurück
 
 **Dependencies:** — · **Files:** `src/mcpBridge.ts`, Protokoll, Katalog, Tests · **Scope:** S
 

@@ -54,6 +54,7 @@ import {
   type DissolveRoomParams,
   type RenderSchematicParams,
   type ChoosePortSidesParams,
+  type SetConnectionPathParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -1927,6 +1928,28 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     return {
       changed: changes.map((c) => ({ connectionId: c.id, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle })),
       hint: changes.length ? "route_connections next — the lines follow the new sides." : "Every two-sided port already faces its counterpart.",
+    };
+  },
+
+  set_connection_path: (params) => {
+    const { connectionId, waypoints } = (params ?? {}) as unknown as SetConnectionPathParams;
+    const edge = st().edges.find((e) => e.id === connectionId);
+    if (!edge) throw new CommandError(`No connection found with id "${String(connectionId)}".`);
+    if (!Array.isArray(waypoints)) throw new CommandError("waypoints must be a list of points { x, y } (empty = back to auto-routing).");
+    if (waypoints.length > 50) throw new CommandError("At most 50 waypoints.");
+    const snapped = waypoints.map((p, i) => {
+      const pos = validatePosition((p as { x?: unknown })?.x, (p as { y?: unknown })?.y);
+      if (!pos.ok) throw new CommandError(`Waypoint ${i + 1}: ${pos.error}`);
+      return { x: Math.round(pos.position.x / GRID_SIZE) * GRID_SIZE, y: Math.round(pos.position.y / GRID_SIZE) * GRID_SIZE };
+    });
+    if (snapped.length) st().setManualWaypoints(edge.id, snapped);
+    else st().clearManualWaypoints(edge.id);
+    return {
+      connectionId: edge.id,
+      waypoints: snapped,
+      hint: snapped.length
+        ? "The router keeps this path. route_connections leaves it alone unless you name the connection; check_layout and render_schematic show how it runs."
+        : "The line is back with the auto-routing — route_connections lays it.",
     };
   },
 

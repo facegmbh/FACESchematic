@@ -922,6 +922,25 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "set_connection_path",
+    description:
+      "Lay one line yourself: the points (canvas coordinates, snapped to the 16 px grid) it passes on its way from port to port, in order; the line runs orthogonally through them. The editor and route_connections keep this path, as if drawn by hand. Use it as a last resort for a line check_layout still reports (line_outside, over_text, crosses_device) after choose_port_sides, margins and route_connections — read the device and room positions from get_schematic and look with render_schematic afterwards. An empty list gives the line back to the auto-routing. One undo step.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectionId: { type: "string", description: "The connection to lay." },
+        waypoints: {
+          type: "array",
+          maxItems: 50,
+          items: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"], additionalProperties: false },
+          description: "Points on the canvas, in order from source to target; [] = back to auto-routing.",
+        },
+      },
+      required: ["connectionId", "waypoints"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "arrange_rooms",
     description:
       "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",

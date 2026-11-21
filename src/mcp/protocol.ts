@@ -92,7 +92,8 @@ export type CommandType =
   | "rename_room"
   | "dissolve_room"
   | "render_schematic"
-  | "choose_port_sides";
+  | "choose_port_sides"
+  | "set_connection_path";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -694,6 +695,13 @@ export interface DissolveRoomParams {
 export interface ChoosePortSidesParams {
   /** Only these connections; the only way to include one with the user's own waypoints. */
   connectionIds?: string[];
+}
+
+/** FACE: Claude lays one line itself (SPEC-schaltplan-leitungen.md). */
+export interface SetConnectionPathParams {
+  connectionId: string;
+  /** Points on the canvas the line passes, in order (at most 50); empty = back to auto-routing. */
+  waypoints: { x: number; y: number }[];
 }
 
 /** FACE: a PNG of the schematic (or one room) for the assistant to look at. */

@@ -393,3 +393,36 @@ describe("margin and gap commands (Task 30)", () => {
     expect((await run("arrange_rooms", { gap: 192 })).ok).toBe(true);
   });
 });
+
+describe("set_connection_path (Task 31)", () => {
+  const edgeOf = (id: string) => store.getState().edges.find((e) => e.id === id)!;
+  const someId = () => store.getState().edges[0].id;
+
+  it("lays a line along given points, snapped to the grid, as the user's own path — one undo step", async () => {
+    const id = someId();
+    const before = JSON.stringify(edgeOf(id).data);
+    const r = await run("set_connection_path", { connectionId: id, waypoints: [{ x: 1003, y: 205 }, { x: 1003, y: 610 }] });
+    expect(r).toMatchObject({ ok: true, result: { connectionId: id, waypoints: [{ x: 1008, y: 208 }, { x: 1008, y: 608 }] } });
+    expect(edgeOf(id).data?.manualWaypoints).toEqual([{ x: 1008, y: 208 }, { x: 1008, y: 608 }]);
+    expect(edgeOf(id).data?.autoRouteWaypoints).toBeFalsy();
+    store.getState().undo();
+    expect(JSON.stringify(edgeOf(id).data)).toBe(before);
+  });
+
+  it("an empty list gives the line back to the router", async () => {
+    const id = someId();
+    await run("set_connection_path", { connectionId: id, waypoints: [{ x: 0, y: 0 }] });
+    const r = await run("set_connection_path", { connectionId: id, waypoints: [] });
+    expect(r.ok).toBe(true);
+    expect(edgeOf(id).data?.manualWaypoints).toBeUndefined();
+  });
+
+  it("checks what it is given", async () => {
+    const id = someId();
+    expect((await run("set_connection_path", { connectionId: "nope", waypoints: [] })).ok).toBe(false);
+    expect((await run("set_connection_path", { connectionId: id, waypoints: "x" })).ok).toBe(false);
+    expect((await run("set_connection_path", { connectionId: id, waypoints: [{ x: "a", y: 1 }] })).ok).toBe(false);
+    const many = Array.from({ length: 51 }, (_, i) => ({ x: i * 16, y: 0 }));
+    expect((await run("set_connection_path", { connectionId: id, waypoints: many })).ok).toBe(false);
+  });
+});

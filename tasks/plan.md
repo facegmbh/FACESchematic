@@ -169,7 +169,7 @@ Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
 - [x] Task 28: `choose_port_sides` — zweiseitige Ports zum Gegenüber (reine Funktion + Befehl, ein Undo-Schritt)
 - [x] Task 29: Router — Ortsnamen und Notizen als Hindernisse (`buildObstacles`), Routing-Tests/Harness grün
 - [x] Task 30: `check_layout` meldet `line_outside` und `over_text`; `gap` für `arrange_rooms`, `margin` für `arrange_room`/`fit_room`
-- [ ] Task 31: `set_connection_path` — Claude legt eine Leitung selbst (Stützpunkte, Raster, Undo)
+- [x] Task 31: `set_connection_path` — Claude legt eine Leitung selbst (Stützpunkte, Raster, Undo)
 
 ### Checkpoint H1 (Zwischenstand zeigen, kein Push)
 - [ ] Kapelle mit neuem Ablauf: Messwerte vorher/nachher, Bild
