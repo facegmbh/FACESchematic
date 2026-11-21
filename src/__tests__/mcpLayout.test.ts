@@ -471,3 +471,24 @@ describe("route_connections waits until the router has settled", () => {
     // …and route_connections only returned after the final one arrived.
   });
 });
+
+describe("renumber_ports (Jean-Luc 21.11.: switch ports may be renumbered)", () => {
+  const handles = () => Object.fromEntries(store.getState().edges.map((e) => [e.id, [e.sourceHandle, e.targetHandle]]));
+
+  it("renumbers the switch by the sheet, says which port became which, one undo step", async () => {
+    const before = handles();
+    const r = await run("renumber_ports", { deviceId: "device-27" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const result = r.result as { changed: { connectionId: string; from: string; to: string }[] };
+    expect(result.changed.length).toBeGreaterThan(0);
+    expect(result.changed[0].from).toMatch(/Port/);
+    expect(Object.keys(handles()).sort()).toEqual(Object.keys(before).sort());
+    store.getState().undo();
+    expect(handles()).toEqual(before);
+  });
+
+  it("needs a device", async () => {
+    expect((await run("renumber_ports", { deviceId: "room-8" })).ok).toBe(false);
+  });
+});

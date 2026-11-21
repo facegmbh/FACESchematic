@@ -922,6 +922,17 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "renumber_ports",
+    description:
+      "Renumber a switch's ports (or any device with a row of like ports) in the order the connected devices stand on the sheet, top to bottom, and turn each line to the side facing its device — so the network lines run side by side into the switch instead of crossing. Only like ports swap (RJ45 with RJ45, SFP with SFP); management, console and USB ports stay; lines the user laid by hand keep their port. Connection ids stay; one undo step. Run it after arranging, before route_connections. The port numbers in the drawing change — say so to the user.",
+    inputSchema: {
+      type: "object",
+      properties: { deviceId: { type: "string", description: "The switch (or patch panel) whose ports to renumber." } },
+      required: ["deviceId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "set_connection_path",
     description:
       "Lay one line yourself: the points (canvas coordinates, snapped to the 16 px grid) it passes on its way from port to port, in order; the line runs orthogonally through them. The editor and route_connections keep this path, as if drawn by hand. Use it as a last resort for a line check_layout still reports (line_outside, over_text, crosses_device) after choose_port_sides, margins and route_connections — get_schematic gives every device and room its canvas rectangle (canvas: x, y, width, height), so lead the line through the gaps between locations and areas; look with render_schematic afterwards. An empty list gives the line back to the auto-routing. One undo step.",

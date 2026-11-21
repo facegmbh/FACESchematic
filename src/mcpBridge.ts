@@ -22,6 +22,7 @@ import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
 import { arrangeRoom, arrangeRooms, fitRoomSize, roomMargin } from "./layoutArrange";
 import { choosePortSides } from "./portSides";
+import { renumberPorts } from "./renumberPorts";
 import { blobToBase64, captureSchematicPng, renderBounds, renderPixelRatio } from "./renderSchematic";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
@@ -55,6 +56,7 @@ import {
   type RenderSchematicParams,
   type ChoosePortSidesParams,
   type SetConnectionPathParams,
+  type RenumberPortsParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -1930,6 +1932,37 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     return {
       changed: changes.map((c) => ({ connectionId: c.id, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle })),
       hint: changes.length ? "route_connections next — the lines follow the new sides." : "Every two-sided port already faces its counterpart.",
+    };
+  },
+
+  renumber_ports: (params) => {
+    const { deviceId } = (params ?? {}) as unknown as RenumberPortsParams;
+    const device = requireDevice(deviceId);
+    const ports = new Map(((device.data as DeviceData).ports ?? []).map((p) => [p.id, p.label] as const));
+    const labelOf = (handle: string | null | undefined) => ports.get(String(handle ?? "").replace(/-(in|out)$/, "")) ?? String(handle);
+    const edges = st().edges;
+    const renumbered = renumberPorts(st().nodes, edges, deviceId);
+    // Then each moved line leaves on the side facing its counterpart — one undo step for both.
+    const moved = edges.map((e) => {
+      const c = renumbered.find((x) => x.id === e.id);
+      return c ? { ...e, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle } : e;
+    });
+    const atDevice = moved.filter((e) => e.source === deviceId || e.target === deviceId).map((e) => e.id);
+    const sides = choosePortSides(st().nodes, moved, atDevice);
+    const merged = new Map(renumbered.map((c) => [c.id, c] as const));
+    for (const c of sides) merged.set(c.id, c);
+    if (merged.size) st().setConnectionHandles([...merged.values()]);
+    const portAtDevice = (e: { source: string; sourceHandle?: string | null; targetHandle?: string | null }) =>
+      e.source === deviceId ? e.sourceHandle : e.targetHandle;
+    return {
+      deviceId,
+      changed: renumbered.map((c) => {
+        const old = edges.find((e) => e.id === c.id)!;
+        return { connectionId: c.id, from: labelOf(portAtDevice(old)), to: labelOf(portAtDevice({ ...old, ...c })) };
+      }),
+      hint: renumbered.length
+        ? "Port numbers in the drawing changed — tell the user (patching on site follows the drawing). route_connections next."
+        : "The ports already follow the sheet.",
     };
   },
 

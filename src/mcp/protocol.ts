@@ -93,7 +93,8 @@ export type CommandType =
   | "dissolve_room"
   | "render_schematic"
   | "choose_port_sides"
-  | "set_connection_path";
+  | "set_connection_path"
+  | "renumber_ports";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -695,6 +696,11 @@ export interface DissolveRoomParams {
 export interface ChoosePortSidesParams {
   /** Only these connections; the only way to include one with the user's own waypoints. */
   connectionIds?: string[];
+}
+
+/** FACE: a switch's ports in the order its devices stand on the sheet (Jean-Luc, 21.11.). */
+export interface RenumberPortsParams {
+  deviceId: string;
 }
 
 /** FACE: Claude lays one line itself (SPEC-schaltplan-leitungen.md). */
