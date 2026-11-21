@@ -39,3 +39,27 @@ test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
     assert.ok(SERVER_INSTRUCTIONS.includes(name));
   }
 });
+
+test("build-schematic: rooms are locations with racks, then arrange, route, check, look — in that order", () => {
+  const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
+  const order = ["create_room", "add_rack_to_room", "place_device_in_rack", "arrange_room", "arrange_rooms", "connect_devices_batch", "route_connections", "check_layout", "render_schematic"];
+  let last = -1;
+  for (const step of order) {
+    const at = text.indexOf(step, last + 1);
+    assert.ok(at > last, `${step} should come after the previous step`);
+    last = at;
+  }
+  assert.match(text, /location/i);
+  assert.match(text, /not .*trade/i);
+  assert.match(text, /three rounds/i);
+});
+
+test("build-schematic: an existing drawing by trade is restructured, not rebuilt", () => {
+  const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
+  assert.match(text, /rename_room/);
+  assert.match(text, /dissolve_room/);
+});
+
+test("SERVER_INSTRUCTIONS: says how a drawing is laid out and checked", () => {
+  for (const word of ["location", "check_layout", "render_schematic"]) assert.match(SERVER_INSTRUCTIONS, new RegExp(word));
+});

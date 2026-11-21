@@ -498,8 +498,15 @@ verbinden → `route_connections` → `check_layout` bis leer (max. 3 Runden) �
 `schaltplan_geraeteliste` → `naechster_schritt` entsprechend (Räume = Orte, Schränke = Racks).
 
 **Acceptance criteria:**
-- [ ] Ende-zu-Ende über `/face/service/call`: Kapelle örtlich mit Rack neu aufgebaut, `check_layout` leer, Bild kommt
-- [ ] Odoo-Leitfaden und Geräteliste nennen die Regeln
+- [x] Ende-zu-Ende über `/face/service/call` (21.11., Tab mit `VITE_FACE_BACKEND=1`, Mock-Odoo): Kapelle nach
+  Gewerken (7 Räume) umgebaut — `rename_room` Mikrofone → Kapelle, 6 × `dissolve_room`, 19 Verbindungen erhalten —,
+  Orte und Wandschrank (HE 1–10) angelegt, geordnet, verlegt, geprüft, Bild 1600×1355 / 360 KB über den Dienst;
+  42 Aufrufe, langsamster `render_schematic` 3,1 s (Grenze 50 s)
+- [ ] `check_layout` **leer**: nicht erreicht. Keine harten Befunde (overlap/outside/room_overlap/no_room/off_grid/
+  unrouted), es bleiben 1 Umweg (Epson → Switch) und 63 Kreuzungspaare — fast alle in der Gasse links vom Schrank,
+  wo die Netzwerkleitungen auf die Switch-Ports springen. Senken ließe sich das über die Port-Zuordnung am Switch
+  (fachliche Änderung, nicht still) — nach Checkpoint G mit Jean-Luc klären. Claude nennt den Rest laut Playbook.
+- [x] Odoo-Leitfaden („Aufbau: örtlich“) und Geräteliste (`naechster_schritt`) nennen die Regeln (Branch `feat/schaltplan-bild`)
 
 **Dependencies:** Tasks 25, 26 · **Files:** `mcp-server/src/prompts.ts`, Odoo `data/leitfaden.md`, `tools/schaltplan.py` · **Scope:** S
 

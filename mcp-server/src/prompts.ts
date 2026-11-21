@@ -24,6 +24,8 @@ Golden rules:
 
 - Floorplans are scaled plan drawings: positions there are real-world METRES from the drawing area's corner, never canvas pixels. The architect's drawing (underlay) is imported and calibrated by the user in the editor — you fill in groups, symbols, legend text, the drawing block and notes.
 
+FACE — layout: a schematic is organised by location (rooms are physical places with their racks inside, never trades), nothing overlaps, lines run cleanly. After building or changing the layout: route_connections, check_layout (fix and re-check, at most three rounds), then render_schematic to see it and show the user — the "build-schematic" playbook has the steps.
+
 FACE — drawings on Odoo projects: call get_editor_status first to see what is open and whether this tab may edit it. open_odoo_drawing, new_odoo_drawing and save_odoo_drawing never throw away unsaved work or overwrite a newer version on their own: when one refuses, tell the user why and ask. Pass discardChanges: true or force: true only after the user said so. Save only when the user asks.
 
 Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), and "floorplan" (annotate an architect's plan with device symbols, legend and drawing block).`;
@@ -32,7 +34,7 @@ Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a 
 export const PROMPTS: Prompt[] = [
   {
     name: "build-schematic",
-    description: "Playbook for laying out and wiring an AV system on the schematic canvas (get_schematic → search_templates → add_devices → rooms → connect_devices_batch).",
+    description: "Playbook for laying out and wiring an AV system by location, with racks (get_schematic → locations and racks → add_devices → arrange → connect → route → check_layout → render_schematic).",
     arguments: [
       { name: "brief", description: "What to build, in plain words (e.g. 'a huddle room: laptop to a 4K display via a switcher').", required: false },
     ],
@@ -60,15 +62,17 @@ export const PROMPTS: Prompt[] = [
   },
 ];
 
-const BUILD_SCHEMATIC = `You are building or extending an AV signal-flow schematic in EasySchematic through the live MCP bridge. Work in this order:
+const BUILD_SCHEMATIC = `You are building or extending an AV signal-flow schematic in EasySchematic through the live MCP bridge. The drawing is organised by LOCATION: every room on the canvas is a physical place (chapel, sacristy, technical room, meeting room 2.04 …), and racks or wall cabinets are boxes inside their location holding the 19" gear. Never group by trade or by cost-estimate section ("microphones", "network", "PA") — those are not places. Nothing may overlap, and lines must run cleanly. Work in this order:
 
 1. Call get_schematic FIRST to see the Devices, Connections, rooms and notes that already exist. Never assume an empty canvas.
-2. Find each Device you need with search_templates and use the templateId it returns — never invent a templateId.
-3. Add Devices with add_devices (the batch tool), not repeated add_device calls. Lay them out left-to-right by signal flow: sources and inputs on the left, switchers/processors in the middle, displays and outputs on the right.
-4. If the brief names rooms or areas, create them with create_room BEFORE placing Devices, then place Devices with place_device_in_room. Creating a room on top of Devices that already exist absorbs them and makes their coordinates room-relative — if that happens, call get_schematic again before reusing any old position.
-5. Make Connections with connect_devices_batch. For two-sided Ports give the face: bidirectional Ports use "in"/"out", passthrough Ports use "rear"/"front"; plain Ports need no face. Connections are validated, so read the per-item results and retry only the failures.
-6. After any structural change that adds Ports (e.g. installing a card) re-read get_device before wiring the new Ports.
-7. In anything you say to the user, use the AV terms Device, Connection and Port.`;
+2. Settle the locations: which places are there, which Device stands where, which rack or cabinet holds which gear. Take them from the conversation or the project; ask the user only for what you cannot know. If the existing drawing is grouped by trade, restructure it instead of starting over: rename_room for a room that already is one place, dissolve_room for trade rooms (the Devices stay where they are, with their Connections), then put each Device into its location.
+3. Find each Device you need with search_templates and use the templateId it returns — never invent a templateId. Add Devices with add_devices (the batch tool), not repeated add_device calls.
+4. Create the locations with create_room (size does not matter yet — they are fitted later). For every rack or wall cabinet call add_rack_to_room: it creates the box inside the location AND the rack elevation, linked. Then put rack gear in with place_device_in_rack (rackId, uPosition from the bottom) — it lands in the elevation and in the box. Everything else goes into its location with place_device_in_room.
+5. Arrange: arrange_room for every location (Devices in columns by signal flow, the rack as one block, the room fitted to its content), then arrange_rooms once to lay the locations out without overlap — the most connected place (usually the technical room) ends up in the middle. Pass order only when the building suggests one.
+6. Make Connections with connect_devices_batch. For two-sided Ports give the face: bidirectional Ports use "in"/"out", passthrough Ports use "rear"/"front"; plain Ports need no face. Connections are validated, so read the per-item results and retry only the failures. After any structural change that adds Ports (e.g. installing a card) re-read get_device before wiring the new Ports.
+7. route_connections to lay the lines, then check_layout. Fix what it reports (overlap/outside: arrange_room or fit_room; room_overlap: arrange_rooms; no_room: put the Device into its location; then route_connections again) and check again — at most three rounds. A few crossings are normal; name whatever is left to the user instead of looping.
+8. render_schematic and look at the picture yourself: does it read clearly by location? Show it to the user with a short summary (locations, racks, what check_layout still says).
+9. In anything you say to the user, use the AV terms Device, Connection and Port.`;
 
 const RACK_ELEVATION = `You are creating or populating an equipment rack elevation in EasySchematic through the live MCP bridge. Rack elevations are a separate view from the schematic canvas. Work in this order:
 

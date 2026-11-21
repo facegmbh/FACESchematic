@@ -157,7 +157,7 @@ Entscheidungen:
 - [x] Task 25: `arrange_rooms` und `route_connections`
 - [x] Task 25a: `rename_room` und `dissolve_room` — bestehende Gewerke-Räume in Orte umbauen (G1-Lücke)
 - [x] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen (Sichtprüfung in claude.ai bei Checkpoint G)
-- [ ] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call`
+- [x] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call` (Kreuzungen offen, siehe todo)
 
 ### Checkpoint G (Freigabe, Push auf master; Odoo-Teil direkt auf main)
 - [ ] Alle Tests und Build grün; Ende-zu-Ende: Kapelle neu ordnen, `check_layout` leer, Bild kommt an
