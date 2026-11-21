@@ -84,7 +84,9 @@ export type CommandType =
   | "new_odoo_drawing"
   // FACE: layout (SPEC-schaltplan-layout.md)
   | "check_layout"
-  | "add_rack_to_room";
+  | "add_rack_to_room"
+  | "arrange_room"
+  | "fit_room";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -642,6 +644,14 @@ export interface AddRackToRoomParams {
   /** Position of the rack box inside the location; default top-left (16, 48). */
   x?: number;
   y?: number;
+}
+
+export interface ArrangeRoomParams {
+  roomId: string;
+}
+
+export interface FitRoomParams {
+  roomId: string;
 }
 
 export interface CheckLayoutParams {

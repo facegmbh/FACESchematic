@@ -846,6 +846,28 @@ export const TOOLS: ToolDef[] = [
 
   // --- FACE: layout (SPEC-schaltplan-layout.md) ----------------------------------------
   {
+    name: "arrange_room",
+    description:
+      "Tidy one room: its devices (and rack boxes, as one block) go into columns by signal flow — a device feeding another stands left of it — on the grid, without overlap, then the room fits its content (its parents grow if needed). One undo step. Use after filling a room; then arrange_rooms if rooms now overlap, then check_layout. Only on the user's wish for a room they arranged by hand.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string", description: "The room to arrange." } },
+      required: ["roomId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "fit_room",
+    description:
+      "Resize a room to its content (grow or shrink, with a margin, on the grid) without moving anything; parent rooms grow if it no longer fits. Fixes 'outside' findings from check_layout.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string", description: "The room to fit." } },
+      required: ["roomId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "add_rack_to_room",
     description:
       "Add a rack or wall cabinet to a location: creates the rack in the rack elevation (U layout, on the shared rack page) AND a rack box inside the location on the schematic, linked to each other. Then mount devices with place_device_in_rack — each lands in the elevation and in the box. Use for every rack/cabinet (e.g. a wall-mount enclosure in the estimate).",

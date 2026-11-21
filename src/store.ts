@@ -637,6 +637,9 @@ interface SchematicState {
   /** FACE: set a room's size (bridge: fit_room, rack boxes). Keeps `measured` in step so a
    *  geometry check right after sees the new size before React Flow re-measures. */
   resizeRoom: (nodeId: string, size: { width: number; height: number }, options?: { skipUndo?: boolean }) => void;
+  /** FACE: move several nodes at once (positions relative to their parent, as stored) — one undo
+   *  step, cable tags re-anchored like after a drag. Used by the bridge's arrange_room. */
+  setNodePositions: (positions: Record<string, { x: number; y: number }>, options?: { skipUndo?: boolean }) => void;
   /** Re-evaluate room membership for every non-room node. Used after a room is
    *  created, resized, or moved so devices get parented/unparented to match
    *  the new layout. */
@@ -4600,6 +4603,16 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().reparentNode(nodeId, absPos, { skipUndo: true });
     get().saveToLocalStorage();
     return true;
+  },
+
+  setNodePositions: (positions, options) => {
+    const state = get();
+    const ids = new Set(Object.keys(positions).filter((id) => state.nodes.some((n) => n.id === id)));
+    if (!ids.size) return;
+    if (!options?.skipUndo) pushUndo({ nodes: state.nodes, edges: state.edges });
+    const moved = state.nodes.map((n) => (ids.has(n.id) ? { ...n, position: positions[n.id] } : n));
+    set({ nodes: settleTagsAfterMove(moved, state.edges, ids) ?? moved });
+    get().saveToLocalStorage();
   },
 
   resizeRoom: (nodeId, size, options) => {

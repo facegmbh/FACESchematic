@@ -430,9 +430,9 @@ kurz bleiben), Abstand und Position auf dem Raster; Rack-Kästen als Block. `fit
 Raum (und seine Eltern) an den Inhalt an.
 
 **Acceptance criteria:**
-- [ ] Nach `arrange_room` keine Überlappung im Raum; Quellen links von ihren Zielen
-- [ ] `fit_room` umschließt alle Kinder mit Rand, auch verschachtelt
-- [ ] Ein Schritt Undo stellt den Raum wieder her
+- [x] Nach `arrange_room` keine Überlappung im Raum; Quellen links von ihren Zielen
+- [x] `fit_room` umschließt alle Kinder mit Rand, auch verschachtelt
+- [x] Ein Schritt Undo stellt den Raum wieder her
 
 **Verification:** `npx vitest run`, `npx tsc -b`
 

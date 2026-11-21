@@ -20,6 +20,7 @@ import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
+import { arrangeRoom, fitRoomSize } from "./layoutArrange";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
@@ -45,6 +46,8 @@ import {
   type NewOdooDrawingParams,
   type CheckLayoutParams,
   type AddRackToRoomParams,
+  type ArrangeRoomParams,
+  type FitRoomParams,
   type BridgeServerMessage,
   type AddDeviceParams,
   type AddDevicesParams,
@@ -732,7 +735,35 @@ function moveIntoRackBox(rackId: string, deviceId: string): string | undefined {
     height: Math.max(boxSize.height, y + dev.height + RACK_BOX_PAD),
   };
   if (need.width !== boxSize.width || need.height !== boxSize.height) st().resizeRoom(box.id, need, { skipUndo: true });
-  return st().placeDeviceInRoom(deviceId, box.id, { x: RACK_BOX_PAD, y }) ? box.id : undefined;
+  if (!st().placeDeviceInRoom(deviceId, box.id, { x: RACK_BOX_PAD, y })) return undefined;
+  fitRooms(box.id, false); // the location grows with its rack box
+  return box.id;
+}
+
+function requireRoom(roomId: unknown): SchematicNode {
+  const room = typeof roomId === "string" ? st().nodes.find((n) => n.id === roomId) : undefined;
+  if (!room || room.type !== "room") throw new CommandError(`No room found with id "${String(roomId)}".`);
+  return room;
+}
+
+function nodeSizeOf(id: string): { width: number; height: number } {
+  return nodeSize(st().nodes.find((n) => n.id === id)!);
+}
+
+/** Fit a room to its content (grow or shrink), then let its parents grow where it no longer
+ *  fits. No undo step of its own — callers push one first. Returns the room's new size. */
+function fitRooms(roomId: string, shrink: boolean): { width: number; height: number } {
+  let id: string | undefined = roomId;
+  let first: { width: number; height: number } | undefined;
+  while (id) {
+    const current = nodeSizeOf(id);
+    const fit = fitRoomSize(st().nodes, id);
+    const next = id === roomId && shrink ? fit : { width: Math.max(current.width, fit.width), height: Math.max(current.height, fit.height) };
+    if (next.width !== current.width || next.height !== current.height) st().resizeRoom(id, next, { skipUndo: true });
+    first ??= next;
+    id = st().nodes.find((n) => n.id === id)?.parentId;
+  }
+  return first!;
 }
 
 function absolutePositionOf(id: string): { x: number; y: number } {
@@ -1712,6 +1743,24 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       rackType: rack.rackType,
       hint: "Put devices in with place_device_in_rack (rackId, uPosition) — they land in the rack elevation and in this box.",
     };
+  },
+
+  arrange_room: (params) => {
+    const { roomId } = (params ?? {}) as unknown as ArrangeRoomParams;
+    requireRoom(roomId);
+    const positions = arrangeRoom(st().nodes, st().edges, roomId);
+    st().setNodePositions(positions); // the one undo step; fitting below rides along
+    const size = fitRooms(roomId, true);
+    return { roomId, moved: Object.keys(positions).length, size, hint: "check_layout next; then arrange_rooms if rooms now overlap." };
+  },
+
+  fit_room: (params) => {
+    const { roomId } = (params ?? {}) as unknown as FitRoomParams;
+    requireRoom(roomId);
+    const s = st();
+    s.resizeRoom(roomId, nodeSizeOf(roomId), { skipUndo: false }); // undo point with the current size
+    const size = fitRooms(roomId, true);
+    return { roomId, size };
   },
 
   check_layout: (params) => {

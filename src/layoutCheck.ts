@@ -43,7 +43,8 @@ const DETOUR_RATIO = 2;
 /** …and at least this much longer — short jogs around a neighbour are fine. */
 const DETOUR_MIN_EXTRA = 200;
 
-function size(n: SchematicNode): { width: number; height: number } {
+/** Size the editor draws a node at: measured, else the style, else its defaults. */
+export function layoutSize(n: SchematicNode): { width: number; height: number } {
   const isRoom = n.type === "room";
   const style = (n.style ?? {}) as { width?: number; height?: number };
   return {
@@ -67,7 +68,7 @@ function absolute(n: SchematicNode, byId: Map<string, SchematicNode>): Point {
 
 function rectOf(n: SchematicNode, byId: Map<string, SchematicNode>): Rect {
   const p = absolute(n, byId);
-  const s = size(n);
+  const s = layoutSize(n);
   return { left: p.x, top: p.y, right: p.x + s.width, bottom: p.y + s.height };
 }
 

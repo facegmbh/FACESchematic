@@ -130,3 +130,46 @@ describe("locations and racks (Task 23)", () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe("arrange_room and fit_room (Task 24)", () => {
+  const roomSize = (id: string) => {
+    const n = store.getState().nodes.find((x) => x.id === id)!;
+    const style = n.style as { width: number; height: number };
+    return { width: n.measured?.width ?? style.width, height: n.measured?.height ?? style.height };
+  };
+  const problemsIn = async (roomId: string) => {
+    const r = await run("check_layout", { roomId });
+    if (!r.ok) throw new Error(r.error);
+    const inside = new Set(store.getState().nodes.filter((n) => n.parentId === roomId).map((n) => n.id));
+    return (r.result as { findings: { kind: string; ids: string[] }[] }).findings.filter(
+      (f) => (f.kind === "overlap" && f.ids.every((id) => inside.has(id))) || (f.kind === "outside" && inside.has(f.ids[0])),
+    );
+  };
+
+  it("arrange_room clears the Projektion room (PureLink/RX1 no longer overlap) and fits it", async () => {
+    expect((await problemsIn("room-6")).length).toBeGreaterThan(0);
+    const r = await run("arrange_room", { roomId: "room-6" });
+    expect(r.ok).toBe(true);
+    expect(await problemsIn("room-6")).toEqual([]);
+  });
+
+  it("arrange_room is one undo step — positions and size come back together", async () => {
+    const before = JSON.stringify(store.getState().nodes.map((n) => [n.id, n.position, n.style]));
+    await run("arrange_room", { roomId: "room-8" });
+    store.getState().undo();
+    expect(JSON.stringify(store.getState().nodes.map((n) => [n.id, n.position, n.style]))).toBe(before);
+  });
+
+  it("fit_room makes the switch fit into 'Netzwerk'", async () => {
+    expect((await problemsIn("room-8")).some((f) => f.kind === "outside")).toBe(true);
+    const r = await run("fit_room", { roomId: "room-8" });
+    expect(r.ok).toBe(true);
+    expect(await problemsIn("room-8")).toEqual([]);
+    expect(roomSize("room-8").height).toBeGreaterThanOrEqual(608);
+  });
+
+  it("both need a room", async () => {
+    expect((await run("arrange_room", { roomId: "device-27" })).ok).toBe(false);
+    expect((await run("fit_room", {})).ok).toBe(false);
+  });
+});

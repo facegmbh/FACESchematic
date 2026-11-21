@@ -143,10 +143,11 @@ Entscheidungen:
   Kapelle-Fixture (Größen im Browser gemessen) meldet: 3 Überlappungen, Switch ragt heraus, Linie
   durch Control Server, 4 Umwege, 22 Kreuzungen, 17 Geräte neben dem Raster.
 - [x] Task 23: Verschachtelte Orte und Racks — `create_room` mit `parentRoomId`, `add_rack_to_room` (Kasten + Rack-Ansicht), `place_device_in_rack` setzt in beide (Undo von `add_rack_to_room` noch mehrstufig)
-- [ ] Task 24: `arrange_room` (Signalfluss, Raster, Racks als Block) und `fit_room`
+- [x] Task 24: `arrange_room` (Signalfluss, Raster, Racks als Block) und `fit_room`
 
 ### Checkpoint G1 (Zwischenstand zeigen, kein Push)
-- [ ] Kapelle-Fixture: nach Ordnen keine `overlap`/`outside`; Screenshot an Jean-Luc
+- [x] Kapelle-Fixture: je Raum nach `arrange_room` keine `overlap`/`outside` (Test)
+- [ ] Screenshot an Jean-Luc — nach Task 25, weil die Räume erst mit `arrange_rooms` nicht mehr übereinanderliegen
 
 - [ ] Task 25: `arrange_rooms` und `route_connections`
 - [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen
