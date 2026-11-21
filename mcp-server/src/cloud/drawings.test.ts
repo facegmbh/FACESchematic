@@ -24,7 +24,7 @@ beforeEach(async () => {
   });
   clock.now = Date.now();
   server = createApp(config, { now: () => clock.now }).listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  base = `http://[::1]:${(server.address() as AddressInfo).port}`;
 });
 
 afterEach(async () => {
@@ -245,7 +245,7 @@ test("missing write rights in Odoo come back as 403 with Odoo's reason", async (
   odoo = await startMockOdoo({}, { "ir.attachment.write": ["odoo.exceptions.AccessError", "Sie dürfen Anhänge dieses Projekts nicht ändern."] });
   const config = loadConfig({ FACE_SECRET: "s".repeat(40), FACE_PUBLIC_URL: "http://localhost:5173", ODOO_URL: odoo.url, DATA_DIR: mkdtempSync(path.join(tmpdir(), "face-drawings-")) });
   server = createApp(config, { now: () => clock.now }).listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  base = `http://[::1]:${(server.address() as AddressInfo).port}`;
 
   const max = await signIn(MOCK_USER_2);
   await post(max, "/drawings/501/lock", { tabId: "max-A" });
@@ -315,7 +315,7 @@ test("a drawing deleted in Odoo meanwhile is 404, and internal errors stay inter
   });
   const config = loadConfig({ FACE_SECRET: "s".repeat(40), FACE_PUBLIC_URL: "http://localhost:5173", ODOO_URL: odoo.url, DATA_DIR: mkdtempSync(path.join(tmpdir(), "face-drawings-")) });
   server = createApp(config, { now: () => clock.now }).listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  base = `http://[::1]:${(server.address() as AddressInfo).port}`;
   const jl = await signIn(MOCK_USER);
   assert.equal((await get(jl, "/drawings/501")).status, 404);
   const broken = await get(jl, "/projects");

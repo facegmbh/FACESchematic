@@ -34,7 +34,7 @@ function start(): Running {
   const clock = { now: Date.now() };
   const server: Server = createApp(config, { now: () => clock.now }).listen(0);
   const { port } = server.address() as AddressInfo;
-  return { base: `http://127.0.0.1:${port}`, dataDir, clock, close: () => server.close() };
+  return { base: `http://[::1]:${port}`, dataDir, clock, close: () => server.close() };
 }
 
 const json = { "Content-Type": "application/json", "X-FACE-Request": "1" };
@@ -180,7 +180,7 @@ test("the session survives a restart of the backend", async () => {
   const server = createApp(config).listen(0);
   try {
     const { port } = server.address() as AddressInfo;
-    assert.equal((await fetch(`http://127.0.0.1:${port}/face/api/me`, { headers: { Cookie: cookie } })).status, 200);
+    assert.equal((await fetch(`http://[::1]:${port}/face/api/me`, { headers: { Cookie: cookie } })).status, 200);
   } finally {
     server.close();
   }

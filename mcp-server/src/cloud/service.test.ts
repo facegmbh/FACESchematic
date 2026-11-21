@@ -32,7 +32,7 @@ async function start(env: Record<string, string> = { FACE_SERVICE_TOKEN: TOKEN }
   relay = new Relay(Date.now, { pollWaitMs: 50 });
   logged = [];
   server = createApp(config, { relay, serviceCallTimeoutMs: 100, log: (m) => logged.push(m) }).listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  base = `http://[::1]:${(server.address() as AddressInfo).port}`;
 }
 
 beforeEach(() => start());

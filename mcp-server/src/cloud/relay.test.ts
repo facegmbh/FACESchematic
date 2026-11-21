@@ -151,7 +151,7 @@ beforeEach(async () => {
   });
   relay = new Relay(Date.now, { pollWaitMs: 50 });
   server = createApp(config, { relay }).listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  base = `http://[::1]:${(server.address() as AddressInfo).port}`;
 });
 
 afterEach(async () => {

@@ -17,7 +17,7 @@ test("GET /face/health answers ok with the version", async () => {
   const server = createApp(config).listen(0);
   try {
     const { port } = server.address() as AddressInfo;
-    const res = await fetch(`http://127.0.0.1:${port}/face/health`);
+    const res = await fetch(`http://[::1]:${port}/face/health`);
     assert.equal(res.status, 200);
     const body = (await res.json()) as { status: string; version: string };
     assert.equal(body.status, "ok");

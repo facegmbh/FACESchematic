@@ -213,7 +213,7 @@ export async function startMockOdoo(
   });
   const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://[::1]:${port}`,
     authCalls,
     projects,
     attachments,
