@@ -20,6 +20,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { AppBridge } from "./bridge.js";
 import { TOOLS } from "./tools.js";
+import { toolResultContent } from "./content.js";
 import { PROMPTS, getPrompt, SERVER_INSTRUCTIONS } from "./prompts.js";
 import { DEFAULT_BRIDGE_PORT } from "./protocol.generated.js";
 
@@ -58,7 +59,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args } = req.params;
   try {
     const result = await bridge.call(name, (args ?? {}) as Record<string, unknown>);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return { content: toolResultContent(result) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { content: [{ type: "text", text: message }], isError: true };

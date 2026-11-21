@@ -21,6 +21,7 @@ import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
 import { arrangeRoom, arrangeRooms, fitRoomSize } from "./layoutArrange";
+import { blobToBase64, captureSchematicPng, renderBounds, renderPixelRatio } from "./renderSchematic";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
@@ -50,6 +51,7 @@ import {
   type FitRoomParams,
   type RenameRoomParams,
   type DissolveRoomParams,
+  type RenderSchematicParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -712,6 +714,11 @@ function placeDeviceInRackCore(p: PlaceDeviceInRackParams) {
 }
 
 const RACK_BOX_PAD = 16;
+/** render_schematic: longest side by default (about what Claude looks at), the size it aims
+ *  for, and the most it will send. */
+const RENDER_MAX_SIZE = 1600;
+const RENDER_MAX_BYTES = 1_000_000;
+const RENDER_HARD_MAX_BYTES = 4_000_000;
 const RACK_BOX_TOP = 48; // room label
 
 function nodeSize(n: SchematicNode): { width: number; height: number } {
@@ -1839,6 +1846,44 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       ...(data.linkedRackId ? { note: "The rack elevation stays; it is no longer linked to a room (add_rack_to_room creates a new box)." } : {}),
       hint: "Put the released devices into their locations (place_device_in_room), then check_layout.",
     };
+  },
+
+  render_schematic: async (params) => {
+    const { roomId, maxSize } = (params ?? {}) as RenderSchematicParams;
+    if (roomId !== undefined) requireRoom(roomId);
+    if (maxSize !== undefined && (typeof maxSize !== "number" || !Number.isFinite(maxSize) || maxSize < 300 || maxSize > 4000)) {
+      throw new CommandError("maxSize must be a number of pixels between 300 and 4000.");
+    }
+    if (!st().nodes.some((n) => !n.hidden)) throw new CommandError("The schematic is empty — there is nothing to show yet.");
+    const bounds = renderBounds(st().nodes, roomId, st().routedEdges);
+    // The canvas exists only while the schematic page is shown: show it for the picture, then go back.
+    const pageBefore = st().activePage;
+    if (pageBefore !== "schematic") st().setActivePage("schematic");
+    try {
+      let ratio = renderPixelRatio(bounds, maxSize ?? RENDER_MAX_SIZE);
+      for (let attempt = 1; ; attempt++) {
+        const blob = await captureSchematicPng(bounds, ratio);
+        if (blob.size <= RENDER_MAX_BYTES || attempt === 4) {
+          if (blob.size > RENDER_HARD_MAX_BYTES) {
+            throw new CommandError("The picture is too large to send — pass roomId to show one room at a time.");
+          }
+          return {
+            image: { mimeType: "image/png", data: await blobToBase64(blob) },
+            width: Math.round(bounds.width * ratio),
+            height: Math.round(bounds.height * ratio),
+            bytes: blob.size,
+            ...(roomId ? { roomId } : {}),
+          };
+        }
+        // PNG size grows with the pixel count: shrink both sides by the square root, with room to spare.
+        ratio *= Math.sqrt(RENDER_MAX_BYTES / blob.size) * 0.9;
+      }
+    } catch (err) {
+      if (err instanceof CommandError) throw err;
+      throw new CommandError(`Could not render the schematic: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (pageBefore !== "schematic") st().setActivePage(pageBefore);
+    }
   },
 
   arrange_rooms: (params) => {

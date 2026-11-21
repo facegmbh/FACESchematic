@@ -156,7 +156,7 @@ Entscheidungen:
 
 - [x] Task 25: `arrange_rooms` und `route_connections`
 - [x] Task 25a: `rename_room` und `dissolve_room` — bestehende Gewerke-Räume in Orte umbauen (G1-Lücke)
-- [ ] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen
+- [x] Task 26: `render_schematic` (PNG) — und im Odoo-Connector als Bild durchreichen (Sichtprüfung in claude.ai bei Checkpoint G)
 - [ ] Task 27: Playbook „build-schematic“ + Odoo-Leitfaden (Orte, Racks, prüfen, Bild), Ende-zu-Ende über `/face/service/call`
 
 ### Checkpoint G (Freigabe, Push auf master; Odoo-Teil direkt auf main)

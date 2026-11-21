@@ -893,6 +893,19 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "render_schematic",
+    description:
+      "Look at the schematic: returns a PNG of the whole drawing or of one room (roomId). Use it after building or rearranging, together with check_layout, to see whether the drawing reads clearly — and show it to the user. For a large drawing, look at rooms one by one. Switches to the schematic page for the picture and back.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "Only this room (a location or rack box)." },
+        maxSize: { type: "number", description: "Longest side in pixels, 300–4000 (default 1600)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "arrange_rooms",
     description:
       "Lay the top-level rooms (locations) out in rows, left to right, without overlap and on the grid; everything inside moves along. One undo step. Use after arrange_room has grown or shrunk rooms, or when check_layout reports room_overlap. order: room ids in the wanted order (e.g. along the signal path or the building); the rest follow.",

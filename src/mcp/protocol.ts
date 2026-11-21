@@ -90,7 +90,8 @@ export type CommandType =
   | "arrange_rooms"
   | "route_connections"
   | "rename_room"
-  | "dissolve_room";
+  | "dissolve_room"
+  | "render_schematic";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -680,6 +681,13 @@ export interface RenameRoomParams {
 /** FACE: remove a room's frame and keep its content where it is. */
 export interface DissolveRoomParams {
   roomId: string;
+}
+
+/** FACE: a PNG of the schematic (or one room) for the assistant to look at. */
+export interface RenderSchematicParams {
+  roomId?: string;
+  /** Longest side of the picture in px (300–4000, default 1600). */
+  maxSize?: number;
 }
 
 export interface CheckLayoutParams {

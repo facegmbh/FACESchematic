@@ -77,53 +77,19 @@ export async function exportImage(
 
   const effectivePixelRatio = capExportPixelRatio(pixelRatio, width, height);
 
-  // Firefox returns `undefined` from getPropertyValue() for unrecognized CSS
-  // properties, but html-to-image calls .trim() on the result without a null
-  // check. Patch it to return '' instead while html-to-image runs.
-  const origGetPropertyValue = CSSStyleDeclaration.prototype.getPropertyValue;
-  CSSStyleDeclaration.prototype.getPropertyValue = function (prop) {
-    return origGetPropertyValue.call(this, prop) ?? '';
-  };
-
-  // Force light-mode colors during capture — see [data-export-capturing] in index.css
-  document.documentElement.setAttribute("data-export-capturing", "");
-  // Let the style override flush before html-to-image reads computed styles
-  await new Promise<void>((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-  );
-
-  // Freeze var(--color-…) strokes to concrete colors so Chromium's html-to-image
-  // clone keeps the connection lines (#173).
-  const restoreColors = freezeSvgColors(viewportEl);
-  // XML-illegal characters in labels make the serialized SVG ill-formed; the
-  // capture then rejects with a bare Event (see exportCapturePrep.ts).
-  const restoreText = scrubXmlIllegalDom(viewportEl);
-
   // Download from a Blob, never a base64 data URL: the URL doubles the image in
   // memory as a giant string, and Chrome silently drops data-URL downloads past
   // ~2MB — both bite on exactly the large schematics of #383.
   let blob: Blob | null;
   try {
-    const captureOptions = {
+    blob = await captureViewportBlob(viewportEl, {
+      format,
       backgroundColor,
       width,
       height,
       pixelRatio: format === "svg" ? 1 : effectivePixelRatio,
-      style: {
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-      },
-    };
-    if (format === "svg") {
-      const dataUrl = await toSvg(viewportEl, captureOptions);
-      const svgText = decodeURIComponent(
-        dataUrl.replace(/^data:image\/svg\+xml;charset=utf-8,/, ""),
-      );
-      blob = new Blob([svgText], { type: "image/svg+xml" });
-    } else {
-      blob = await toBlob(viewportEl, captureOptions);
-    }
+      transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+    });
   } catch (err) {
     // Callers fire-and-forget exportImage: without this, a failed capture is
     // an unhandled rejection with no feedback at all.
@@ -132,11 +98,6 @@ export async function exportImage(
       .getState()
       .addToast(t("{format} export failed — {reason}", { format: format.toUpperCase(), reason: describeExportError(err) }), "error");
     return;
-  } finally {
-    restoreText();
-    restoreColors();
-    CSSStyleDeclaration.prototype.getPropertyValue = origGetPropertyValue;
-    document.documentElement.removeAttribute("data-export-capturing");
   }
   // canvas.toBlob resolves null when the browser can't encode the raster (iOS
   // Safari caps canvas area well below our own limits) — say so instead of a
@@ -156,4 +117,88 @@ export async function exportImage(
   link.click();
   // The click only queues the download; revoke after it has been picked up.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export interface ViewportCapture {
+  format: "png" | "svg";
+  backgroundColor: string;
+  /** Output size in CSS px (before pixelRatio). */
+  width: number;
+  height: number;
+  pixelRatio: number;
+  /** CSS transform that puts the wanted part of the canvas at the output's top-left. */
+  transform: string;
+}
+
+/** One frame, or a short timer when the tab is hidden — Chrome runs no animation frames
+ *  in a background tab, and Claude's render_schematic usually runs in one. */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (document.hidden) setTimeout(resolve, 16);
+    else requestAnimationFrame(() => resolve());
+  });
+}
+
+/**
+ * Capture React Flow's viewport element as PNG or SVG — the core of the image download and
+ * of Claude's render_schematic (renderSchematic.ts). Throws when html-to-image fails;
+ * resolves null when the browser cannot encode a raster that large.
+ */
+export async function captureViewportBlob(viewportEl: HTMLElement, opts: ViewportCapture): Promise<Blob | null> {
+  // Firefox returns `undefined` from getPropertyValue() for unrecognized CSS
+  // properties, but html-to-image calls .trim() on the result without a null
+  // check. Patch it to return '' instead while html-to-image runs.
+  const origGetPropertyValue = CSSStyleDeclaration.prototype.getPropertyValue;
+  CSSStyleDeclaration.prototype.getPropertyValue = function (prop) {
+    return origGetPropertyValue.call(this, prop) ?? '';
+  };
+  // html-to-image waits for an animation frame after decoding each image; a hidden tab never
+  // gets one, so the capture would hang there. Stand in with a timer while it runs.
+  const origRaf = window.requestAnimationFrame;
+  if (document.hidden) {
+    window.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      window.setTimeout(() => cb(performance.now()), 16) as unknown as number;
+  }
+
+  // Force light-mode colors during capture — see [data-export-capturing] in index.css
+  document.documentElement.setAttribute("data-export-capturing", "");
+  let restoreColors = () => {};
+  let restoreText = () => {};
+  try {
+    // Let the style override flush before html-to-image reads computed styles
+    await nextFrame();
+    await nextFrame();
+    // Freeze var(--color-…) strokes to concrete colors so Chromium's html-to-image
+    // clone keeps the connection lines (#173).
+    restoreColors = freezeSvgColors(viewportEl);
+    // XML-illegal characters in labels make the serialized SVG ill-formed; the
+    // capture then rejects with a bare Event (see exportCapturePrep.ts).
+    restoreText = scrubXmlIllegalDom(viewportEl);
+
+    const captureOptions = {
+      backgroundColor: opts.backgroundColor,
+      width: opts.width,
+      height: opts.height,
+      pixelRatio: opts.pixelRatio,
+      style: {
+        width: `${opts.width}px`,
+        height: `${opts.height}px`,
+        transform: opts.transform,
+      },
+    };
+    if (opts.format === "svg") {
+      const dataUrl = await toSvg(viewportEl, captureOptions);
+      const svgText = decodeURIComponent(
+        dataUrl.replace(/^data:image\/svg\+xml;charset=utf-8,/, ""),
+      );
+      return new Blob([svgText], { type: "image/svg+xml" });
+    }
+    return await toBlob(viewportEl, captureOptions);
+  } finally {
+    restoreText();
+    restoreColors();
+    window.requestAnimationFrame = origRaf;
+    CSSStyleDeclaration.prototype.getPropertyValue = origGetPropertyValue;
+    document.documentElement.removeAttribute("data-export-capturing");
+  }
 }

@@ -472,13 +472,19 @@ Inhalt bleibt liegen und kommt in den umgebenden Raum.
 
 ## Task 26: `render_schematic`
 
-**Description:** PNG der Zeichnung oder eines Raums (`roomId`, `maxWidth`) über den vorhandenen
+**Description:** PNG der Zeichnung oder eines Raums (`roomId`, `maxSize`) über den vorhandenen
 Export, als `{ image: { mimeType, data } }`. Im Odoo-Connector gibt `schaltplan_befehl` ein Bild
 als Bildinhalt weiter (`registry.text_und_bild`).
 
 **Acceptance criteria:**
-- [ ] Liefert ein gültiges PNG ≤ ~1 MB, auch für den ganzen Plan
-- [ ] In claude.ai erscheint das Bild
+- [x] Liefert ein gültiges PNG ≤ ~1 MB, auch für den ganzen Plan (Kapelle örtlich: 1600×1393, 356 KB; Technik 191 KB)
+- [x] Von einer Rack-Seite aus: Bild vom Schaltplan, danach wieder die Rack-Seite
+- [x] Hintergrund-Tab: html-to-image wartet auf Animation-Frames, die ein verdeckter Tab nicht bekommt —
+  während der Aufnahme ersetzt ein Timer sie. Geprüft mit nachgestelltem Hintergrund (`document.hidden`,
+  keine Frames); einen echt verdeckten Tab konnte Playwright auf dem Mac nicht erzeugen. Wechselt ein
+  verdeckter Tab erst die Seite, misst React Flow evtl. nicht — dann sagt der Befehl, den Tab einmal nach vorn zu holen
+- [x] Lokaler MCP-Server gibt das Bild als Bildinhalt aus (`mcp-server/src/content.ts`), Odoo ebenso (facegmbh/Odoo, Branch `feat/schaltplan-bild`)
+- [ ] In claude.ai erscheint das Bild (nach dem Push, Checkpoint G)
 
 **Verification:** `npx vitest run`, Playwright gegen den Tab, Odoo-Test für die Bildweitergabe
 

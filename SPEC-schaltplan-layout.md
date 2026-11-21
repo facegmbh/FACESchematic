@@ -41,7 +41,7 @@ User Stories:
 | `route_connections` `{ connectionIds? }` | Leitungen mit dem Auto-Routing des Editors neu verlegen (alle oder Auswahl); eigene Wegpunkte gehen dabei verloren, deshalb nur auf Wunsch für bereits von Hand gelegte |
 | `rename_room` `{ roomId, label }` | Raum umbenennen, z. B. Gewerk-Raum „Netzwerk“ → Ort „Technik“; nichts bewegt sich |
 | `dissolve_room` `{ roomId }` | Rahmen entfernen, Inhalt bleibt an seinem Platz (mit Leitungen) und rutscht in den umgebenden Raum oder auf die oberste Ebene; ein Undo-Schritt; gesperrte Räume nicht; verknüpfte Rack-Ansicht bleibt |
-| `render_schematic` `{ roomId?, maxWidth? }` | PNG der Zeichnung (oder eines Raums) als `{ image: { mimeType, data } }` |
+| `render_schematic` `{ roomId?, maxSize? }` | PNG der Zeichnung (mit allen verlegten Leitungen) oder eines Raums als `{ image: { mimeType, data }, width, height, bytes }`; längste Seite `maxSize` (Standard 1600 px, höchstens 2×), Ziel ≤ 1 MB (sonst kleiner neu aufgenommen), Grenze 4 MB. Wechselt für das Bild auf die Schaltplan-Seite und zurück; läuft auch im Hintergrund-Tab |
 
 Alle schreibenden Befehle laufen über vorhandene Store-Aktionen (Undo, Autosave). Was der
 Editor schon kann (Ausrichten, Auto-Routing, verschachtelte Räume), wird angebunden, nicht neu
