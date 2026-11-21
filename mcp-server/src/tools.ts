@@ -214,7 +214,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "create_room",
     description:
-      "Create a room — a labelled container on the canvas that devices can be placed inside (use place_device_in_room). Returns the new room's id. width/height are optional (default 400x300; minimums 200x150). Any existing devices already inside the new room's bounds are absorbed into it and listed in absorbedDeviceIds (their coordinates become relative to the room, so re-read them before reusing old positions).",
+      "Create a room — a labelled container on the canvas that devices can be placed inside (use place_device_in_room). Returns the new room's id. width/height are optional (default 400x300; minimums 200x150). Any existing devices already inside the new room's bounds are absorbed into it and listed in absorbedDeviceIds (their coordinates become relative to the room, so re-read them before reusing old positions). Rooms are LOCATIONS (chapel, sacristy, technical room …), not trades: with parentRoomId the room is created inside another room (x/y relative to it) — refused if it does not fit. For a rack or wall cabinet use add_rack_to_room instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -223,6 +223,7 @@ export const TOOLS: ToolDef[] = [
         y: { type: "number", description: "Room top-left Y position on the canvas." },
         width: { type: "number", description: "Optional room width (minimum 200; default 400)." },
         height: { type: "number", description: "Optional room height (minimum 150; default 300)." },
+        parentRoomId: { type: "string", description: "Create the room inside this room; x/y are then relative to it." },
       },
       required: ["label", "x", "y"],
       additionalProperties: false,
@@ -332,7 +333,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "place_device_in_rack",
     description:
-      "Mount a device from the schematic into a rack at a U position. The device's height in U is inferred from its physical dimensions, and half-rack gear is placed on a free side automatically. Gear too small to rack-mount directly is placed on an auto-created 1U shelf (the response includes that shelfId; remove_device_from_rack cleans the shelf up for you unless you've since edited it in the editor). Fails if the U span is occupied or out of the rack's bounds, if the device is already placed in a rack (remove it first), for a rear placement on a 2-post rack, or if the device is too wide to fit a 19\" rack. uPosition is 1-based from the bottom.",
+      "Mount a device from the schematic into a rack at a U position. The device's height in U is inferred from its physical dimensions, and half-rack gear is placed on a free side automatically. Gear too small to rack-mount directly is placed on an auto-created 1U shelf (the response includes that shelfId; remove_device_from_rack cleans the shelf up for you unless you've since edited it in the editor). Fails if the U span is occupied or out of the rack's bounds, if the device is already placed in a rack (remove it first), for a rear placement on a 2-post rack, or if the device is too wide to fit a 19\" rack. uPosition is 1-based from the bottom. If the rack has a box on the schematic (add_rack_to_room), the device is also moved into that box (rackRoomId in the response) and the box grows to fit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -844,6 +845,24 @@ export const TOOLS: ToolDef[] = [
   },
 
   // --- FACE: layout (SPEC-schaltplan-layout.md) ----------------------------------------
+  {
+    name: "add_rack_to_room",
+    description:
+      "Add a rack or wall cabinet to a location: creates the rack in the rack elevation (U layout, on the shared rack page) AND a rack box inside the location on the schematic, linked to each other. Then mount devices with place_device_in_rack — each lands in the elevation and in the box. Use for every rack/cabinet (e.g. a wall-mount enclosure in the estimate).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "The location (room) the rack stands in." },
+        name: { type: "string", description: "Rack name, e.g. 'Wandschrank Technik'." },
+        heightU: { type: "number", description: "Rack height in U." },
+        rackType: { type: "string", enum: ["floor-19", "wall-mount", "desktop", "open-2post", "open-4post"], description: "Default floor-19." },
+        x: { type: "number", description: "Box position inside the location (default 16)." },
+        y: { type: "number", description: "Box position inside the location (default 48)." },
+      },
+      required: ["roomId", "name", "heightU"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "check_layout",
     description:

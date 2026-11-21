@@ -634,6 +634,9 @@ interface SchematicState {
    *  unchanged "already in this room" device for a successful placement. Used by the
    *  bridge's place_device_in_room tool. */
   placeDeviceInRoom: (nodeId: string, roomId: string, relativePosition?: { x: number; y: number }) => boolean;
+  /** FACE: set a room's size (bridge: fit_room, rack boxes). Keeps `measured` in step so a
+   *  geometry check right after sees the new size before React Flow re-measures. */
+  resizeRoom: (nodeId: string, size: { width: number; height: number }, options?: { skipUndo?: boolean }) => void;
   /** Re-evaluate room membership for every non-room node. Used after a room is
    *  created, resized, or moved so devices get parented/unparented to match
    *  the new layout. */
@@ -4597,6 +4600,26 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     get().reparentNode(nodeId, absPos, { skipUndo: true });
     get().saveToLocalStorage();
     return true;
+  },
+
+  resizeRoom: (nodeId, size, options) => {
+    const state = get();
+    const room = state.nodes.find((n) => n.id === nodeId && n.type === "room");
+    if (!room) return;
+    if (!options?.skipUndo) pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      nodes: state.nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              style: { ...n.style, width: size.width, height: size.height },
+              ...(n.measured ? { measured: { width: size.width, height: size.height } } : {}),
+              ...(n.width !== undefined ? { width: size.width, height: size.height } : {}),
+            }
+          : n,
+      ),
+    });
+    get().saveToLocalStorage();
   },
 
   reparentAllDevices: (options) => {

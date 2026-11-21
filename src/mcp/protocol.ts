@@ -83,7 +83,8 @@ export type CommandType =
   | "save_odoo_drawing"
   | "new_odoo_drawing"
   // FACE: layout (SPEC-schaltplan-layout.md)
-  | "check_layout";
+  | "check_layout"
+  | "add_rack_to_room";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -229,6 +230,9 @@ export interface CreateRoomParams {
    *  400x300. Minimums mirror the editor: width >= 200, height >= 150. */
   width?: number;
   height?: number;
+  /** FACE: create the room inside this room (a location's sub-area or rack box); x/y are
+   *  then relative to that room's top-left. Refused if it does not fit inside. */
+  parentRoomId?: string;
 }
 
 export interface PlaceDeviceInRoomParams {
@@ -626,6 +630,20 @@ export interface OpenOdooDrawingParams {
 export interface SaveOdooDrawingParams {
   force?: boolean;
 }
+export interface AddRackToRoomParams {
+  /** The location (room) the rack stands in. */
+  roomId: string;
+  /** Rack name, e.g. "Wandschrank Technik". */
+  name: string;
+  /** Rack height in rack units. */
+  heightU: number;
+  /** One of RACK_TYPES. Default "floor-19". */
+  rackType?: string;
+  /** Position of the rack box inside the location; default top-left (16, 48). */
+  x?: number;
+  y?: number;
+}
+
 export interface CheckLayoutParams {
   /** Only this room and what is inside it (nested rooms, racks, devices). */
   roomId?: string;

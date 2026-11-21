@@ -414,9 +414,9 @@ Kennung „Rack“) **und** Rack in der Rack-Ansicht (vorhandenes `create_rack`)
 Rack-ID am Kasten. `place_device_in_rack` setzt ein Gerät dann zusätzlich in den Kasten.
 
 **Acceptance criteria:**
-- [ ] Ort → Rack → Gerät verschachtelt; Positionen bleiben relativ zum Eltern-Raum
-- [ ] `add_rack_to_room` legt Kasten und Rack-Ansicht an; Gerät ins Rack → in beiden
-- [ ] Löschen/Undo lassen keinen verwaisten Kasten oder Rack zurück
+- [x] Ort → Rack → Gerät verschachtelt; Positionen bleiben relativ zum Eltern-Raum
+- [x] `add_rack_to_room` legt Kasten und Rack-Ansicht an; Gerät ins Rack → in beiden
+- [~] Löschen: der Editor löst die Verknüpfung schon selbst. Undo: `add_rack_to_room` sind mehrere Undo-Schritte (Rack, Kasten, Kennzeichnung, Verknüpfung) – einmal Rückgängig nimmt nur den letzten zurück. Zusammenfassen bräuchte eine Store-Änderung; offen
 
 **Verification:** `npx vitest run`, `npx tsc -b`, `npm run i18n:check`
 

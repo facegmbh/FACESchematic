@@ -142,7 +142,7 @@ Entscheidungen:
   `extractSegments`/`segmentsCross`). Bild-Export im Hintergrund-Tab: offen bis Task 26.
   Kapelle-Fixture (Größen im Browser gemessen) meldet: 3 Überlappungen, Switch ragt heraus, Linie
   durch Control Server, 4 Umwege, 22 Kreuzungen, 17 Geräte neben dem Raster.
-- [ ] Task 23: Verschachtelte Orte und Racks — `create_room` mit `parentRoomId`, `add_rack_to_room` (Kasten + Rack-Ansicht), `place_device_in_rack` setzt in beide
+- [x] Task 23: Verschachtelte Orte und Racks — `create_room` mit `parentRoomId`, `add_rack_to_room` (Kasten + Rack-Ansicht), `place_device_in_rack` setzt in beide (Undo von `add_rack_to_room` noch mehrstufig)
 - [ ] Task 24: `arrange_room` (Signalfluss, Raster, Racks als Block) und `fit_room`
 
 ### Checkpoint G1 (Zwischenstand zeigen, kein Push)

@@ -20,6 +20,7 @@ import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import { useSchematicStore, loadSpecLookup } from "./store";
 import { checkLayout } from "./layoutCheck";
+import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
 import {
   getTabId,
@@ -43,6 +44,7 @@ import {
   type SaveOdooDrawingParams,
   type NewOdooDrawingParams,
   type CheckLayoutParams,
+  type AddRackToRoomParams,
   type BridgeServerMessage,
   type AddDeviceParams,
   type AddDevicesParams,
@@ -693,7 +695,60 @@ function installCardCore(p: InstallCardParams) {
  *  place_device_in_rack_batch. Pre-checks isRackSlotAvailable (the store action does NOT)
  *  and the editor's one-rack / 2-post-rear / oversize / shelf-only rules before the
  *  structural addPlacementSmart. Throws CommandError on any failure. */
+/** FACE: placing a device in a rack also puts it into that rack's box on the schematic (the room
+ *  linked to the rack), stacked below what is already there; the box grows to fit. */
 function placeDeviceInRackCore(p: PlaceDeviceInRackParams) {
+  const result = placeDeviceInRackRaw(p);
+  const rackRoomId = moveIntoRackBox(p.rackId, p.deviceId);
+  return rackRoomId ? { ...result, rackRoomId } : result;
+}
+
+const RACK_BOX_PAD = 16;
+const RACK_BOX_TOP = 48; // room label
+
+function nodeSize(n: SchematicNode): { width: number; height: number } {
+  const style = (n.style ?? {}) as { width?: number; height?: number };
+  const room = n.type === "room";
+  return {
+    width: n.measured?.width ?? style.width ?? (room ? 400 : 144),
+    height: n.measured?.height ?? style.height ?? (room ? 300 : 48),
+  };
+}
+
+function moveIntoRackBox(rackId: string, deviceId: string): string | undefined {
+  const rack = rackPages().flatMap((pg) => pg.racks).find((r) => r.id === rackId);
+  const roomId = rack?.linkedRoomId;
+  const box = roomId ? st().nodes.find((n) => n.id === roomId && n.type === "room") : undefined;
+  const device = st().nodes.find((n) => n.id === deviceId);
+  if (!box || !device) return undefined;
+  if (device.parentId === box.id) return box.id;
+  const children = st().nodes.filter((n) => n.parentId === box.id);
+  const bottom = children.reduce((y, n) => Math.max(y, n.position.y + nodeSize(n).height), 0);
+  const y = children.length ? Math.ceil((bottom + RACK_BOX_PAD) / GRID_SIZE) * GRID_SIZE : RACK_BOX_TOP;
+  const dev = nodeSize(device);
+  const boxSize = nodeSize(box);
+  const need = {
+    width: Math.max(boxSize.width, dev.width + 2 * RACK_BOX_PAD),
+    height: Math.max(boxSize.height, y + dev.height + RACK_BOX_PAD),
+  };
+  if (need.width !== boxSize.width || need.height !== boxSize.height) st().resizeRoom(box.id, need, { skipUndo: true });
+  return st().placeDeviceInRoom(deviceId, box.id, { x: RACK_BOX_PAD, y }) ? box.id : undefined;
+}
+
+function absolutePositionOf(id: string): { x: number; y: number } {
+  const byId = new Map(st().nodes.map((n) => [n.id, n] as const));
+  let n = byId.get(id);
+  let x = 0;
+  let y = 0;
+  while (n) {
+    x += n.position.x;
+    y += n.position.y;
+    n = n.parentId ? byId.get(n.parentId) : undefined;
+  }
+  return { x, y };
+}
+
+function placeDeviceInRackRaw(p: PlaceDeviceInRackParams) {
   const { deviceId, rackId, uPosition, face } = p;
   const node = requireDevice(deviceId);
   const data = node.data as DeviceData;
@@ -959,7 +1014,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
   },
 
   create_room: (params) => {
-    const { label, x, y, width, height } = params as unknown as CreateRoomParams;
+    const { label, x, y, width, height, parentRoomId } = params as unknown as CreateRoomParams;
     if (typeof label !== "string" || label.trim() === "") {
       throw new CommandError("label is required (a non-empty room name).");
     }
@@ -967,11 +1022,29 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     if (!pos.ok) throw new CommandError(pos.error);
     const size = validateRoomSize(width, height);
     if (!size.ok) throw new CommandError(size.error);
+    let parentAbs: { x: number; y: number } | undefined;
+    if (parentRoomId !== undefined) {
+      const parent = st().nodes.find((n) => n.id === parentRoomId);
+      if (!parent || parent.type !== "room") throw new CommandError(`No room found with id "${parentRoomId}".`);
+      parentAbs = absolutePositionOf(parentRoomId);
+    }
+    const absPos = parentAbs ? { x: parentAbs.x + pos.position.x, y: parentAbs.y + pos.position.y } : pos.position;
     const beforeRooms = new Set(st().nodes.filter((n) => n.type === "room").map((n) => n.id));
     const beforeParents = new Map(deviceNodes().map((n) => [n.id, n.parentId] as const));
-    st().addRoom(label, pos.position, size.size);
-    const room = st().nodes.find((n) => n.type === "room" && !beforeRooms.has(n.id));
+    st().addRoom(label, absPos, size.size);
+    let room = st().nodes.find((n) => n.type === "room" && !beforeRooms.has(n.id));
     if (!room) throw new CommandError("Room was not created (no new room node appeared).");
+    if (parentRoomId !== undefined) {
+      // Nesting follows geometry (reparentNode), exactly as when the user drops a room into another.
+      st().reparentNode(room.id, absPos, { skipUndo: true });
+      room = st().nodes.find((n) => n.id === room!.id)!;
+      if (room.parentId !== parentRoomId) {
+        st().undo(); // takes back addRoom (one undo step) — nothing is left behind
+        throw new CommandError(
+          `The room does not fit inside "${parentRoomId}" at (${pos.position.x}, ${pos.position.y}) — make the parent larger (fit_room) or the room smaller.`,
+        );
+      }
+    }
     // addRoom runs reparentAllDevices, which pulls any existing devices that now fall
     // inside the new room into it (and rewrites their coords to room-relative). Report
     // those so the caller knows those devices' positions changed (re-read via get_device
@@ -982,6 +1055,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     return {
       roomId: room.id,
       label: (room.data as { label?: string }).label ?? label,
+      parentRoomId: room.parentId,
       position: pos.position,
       size: { width: size.size?.width ?? 400, height: size.size?.height ?? 300 },
       absorbedDeviceIds,
@@ -1606,6 +1680,40 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
   },
 
   // --- FACE: layout (SPEC-schaltplan-layout.md) ------------------------------------
+  add_rack_to_room: (params) => {
+    const { roomId, name, heightU, rackType, x, y } = (params ?? {}) as unknown as AddRackToRoomParams;
+    const room = st().nodes.find((n) => n.id === roomId);
+    if (!room || room.type !== "room") throw new CommandError(`No room found with id "${roomId}".`);
+    if (typeof name !== "string" || !name.trim()) throw new CommandError("name is required (e.g. \"Wandschrank Technik\").");
+    // All racks share one rack-elevation page, side by side — like the editor does.
+    const pageId = rackPages()[0]?.id;
+    const rack = handlers.create_rack({ label: name.trim(), heightU, rackType, ...(pageId ? { pageId } : { pageLabel: "Racks" }) }) as {
+      pageId: string;
+      rackId: string;
+      heightU: number;
+      rackType: string;
+    };
+    const box = handlers.create_room({
+      label: name.trim(),
+      x: x ?? RACK_BOX_PAD,
+      y: y ?? RACK_BOX_TOP,
+      width: 208,
+      height: 160,
+      parentRoomId: roomId,
+    }) as { roomId: string };
+    st().toggleEquipmentRack(box.roomId);
+    st().linkRoomToRack(box.roomId, rack.pageId, rack.rackId);
+    return {
+      rackRoomId: box.roomId,
+      rackId: rack.rackId,
+      pageId: rack.pageId,
+      name: name.trim(),
+      heightU: rack.heightU,
+      rackType: rack.rackType,
+      hint: "Put devices in with place_device_in_rack (rackId, uPosition) — they land in the rack elevation and in this box.",
+    };
+  },
+
   check_layout: (params) => {
     const { roomId } = (params ?? {}) as CheckLayoutParams;
     if (roomId !== undefined) {
