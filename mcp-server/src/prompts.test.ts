@@ -42,7 +42,7 @@ test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
 
 test("build-schematic: locations and areas, racks, connect BEFORE arranging (signal flow needs the connections), arrange, THEN sides (they depend on where devices ended up), route, check, look", () => {
   const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
-  const order = ["create_room", "parentRoomId", "add_rack_to_room", "place_device_in_rack", "connect_devices_batch", "arrange_room", "margin", "arrange_rooms", "gap", "choose_port_sides", "route_connections", "check_layout", "set_connection_path", "render_schematic"];
+  const order = ["create_room", "parentRoomId", "add_rack_to_room", "place_device_in_rack", "connect_devices_batch", "arrange_room", "margin", "arrange_rooms", "gap", "renumber_ports", "choose_port_sides", "route_connections", "check_layout", "set_connection_path", "render_schematic"];
   let last = -1;
   for (const step of order) {
     const at = text.indexOf(step, last + 1);

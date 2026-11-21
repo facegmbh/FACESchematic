@@ -1977,11 +1977,20 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       if (!pos.ok) throw new CommandError(`Waypoint ${i + 1}: ${pos.error}`);
       return { x: Math.round(pos.position.x / GRID_SIZE) * GRID_SIZE, y: Math.round(pos.position.y / GRID_SIZE) * GRID_SIZE };
     });
-    if (snapped.length) st().setManualWaypoints(edge.id, snapped);
+    // Every leg between two points straight: add the corner where two points are not on one line
+    // (horizontal first). The router keeps a straight leg exactly, unless it runs into a device or text.
+    const path: { x: number; y: number }[] = [];
+    for (const p of snapped) {
+      const prev = path[path.length - 1];
+      if (prev && prev.x !== p.x && prev.y !== p.y) path.push({ x: p.x, y: prev.y });
+      if (!prev || prev.x !== p.x || prev.y !== p.y) path.push(p);
+    }
+    if (path.length > 60) throw new CommandError("Too many points once the corners are added — give fewer, on one line each.");
+    if (path.length) st().setManualWaypoints(edge.id, path);
     else st().clearManualWaypoints(edge.id);
     return {
       connectionId: edge.id,
-      waypoints: snapped,
+      waypoints: path,
       hint: snapped.length
         ? "The router keeps this path. route_connections leaves it alone unless you name the connection; check_layout and render_schematic show how it runs."
         : "The line is back with the auto-routing — route_connections lays it.",

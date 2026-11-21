@@ -423,6 +423,12 @@ describe("set_connection_path (Task 31)", () => {
     expect(JSON.stringify(edgeOf(id).data)).toBe(before);
   });
 
+  it("adds the corner between two points that are not on one line, so every leg is straight", async () => {
+    const id = someId();
+    const r = await run("set_connection_path", { connectionId: id, waypoints: [{ x: 0, y: 0 }, { x: 320, y: 480 }, { x: 320, y: 800 }] });
+    expect(r).toMatchObject({ ok: true, result: { waypoints: [{ x: 0, y: 0 }, { x: 320, y: 0 }, { x: 320, y: 480 }, { x: 320, y: 800 }] } });
+  });
+
   it("an empty list gives the line back to the router", async () => {
     const id = someId();
     await run("set_connection_path", { connectionId: id, waypoints: [{ x: 0, y: 0 }] });

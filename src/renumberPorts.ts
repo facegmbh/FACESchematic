@@ -51,12 +51,25 @@ export function renumberPorts(nodes: SchematicNode[], edges: ConnectionEdge[], d
     return [{ e, atSource, port, suffix: m ? `-${m[2]}` : "", other, own }];
   });
 
-  // Which other device stands higher on the sheet (then: further left).
-  const place = (n: SchematicNode | undefined) => {
-    if (!n) return { y: Infinity, x: Infinity };
+  // In which order the lines arrive at the switch, per side. A line from a device beside the switch
+  // comes in level; one from above comes down a channel next to it. Seen from the switch's upper
+  // corner on that side, sweeping from straight above, over the side, to below: the line arriving
+  // first takes the top port. So of two devices above, the one nearer the switch (inner track) ends
+  // first and the lines nest instead of crossing; devices beside it follow top to bottom.
+  const swPos = absolute(device, byId);
+  const swSize = layoutSize(device);
+  const arrival = (n: SchematicNode | undefined): number => {
+    if (!n) return Infinity;
     const p = absolute(n, byId);
     const s = layoutSize(n);
-    return { y: p.y + s.height / 2, x: p.x + s.width / 2 };
+    const cx = p.x + s.width / 2;
+    const cy = p.y + s.height / 2;
+    // Right only when wholly right of the switch; beside-left and overlapping (above/below) use the
+    // left side, as choose_port_sides does.
+    const left = p.x < swPos.x + swSize.width;
+    const cornerX = left ? swPos.x : swPos.x + swSize.width;
+    const out = left ? cornerX - cx : cx - cornerX; // how far out to the side
+    return Math.atan2(cy - swPos.y, Math.max(out, 0));
   };
 
   const changes = new Map<string, PortSideChange>();
@@ -69,11 +82,7 @@ export function renumberPorts(nodes: SchematicNode[], edges: ConnectionEdge[], d
     if (movable.length === 0) continue;
     const blocked = new Set(inGroup.filter((x) => !movable.includes(x)).map((x) => x.port.id));
     const slots = groupPorts.filter((p) => !blocked.has(p.id)); // in the device's own order, top to bottom
-    const sorted = [...movable].sort((a, b) => {
-      const pa = place(a.other);
-      const pb = place(b.other);
-      return pa.y - pb.y || pa.x - pb.x || a.e.id.localeCompare(b.e.id);
-    });
+    const sorted = [...movable].sort((a, b) => arrival(a.other) - arrival(b.other) || a.e.id.localeCompare(b.e.id));
     sorted.forEach((x, i) => {
       const slot = slots[i];
       if (!slot || slot.id === x.port.id) return;

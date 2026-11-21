@@ -41,6 +41,17 @@ describe("renumberPorts", () => {
     expect([port("b"), port("a"), port("c")]).toEqual(["p1", "p2", "p3"]);
   });
 
+  it("lines coming down from above nest: the device nearest the switch takes the top port", () => {
+    // Switch low on the sheet; both devices stand above it, to the left. The near one's line runs in the
+    // inner track and must end first (top port), or the far one's line would cross it.
+    const low = { ...sw, position: { x: 1000, y: 1000 } } as SchematicNode;
+    const n = [low, device("far", 0, 0), device("near", 720, 0), device("beside", 0, 1300)];
+    const e = [edge("f", "far", "lan-out", "sw", "p1-in"), edge("n", "near", "lan-out", "sw", "p2-in"), edge("b", "beside", "lan-out", "sw", "p3-in")];
+    const changes = renumberPorts(n, e, "sw");
+    const port = (id: string) => portOf(changes.find((c) => c.id === id)?.targetHandle ?? e.find((x) => x.id === id)!.targetHandle);
+    expect([port("n"), port("f"), port("b")]).toEqual(["p1", "p2", "p3"]);
+  });
+
   it("works whichever end of the connection the switch is", () => {
     const n = [sw, device("top", 0, 0), device("low", 0, 600)];
     const e = [edge("a", "sw", "p4-out", "low", "lan-in"), edge("b", "top", "lan-out", "sw", "p2-in")];

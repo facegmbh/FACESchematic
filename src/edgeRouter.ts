@@ -553,6 +553,12 @@ function logRoutingReport(
   (globalThis as unknown as Record<string, unknown>).__routingReport = report;
 }
 
+/** FACE: does an axis-aligned segment pass through the inside of an obstacle rect? */
+function straightSegmentHits(a: Point, b: Point, r: { left: number; top: number; right: number; bottom: number }): boolean {
+  const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+  return x2 > r.left && x1 < r.right && y2 > r.top && y1 < r.bottom;
+}
+
 // ---------- Title block obstacles ----------
 
 /**
@@ -925,7 +931,18 @@ export function routeAllEdges(
       const legSrcExitsRight = isFirstLeg ? ep.sourceExitsRight : undefined;
       const legTgtEntersLeft = isLastLeg ? ep.targetEntersLeft : undefined;
 
-      let legResult = computeEdgePath(
+      // FACE (SPEC-schaltplan-leitungen.md): between two waypoints on one line, with nothing in the
+      // way, the line runs straight from one to the other — exactly as laid, by a person or by Claude's
+      // set_connection_path. A* here swerved for other lines' penalties and broke out elsewhere.
+      const straightLeg =
+        !isFirstLeg && !isLastLeg && (from.x === to.x || from.y === to.y) && (from.x !== to.x || from.y !== to.y) &&
+        !obs.rects.some((r) => straightSegmentHits(from, to, r));
+      let legResult = straightLeg
+        ? {
+            waypoints: [{ x: from.x, y: from.y }, { x: to.x, y: to.y }],
+            arrivalDir: from.y === to.y ? (to.x >= from.x ? 0 : 2) : to.y >= from.y ? 1 : 3,
+          }
+        : computeEdgePath(
         from.x, from.y, to.x, to.y,
         obs.rects, 0, spread,
         penalties.length > 0 ? penalties : undefined,
