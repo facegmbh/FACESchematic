@@ -272,8 +272,8 @@ sie fehlt (die vorhandene Datei mit `FACE_SECRET` bleibt sonst unberührt). `com
 die Variable an `backend` weiter. Die Datei wird nie ausgegeben.
 
 **Acceptance criteria:**
-- [ ] Vorhandene `backend.env` ohne Token → Token ergänzt, `FACE_SECRET` unverändert
-- [ ] Zweiter Lauf ändert nichts; neue Anlage erzeugt beide Zeilen mit Rechten 600
+- [x] Vorhandene `backend.env` ohne Token → Token ergänzt, `FACE_SECRET` unverändert
+- [x] Zweiter Lauf ändert nichts; neue Anlage erzeugt beide Zeilen mit Rechten 600
 
 **Verification:** Shell-Schritt lokal in einem Temp-Verzeichnis dreimal durchgespielt (ohne Datei, mit altem Stand, unverändert)
 

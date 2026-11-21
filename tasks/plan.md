@@ -99,7 +99,7 @@ Entscheidungen für diese Phase (10.11.):
 
 - [x] Task 13: Relay im Backend — Tab anmelden, Poll, Antwort, Ablösung, Verfall
 - [x] Task 14: Dienst-Zugang — `/face/service/call` und `/face/service/catalog` mit Token
-- [ ] Task 15: Deploy — `FACE_SERVICE_TOKEN` einmalig erzeugen und durchreichen
+- [x] Task 15: Deploy — `FACE_SERVICE_TOKEN` einmalig erzeugen und durchreichen
 
 ### Checkpoint D (Freigabe, dann Push auf master)
 - [ ] `npm test` (mcp-server), `npx vitest run`, `npx tsc -b`, `npm run build` grün

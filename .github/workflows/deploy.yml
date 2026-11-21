@@ -54,6 +54,14 @@ jobs:
             ( umask 077 && echo "FACE_SECRET=$(openssl rand -hex 32)" > "$env_file" )
             echo "Backend: neues Geheimnis in $env_file angelegt"
           fi
+          # Dienst-Token fuer den Odoo-Connector (SPEC-cloud-bridge.md): einmalig ergaenzt,
+          # die vorhandenen Zeilen bleiben unberuehrt. Jean-Luc traegt ihn einmal in Odoo
+          # als Systemparameter face_schematic.token ein; der Wert wird nie ausgegeben.
+          if ! grep -q '^FACE_SERVICE_TOKEN=' "$env_file"; then
+            [ -n "$(tail -c1 "$env_file")" ] && echo >> "$env_file"
+            echo "FACE_SERVICE_TOKEN=$(openssl rand -hex 32)" >> "$env_file"
+            echo "Backend: Dienst-Token in $env_file ergaenzt — einmal in Odoo als face_schematic.token eintragen"
+          fi
           cp "$env_file" .env
 
       - name: Build & deploy (docker compose)
@@ -71,7 +79,14 @@ jobs:
           # Das Backend durch den App-nginx hindurch — es braucht ein paar Sekunden zum Start.
           for i in $(seq 1 15); do
             body=$(curl -s http://localhost:8080/face/health || true)
-            case "$body" in *'"status":"ok"'*) echo "/face/health -> $body"; exit 0 ;; esac
+            case "$body" in *'"status":"ok"'*)
+              echo "/face/health -> $body"
+              # Ohne Token waere es 503: dann ist FACE_SERVICE_TOKEN nicht im Container angekommen.
+              svc=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/face/service/catalog)
+              echo "/face/service/catalog ohne Token -> $svc (erwartet 401)"
+              test "$svc" = "401"
+              exit 0 ;;
+            esac
             sleep 2
           done
           echo "/face/health antwortet nicht: $body"

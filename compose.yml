@@ -16,6 +16,8 @@ services:
       dockerfile: mcp-server/Dockerfile.cloud
     environment:
       FACE_SECRET: ${FACE_SECRET:-}
+      # Shared with the Odoo connector; unset → /face/service answers 503.
+      FACE_SERVICE_TOKEN: ${FACE_SERVICE_TOKEN:-}
       FACE_PUBLIC_URL: https://schematic.face-gmbh.com
       TZ: Europe/Berlin
     volumes:
