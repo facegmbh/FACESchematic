@@ -575,6 +575,9 @@ Kapelle (G-Anordnung) im Browser, nur über Claudes Befehle: alter Ablauf 7 Leit
 - [x] Playbook und Odoo-Leitfaden mit neuem Ablauf und Jean-Lucs Wünschen aus dem Chat vom 21.11.
 - [x] Kapelle nach Leitfaden (Browser, nur Claudes Befehle): `line_outside` = 0, `over_text` = 0, kein Umweg,
   20 Kreuzungspaare; zwei Läufe gleich
-- [ ] Derselbe Ablauf über `/face/service/call` (Dienst-Weg unverändert seit Phase 6, dort geprüft) — bei Checkpoint H
+- [x] Derselbe Ablauf über `/face/service/call` (21.11., Tab mit `VITE_FACE_BACKEND=1`, Mock-Odoo): Kapelle nach
+  Gewerken → 7 × `dissolve_room` → Orte, 6 Bereiche, Schrank (3 Spalten, 19 Verbindungen erhalten) → keine
+  Leitung außerhalb oder über Text, keine harten Befunde, 1 Kreuzungs-Befund; Schrank-Kasten nicht auflösbar;
+  Bild 1600×1600 / 391 KB; 57 Aufrufe, langsamster 3,3 s
 
 ## Checkpoint H — Freigabe, Push (FACESchematic master, Odoo main)

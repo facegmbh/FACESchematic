@@ -185,7 +185,7 @@ Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
   den fertigen Router, `get_schematic` mit `canvas`-Rechtecken
 
 ### Checkpoint H (Freigabe, Push)
-- [ ] Kapelle Ende-zu-Ende: `line_outside` = 0, `over_text` = 0; alle Tests grün
+- [x] Kapelle Ende-zu-Ende über den Dienst: `line_outside` = 0, `over_text` = 0; alle Tests grün (2166 + 95), routing:check 13/13
 
 ## Risks and Mitigations
 
