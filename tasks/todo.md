@@ -581,3 +581,48 @@ Kapelle (G-Anordnung) im Browser, nur über Claudes Befehle: alter Ablauf 7 Leit
   Bild 1600×1600 / 391 KB; 57 Aufrufe, langsamster 3,3 s
 
 ## Checkpoint H — Freigabe, Push (FACESchematic master, Odoo main)
+
+# Phase 8: schaltplan-rahmen (SPEC-schaltplan-rahmen.md)
+
+Jean-Luc, 22.11.: „Linien laufen aber noch auf Linien von Rahmen und Geräte könnten leicht verschoben
+werden damit die Linien sauberer laufen. Linien sollen auch nicht durch die Rahmen laufen von anderen.“
+Entschieden: für alle Zeichnungen.
+
+## Task 35: Router meidet Rahmen
+
+**Acceptance criteria:**
+- [x] Auf einem Rahmen entlang läuft keine Leitung mehr; um einen fremden Raum geht sie herum, durch eigene gerade
+- [x] Ohne Räume unverändert: `routing:check` 13/13 „ok (no changes)“
+- [x] Jean-Lucs Kapelle: 7 → 0 auf Rahmen, 3 → 1 durch fremde Rahmen (Kirche über der Kapelle, nur durch Anordnung lösbar), kein `line_outside`
+
+**Files:** `src/pathfinding.ts`, `src/edgeRouter.ts`, `src/__tests__/roomFrames.test.ts`, Fixture `kapelle-jl-2026-11-22.json` · **Scope:** M
+
+## Task 36: `on_frame` und `through_room`
+
+**Acceptance criteria:**
+- [x] `on_frame`: bis 8 px neben einer Rahmenseite, mindestens 16 px lang; Kreuzen zählt nicht
+- [x] `through_room`: nur fremde Räume, der äußerste genannt; Abhilfe je nach Ort oder Bereich
+
+**Files:** `src/layoutCheck.ts`, Tests · **Scope:** S
+
+## Task 37: `straighten_lines`
+
+**Acceptance criteria:**
+- [x] Gerät mit weniger Verbindungen rückt senkrecht, ganze Rasterfelder, höchstens `maxShift` (64)
+- [x] Nie auf andere Geräte/Räume, nie aus dem eigenen Raum, keine gerade Leitung knicken; gesperrte Räume bleiben; Hand-Wege bleiben
+- [x] Befehl: ein Undo-Schritt, verlegt neu und wartet; ohne verlegte Leitungen Hinweis auf `route_connections`
+- [x] Jean-Lucs Kapelle: 3 Geräte gerückt (16–32 px), 3 Leitungen gerade
+
+**Files:** `src/straightenLines.ts`, `src/mcpBridge.ts`, Protokoll, Katalog, Tests · **Scope:** M
+
+## Task 38: Playbook, Leitfaden, Ende-zu-Ende
+
+**Acceptance criteria:**
+- [x] Playbook und Odoo-Leitfaden: `straighten_lines` nach dem Verlegen, `through_room` → Orte nebeneinander, `on_frame` wie `line_outside`
+- [x] Über `/face/service/call` (22.11.): Kapelle nach Gewerken → Orte/Bereiche/Schrank → nach einer Korrekturrunde
+  (Rand 96 für Technik, Kirche, Kapelle; Lücke 160) keine Leitung außerhalb, über Text, auf Rahmen oder durch
+  fremde Orte, keine harten Befunde, 1 Kreuzungs-Befund; 71 Aufrufe, Bild 1563×1600 / 356 KB
+- [x] Alle Tests grün (2195 + 96), `tsc -b`, routing:check 13/13
+
+## Checkpoint I — Freigabe, Push (FACESchematic master, Odoo main)
+

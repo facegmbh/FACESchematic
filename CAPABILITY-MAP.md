@@ -18,9 +18,10 @@ FACE-Odoo-Connector, den alle schon verbunden haben. Ersetzt in diesem Punkt die
 | `odoo-device-library` | Eigene Geräte zentral in Odoo statt nur im Browser, verknüpft mit dem Odoo-Artikel — **vorgemerkt, Spec folgt** | face-identity |
 | `schaltplan-layout` | Claude gliedert örtlich (Orte → Racks), prüft Überlappungen und Leitungsführung, ordnet, verlegt neu und sieht das Ergebnis als Bild (21.11.) | cloud-bridge |
 | `schaltplan-leitungen` | Keine Linien außerhalb der Zeichnung und über Text: Port-Seiten wählen, Ortsnamen/Notizen als Hindernisse, Ränder und Abstände, eigene Stützpunkte (21.11.) | schaltplan-layout |
+| `schaltplan-rahmen` | Keine Linien auf Rahmen oder durch fremde Orte/Bereiche (Router, für alle Zeichnungen), Geräte leicht verschieben für gerade Leitungen (22.11.) | schaltplan-leitungen |
 | `schaltplan-lebenszyklus` | Zeichnung durch Kalkulation → Angebot → Auftrag → Montage/Abnahme → Wartung: Abgleich Zeichnung ↔ Positionen, Seriennummern/Asset-IDs, Verknüpfung mit der Anlage (`face.installation`) — **vorgemerkt, Spec folgt** | odoo-mcp-schaltplan, odoo-device-library |
 
-Reihenfolge: backend-deploy + face-identity → odoo-drawings, cloud-bridge → odoo-mcp-schaltplan → schaltplan-layout → schaltplan-leitungen → odoo-device-library → schaltplan-lebenszyklus
+Reihenfolge: backend-deploy + face-identity → odoo-drawings, cloud-bridge → odoo-mcp-schaltplan → schaltplan-layout → schaltplan-leitungen → schaltplan-rahmen → odoo-device-library → schaltplan-lebenszyklus
 
 ## Übergreifende Entscheidungen
 

@@ -42,7 +42,7 @@ test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
 
 test("build-schematic: locations and areas, racks, connect BEFORE arranging (signal flow needs the connections), arrange, THEN sides (they depend on where devices ended up), route, check, look", () => {
   const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
-  const order = ["create_room", "parentRoomId", "add_rack_to_room", "place_device_in_rack", "connect_devices_batch", "arrange_room", "margin", "arrange_rooms", "gap", "renumber_ports", "choose_port_sides", "route_connections", "check_layout", "set_connection_path", "render_schematic"];
+  const order = ["create_room", "parentRoomId", "add_rack_to_room", "place_device_in_rack", "connect_devices_batch", "arrange_room", "margin", "arrange_rooms", "gap", "renumber_ports", "choose_port_sides", "route_connections", "straighten_lines", "check_layout", "set_connection_path", "render_schematic"];
   let last = -1;
   for (const step of order) {
     const at = text.indexOf(step, last + 1);
@@ -78,4 +78,13 @@ test("build-schematic: Jean-Luc's wishes (21.11.) are in the playbook", () => {
   assert.match(text, /empty/i);
   // Switch ports are only renumbered when the user agrees.
   assert.match(text, /switch port/i);
+});
+
+test("build-schematic: Jean-Luc's wishes (22.11.) — off frames, not through other rooms, devices moved to straighten lines", () => {
+  const text = (getPrompt("build-schematic").messages[0].content as { text: string }).text;
+  assert.match(text, /along a frame/i);
+  assert.match(text, /through_room/);
+  assert.match(text, /side by side/i);
+  assert.match(text, /straighten_lines/);
+  assert.match(SERVER_INSTRUCTIONS, /straighten_lines/);
 });

@@ -187,6 +187,17 @@ Ortsnamen, 37 Kreuzungspaare; mit Seitenwahl 672 px / 3 / 48.
 ### Checkpoint H (Freigabe, Push)
 - [x] Kapelle Ende-zu-Ende über den Dienst: `line_outside` = 0, `over_text` = 0; alle Tests grün (2166 + 95), routing:check 13/13
 
+### Phase 8: schaltplan-rahmen (SPEC-schaltplan-rahmen.md)
+Ausgangsmessung Jean-Lucs Kapelle (Odoo, 22.11.): 7 Leitungen auf Rahmen, 3 durch fremde Rahmen.
+- [x] Task 35: Router — Rahmenfelder kosten (`FRAME_COST` 40), Felder außerhalb der Zeichnung kosten
+  (`OUTSIDE_COST` 4), Spaltenverteiler meidet Rahmen und fremde Räume; für alle Zeichnungen
+- [x] Task 36: `check_layout` meldet `on_frame` und `through_room`
+- [x] Task 37: `straighten_lines` — Geräte leicht verschieben für gerade Leitungen
+- [x] Task 38: Playbook, Leitfaden, Ende-zu-Ende über den Dienst
+
+### Checkpoint I (Freigabe, Push)
+- [ ] Jean-Luc gibt frei; FACESchematic master, Odoo main
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
