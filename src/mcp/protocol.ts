@@ -94,7 +94,8 @@ export type CommandType =
   | "render_schematic"
   | "choose_port_sides"
   | "set_connection_path"
-  | "renumber_ports";
+  | "renumber_ports"
+  | "straighten_lines";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -701,6 +702,16 @@ export interface ChoosePortSidesParams {
 /** FACE: a switch's ports in the order its devices stand on the sheet (Jean-Luc, 21.11.). */
 export interface RenumberPortsParams {
   deviceId: string;
+}
+
+/** FACE: move devices a little so lines run straight (SPEC-schaltplan-rahmen.md). */
+export interface StraightenLinesParams {
+  /** Only devices inside this room (location or area). */
+  roomId?: string;
+  /** How far a device may move, px (16–160, default 64). */
+  maxShift?: number;
+  /** How long to wait for the re-routed lines, ms (default 6000, max 15000). */
+  waitMs?: number;
 }
 
 /** FACE: Claude lays one line itself (SPEC-schaltplan-leitungen.md). */

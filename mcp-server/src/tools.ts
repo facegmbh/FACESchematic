@@ -933,6 +933,20 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "straighten_lines",
+    description:
+      "Move devices a little — up or down by whole grid steps, at most maxShift (default 64 px) — so lines whose ports face each other run straight instead of with a jog. The device with fewer connections moves (the camera to its encoder, not the switch); never onto another device or room, never out of its room, never bending a line that is straight already. Devices in a locked room stay (in a rack box they may move — the U positions live on the rack page); lines the user laid by hand are left alone. Works from the routed lines, re-routes and waits for the result. One undo step. Run it after route_connections, then check_layout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "Only devices inside this location or area (default: the whole schematic)." },
+        maxShift: { type: "number", description: "How far a device may move, px, 16–160 (default 64)." },
+        waitMs: { type: "number", description: "How long to wait for the re-routed lines, ms (default 6000, max 15000)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "set_connection_path",
     description:
       "Lay one line yourself: the corner points (canvas coordinates, snapped to the 16 px grid) it passes on its way from port to port, in order. Where two points are not on one line the corner is added (horizontal first). Between two points the line runs exactly straight, unless that straight runs into a device or a name — then the router goes round it there, so lead the points through free gaps. From the port to the first point and from the last point to the port the router lays the short piece. The editor and route_connections keep this path, as if drawn by hand. Use it as a last resort for a line check_layout still reports (line_outside, over_text, crosses_device) after choose_port_sides, margins and route_connections — get_schematic gives every device and room its canvas rectangle (canvas: x, y, width, height), so lead the line through the gaps between locations and areas; look with render_schematic afterwards. An empty list gives the line back to the auto-routing. One undo step.",
@@ -967,7 +981,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "route_connections",
     description:
-      "Lay the lines with the editor's auto-routing (switches it on) and wait for the result. Connections the user laid by hand keep their waypoints unless named in connectionIds — name them only when the user wants them re-laid. Use after arranging, then check_layout.",
+      "Lay the lines with the editor's auto-routing (switches it on) and wait for the result. Connections the user laid by hand keep their waypoints unless named in connectionIds — name them only when the user wants them re-laid. Lines keep off room frames and out of rooms that hold neither of their devices. Use after arranging, then straighten_lines and check_layout.",
     inputSchema: {
       type: "object",
       properties: {
@@ -998,7 +1012,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "check_layout",
     description:
-      "Check how clean the drawing is, without changing anything: devices on top of each other (overlap), devices or rack boxes sticking out of their room (outside), rooms overlapping (room_overlap), devices off the grid (off_grid), lines running through a device (crosses_device), lines taking a detour (detour), crossing lines (crossings), lines leaving the drawing — the frame around all locations (line_outside, naming the location they pass), lines over a location's name or a note (over_text), and connections not routed yet (unrouted). Each finding names the ids involved and what to do. Run it after building or changing a schematic and fix overlap/outside/room_overlap before reporting back; clean = true means nothing to fix.",
+      "Check how clean the drawing is, without changing anything: devices on top of each other (overlap), devices or rack boxes sticking out of their room (outside), rooms overlapping (room_overlap), devices off the grid (off_grid), lines running through a device (crosses_device), lines taking a detour (detour), crossing lines (crossings), lines leaving the drawing — the frame around all locations (line_outside, naming the location they pass), lines over a location's name or a note (over_text), lines running along a location's or area's frame (on_frame), lines through a location or area that holds neither of their devices (through_room — put the two locations side by side), and connections not routed yet (unrouted). Each finding names the ids involved and what to do. Run it after building or changing a schematic and fix overlap/outside/room_overlap before reporting back; clean = true means nothing to fix.",
     inputSchema: {
       type: "object",
       properties: { roomId: { type: "string", description: "Only check this room and what is inside it." } },

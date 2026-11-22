@@ -23,6 +23,7 @@ import { checkLayout } from "./layoutCheck";
 import { arrangeRoom, arrangeRooms, fitRoomSize, roomMargin } from "./layoutArrange";
 import { choosePortSides } from "./portSides";
 import { renumberPorts } from "./renumberPorts";
+import { straightenLines, STRAIGHTEN_MAX_SHIFT } from "./straightenLines";
 import { blobToBase64, captureSchematicPng, renderBounds, renderPixelRatio } from "./renderSchematic";
 import { GRID_SIZE } from "./gridConstants";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession, loadFaceSession } from "./faceBackend";
@@ -57,6 +58,7 @@ import {
   type ChoosePortSidesParams,
   type SetConnectionPathParams,
   type RenumberPortsParams,
+  type StraightenLinesParams,
   type ArrangeRoomsParams,
   type RouteConnectionsParams,
   type BridgeServerMessage,
@@ -796,6 +798,24 @@ function fitRooms(roomId: string, shrink: boolean): { width: number; height: num
 }
 
 /** FACE: an optional px amount (margin, gap) — a number in range, rounded up to the grid. */
+/** Wait for the editor's router after a change — and for it to settle: after a re-arrange it can
+ *  publish an intermediate result first (positions not yet measured), and judging that one made
+ *  check_layout report lines that no longer exist. */
+async function settledRoutes(before: unknown, waitMs: unknown): Promise<void> {
+  const deadline = Date.now() + (typeof waitMs === "number" ? Math.max(0, Math.min(waitMs, 15000)) : 6000);
+  const sleep = () => new Promise((r) => setTimeout(r, 100));
+  while (st().routedEdges === before && Date.now() < deadline) await sleep();
+  let last = st().routedEdges;
+  let quietSince = Date.now();
+  while (last !== before && Date.now() - quietSince < ROUTE_QUIET_MS && Date.now() < deadline) {
+    await sleep();
+    if (st().routedEdges !== last) {
+      last = st().routedEdges;
+      quietSince = Date.now();
+    }
+  }
+}
+
 function validateGridAmount(value: unknown, name: string, min: number, max: number): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
@@ -2023,21 +2043,7 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const before = st().routedEdges;
     if (connectionIds?.length) st().clearEdgeWaypoints(connectionIds);
     if (!st().autoRoute) st().toggleAutoRoute();
-    // The editor re-routes on its own once the drawing changed; wait for the result — and for the
-    // router to settle: after a re-arrange it can publish an intermediate result first (positions not
-    // yet measured), and judging that one made check_layout report lines that no longer exist.
-    const deadline = Date.now() + (typeof waitMs === "number" ? Math.max(0, Math.min(waitMs, 15000)) : 6000);
-    const sleep = () => new Promise((r) => setTimeout(r, 100));
-    while (st().routedEdges === before && Date.now() < deadline) await sleep();
-    let last = st().routedEdges;
-    let quietSince = Date.now();
-    while (last !== before && Date.now() - quietSince < ROUTE_QUIET_MS && Date.now() < deadline) {
-      await sleep();
-      if (st().routedEdges !== last) {
-        last = st().routedEdges;
-        quietSince = Date.now();
-      }
-    }
+    await settledRoutes(before, waitMs);
     const routes = st().routedEdges;
     const edges = st().edges;
     const ownKept = edges.filter((e) => e.data?.manualWaypoints?.length && !e.data?.autoRouteWaypoints).length;
@@ -2050,6 +2056,30 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       hint: ownKept
         ? `${ownKept} connection(s) keep the user's own waypoints; name them in connectionIds only if the user wants them re-laid.`
         : undefined,
+    };
+  },
+
+  straighten_lines: async (params) => {
+    const { roomId, waitMs } = (params ?? {}) as StraightenLinesParams;
+    if (roomId !== undefined) requireRoom(roomId);
+    const maxShift = validateGridAmount((params as StraightenLinesParams | undefined)?.maxShift, "maxShift", 16, 160) ?? STRAIGHTEN_MAX_SHIFT;
+    const s = st();
+    if (s.edges.length && !s.edges.some((e) => (s.routedEdges[e.id]?.waypoints?.length ?? 0) >= 2)) {
+      throw new CommandError("No line is routed yet — route_connections first; straighten_lines works from the routed lines.");
+    }
+    const moves = straightenLines(s.nodes, s.edges, s.routedEdges, { maxShift, roomId });
+    if (!moves.length) return { moved: [], hint: "No line could be straightened by moving a device a little — check_layout next." };
+    const byId = new Map(s.nodes.map((n) => [n.id, n] as const));
+    const positions = Object.fromEntries(moves.map((m) => {
+      const n = byId.get(m.id)!;
+      return [m.id, { x: n.position.x, y: n.position.y + m.dy }];
+    }));
+    if (!s.autoRoute) s.toggleAutoRoute();
+    s.setNodePositions(positions); // one undo step
+    await settledRoutes(s.routedEdges, waitMs);
+    return {
+      moved: moves.map((m) => ({ deviceId: m.id, label: String((byId.get(m.id)?.data as { label?: string })?.label ?? m.id), dy: m.dy, straightens: m.straightens })),
+      hint: "Devices moved and lines re-routed — check_layout next.",
     };
   },
 

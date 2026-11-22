@@ -498,3 +498,43 @@ describe("renumber_ports (Jean-Luc 21.11.: switch ports may be renumbered)", () 
     expect((await run("renumber_ports", { deviceId: "room-8" })).ok).toBe(false);
   });
 });
+
+describe("straighten_lines (SPEC-schaltplan-rahmen.md)", () => {
+  const two = () => store.setState({
+    autoRoute: true,
+    nodes: [
+      { id: "a", type: "device", position: { x: 0, y: 0 }, measured: { width: 160, height: 96 }, data: { label: "Kamera", deviceType: "x", ports: [] } },
+      { id: "b", type: "device", position: { x: 400, y: 0 }, measured: { width: 160, height: 96 }, data: { label: "Encoder", deviceType: "x", ports: [] } },
+      { id: "c", type: "device", position: { x: 800, y: 0 }, measured: { width: 160, height: 96 }, data: { label: "Switch", deviceType: "x", ports: [] } },
+    ] as never,
+    edges: [
+      { id: "e1", source: "a", target: "b", sourceHandle: "o", targetHandle: "i", data: { signalType: "sdi" } },
+      { id: "e2", source: "b", target: "c", sourceHandle: "o", targetHandle: "i", data: { signalType: "ethernet" } },
+    ] as never,
+    routedEdges: {
+      e1: { waypoints: [{ x: 160, y: 48 }, { x: 280, y: 48 }, { x: 280, y: 80 }, { x: 400, y: 80 }] },
+      e2: { waypoints: [{ x: 560, y: 48 }, { x: 800, y: 48 }] },
+    } as never,
+  });
+
+  it("moves the camera down to the encoder's port in one undo step and says which", async () => {
+    two();
+    const r = await run("straighten_lines", { waitMs: 0 });
+    if (!r.ok) throw new Error(r.error);
+    expect((r.result as { moved: unknown[] }).moved).toEqual([{ deviceId: "a", label: "Kamera", dy: 32, straightens: ["e1"] }]);
+    expect(store.getState().nodes.find((n) => n.id === "a")?.position).toEqual({ x: 0, y: 32 });
+    store.getState().undo();
+    expect(store.getState().nodes.find((n) => n.id === "a")?.position).toEqual({ x: 0, y: 0 });
+  });
+
+  it("asks for routed lines first, and checks its arguments", async () => {
+    two();
+    store.setState({ routedEdges: {} });
+    const r = await run("straighten_lines", { waitMs: 0 });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.error).toContain("route_connections");
+    two();
+    expect((await run("straighten_lines", { maxShift: 500, waitMs: 0 })).ok).toBe(false);
+    expect((await run("straighten_lines", { roomId: "nope", waitMs: 0 })).ok).toBe(false);
+  });
+});
