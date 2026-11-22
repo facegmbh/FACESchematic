@@ -1798,6 +1798,50 @@ export function routeAllEdges(
       }
       return allocated;
       };
+      // FACE: one device well above the other — the way back runs in the gap between them,
+      // an S instead of a U, and that is the shortest bracket there is. Over and under only
+      // look past both devices: Jean-Luc's access point at the ceiling went down past the ESP,
+      // under the whole rack box and back up (22.11.). Single loop-backs only — a family
+      // keeps its nested over/under brackets.
+      const allocateBetween = (): boolean => {
+        if (g.edges.length !== 1) return false;
+        const ce = g.edges[0];
+        const { source, target } = ce.ep.edge;
+        const s = gridRectById.get(source) ?? stubRectById.get(source);
+        const t = gridRectById.get(target) ?? stubRectById.get(target);
+        if (!s || !t) return false;
+        const [lo, hi] = s.bottom < t.top ? [s.bottom + 1, t.top - 1] : t.bottom < s.top ? [t.bottom + 1, s.top - 1] : [0, -1];
+        if (lo > hi) return false;
+        const own = new Set([source, target]);
+        const mid = Math.round((lo + hi) / 2);
+        for (let k = 0; k <= 2 * (hi - lo) + 1; k++) {
+          // mid, mid+1, mid-1, mid+2, … — the middle of the gap first.
+          const r = mid + Math.ceil(k / 2) * (k % 2 ? 1 : -1);
+          if (r < lo || r > hi) continue;
+          const x1Lo = Math.min(ce.srcGY, r), x1Hi = Math.max(ce.srcGY, r);
+          const x2Lo = Math.min(r, ce.tgtGY), x2Hi = Math.max(r, ce.tgtGY);
+          let x1: number | null = null;
+          for (let c = ce.srcGX + 1; c <= ce.srcGX + 1 + SCAN; c++) {
+            if (isColumnAvailable(c, x1Lo, x1Hi) && isColumnClear(c, x1Lo, x1Hi, own)) { x1 = c; break; }
+          }
+          let x2: number | null = null;
+          for (let c = ce.tgtGX - 1; c >= ce.tgtGX - 1 - SCAN; c--) {
+            if (isColumnAvailable(c, x2Lo, x2Hi) && isColumnClear(c, x2Lo, x2Hi, own)) { x2 = c; break; }
+          }
+          if (x1 === null || x2 === null || x2 >= x1) continue;
+          if (!isRowAvailable(r, x2, x1) || !isHSegmentClear(r, x2, x1, own)) continue;
+          if (!isHSegmentClear(ce.srcGY, ce.srcGX, x1, new Set([source]))) continue;
+          if (!isHSegmentClear(ce.tgtGY, x2, ce.tgtGX, new Set([target]))) continue;
+          dbg?.(`${ce.ep.edge.id}: between x1=${x1} y=${r} x2=${x2}`);
+          ce.loopU = { x1, y: r, x2 };
+          claimColumn(x1, x1Lo, x1Hi);
+          claimRow(r, x2, x1);
+          claimColumn(x2, x2Lo, x2Hi);
+          return true;
+        }
+        return false;
+      };
+      if (allocateBetween()) continue;
       if (allocateSide(preferOver) === 0) allocateSide(!preferOver);
     }
   }

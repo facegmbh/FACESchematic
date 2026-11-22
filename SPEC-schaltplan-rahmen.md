@@ -88,8 +88,17 @@ User Stories:
    22.11.). Sonst blieben die Versätze im Schrank stehen.
 4. Von Claude früher gelegte Wege (`set_connection_path`) gibt nur der Nutzer oder Claude auf
    Wunsch zurück (`route_connections` mit `connectionIds`). An Jean-Lucs Zeichnung ist der neue
-   Router bei BirdDog besser (keine 12 Knicke mehr). Beim Access Point zum ESP macht er aber einen
-   Bogen unter dem Schrank-Kasten durch, weil dessen Name die Lücke verdeckt.
+   Router bei BirdDog besser (keine 12 Knicke mehr). Beim Access Point zum ESP machte er aber einen
+   Bogen unter dem Schrank-Kasten durch (gelöst, siehe 5).
+5. **Rückwärts-Leitungen biegen zwischen den Geräten ab** (22.11., nach dem Bogen AP → ESP).
+   - Ursache: Eine Leitung, die vom rechten Ausgang zurück nach links läuft, bekam ihre Rückführung
+     nur über beiden Geräten oder unter beiden. Steht ein Gerät deutlich über dem anderen, ist der
+     Weg dazwischen der kürzeste (ein S statt eines U). Er gilt jetzt zuerst, für einzelne
+     Leitungen. Bündel aus mehreren Leitungen behalten ihre geschachtelten U.
+   - Die Variantenwahl im Editor (Portfolio) wertet jetzt jede Leitung, die `check_layout` als
+     `detour` meldet, mit 25 Punkten, so viel wie fünf Verflechtungen. Vorher gewann eine
+     Variante, die zwei Switch-Leitungen um die Decke schickte, um 10 Kreuzungen zu sparen.
+   - Die 13 Fixtures wählen dieselben Varianten wie vorher. `routing:check` 13/13 unverändert.
 
 ## Testing Strategy
 

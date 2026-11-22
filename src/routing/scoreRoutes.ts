@@ -14,6 +14,7 @@ import type { SchematicNode, ConnectionEdge } from "../types";
 import { extractSegments, segmentsCross } from "../edgeRouter";
 import { cellSize } from "../pathfinding";
 import { routingScore } from "./objective";
+import { inSameRack, isDetour } from "../layoutCheck";
 
 type Seg = ReturnType<typeof extractSegments>[number];
 
@@ -203,6 +204,8 @@ export function computeRoutingMetrics(
   let turnsMax = 0;
   let detourMax = 0;
   let detourSum = 0;
+  let detourLines = 0;
+  const edgeById = new Map(edges.map((e) => [e.id, e] as const));
   let backwardSegments = 0;
   for (const g of geoms) {
     if (g.segs.length > 0) {
@@ -236,6 +239,13 @@ export function computeRoutingMetrics(
     const ratio = pathLen / Math.max(manhattan, 1);
     detourMax = Math.max(detourMax, ratio);
     detourSum += ratio;
+    // FACE: the lines check_layout reports as a detour — same rule, so the portfolio never
+    // trades one for a few crossings (Jean-Luc's Kapelle, 22.11.).
+    const edge = edgeById.get(g.edgeId);
+    if (edge && !inSameRack(map, edge.source, edge.target) && isDetour(pathLen, manhattan)) {
+      detourLines++;
+      add("detourLine", g.edgeId);
+    }
 
     const forward = g.target.x > g.source.x;
     if (forward) {
@@ -362,6 +372,7 @@ export function computeRoutingMetrics(
       turnsMax,
       detourRatioMax: Math.round(detourMax * 1000) / 1000,
       detourRatioMean: routedCount ? Math.round((detourSum / routedCount) * 1000) / 1000 : 0,
+      detourLines,
       fallbackCount,
       unroutedEdges: unrouted.length,
       channelDensity,

@@ -36,6 +36,8 @@ export interface ObjectiveWeights {
   turnsTotal: number;
   detourRatioMean: number;
   detourRatioMax: number;
+  /** FACE: lines check_layout reports as a detour. */
+  detourLines: number;
 }
 
 /**
@@ -59,6 +61,10 @@ export const DEFAULT_WEIGHTS: ObjectiveWeights = {
   turnsTotal: 0.1,
   detourRatioMean: 10,
   detourRatioMax: 2,
+  // FACE: a detour check_layout reports weighs as much as five weaves. Jean-Luc's Kapelle
+  // (22.11.): a candidate sent two lines to the switch round the ceiling, twice as long as
+  // needed, to save ten crossings and four weaves — and won.
+  detourLines: 25,
 };
 
 /** Metrics that must be exactly 0 for a correct route; any nonzero is multiplied by `hardZero`. */
@@ -91,6 +97,7 @@ export function scoreBreakdown(metrics: Metrics, weights: ObjectiveWeights = DEF
     turnsTotal: num(metrics, "turnsTotal") * weights.turnsTotal,
     detourRatioMean: num(metrics, "detourRatioMean") * weights.detourRatioMean,
     detourRatioMax: num(metrics, "detourRatioMax") * weights.detourRatioMax,
+    detourLines: num(metrics, "detourLines") * weights.detourLines,
   };
 }
 

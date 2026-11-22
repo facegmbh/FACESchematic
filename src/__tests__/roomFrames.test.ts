@@ -68,4 +68,33 @@ describe("routing and room frames", () => {
     expect(through.map((x) => x.ids.slice(1))).toEqual([["room-23"]]);
     expect(f.map((x) => x.kind)).not.toContain("line_outside");
   });
+
+  it("a line back to the left turns between its two devices when one sits well above the other", () => {
+    // a's output faces right, b's input left, b lower and further left: the way back runs in
+    // the gap between them, not over a or under b.
+    const out = makePort("Out", "hdmi", "output");
+    const inn = makePort("In", "hdmi", "input");
+    const a = makeDevice({ id: "a", x: 800, y: 0, ports: [out] });
+    const b = makeDevice({ id: "b", x: 0, y: 640, ports: [inn] });
+    const edge = makeEdge({ id: "e", source: "a", sourceHandle: out.id, target: "b", targetHandle: inn.id, signalType: "hdmi" });
+    const { routes } = routeFixture([a, b], [edge]);
+    const ys = routes.e!.waypoints.map((p) => p.y);
+    const [top, bottom] = [ys[0], ys[ys.length - 1]];
+    for (const y of ys) expect(y >= top && y <= bottom, `waypoints ${JSON.stringify(routes.e!.waypoints)}`).toBe(true);
+  });
+
+  it("Jean-Luc's Kapelle: the access point's line to the ESP turns above the rack box, not under it", () => {
+    // Jean-Luc's drawing laid this one by hand; given back to the router it went down past the
+    // ESP, under the whole rack box and back up (22.11.).
+    const nodes = jl.nodes as unknown as SchematicNode[];
+    const edges = (jl.edges as unknown as ConnectionEdge[]).map((e) =>
+      e.id === "edge-41" ? ({ ...e, data: { ...e.data, manualWaypoints: undefined } } as ConnectionEdge) : e,
+    );
+    const { routes } = routeFixture(nodes, edges);
+    const wps = routes["edge-41"]!.waypoints;
+    const espPortY = wps[wps.length - 1].y;
+    expect(Math.max(...wps.map((p) => p.y)), JSON.stringify(wps)).toBe(espPortY);
+    const f = checkLayout(nodes, edges, routes).filter((x) => x.ids.includes("edge-41") && x.kind !== "crossings");
+    expect(f.map((x) => `${x.kind}: ${x.message}`)).toEqual([]);
+  });
 });

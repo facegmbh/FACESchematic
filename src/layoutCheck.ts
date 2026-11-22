@@ -48,6 +48,21 @@ const TOLERANCE = 2;
 const DETOUR_RATIO = 2;
 /** …and at least this much longer — short jogs around a neighbour are fine. */
 const DETOUR_MIN_EXTRA = 200;
+/** The detour rule, shared with the router's portfolio scorer so it never picks what we report. */
+export const isDetour = (actual: number, shortest: number): boolean =>
+  actual > DETOUR_RATIO * shortest && actual - shortest > DETOUR_MIN_EXTRA;
+
+/**
+ * Devices in the same rack sit on top of each other, outputs right, inputs left: their lines
+ * have to go round, and that is the drawing being true to the rack, not a detour.
+ */
+export function inSameRack(byId: ReadonlyMap<string, SchematicNode>, a: string, b: string): boolean {
+  const rackOf = (id: string) => {
+    const parent = byId.get(byId.get(id)?.parentId ?? "");
+    return (parent?.data as { isEquipmentRack?: boolean } | undefined)?.isEquipmentRack ? parent!.id : undefined;
+  };
+  return rackOf(a) !== undefined && rackOf(a) === rackOf(b);
+}
 /** A line this close to a frame reads as lying on it (half a grid cell). */
 const FRAME_NEAR = 8;
 /** …over at least this length — crossing a frame is not running along it. */
@@ -277,14 +292,7 @@ export function checkLayout(
     }
     const shortest = Math.abs(wps[wps.length - 1].x - wps[0].x) + Math.abs(wps[wps.length - 1].y - wps[0].y);
     const actual = length(wps);
-    // Devices in the same rack sit on top of each other, outputs right, inputs left: their lines
-    // have to go round, and that is the drawing being true to the rack, not a detour.
-    const rackOf = (id: string) => {
-      const parent = byId.get(byId.get(id)?.parentId ?? "");
-      return (parent?.data as { isEquipmentRack?: boolean } | undefined)?.isEquipmentRack ? parent!.id : undefined;
-    };
-    const sameRack = rackOf(e.source) !== undefined && rackOf(e.source) === rackOf(e.target);
-    if (!sameRack && actual > DETOUR_RATIO * shortest && actual - shortest > DETOUR_MIN_EXTRA) {
+    if (!inSameRack(byId, e.source, e.target) && isDetour(actual, shortest)) {
       findings.push({
         kind: "detour",
         ids: [e.id],

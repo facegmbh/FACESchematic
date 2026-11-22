@@ -48,4 +48,9 @@ describe("routingScore", () => {
   it("treats absent metrics as zero", () => {
     expect(routingScore({})).toBe(0);
   });
+
+  it("a line check_layout calls a detour costs more than a few crossings (Jean-Luc's Kapelle, 22.11.)", () => {
+    // A candidate sent two lines round the ceiling to save ten crossings and four weaves — and won.
+    expect(routingScore({ detourLines: 2 })).toBeGreaterThan(routingScore({ crossingPairs: 10, weavingPairs: 4 }));
+  });
 });
