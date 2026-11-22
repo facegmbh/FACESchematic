@@ -25,6 +25,8 @@ import {
   waypointsToSvgPathWithHops,
   beginRoutingBudget,
   routingBudgetExceeded,
+  frameLinesOf,
+  setRoutingFrames,
   ROUTING_PARAMS,
   type PenaltyZone,
   type Rect,
@@ -643,6 +645,52 @@ export function routeAllEdges(
   // Pre-convert obstacles to grid rects once — avoids per-edge re-conversion
   const precomputedGridRects = pixelRectsToGrid(obs.rects);
 
+  // FACE: room frames (SPEC-schaltplan-rahmen.md). A* pays for every step onto a frame, so lines
+  // cross frames rather than run along them; the column allocator hands out no corridor on a
+  // frame, nor through a room that holds neither of the edge's devices.
+  const roomRects = nodes.filter((n) => n.type === "room").map((n) => {
+    const p = getAbsPos(n, nodeMap);
+    const style = (n.style ?? {}) as { width?: number; height?: number };
+    const w = n.measured?.width ?? style.width ?? (n.width as number | undefined) ?? 400;
+    const h = n.measured?.height ?? style.height ?? (n.height as number | undefined) ?? 300;
+    return { id: n.id, left: p.x, top: p.y, right: p.x + w, bottom: p.y + h };
+  });
+  const frameLines = frameLinesOf(roomRects);
+  const roomGrid = roomRects.map((r) => ({ id: r.id, left: px2g(r.left), top: px2g(r.top), right: px2g(r.right), bottom: px2g(r.bottom) }));
+  const topRooms = roomGrid.filter((r) => !nodeMap.get(r.id)?.parentId);
+  setRoutingFrames(frameLines, topRooms.length ? {
+    left: Math.min(...topRooms.map((r) => r.left)), top: Math.min(...topRooms.map((r) => r.top)),
+    right: Math.max(...topRooms.map((r) => r.right)), bottom: Math.max(...topRooms.map((r) => r.bottom)),
+  } : undefined);
+  /** The rooms holding any of these nodes, nested rooms included. */
+  const roomsHolding = (nodeIds: Iterable<string>): Set<string> => {
+    const out = new Set<string>();
+    for (const id of nodeIds) {
+      let parentId = nodeMap.get(id)?.parentId;
+      while (parentId) {
+        out.add(parentId);
+        parentId = nodeMap.get(parentId)?.parentId;
+      }
+    }
+    return out;
+  };
+  /** True when a corridor line (vertical at column `at`, or horizontal at row `at`, from lo to hi)
+   *  would run on a room frame, or — given the edge's own devices — through a room holding neither. */
+  const hitsFrame = (axis: "v" | "h", at: number, lo: number, hi: number, ownIds?: Set<string>): boolean => {
+    if (roomGrid.length === 0) return false;
+    for (const f of frameLines) {
+      if (f.axis === axis && f.at === at && hi > f.from && lo < f.to) return true;
+    }
+    if (!ownIds) return false;
+    const own = roomsHolding(ownIds);
+    for (const r of roomGrid) {
+      if (own.has(r.id)) continue;
+      if (axis === "v" ? at > r.left && at < r.right && hi > r.top && lo < r.bottom
+        : at > r.top && at < r.bottom && hi > r.left && lo < r.right) return true;
+    }
+    return false;
+  };
+
   // Add title block obstacles in print view
   if (printConfig) {
     const tbRects = buildTitleBlockObstacles(nodes, printConfig);
@@ -1072,6 +1120,7 @@ export function routeAllEdges(
   // device, which the A* retry then honored by routing straight through the body.
   const pad = ROUTING_PARAMS.PAD;
   const isColumnClear = (gx: number, gyMin: number, gyMax: number, excludeNodeIds?: Set<string>): boolean => {
+    if (hitsFrame("v", gx, gyMin, gyMax, excludeNodeIds)) return false;
     for (const r of gridRects) {
       const ownDevice = excludeNodeIds && r.nodeId && excludeNodeIds.has(r.nodeId);
       const left = ownDevice ? r.left + pad : r.left;
@@ -1093,6 +1142,7 @@ export function routeAllEdges(
   // excludeNodeIds: skip the edge's own source/target devices — a horizontal
   // segment naturally exits through the source device's obstacle rect.
   const isHSegmentClear = (gy: number, gxMin: number, gxMax: number, excludeNodeIds?: Set<string>): boolean => {
+    if (hitsFrame("h", gy, gxMin, gxMax, excludeNodeIds)) return false;
     for (const r of gridRects) {
       if (excludeNodeIds && r.nodeId && excludeNodeIds.has(r.nodeId)) continue;
       if (gy >= r.top && gy <= r.bottom && gxMax >= r.left && gxMin <= r.right) {

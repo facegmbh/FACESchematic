@@ -181,3 +181,42 @@ describe("checkLayout — lines outside the drawing and over text (Task 30)", ()
     expect(f.map((x) => x.ids)).toEqual([["e1", "note-1"]]);
   });
 });
+
+describe("checkLayout — frames (SPEC-schaltplan-rahmen.md)", () => {
+  // Kapelle left, Technik right, Sakristei between them below; Kamera an area inside Kapelle.
+  const n = [
+    room("kapelle", 0, 0, 400, 400), room("kamera", 32, 48, 240, 160, "kapelle"),
+    room("technik", 800, 0, 400, 400), room("sakristei", 400, 480, 400, 300),
+    device("cam", 32, 48, "kamera"), device("sw", 32, 96, "technik"), device("pc", 32, 96, "sakristei"),
+  ];
+
+  it("a line running along a location's frame is reported with the location", () => {
+    // Down the right frame of Kamera (x = 272) for 120 px.
+    const routes = { e1: { waypoints: [{ x: 192, y: 100 }, { x: 272, y: 100 }, { x: 272, y: 220 }, { x: 832, y: 220 }, { x: 832, y: 144 }] } };
+    const f = checkLayout(n, [edge("e1", "cam", "sw")], routes).filter((x) => x.kind === "on_frame");
+    expect(f).toHaveLength(1);
+    expect(f[0].ids).toEqual(["e1", "kamera"]);
+    expect(f[0].message).toContain("kamera");
+  });
+
+  it("a few px beside the frame still counts as on it; crossing a frame does not", () => {
+    const beside = { e1: { waypoints: [{ x: 192, y: 100 }, { x: 276, y: 100 }, { x: 276, y: 220 }, { x: 832, y: 220 }, { x: 832, y: 144 }] } };
+    expect(checkLayout(n, [edge("e1", "cam", "sw")], beside).filter((x) => x.kind === "on_frame")).toHaveLength(1);
+    const across = { e1: { waypoints: [{ x: 192, y: 100 }, { x: 320, y: 100 }, { x: 320, y: 440 }, { x: 832, y: 440 }, { x: 832, y: 144 }] } };
+    expect(checkLayout(n, [edge("e1", "cam", "sw")], across).filter((x) => x.kind === "on_frame")).toEqual([]);
+  });
+
+  it("a line through a location that holds neither of its devices is reported with that location", () => {
+    // Kamera → PC in Sakristei is fine, but this one runs from Kamera to Technik through Sakristei.
+    const routes = { e1: { waypoints: [{ x: 192, y: 100 }, { x: 320, y: 100 }, { x: 320, y: 600 }, { x: 832, y: 600 }, { x: 832, y: 144 }] } };
+    const f = checkLayout(n, [edge("e1", "cam", "sw")], routes).filter((x) => x.kind === "through_room");
+    expect(f).toHaveLength(1);
+    expect(f[0].ids).toEqual(["e1", "sakristei"]);
+    expect(f[0].message).toContain("arrange_rooms");
+  });
+
+  it("running through its own locations and areas is fine, so is the gap between locations", () => {
+    const routes = { e1: { waypoints: [{ x: 192, y: 100 }, { x: 320, y: 100 }, { x: 320, y: 440 }, { x: 832, y: 440 }, { x: 832, y: 144 }] } };
+    expect(checkLayout(n, [edge("e1", "cam", "sw")], routes).filter((x) => x.kind === "through_room")).toEqual([]);
+  });
+});

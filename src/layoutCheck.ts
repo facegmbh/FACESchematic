@@ -22,6 +22,8 @@ export type LayoutFindingKind =
   | "detour"
   | "line_outside"
   | "over_text"
+  | "on_frame"
+  | "through_room"
   | "unrouted";
 
 export interface LayoutFinding {
@@ -46,6 +48,10 @@ const TOLERANCE = 2;
 const DETOUR_RATIO = 2;
 /** …and at least this much longer — short jogs around a neighbour are fine. */
 const DETOUR_MIN_EXTRA = 200;
+/** A line this close to a frame reads as lying on it (half a grid cell). */
+const FRAME_NEAR = 8;
+/** …over at least this length — crossing a frame is not running along it. */
+const FRAME_MIN_RUN = 16;
 
 /** Size the editor draws a node at: measured, else the style, else its defaults. */
 export function layoutSize(n: SchematicNode): { width: number; height: number } {
@@ -130,6 +136,20 @@ function lengthOutside(a: Point, b: Point, r: Rect): number {
     inside = Math.max(0, Math.min(Math.max(a.y, b.y), r.bottom) - Math.max(Math.min(a.y, b.y), r.top));
   }
   return total - inside;
+}
+
+/** Does an axis-aligned segment run along one side of a rect (within FRAME_NEAR, for at least
+ *  FRAME_MIN_RUN)? */
+function runsAlong(a: Point, b: Point, r: Rect): boolean {
+  if (a.x === b.x) {
+    if (Math.min(Math.abs(a.x - r.left), Math.abs(a.x - r.right)) > FRAME_NEAR) return false;
+    return Math.min(Math.max(a.y, b.y), r.bottom) - Math.max(Math.min(a.y, b.y), r.top) >= FRAME_MIN_RUN;
+  }
+  if (a.y === b.y) {
+    if (Math.min(Math.abs(a.y - r.top), Math.abs(a.y - r.bottom)) > FRAME_NEAR) return false;
+    return Math.min(Math.max(a.x, b.x), r.right) - Math.max(Math.min(a.x, b.x), r.left) >= FRAME_MIN_RUN;
+  }
+  return false;
 }
 
 function distance(p: Point, r: Rect): number {
@@ -312,6 +332,42 @@ export function checkLayout(
         kind: "over_text",
         ids: [e.id, ...owners],
         message: `The line ${route} runs over ${owners.map((id) => `"${label(byId.get(id))}"`).join(", ")} — route_connections avoids names and notes; if it stays, give the location more margin or lay the line with set_connection_path.`,
+      });
+    }
+  }
+
+  // FACE (SPEC-schaltplan-rahmen.md): no line along a frame, none through a location or area
+  // that holds neither of its devices.
+  for (const e of routed) {
+    const wps = routes[e.id]!.waypoints;
+    const route = `${label(byId.get(e.source))} → ${label(byId.get(e.target))}`;
+    const onFrame = rooms.filter((r) => wps.slice(1).some((p, k) => runsAlong(wps[k], p, rects.get(r.id)!)));
+    if (onFrame.length) {
+      const names = onFrame.map((r) => `"${label(r)}"`).join(", ");
+      findings.push({
+        kind: "on_frame",
+        ids: [e.id, ...onFrame.map((r) => r.id)],
+        message: `The line ${route} runs along the frame of ${names} — route_connections keeps lines off frames; if it stays, give ${names} or its neighbours more gap (arrange_room margin, arrange_rooms gap) or lay it with set_connection_path.`,
+      });
+    }
+    const own = new Set([e.source, e.target].flatMap((id) => {
+      const out: string[] = [];
+      let parentId = byId.get(id)?.parentId;
+      while (parentId) { out.push(parentId); parentId = byId.get(parentId)?.parentId; }
+      return out;
+    }));
+    const foreign = rooms.filter((r) => !own.has(r.id) && wps.slice(1).some((p, k) => segmentEnters(wps[k], p, rects.get(r.id)!)));
+    // Name the outermost foreign room only: through an area means through its location too.
+    const outer = foreign.filter((r) => !foreign.some((o) => isAncestor(o.id, r, byId)));
+    if (outer.length) {
+      const names = outer.map((r) => `"${label(r)}"`).join(", ");
+      const top = outer.some((r) => !r.parentId);
+      findings.push({
+        kind: "through_room",
+        ids: [e.id, ...outer.map((r) => r.id)],
+        message: `The line ${route} runs through ${names}, which holds neither of its devices — ${top
+          ? `put its two locations next to each other (arrange_rooms with order) so ${names} is not in between`
+          : `rearrange the location around it (arrange_room) or give the areas more gap (margin)`}, then route_connections.`,
       });
     }
   }

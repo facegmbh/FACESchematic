@@ -100,6 +100,12 @@ export const ROUTING_DEFAULTS = {
   GAP: 0,
   ESCAPE_MARGIN: 2,       // grid cells of margin beyond bounding box
   STUB: 1,                // 1 grid cell horizontal exit from port
+  /** FACE: cost of stepping onto a room frame (SPEC-schaltplan-rahmen.md). Crossing a frame
+   *  pays it once; running along a frame pays it every cell, so lines leave frames free. */
+  FRAME_COST: 40,
+  /** FACE: cost of every cell outside the frame around all locations — the same frame
+   *  check_layout's line_outside judges by. Through another location beats going round it. */
+  OUTSIDE_COST: 4,
 };
 
 /** Tunable routing parameters. Live-overridable via window.__routingParams for debug tuning. */
@@ -234,6 +240,68 @@ export interface IntGrid {
   originX: number; // grid X of column 0 (so pixel X = (originX + col) * CELL_SIZE)
   originY: number; // grid Y of row 0
   blocked: Uint8Array; // flat: blocked[col * rows + row], 1=blocked 0=free
+  /** FACE: extra cost of stepping into a cell (room frames), same layout as `blocked`. */
+  cost?: Uint8Array;
+}
+
+// ---------- FACE: room frames ----------
+
+/** A room frame's side on the grid: a vertical (`v`, at column `at`) or horizontal (`h`, at
+ *  row `at`) line from `from` to `to`. */
+export interface FrameLine {
+  axis: "v" | "h";
+  at: number;
+  from: number;
+  to: number;
+}
+
+let _frameLines: FrameLine[] = [];
+let _drawing: { left: number; top: number; right: number; bottom: number } | undefined;
+/** Set the room frames for the current routing run (routeAllEdges does it) and the frame around
+ *  all locations in grid cells; [] / undefined switch them off. */
+export function setRoutingFrames(lines: FrameLine[], drawing?: { left: number; top: number; right: number; bottom: number }): void {
+  _frameLines = lines;
+  _drawing = drawing;
+}
+
+/** The four sides of every room in grid coordinates, for `setRoutingFrames`. */
+export function frameLinesOf(rooms: readonly { left: number; top: number; right: number; bottom: number }[]): FrameLine[] {
+  const lines: FrameLine[] = [];
+  for (const r of rooms) {
+    const l = px2g(r.left), t = px2g(r.top), rr = px2g(r.right), b = px2g(r.bottom);
+    lines.push({ axis: "v", at: l, from: t, to: b }, { axis: "v", at: rr, from: t, to: b });
+    lines.push({ axis: "h", at: t, from: l, to: rr }, { axis: "h", at: b, from: l, to: rr });
+  }
+  return lines;
+}
+
+function frameCost(cols: number, rows: number, minGX: number, minGY: number): Uint8Array | undefined {
+  if (_frameLines.length === 0) return undefined;
+  const k = Math.max(0, Math.min(255, ROUTING_PARAMS.FRAME_COST));
+  const out = Math.max(0, Math.min(255, ROUTING_PARAMS.OUTSIDE_COST));
+  if (k === 0 && (out === 0 || !_drawing)) return undefined;
+  const cost = new Uint8Array(cols * rows);
+  if (_drawing && out > 0) {
+    for (let c = 0; c < cols; c++) {
+      const gx = c + minGX;
+      for (let r = 0; r < rows; r++) {
+        const gy = r + minGY;
+        if (gx < _drawing.left || gx > _drawing.right || gy < _drawing.top || gy > _drawing.bottom) cost[c * rows + r] = out;
+      }
+    }
+  }
+  for (const f of _frameLines) {
+    if (f.axis === "v") {
+      const c = f.at - minGX;
+      if (c < 0 || c >= cols) continue;
+      for (let r = Math.max(0, f.from - minGY); r <= Math.min(rows - 1, f.to - minGY); r++) cost[c * rows + r] = k;
+    } else {
+      const r = f.at - minGY;
+      if (r < 0 || r >= rows) continue;
+      for (let c = Math.max(0, f.from - minGX); c <= Math.min(cols - 1, f.to - minGX); c++) cost[c * rows + r] = k;
+    }
+  }
+  return cost;
 }
 
 export function buildGrid(
@@ -290,7 +358,7 @@ export function buildGrid(
     }
   }
 
-  return { cols, rows, originX: minGX, originY: minGY, blocked };
+  return { cols, rows, originX: minGX, originY: minGY, blocked, cost: frameCost(cols, rows, minGX, minGY) };
 }
 
 /** Build a single global grid covering all obstacles and edge endpoints.
@@ -340,7 +408,7 @@ export function buildGlobalGrid(
     }
   }
 
-  return { cols, rows, originX: minGX, originY: minGY, blocked };
+  return { cols, rows, originX: minGX, originY: minGY, blocked, cost: frameCost(cols, rows, minGX, minGY) };
 }
 
 // ---------- A* ----------
@@ -408,7 +476,7 @@ export function astarOrthogonal(
   sourceExitsRight?: boolean,
   penaltySpatialIndex?: PenaltySpatialIndex,
 ): { path: { gx: number; gy: number }[]; arrivalDir: number } | null {
-  const { cols, rows, originX, originY, blocked } = grid;
+  const { cols, rows, originX, originY, blocked, cost } = grid;
 
   // Cache routing params into locals — avoids Proxy trap overhead in hot loop
   const TURN_PENALTY = ROUTING_PARAMS.TURN_PENALTY;
@@ -537,6 +605,7 @@ export function astarOrthogonal(
 
       // Distance is always 1 (one grid cell step)
       let g = current.g + 1;
+      if (cost) g += cost[nci * rows + nri]; // FACE: room frames
 
       // Turn penalty with nesting bias
       if (d !== current.dir && current.dir >= 0) {
