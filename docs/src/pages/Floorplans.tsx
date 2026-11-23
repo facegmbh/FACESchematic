@@ -314,6 +314,30 @@ export default function FloorplansPage() {
         clears its rack placements.
       </p>
 
+      <h2>Planning a projector</h2>
+      <p>
+        Select a projector on the plan and press <strong>▷ Plan projection</strong> in the right
+        panel. The picture appears ahead of the projector as a line of its real width, with the cone
+        to it. Drag that line to the wall it hangs on; the round handle at its end turns it. From
+        then on <em>the picture stays put and the projector is what moves</em>.
+      </p>
+      <p>
+        Pick the <strong>model</strong> by typing part of its name (Epson; for other makes leave it
+        empty and enter the throw ratio and the light output from the datasheet), choose the{" "}
+        <strong>format</strong> and give the picture its size as a diagonal, a width or a height. The
+        padlocks pin a side so it survives a change of format. The <strong>distance</strong> slider
+        runs exactly from the nearest to the farthest position the lens allows and slides the
+        projector along its line — you can also just drag the projector. The dashed line on the plan
+        marks the same stretch.
+      </p>
+      <p>
+        Zoom and horizontal lens shift follow from where the projector stands; outside the limits
+        the cone turns red and the panel says by how much. <strong>Brightness</strong> is written out
+        as lumens ÷ picture area = lux. Under <strong>More</strong> are the lens of an
+        interchangeable-lens model, the two heights that also check the vertical shift and give the
+        allowed mounting height, and the screen gain.
+      </p>
+
       <h2>The legend box</h2>
       <p>
         The legend is generated from the groups in use: swatch, title, description and product

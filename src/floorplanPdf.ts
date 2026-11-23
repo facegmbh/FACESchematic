@@ -83,6 +83,7 @@ import {
   PAGE_MARGIN_MM,
   type LegendRow,
 } from "./floorplan";
+import { PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, projectionCaption, projectionCaptionAnchorMm, visibleProjections } from "./projection";
 
 const MM_TO_PT = 72 / IN_TO_MM;
 /** Where the red rule under the legend title sits inside the title row. */
@@ -738,6 +739,48 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         doc.setTextColor(17, 17, 17);
         doc.text(coverageLabel, at.x, at.y, { baseline: "middle", align: "center" });
       }
+    }
+
+    // Projectors and their pictures — the same geometry the screen draws, so the print
+    // shows the position that was judged on screen.
+    for (const { projection, geometry: g } of visibleProjections(page)) {
+      const ok = g.result.issues.length === 0;
+      const [pr, pg, pb] = hexToRgb(ok ? PROJECTION_OK_COLOR : PROJECTION_WARN_COLOR);
+      const [a, b] = g.pictureMm;
+      const [sa, sb] = g.surfaceMm;
+      if (g.distanceM > 0) {
+        const cone: [number, number][] = [[a.x - g.lensMm.x, a.y - g.lensMm.y], [b.x - a.x, b.y - a.y]];
+        doc.setFillColor(pr, pg, pb);
+        doc.setDrawColor(pr, pg, pb);
+        doc.setLineWidth(0.2);
+        setPdfAlpha(doc, 0.1);
+        doc.lines(cone, g.lensMm.x, g.lensMm.y, [1, 1], "F", true);
+        setPdfAlpha(doc, 1);
+        doc.lines(cone, g.lensMm.x, g.lensMm.y, [1, 1], "S", true);
+      }
+      if (g.bandMm) {
+        const [okR, okG, okB] = hexToRgb(PROJECTION_OK_COLOR);
+        const len = Math.hypot(sb.x - sa.x, sb.y - sa.y) || 1;
+        const tx = ((sb.x - sa.x) / len) * 1.5, ty = ((sb.y - sa.y) / len) * 1.5;
+        doc.setDrawColor(okR, okG, okB);
+        doc.setLineWidth(0.2);
+        doc.setLineDashPattern([0.8, 0.8], 0);
+        doc.line(g.bandMm[0].x, g.bandMm[0].y, g.bandMm[1].x, g.bandMm[1].y);
+        doc.setLineDashPattern([], 0);
+        for (const end of g.bandMm) doc.line(end.x - tx, end.y - ty, end.x + tx, end.y + ty);
+      }
+      doc.setDrawColor(100, 116, 139);
+      doc.setLineWidth(0.5);
+      doc.line(sa.x, sa.y, sb.x, sb.y);
+      doc.setDrawColor(17, 17, 17);
+      doc.setLineWidth(0.8);
+      doc.line(a.x, a.y, b.x, b.y);
+      const at = projectionCaptionAnchorMm(projection, page.labelSizeMm * 1.6);
+      doc.setFont("Inter", "bold");
+      doc.setFontSize(page.labelSizeMm * 0.85 * MM_TO_PT);
+      if (ok) doc.setTextColor(17, 17, 17); else doc.setTextColor(pr, pg, pb);
+      // The embedded font has no double prime; the plain inch mark reads the same.
+      doc.text(projectionCaption(projection, g).replace("\u2033", '"'), at.x, at.y, { baseline: "middle", align: at.align === "start" ? "left" : at.align === "end" ? "right" : "center" });
     }
 
     // Content border

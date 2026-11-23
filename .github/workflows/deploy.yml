@@ -40,6 +40,21 @@ jobs:
           done
           echo "BHE: keine Symbolbibliothek auf diesem Host — Build ohne sie"
 
+      # Die Projektionsdaten (SPEC-projektion.md) sind Epson-Material und liegen ebenfalls
+      # nicht im Repository. Erzeugt mit tools/epsonThrowData.mjs, abgelegt neben dem Runner.
+      # Fehlen sie, rechnet der Projektionsplaner nur mit von Hand eingegebenem
+      # Projektionsverhaeltnis.
+      - name: Projektionsdaten einsetzen (nicht in git)
+        run: |
+          for src in "$HOME/faceschematic/projection" /srv/faceschematic/projection; do
+            [ -f "$src/epson.json" ] || continue
+            rm -rf public/projection
+            cp -r "$src" public/projection
+            echo "Projektion: epson.json aus $src ($(wc -c < public/projection/epson.json) Bytes)"
+            exit 0
+          done
+          echo "Projektion: keine Epson-Daten auf diesem Host — Build ohne sie"
+
       # Das Backend (SPEC-backend-deploy.md) verschluesselt die hinterlegten Odoo-API-
       # Schluessel mit FACE_SECRET. Das Geheimnis liegt neben dem Runner, nie im
       # Repository, und wird beim ersten Lauf einmalig erzeugt. Es darf sich danach nicht

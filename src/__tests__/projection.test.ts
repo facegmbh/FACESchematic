@@ -8,6 +8,8 @@ import {
   projectionGeometry,
   symbolPositionForDistance,
   maxVerticalShift,
+  projectionCaption,
+  projectionCaptionAnchorMm,
 } from "../projection";
 import type { FloorplanProjection, ProjectionOptics } from "../types";
 
@@ -240,5 +242,28 @@ describe("on the sheet", () => {
     const g = projectionGeometry(turned, { x: 200, y: 160 }, scale);
     expect(g.distanceM).toBeCloseTo(3);
     expect(g.lateralM).toBeCloseTo(0);
+  });
+});
+
+describe("caption", () => {
+  const p = {
+    id: "x", symbolId: "s", optics: {}, aspect: "16:10", widthM: 2, heightM: 1.25,
+    screenCenterMm: { x: 100, y: 100 }, screenRotationDeg: 180, model: "EB-L610U",
+  } satisfies FloorplanProjection;
+
+  it("names model, diagonal and distance", () => {
+    const g = projectionGeometry({ ...p, optics: L610U }, { x: 30, y: 100 }, 50);
+    expect(projectionCaption({ ...p, optics: L610U }, g)).toBe("EB-L610U · 93″ · 3.50 m");
+  });
+
+  it("runs away from the surface instead of across it", () => {
+    // Projector on the left → text starts to the right of the surface.
+    expect(projectionCaptionAnchorMm(p, 5)).toMatchObject({ align: "start", y: 100 });
+    expect(projectionCaptionAnchorMm(p, 5).x).toBeGreaterThan(100);
+    expect(projectionCaptionAnchorMm({ ...p, screenRotationDeg: 0 }, 5).align).toBe("end");
+    // Surface lying flat on the sheet: centred above or below it.
+    const below = projectionCaptionAnchorMm({ ...p, screenRotationDeg: 270 }, 5);
+    expect(below.align).toBe("middle");
+    expect(below.y).toBeCloseTo(105);
   });
 });

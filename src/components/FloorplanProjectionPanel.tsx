@@ -236,16 +236,20 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
         <span style={{ fontSize: 10 }}>″</span>
       </label>
 
+      {/* Two short rows rather than one crowded one: value, unit, pin. */}
       <div className={ROW}>
         <span className="shrink-0 w-12">{t("Width")}</span>
         <NumberField className={`w-14 ${FIELD}`} digits={2} value={projection.widthM} testId="projection-width"
           onCommit={(v) => v && patch(resizeSurface(projection, { widthM: v }))} />
+        <span style={{ fontSize: 10 }}>m</span>
         {lock(projection.lockWidth, () => patch({ lockWidth: !projection.lockWidth }), t("Pin the width — it stays when the height or the format changes"), "projection-lock-width")}
-        <span className="shrink-0">{t("Height")}</span>
+      </div>
+      <div className={ROW}>
+        <span className="shrink-0 w-12">{t("Height")}</span>
         <NumberField className={`w-14 ${FIELD}`} digits={2} value={projection.heightM} testId="projection-height"
           onCommit={(v) => v && patch(resizeSurface(projection, { heightM: v }))} />
-        {lock(projection.lockHeight, () => patch({ lockHeight: !projection.lockHeight }), t("Pin the height — it stays when the width or the format changes"), "projection-lock-height")}
         <span style={{ fontSize: 10 }}>m</span>
+        {lock(projection.lockHeight, () => patch({ lockHeight: !projection.lockHeight }), t("Pin the height — it stays when the width or the format changes"), "projection-lock-height")}
       </div>
 
       {/* The slider only offers what the lens can do; the projector moves, the picture stays. */}
@@ -258,7 +262,8 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
               className="flex-1 min-w-0 accent-cyan-600"
               min={r.range.minM}
               max={r.range.maxM}
-              step={0.01}
+              // "any": a fixed step would stop short of the far limit by a fraction of it.
+              step="any"
               value={Math.min(r.range.maxM, Math.max(r.range.minM, g.distanceM))}
               data-testid="projection-distance-slider"
               onPointerDown={() => { sliding.current = false; }}
@@ -270,7 +275,7 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
               onCommit={(v) => v && moveTo(v, false)} />
             <span style={{ fontSize: 10 }}>m</span>
           </div>
-          <div className="flex justify-between pl-14 pr-[4.6rem] text-[var(--color-text-muted)]" style={{ fontSize: 9 }}>
+          <div className="flex justify-between pl-14 pr-[5.2rem] text-[var(--color-text-muted)]" style={{ fontSize: 9 }}>
             <span>{r.range.minM.toFixed(2)}</span>
             <span>{r.range.maxM.toFixed(2)}</span>
           </div>

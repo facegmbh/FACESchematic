@@ -406,10 +406,21 @@ export function projectionCaption(p: FloorplanProjection, g: ProjectionGeometry)
   return parts.filter(Boolean).join(" · ");
 }
 
-/** Where the caption goes: just behind the surface, away from the projector. */
-export function projectionCaptionAnchorMm(p: FloorplanProjection, offsetMm: number): Pt {
+/** Where the caption goes: just behind the surface, away from the projector, and running
+ *  away from it — upright text centred on that spot would be struck through by the
+ *  surface line whenever the surface stands upright on the sheet. */
+export function projectionCaptionAnchorMm(
+  p: FloorplanProjection,
+  offsetMm: number,
+): Pt & { align: "start" | "middle" | "end" } {
   const n = unit(p.screenRotationDeg);
-  return { x: p.screenCenterMm.x - n.x * offsetMm, y: p.screenCenterMm.y - n.y * offsetMm };
+  const sideways = Math.abs(n.x) > 0.5;
+  const reach = sideways ? offsetMm * 0.6 : offsetMm;
+  return {
+    x: p.screenCenterMm.x - n.x * reach,
+    y: p.screenCenterMm.y - n.y * reach,
+    align: !sideways ? "middle" : n.x < 0 ? "start" : "end",
+  };
 }
 
 export const PROJECTION_OK_COLOR = "#0e7490";

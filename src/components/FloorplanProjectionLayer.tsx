@@ -104,7 +104,7 @@ export default function FloorplanProjectionLayer({
               y={mmToPx(labelAt.y)}
               fontSize={mmToPx(page.labelSizeMm * 0.85)}
               fill={ok ? "#111" : PROJECTION_WARN_COLOR}
-              textAnchor="middle"
+              textAnchor={labelAt.align}
               dominantBaseline="middle"
               style={{ pointerEvents: "none", fontWeight: 600 }}
             >
