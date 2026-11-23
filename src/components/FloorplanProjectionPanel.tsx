@@ -6,7 +6,7 @@ import {
   SEATED_PERSON_HEIGHT_M,
   defaultProjectionFor,
   inPictureLabel,
-  sectionDrawing,
+  sectionDrawingFor,
   projectionGeometry,
   resizeSurface,
   symbolPositionForDistance,
@@ -25,7 +25,8 @@ import {
 import { clampToSheet } from "../floorplan";
 import { useT } from "../i18n";
 import ProjectionSectionSvg from "./ProjectionSectionSvg";
-import type { DeviceData, FloorplanPage, FloorplanProjection, FloorplanSymbol, ProjectionOptics, ProjectionSection } from "../types";
+import { UNDERLAY_ACCEPT, importUnderlayFile } from "../floorplanUnderlay";
+import type { DeviceData, FloorplanPage, FloorplanProjection, FloorplanSymbol, ProjectionOptics, ProjectionSection, ProjectionSectionUnderlay } from "../types";
 
 interface Props {
   page: FloorplanPage;
@@ -74,6 +75,93 @@ function NumberField({ value, digits, onCommit, className, title, min = 0.01, te
   );
 }
 
+/** Longest edge an attached section is kept at. It is a backdrop for a handful of lines,
+ *  and it travels in the project file. */
+const SECTION_UNDERLAY_MAX_PX = 1800;
+
+/** Re-encode any imported picture as a JPEG of bounded size on white — one format the
+ *  sheet and the PDF both take, whatever came in (PNG with alpha, WebP, a rasterized PDF). */
+async function shrinkToJpeg(src: string, maxEdgePx: number): Promise<{ src: string; widthPx: number; heightPx: number }> {
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("image"));
+    img.src = src;
+  });
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const k = Math.min(1, maxEdgePx / Math.max(w, h, 1));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(w * k));
+  canvas.height = Math.max(1, Math.round(h * k));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { src: canvas.toDataURL("image/jpeg", 0.85), widthPx: canvas.width, heightPx: canvas.height };
+}
+
+/**
+ * Two clicks on the architect's section: the floor below the picture, then the floor
+ * below the projector. Shown large, because the points decide where the beam lands.
+ */
+function SectionCalibrator({ underlay, onApply, onClose }: {
+  underlay: ProjectionSectionUnderlay;
+  onApply: (a: { x: number; y: number }, b: { x: number; y: number }) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [points, setPoints] = useState<{ x: number; y: number }[]>(
+    underlay.floorAtPicturePx && underlay.floorAtProjectorPx ? [underlay.floorAtPicturePx, underlay.floorAtProjectorPx] : [],
+  );
+  const r = Math.max(underlay.widthPx, underlay.heightPx) / 120;
+  const names = [t("Picture"), t("Projector")];
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50" data-testid="section-calibrator" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex flex-col gap-2 p-3 rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] shadow-xl" style={{ maxWidth: "92vw", maxHeight: "92vh" }}>
+        <div className="font-semibold">
+          {points.length === 0 && t("Click the floor directly below the picture")}
+          {points.length === 1 && t("Now click the floor directly below the projector's lens")}
+          {points.length === 2 && t("Both points are set. Click again to start over.")}
+        </div>
+        <svg
+          viewBox={`0 0 ${underlay.widthPx} ${underlay.heightPx}`}
+          style={{ maxWidth: "88vw", maxHeight: "74vh", aspectRatio: `${underlay.widthPx} / ${underlay.heightPx}`, cursor: "crosshair", background: "#fff" }}
+          data-testid="section-calibrator-image"
+          onClick={(e) => {
+            const box = e.currentTarget.getBoundingClientRect();
+            const at = {
+              x: ((e.clientX - box.left) / box.width) * underlay.widthPx,
+              y: ((e.clientY - box.top) / box.height) * underlay.heightPx,
+            };
+            setPoints((cur) => (cur.length >= 2 ? [at] : [...cur, at]));
+          }}
+        >
+          <image href={underlay.src} width={underlay.widthPx} height={underlay.heightPx} />
+          {points.length === 2 && <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#d97706" strokeWidth={r / 3} />}
+          {points.map((p, i) => (
+            <g key={i}>
+              <circle cx={p.x} cy={p.y} r={r} fill="#fff" stroke="#0e7490" strokeWidth={r / 3} />
+              <text x={p.x} y={p.y - r * 1.6} fontSize={r * 2.4} textAnchor="middle" fill="#0e7490" fontWeight={700} stroke="#fff" strokeWidth={r / 3} paintOrder="stroke">{names[i]}</text>
+            </g>
+          ))}
+        </svg>
+        <div className="flex items-center gap-2 justify-end">
+          <button className="px-2 py-1 rounded border border-[var(--color-border)]" onClick={onClose}>{t("Cancel")}</button>
+          <button
+            className="px-2 py-1 rounded bg-cyan-700 text-white disabled:opacity-40"
+            disabled={points.length !== 2}
+            data-testid="section-calibrator-apply"
+            onClick={() => onApply(points[0], points[1])}
+          >
+            {t("Apply")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The projection block of a projector symbol: pick the model, say how big the picture is,
  * slide the projector through the distances that work. Only what planning needs is in
@@ -94,6 +182,9 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
 
   const projection = (page.projections ?? []).find((pr) => pr.symbolId === symbol.id);
   const [query, setQuery] = useState<string | null>(null);
+  const [calibrating, setCalibrating] = useState(false);
+  const sectionFile = useRef<HTMLInputElement>(null);
+  const addToast = useSchematicStore((s) => s.addToast);
   const sliding = useRef(false);
 
   const recognised = useMemo(
@@ -380,7 +471,7 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
           {sec ? (
             <>
               <div className="rounded border border-[var(--color-border)] bg-white overflow-hidden self-start">
-                <ProjectionSectionSvg drawing={sectionDrawing(sec, 70)} pxPerMm={3} label={inPictureLabel(sec)} />
+                <ProjectionSectionSvg drawing={sectionDrawingFor(sec, projection.section, 70)} pxPerMm={3} label={inPictureLabel(sec)} />
               </div>
               {sec.issues.includes("picture-above-ceiling") && <div className="px-1.5 py-0.5 rounded border border-red-200 bg-red-100 text-red-800">{t("The picture reaches above the ceiling")}</div>}
               {sec.issues.includes("lens-above-ceiling") && <div className="px-1.5 py-0.5 rounded border border-red-200 bg-red-100 text-red-800">{t("The lens is above the ceiling")}</div>}
@@ -392,6 +483,56 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
                   })} />
                 <span>{t("Show the section on the sheet")}</span>
               </label>
+              {/* The architect's own section as the backdrop, instead of the generated one. */}
+              <input
+                ref={sectionFile}
+                type="file"
+                accept={UNDERLAY_ACCEPT.split(",").filter((a) => !a.includes("dxf")).join(",")}
+                className="hidden"
+                data-testid="projection-section-file"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  try {
+                    const imported = await importUnderlayFile(file, { dpi: 100, maxLongEdgePx: SECTION_UNDERLAY_MAX_PX });
+                    const small = await shrinkToJpeg(imported.src, SECTION_UNDERLAY_MAX_PX);
+                    patchSection({ underlay: { ...small, name: file.name } });
+                    setCalibrating(true);
+                  } catch (err) {
+                    addToast(err instanceof Error && err.message.length > 8 ? err.message : t("This file could not be read as a picture."), "error");
+                  }
+                }}
+              />
+              {projection.section?.underlay ? (
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="truncate text-[var(--color-text-muted)]" style={{ fontSize: 10 }} title={projection.section.underlay.name}>{projection.section.underlay.name ?? t("Section drawing")}</span>
+                  <div className="flex-1" />
+                  <button className="px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-cyan-500 hover:text-cyan-700" data-testid="projection-section-calibrate" onClick={() => setCalibrating(true)}
+                    title={t("Click the floor below the picture and below the projector, so the beam lands in the right place")}>
+                    {t("Set points…")}
+                  </button>
+                  <button className="px-1 text-[var(--color-text-muted)] hover:text-red-600" title={t("Back to the generated section")} onClick={() => patchSection({ underlay: undefined })}>×</button>
+                </div>
+              ) : (
+                <button className="self-start px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-cyan-500 hover:text-cyan-700" onClick={() => sectionFile.current?.click()}
+                  title={t("Use the architect's section (PDF or picture) as the backdrop. Two clicks on its floor line place the beam on it.")}>
+                  {t("Attach a section drawing…")}
+                </button>
+              )}
+              {projection.section?.underlay && !projection.section.underlay.floorAtProjectorPx && (
+                <div className="text-amber-700" style={{ fontSize: 10 }}>{t("Set the two floor points to see beam and person on the drawing.")}</div>
+              )}
+              {calibrating && projection.section?.underlay && (
+                <SectionCalibrator
+                  underlay={projection.section.underlay}
+                  onClose={() => setCalibrating(false)}
+                  onApply={(a, b) => {
+                    patchSection({ underlay: { ...projection.section!.underlay!, floorAtPicturePx: a, floorAtProjectorPx: b } });
+                    setCalibrating(false);
+                  }}
+                />
+              )}
             </>
           ) : (
             <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{t("Enter lower edge and lens height to see the section.")}</div>

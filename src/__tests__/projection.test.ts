@@ -12,6 +12,7 @@ import {
   projectionCaptionAnchorMm,
   evaluateSection,
   sectionDrawing,
+  sectionDrawingFor,
 } from "../projection";
 import type { FloorplanProjection, ProjectionOptics } from "../types";
 
@@ -353,5 +354,45 @@ describe("section: where someone stands in the picture", () => {
         expect(pt.y).toBeLessThanOrEqual(d.heightMm + 0.001);
       }
     }
+  });
+});
+
+describe("section over an architect's drawing", () => {
+  const s = evaluateSection({ distanceM: 4, pictureHeightM: 1.35, screenBottomM: 1, lensHeightM: 2.8, personHeightM: 1.8 })!;
+  // 1000 × 500 px drawing; the floor runs at y = 400, picture at x = 200, projector at x = 600.
+  const underlay = { src: "data:image/png;base64,AAAA", widthPx: 1000, heightPx: 500 };
+  const find = (d: ReturnType<typeof sectionDrawingFor>, role: string) => d.items.find((i) => i.role === role)!;
+
+  it("shows only the drawing until two points are set", () => {
+    const d = sectionDrawingFor(s, { underlay }, 100);
+    expect(d.image).toEqual({ src: underlay.src });
+    expect(d.heightMm).toBeCloseTo(50);
+    expect(d.items).toEqual([]);
+  });
+
+  it("lays beam, picture and person onto it from the two floor points", () => {
+    const d = sectionDrawingFor(s, { underlay: { ...underlay, floorAtPicturePx: { x: 200, y: 400 }, floorAtProjectorPx: { x: 600, y: 400 } } }, 100);
+    // 400 px for 4 m → 100 px per metre; 100 mm for 1000 px → 0.1 mm per px.
+    const picture = find(d, "picture");
+    expect(picture.points[0]).toEqual({ x: expect.closeTo(20), y: expect.closeTo(30) });
+    expect(picture.points[1]).toEqual({ x: expect.closeTo(20), y: expect.closeTo(16.5) });
+    expect(find(d, "beam").points[0]).toEqual({ x: expect.closeTo(60), y: expect.closeTo(12) });
+    // In the picture up to 1.778 m → a stretch on the floor from x = 20 to 37.78 mm.
+    const stretch = find(d, "in-picture");
+    expect(stretch.points[1].x).toBeCloseTo(37.78, 1);
+    expect(stretch.points[1].y).toBeCloseTo(40);
+    // The architect drew floor and ceiling already.
+    expect(d.items.map((i) => i.role)).not.toContain("floor");
+  });
+
+  it("works for a drawing with the projector on the left", () => {
+    const d = sectionDrawingFor(s, { underlay: { ...underlay, floorAtPicturePx: { x: 600, y: 400 }, floorAtProjectorPx: { x: 200, y: 400 } } }, 100);
+    expect(find(d, "beam").points[0]).toEqual({ x: expect.closeTo(20), y: expect.closeTo(12) });
+    expect(find(d, "picture").points[1].y).toBeCloseTo(16.5);
+  });
+
+  it("is the generated section without a drawing", () => {
+    expect(sectionDrawingFor(s, {}, 60).image).toBeUndefined();
+    expect(sectionDrawingFor(s, undefined, 60).items.map((i) => i.role)).toContain("floor");
   });
 });

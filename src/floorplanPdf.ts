@@ -813,6 +813,10 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         doc.setDrawColor(17, 17, 17);
         doc.setLineWidth(0.2);
         doc.rect(box.x, box.y, box.drawing.widthMm, box.drawing.heightMm, "FD");
+        if (box.drawing.image) {
+          doc.addImage(box.drawing.image.src, imageFormat(box.drawing.image.src), box.x, box.y, box.drawing.widthMm, box.drawing.heightMm, undefined, "MEDIUM");
+          doc.rect(box.x, box.y, box.drawing.widthMm, box.drawing.heightMm, "S");
+        }
         doc.setLineCap("butt");
         for (const item of box.drawing.items) {
           const st = style[item.role];

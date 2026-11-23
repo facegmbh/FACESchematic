@@ -116,6 +116,22 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   await page.getByRole("button", { name: /seated|sitzend/ }).click();
   await expect(page.getByTestId("projection-section-text")).toContainText("0.67");
 
+  // The architect's own section as the backdrop: attach it, click the floor below the
+  // picture and below the projector, and the beam is laid over it.
+  await page.getByTestId("projection-section-file").setInputFiles(planPath);
+  const calibrator = page.getByTestId("section-calibrator-image");
+  await expect(calibrator).toBeVisible({ timeout: 15_000 });
+  const cb = (await calibrator.boundingBox())!;
+  await page.mouse.click(cb.x + cb.width * 0.2, cb.y + cb.height * 0.8);
+  await page.mouse.click(cb.x + cb.width * 0.8, cb.y + cb.height * 0.8);
+  await page.getByTestId("section-calibrator-apply").click();
+  await expect(calibrator).toBeHidden();
+  const sectionBox = page.locator(`[data-projection-section-box="${state.projectionId}"]`);
+  await expect(sectionBox.locator("image")).toBeAttached();
+  await expect(sectionBox.locator('[data-section-role="beam"]')).toBeAttached();
+  // The generated floor line is gone — the drawing brings its own.
+  await expect(sectionBox.locator('[data-section-role="floor"]')).toHaveCount(0);
+
   await page.screenshot({ path: process.env.PROJECTION_SHOT ?? join(tmpdir(), "projection.png") });
   expect(errors).toEqual([]);
 });

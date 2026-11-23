@@ -17,6 +17,7 @@ export default function ProjectionSectionSvg({ drawing, pxPerMm, label }: { draw
   const k = pxPerMm;
   return (
     <svg width={drawing.widthMm * k} height={drawing.heightMm * k} viewBox={`0 0 ${drawing.widthMm} ${drawing.heightMm}`} data-testid="projection-section">
+      {drawing.image && <image href={drawing.image.src} x={0} y={0} width={drawing.widthMm} height={drawing.heightMm} preserveAspectRatio="none" />}
       {drawing.items.map((item, i) => {
         const st = SECTION_STYLE[item.role];
         if (item.points.length === 2) {
@@ -45,6 +46,10 @@ export default function ProjectionSectionSvg({ drawing, pxPerMm, label }: { draw
           dominantBaseline="middle"
           fill="#b45309"
           fontWeight={600}
+          // A halo keeps it readable on top of an architect's linework.
+          stroke="#fff"
+          strokeWidth={drawing.image ? drawing.labelSizeMm * 0.18 : 0}
+          paintOrder="stroke"
         >
           {label}
         </text>

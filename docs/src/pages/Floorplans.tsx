@@ -348,6 +348,13 @@ export default function FloorplansPage() {
         that stretch of the cone is hatched. <strong>Show the section on the sheet</strong> puts the
         section on the plan as a box you can move and widen, so it is exported with the sheet.
       </p>
+      <p>
+        If the architect has drawn a section, use it instead: <strong>Attach a section drawing…</strong>{" "}
+        takes a PDF or a picture, then asks for two clicks on its floor line — below the picture and
+        below the projector&apos;s lens. That fixes position and scale (the distance between them is
+        the throw distance the plan already knows), and beam, picture and person are drawn over the
+        architect&apos;s lines.
+      </p>
 
       <h2>The legend box</h2>
       <p>

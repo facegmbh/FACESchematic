@@ -1641,6 +1641,22 @@ export interface ProjectionSection {
   /** Top-left corner and width of that box, paper mm. */
   positionMm?: { x: number; y: number };
   widthMm?: number;
+  /** The architect's own section as the background. Set → beam and person are laid over
+   *  it instead of the generated drawing. */
+  underlay?: ProjectionSectionUnderlay;
+}
+
+/** A section drawing placed under the computed one. Two points on its floor line — below
+ *  the picture and below the lens — fix where it is and how large: the distance between
+ *  them is the throw distance, which the plan already knows. */
+export interface ProjectionSectionUnderlay {
+  /** Raster data URL. */
+  src: string;
+  widthPx: number;
+  heightPx: number;
+  name?: string;
+  floorAtPicturePx?: { x: number; y: number };
+  floorAtProjectorPx?: { x: number; y: number };
 }
 
 /**
