@@ -336,3 +336,81 @@ export function symbolPositionForDistance(
     y: p.screenCenterMm.y + t.y * lateral + n.y * distanceM * mmPerM,
   };
 }
+
+/** Direction a projector symbol has to face to look at a surface. */
+export function symbolRotationFacing(screenRotationDeg: number): number {
+  return (((screenRotationDeg + 180) % 360) + 360) % 360;
+}
+
+/**
+ * A first projection for a projector symbol: a 100" picture straight ahead of it, in the
+ * middle of what the lens can throw, so the cone appears where the symbol is already
+ * looking and only needs pulling to its wall.
+ */
+export function defaultProjectionFor(
+  symbol: { id: string; positionMm: Pt; rotationDeg?: number; groupId?: string },
+  optics: ProjectionOptics,
+  scaleDenominator: number,
+): Omit<FloorplanProjection, "id"> {
+  const aspect = optics.formats?.[0]?.ratio ?? "16:10";
+  const sized = resizeSurface({ aspect, widthM: 0, heightM: 0 }, { diagonalIn: 100 });
+  const range = throwRangeM(optics, aspect, pictureSize(sized.widthM, sized.heightM, aspect));
+  const distanceM = range ? (range.minM + range.maxM) / 2 : 3;
+  const facing = symbol.rotationDeg ?? 0;
+  const dir = unit(facing);
+  const mm = (distanceM * 1000) / scaleDenominator;
+  return {
+    symbolId: symbol.id,
+    groupId: symbol.groupId,
+    optics,
+    aspect,
+    widthM: sized.widthM,
+    heightM: sized.heightM,
+    screenCenterMm: { x: symbol.positionMm.x + dir.x * mm, y: symbol.positionMm.y + dir.y * mm },
+    screenRotationDeg: symbolRotationFacing(facing),
+  };
+}
+
+export interface ProjectionOnSheet {
+  projection: FloorplanProjection;
+  geometry: ProjectionGeometry;
+}
+
+/** The projections a sheet shows: not hidden, their layer switched on, their projector
+ *  still on the plan. */
+export function visibleProjections(page: {
+  projections?: FloorplanProjection[];
+  symbols: { id: string; positionMm: Pt; groupId: string }[];
+  groups: { id: string; hidden?: boolean }[];
+  scaleDenominator: number;
+}): ProjectionOnSheet[] {
+  const out: ProjectionOnSheet[] = [];
+  for (const projection of page.projections ?? []) {
+    if (projection.hidden) continue;
+    const symbol = page.symbols.find((s) => s.id === projection.symbolId);
+    if (!symbol) continue;
+    const group = page.groups.find((g) => g.id === (projection.groupId ?? symbol.groupId));
+    if (group?.hidden) continue;
+    out.push({ projection, geometry: projectionGeometry(projection, symbol.positionMm, page.scaleDenominator) });
+  }
+  return out;
+}
+
+/** One line for the plan: model · diagonal · distance. */
+export function projectionCaption(p: FloorplanProjection, g: ProjectionGeometry): string {
+  const parts = [
+    p.model,
+    `${Math.round(g.result.picture.diagonalIn)}″`,
+    g.distanceM > 0 ? `${g.distanceM.toFixed(2)} m` : undefined,
+  ];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** Where the caption goes: just behind the surface, away from the projector. */
+export function projectionCaptionAnchorMm(p: FloorplanProjection, offsetMm: number): Pt {
+  const n = unit(p.screenRotationDeg);
+  return { x: p.screenCenterMm.x - n.x * offsetMm, y: p.screenCenterMm.y - n.y * offsetMm };
+}
+
+export const PROJECTION_OK_COLOR = "#0e7490";
+export const PROJECTION_WARN_COLOR = "#dc2626";

@@ -1701,6 +1701,9 @@ export interface FloorplanPage {
   /** Walls with their build-up and thickness. They document the building and they are
    *  what the Wi-Fi heatmap attenuates through. */
   walls: FloorplanWall[];
+  /** Projectors with their picture: throw distance, zoom and lens shift worked out on the
+   *  plan. Undefined counts as none — plans from before this existed need no migration. */
+  projections?: FloorplanProjection[];
   /** Wi-Fi heatmap settings. Undefined counts as DEFAULT_HEATMAP (off). */
   heatmap?: FloorplanHeatmap;
   /** Show the fixed project title block in the sheet corner as well. Off by default on

@@ -46,6 +46,7 @@ import type {
   FloorplanNote,
   FloorplanMask,
   FloorplanCoverage,
+  FloorplanProjection,
   FloorplanWall,
   FloorplanHeatmap,
   WallMaterial,
@@ -1184,6 +1185,17 @@ interface SchematicState {
   addFloorplanCoverage: (pageId: string, coverage: Omit<FloorplanCoverage, "id">) => string;
   updateFloorplanCoverage: (pageId: string, coverageId: string, patch: Partial<Omit<FloorplanCoverage, "id">>) => void;
   removeFloorplanCoverage: (pageId: string, coverageId: string) => void;
+  addFloorplanProjection: (pageId: string, projection: Omit<FloorplanProjection, "id">, symbolRotationDeg?: number) => string;
+  /** Patch a projection and, in the same undo step, move or turn its projector symbol —
+   *  the distance slider and the handles on the sheet do both at once. `continuing` marks
+   *  every step of a drag after the first, so one drag is one undo step. */
+  updateFloorplanProjection: (
+    pageId: string,
+    projectionId: string,
+    patch: Partial<Omit<FloorplanProjection, "id">>,
+    options?: { symbolPositionMm?: { x: number; y: number }; symbolRotationDeg?: number; continuing?: boolean },
+  ) => void;
+  removeFloorplanProjection: (pageId: string, projectionId: string) => void;
   addFloorplanWall: (pageId: string, wall: Omit<FloorplanWall, "id">) => string;
   /** Many walls at once — an import from the PDF — as a single undo step. */
   addFloorplanWalls: (pageId: string, walls: Omit<FloorplanWall, "id">[]) => string[];
@@ -1304,6 +1316,10 @@ let floorplanCoverageIdCounter = 0;
 function nextFloorplanCoverageId(): string {
   return `fpcov-${++floorplanCoverageIdCounter}`;
 }
+let floorplanProjectionIdCounter = 0;
+function nextFloorplanProjectionId(): string {
+  return `fpproj-${++floorplanProjectionIdCounter}`;
+}
 
 let floorplanWallIdCounter = 0;
 function nextFloorplanWallId(): string {
@@ -1400,6 +1416,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const mask of page.masks ?? []) {
         const mm2 = mask.id.match(/^fpmask-(\d+)$/);
         if (mm2) floorplanMaskIdCounter = Math.max(floorplanMaskIdCounter, Number(mm2[1]));
+      }
+      for (const projection of page.projections ?? []) {
+        const pm = projection.id.match(/^fpproj-(\d+)$/);
+        if (pm) floorplanProjectionIdCounter = Math.max(floorplanProjectionIdCounter, Number(pm[1]));
       }
       for (const coverage of page.coverages ?? []) {
         const cm2 = coverage.id.match(/^fpcov-(\d+)$/);
@@ -6941,6 +6961,13 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         symbolId: c.symbolId ? symbolIdMap.get(c.symbolId) ?? c.symbolId : undefined,
         groupId: c.groupId ? groupIdMap.get(c.groupId) ?? c.groupId : undefined,
       })),
+      projections: (src.projections ?? []).map((pr) => ({
+        ...pr,
+        id: nextFloorplanProjectionId(),
+        symbolId: symbolIdMap.get(pr.symbolId) ?? pr.symbolId,
+        groupId: pr.groupId ? groupIdMap.get(pr.groupId) ?? pr.groupId : undefined,
+        screenCenterMm: { ...pr.screenCenterMm },
+      })),
       legend: { ...src.legend, notes: [...(src.legend.notes ?? [])] },
       drawingBlock: {
         ...src.drawingBlock,
@@ -7162,6 +7189,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         ...p,
         symbols: p.symbols.filter((sym) => sym.id !== symbolId),
         coverages: (p.coverages ?? []).filter((c) => c.symbolId !== symbolId),
+        ...(p.projections ? { projections: p.projections.filter((pr) => pr.symbolId !== symbolId) } : {}),
       })),
       undoSize: undoStack.length, redoSize: 0,
     });
@@ -7309,6 +7337,59 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, coverages: (p.coverages ?? []).filter((c) => c.id !== coverageId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanProjection: (pageId, projection, symbolRotationDeg) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanProjectionId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        // One projector throws one picture: a second projection on the same symbol
+        // replaces the first.
+        projections: [...(p.projections ?? []).filter((pr) => pr.symbolId !== projection.symbolId), { ...projection, id }],
+        symbols: symbolRotationDeg === undefined
+          ? p.symbols
+          : p.symbols.map((sym) => sym.id === projection.symbolId ? { ...sym, rotationDeg: symbolRotationDeg } : sym),
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  updateFloorplanProjection: (pageId, projectionId, patch, options) => {
+    const state = get();
+    if (!options?.continuing) pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => {
+        const current = (p.projections ?? []).find((pr) => pr.id === projectionId);
+        if (!current) return p;
+        const moveSymbol = options?.symbolPositionMm !== undefined || options?.symbolRotationDeg !== undefined;
+        return {
+          ...p,
+          projections: (p.projections ?? []).map((pr) => pr.id === projectionId ? { ...pr, ...patch } : pr),
+          symbols: !moveSymbol ? p.symbols : p.symbols.map((sym) => sym.id !== current.symbolId ? sym : {
+            ...sym,
+            ...(options?.symbolPositionMm ? { positionMm: options.symbolPositionMm } : {}),
+            ...(options?.symbolRotationDeg !== undefined ? { rotationDeg: options.symbolRotationDeg } : {}),
+          }),
+        };
+      }),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  removeFloorplanProjection: (pageId, projectionId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, projections: (p.projections ?? []).filter((pr) => pr.id !== projectionId) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();

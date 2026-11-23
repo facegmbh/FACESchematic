@@ -62,7 +62,7 @@ describe("throw distance", () => {
   it("matches Epson's simulator for the EB-L610U", () => {
     const at = (d: number, a: string) => {
       const s = surface(d, a);
-      return throwRangeM(L610U, a, pictureSize(s.widthM, s.heightM, a));
+      return throwRangeM(L610U, a, pictureSize(s.widthM, s.heightM, a))!;
     };
     expect(at(80, "16:10").minM).toBeCloseTo(2.331, 3);
     expect(at(80, "16:10").maxM).toBeCloseTo(3.784, 3);
@@ -75,20 +75,20 @@ describe("throw distance", () => {
 
   it("matches for an interchangeable lens", () => {
     const s = surface(200, "16:10");
-    const r = throwRangeM(ELPLL06, "16:10", pictureSize(s.widthM, s.heightM, "16:10"));
+    const r = throwRangeM(ELPLL06, "16:10", pictureSize(s.widthM, s.heightM, "16:10"))!;
     expect(r.minM).toBeCloseTo(22.379, 2);
     expect(r.maxM).toBeCloseTo(30.229, 2);
   });
 
   it("uses a typed throw ratio when there is no manufacturer data", () => {
-    const r = throwRangeM({ throwMin: 1.5, throwMax: 2 }, "16:9", pictureSize(3, 1.6875, "16:9"));
+    const r = throwRangeM({ throwMin: 1.5, throwMax: 2 }, "16:9", pictureSize(3, 1.6875, "16:9"))!;
     expect(r.minM).toBeCloseTo(4.5);
     expect(r.maxM).toBeCloseTo(6);
   });
 
   it("falls back to the lens's first format for a ratio it does not list", () => {
     // Same picture width → roughly the same distance, whatever the height.
-    const r = throwRangeM(ELPLL06, "16:9", pictureSize(4.308, 4.308 / (16 / 9), "16:9"));
+    const r = throwRangeM(ELPLL06, "16:9", pictureSize(4.308, 4.308 / (16 / 9), "16:9"))!;
     expect(r.minM).toBeCloseTo(22.38, 1);
   });
 
