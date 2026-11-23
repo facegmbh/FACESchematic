@@ -607,6 +607,51 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "set_floorplan_coverage",
+    description:
+      "Create or change one coverage area on a floorplan — what a camera sees, what a motion detector reaches. Say which area with coverageId (list_floorplans reports them under coverages), or with symbolId for the area anchored to a device symbol (it is created when the symbol has none; it then follows and turns with the symbol), or pass xM and yM for a new free-standing area. A camera's reach is COMPUTED from optics (megapixels, the opening angle and the DORI level) — to change it, change apertureDeg or optics; passing rangeM replaces the lens by a typed reach in metres, e.g. the distance to the opposite wall. The result says rangeFrom \"optics\" or \"typed\". Take angle and megapixels from the manufacturer's datasheet, not from memory. Only the properties you pass change.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        coverageId: { type: "string", description: "An existing area. From list_floorplans → coverages." },
+        symbolId: { type: "string", description: "The area anchored to this symbol; created if the symbol has none." },
+        shape: { type: "string", enum: ["sector", "circle", "rect"], description: "sector = wedge (camera, PIR), circle = all round, rect = corridor." },
+        apertureDeg: { type: "number", description: "Opening angle of a sector, 1–360 — a lens's horizontal field of view at the zoom the plan should show." },
+        rangeM: { type: "number", description: "Reach in metres on site (0.5–300). Removes optics. Not together with optics." },
+        widthM: { type: "number", description: "Width of a rect in metres." },
+        rotationDeg: { type: "number", description: "Direction in degrees clockwise, 0 = right of the sheet. On an anchored area an offset on top of the symbol's own rotation." },
+        optics: {
+          type: "object",
+          description: "Camera optics: the reach then follows from the lens instead of being typed.",
+          properties: {
+            megapixels: { type: "number", description: "Sensor resolution as the datasheet states it — a 4K sensor is 8." },
+            dori: { type: "string", enum: ["detect", "observe", "recognise", "identify"], description: "Level the drawn reach should still deliver (EN 62676-4). Default recognise." },
+            aspectRatio: { type: "number", description: "Sensor width ÷ height. Default 16:9." },
+          },
+          required: ["megapixels"],
+          additionalProperties: false,
+        },
+        xM: { type: "number", description: "Free-standing areas only: metres from the left of the drawing area." },
+        yM: { type: "number", description: "Free-standing areas only: metres from the top of the drawing area." },
+        label: { type: ["string", "null"], description: "Own caption at the far edge; null returns to the device's number." },
+        hidden: { type: "boolean" },
+      },
+      required: ["pageId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "remove_floorplan_coverage",
+    description: "Remove one coverage area from a floorplan. The symbol it was anchored to stays.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string" }, coverageId: { type: "string" } },
+      required: ["pageId", "coverageId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "set_floorplan_legend",
     description:
       "Fill the legend box: its headline (e.g. \"BESCHALLUNG – LEGENDE & MONTAGE\"), the heading above the installation notes (e.g. \"MONTAGEHINWEISE\") and the notes themselves — one string per printed line, such as mounting instructions and cable specs per model. The rows of the legend (color, model, description) come from the symbol groups automatically. Only the properties you pass change; notes replaces the whole list.",

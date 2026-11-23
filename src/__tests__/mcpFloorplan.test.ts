@@ -561,3 +561,128 @@ describe("amplifier lines & load (Ship 11)", () => {
     expect(legend.linesTitle).toBe("LINIEN");
   });
 });
+
+describe("set_floorplan_coverage / remove_floorplan_coverage", () => {
+  type Cov = {
+    coverageId: string; shape: string; rangeM: number; rangeFrom: "optics" | "typed"; apertureDeg?: number; widthM?: number;
+    optics?: { megapixels: number; dori: string; aspectRatio?: number };
+    rotationDeg: number; symbolId?: string; groupId?: string; label?: string; hidden: boolean;
+  };
+  const camera = (id: string): SchematicNode => ({
+    id, type: "device", position: { x: 0, y: 0 },
+    data: { label: `Cam ${id}`, deviceType: "ptz-camera", ports: [] } as DeviceData,
+  } as SchematicNode);
+
+  /** A plan with one camera symbol and one plain symbol. */
+  function plan() {
+    useSchematicStore.setState({ nodes: [camera("cam-1"), device("device-1")], edges: [], pages: [] });
+    const { pageId } = handlers.create_floorplan({ label: "Kapelle" }) as Summary;
+    const { groupId } = handlers.add_floorplan_group({ pageId, label: "Kamera" }) as { groupId: string };
+    const placed = handlers.place_floorplan_symbols({ pageId, symbols: [
+      { groupId, xM: 5, yM: 5, deviceId: "cam-1" },
+      { groupId, xM: 8, yM: 5, deviceId: "device-1" },
+    ] }) as { results: { result: { symbolId: string } }[] };
+    return { pageId, groupId, camId: placed.results[0].result.symbolId, otherId: placed.results[1].result.symbolId };
+  }
+  const listed = (pageId: string) =>
+    (handlers.list_floorplans({}) as { pages: { pageId: string; coverages: Cov[] }[] }).pages.find((p) => p.pageId === pageId)!.coverages;
+
+  it("gives a camera symbol its area: a lens whose reach follows from angle and megapixels", () => {
+    const { pageId, camId, groupId } = plan();
+    const c = handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 72.8, optics: { megapixels: 8 } }) as Cov;
+    expect(c.symbolId).toBe(camId);
+    expect(c.groupId).toBe(groupId);
+    expect(c.shape).toBe("sector");
+    expect(c.apertureDeg).toBe(72.8);
+    expect(c.optics).toMatchObject({ megapixels: 8, dori: "recognise" });
+    expect(c.rangeFrom).toBe("optics");
+    // 8 MP at 16:9 is about 3771 px wide; 125 px/m across 72.8° reaches about 20 m.
+    expect(c.rangeM).toBeGreaterThan(19);
+    expect(c.rangeM).toBeLessThan(22);
+    expect(listed(pageId)).toHaveLength(1);
+  });
+
+  it("updates the area of a symbol instead of adding a second one", () => {
+    const { pageId, camId } = plan();
+    const first = handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 72.8 }) as Cov;
+    const second = handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 20, rotationDeg: 15 }) as Cov;
+    expect(second.coverageId).toBe(first.coverageId);
+    expect(second.apertureDeg).toBe(20);
+    expect(second.rotationDeg).toBe(15);
+    expect(listed(pageId)).toHaveLength(1);
+  });
+
+  it("a typed reach replaces the lens, and says so", () => {
+    const { pageId, camId } = plan();
+    const lens = handlers.set_floorplan_coverage({ pageId, symbolId: camId }) as Cov;
+    expect(lens.rangeFrom).toBe("optics");
+    const typed = handlers.set_floorplan_coverage({ pageId, coverageId: lens.coverageId, rangeM: 12 }) as Cov;
+    expect(typed.rangeFrom).toBe("typed");
+    expect(typed.rangeM).toBe(12);
+    expect(typed.optics).toBeUndefined();
+    // And back: optics switch the reach to computed again.
+    const back = handlers.set_floorplan_coverage({ pageId, coverageId: lens.coverageId, optics: { megapixels: 4, dori: "identify" } }) as Cov;
+    expect(back.rangeFrom).toBe("optics");
+    expect(back.optics).toMatchObject({ megapixels: 4, dori: "identify" });
+    expect(() => handlers.set_floorplan_coverage({ pageId, coverageId: lens.coverageId, rangeM: 10, optics: { megapixels: 4 } })).toThrow(/rangeM or optics/);
+  });
+
+  it("a device that is no camera gets a wedge with a reach in metres", () => {
+    const { pageId, otherId } = plan();
+    const c = handlers.set_floorplan_coverage({ pageId, symbolId: otherId, apertureDeg: 90, rangeM: 12 }) as Cov;
+    expect(c.rangeFrom).toBe("typed");
+    expect(c.optics).toBeUndefined();
+    expect(c.rangeM).toBe(12);
+  });
+
+  it("places a free-standing area by metres and moves it", () => {
+    const { pageId } = plan();
+    const c = handlers.set_floorplan_coverage({ pageId, xM: 3, yM: 4, shape: "rect", rangeM: 10, widthM: 2.5, label: "Zufahrt" }) as Cov & { xM: number; yM: number };
+    expect(c.symbolId).toBeUndefined();
+    expect(c.shape).toBe("rect");
+    expect(c.widthM).toBe(2.5);
+    expect(c.label).toBe("Zufahrt");
+    expect(c.xM).toBeCloseTo(3, 2);
+    expect(c.yM).toBeCloseTo(4, 2);
+    const moved = handlers.set_floorplan_coverage({ pageId, coverageId: c.coverageId, xM: 6 }) as Cov & { xM: number; yM: number };
+    expect(moved.xM).toBeCloseTo(6, 2);
+    expect(moved.yM).toBeCloseTo(4, 2);
+  });
+
+  it("rejects what it cannot draw", () => {
+    const { pageId, camId } = plan();
+    expect(() => handlers.set_floorplan_coverage({ pageId })).toThrow(/symbolId|xM/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: "nope" })).toThrow(/No symbol/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, coverageId: "nope", rangeM: 3 })).toThrow(/No coverage/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 0 })).toThrow(/apertureDeg/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 400 })).toThrow(/apertureDeg/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, rangeM: 0 })).toThrow(/rangeM/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, shape: "blob" })).toThrow(/shape/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, optics: { megapixels: 0 } })).toThrow(/megapixels/);
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, optics: { megapixels: 4, dori: "see" } })).toThrow(/dori/);
+    // An anchored area sits on its device; it has no position of its own.
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, xM: 1, yM: 1 })).toThrow(/follows its symbol/);
+    expect(listed(pageId)).toHaveLength(0);
+  });
+
+  it("asks which one when a symbol carries two areas", () => {
+    const { pageId, camId } = plan();
+    const first = handlers.set_floorplan_coverage({ pageId, symbolId: camId }) as Cov;
+    useSchematicStore.getState().addFloorplanCoverage(pageId, { shape: "sector", positionMm: { x: 0, y: 0 }, rangeM: 5, symbolId: camId });
+    expect(() => handlers.set_floorplan_coverage({ pageId, symbolId: camId, apertureDeg: 30 })).toThrow(/coverageId/);
+    expect((handlers.set_floorplan_coverage({ pageId, coverageId: first.coverageId, apertureDeg: 30 }) as Cov).apertureDeg).toBe(30);
+  });
+
+  it("clears a caption with null, hides and removes an area", () => {
+    const { pageId, camId } = plan();
+    const c = handlers.set_floorplan_coverage({ pageId, symbolId: camId, label: "Altar", hidden: true }) as Cov;
+    expect(c.label).toBe("Altar");
+    expect(c.hidden).toBe(true);
+    const cleared = handlers.set_floorplan_coverage({ pageId, coverageId: c.coverageId, label: null, hidden: false }) as Cov;
+    expect(cleared.label).not.toBe("Altar");
+    expect(cleared.hidden).toBe(false);
+    expect(handlers.remove_floorplan_coverage({ pageId, coverageId: c.coverageId })).toEqual({ removed: c.coverageId });
+    expect(listed(pageId)).toHaveLength(0);
+    expect(() => handlers.remove_floorplan_coverage({ pageId, coverageId: c.coverageId })).toThrow(/No coverage/);
+  });
+});

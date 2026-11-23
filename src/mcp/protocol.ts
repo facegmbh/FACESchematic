@@ -73,6 +73,8 @@ export type CommandType =
   | "update_floorplan_note"
   | "delete_floorplan_note"
   | "set_floorplan_masks"
+  | "set_floorplan_coverage"
+  | "remove_floorplan_coverage"
   | "list_floorplan_lines"
   | "sync_floorplan_lines"
   | "update_floorplan_line"
@@ -584,6 +586,55 @@ export interface FloorplanMaskSpec {
 export interface SetFloorplanMasksParams extends FloorplanPageRef {
   /** Replaces every white cover on the page. Pass [] to remove them all. */
   masks: FloorplanMaskSpec[];
+}
+
+/** Shapes a coverage area can have, mirroring `CoverageShape` in `src/types.ts`. */
+export const COVERAGE_SHAPES_WIRE = ["sector", "circle", "rect"] as const;
+/** Levels of EN 62676-4 a camera's drawn reach can be judged at, mirroring `DoriLevel`. */
+export const DORI_LEVELS_WIRE = ["detect", "observe", "recognise", "identify"] as const;
+
+/** A camera's lens and sensor: with these the reach is computed, not typed. */
+export interface FloorplanCoverageOpticsSpec {
+  /** Sensor resolution in megapixels, as the datasheet states it (a 4K sensor is 8). */
+  megapixels: number;
+  /** Level the drawn reach should still deliver. Default "recognise" (125 px/m). */
+  dori?: (typeof DORI_LEVELS_WIRE)[number];
+  /** Sensor width ÷ height. Default 16:9. */
+  aspectRatio?: number;
+}
+
+/**
+ * Create or change one coverage area — what a camera sees, what a detector reaches.
+ *
+ * Which area: `coverageId` names one; `symbolId` means the area anchored to that symbol
+ * (created when the symbol has none); neither creates a free-standing area at xM / yM.
+ */
+export interface SetFloorplanCoverageParams extends FloorplanPageRef {
+  coverageId?: string;
+  symbolId?: string;
+  shape?: (typeof COVERAGE_SHAPES_WIRE)[number];
+  /** Opening angle of a sector in degrees, 1–360 — a lens's horizontal field of view. */
+  apertureDeg?: number;
+  /** Reach in metres on site. Typing a reach removes the optics: the area is then as
+   *  long as stated, not as long as the lens resolves. Not together with `optics`. */
+  rangeM?: number;
+  /** Width of a "rect" in metres. */
+  widthM?: number;
+  /** Direction in degrees clockwise, 0 = to the right of the sheet. On an anchored area
+   *  an offset on top of the symbol's own rotation. */
+  rotationDeg?: number;
+  /** Camera optics; the reach then follows from megapixels, angle and DORI level. */
+  optics?: FloorplanCoverageOpticsSpec;
+  /** Position in metres, free-standing areas only — an anchored one follows its symbol. */
+  xM?: number;
+  yM?: number;
+  /** Own caption; null returns to the device's number. */
+  label?: string | null;
+  hidden?: boolean;
+}
+
+export interface RemoveFloorplanCoverageParams extends FloorplanPageRef {
+  coverageId: string;
 }
 
 // ── Amplifier lines & load (Ship 11) ─────────────────────────────────

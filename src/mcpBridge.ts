@@ -102,6 +102,8 @@ import {
   type UpdateFloorplanNoteParams,
   type DeleteFloorplanNoteParams,
   type SetFloorplanMasksParams,
+  type SetFloorplanCoverageParams,
+  type RemoveFloorplanCoverageParams,
   type FloorplanMaskSpec,
   type FloorplanPageRef,
   type UpdateFloorplanLineParams,
@@ -109,6 +111,8 @@ import {
   SPEAKER_LINE_MODES_WIRE,
   FLOORPLAN_SHAPES,
   FLOORPLAN_LABEL_POSITIONS,
+  COVERAGE_SHAPES_WIRE,
+  DORI_LEVELS_WIRE,
 } from "./mcp/protocol";
 import {
   classifyDeviceProperties,
@@ -131,6 +135,7 @@ import {
 import type {
   DeviceData,
   DeviceTemplate,
+  FloorplanCoverage,
   FloorplanDrawingBlock,
   FloorplanDrawingField,
   FloorplanPage,
@@ -149,6 +154,13 @@ import type {
 import { PAPER_SIZES } from "./printConfig";
 import {
   coverageLabelOf,
+  defaultCoverage,
+  defaultCoverageForDevice,
+  COVERAGE_MIN_RANGE_M,
+  COVERAGE_MAX_RANGE_M,
+  DEFAULT_COVERAGE_ASPECT_RATIO,
+  DEFAULT_COVERAGE_WIDTH_M,
+  DEFAULT_DORI_LEVEL,
   appendLegendNote,
   drawingAreaMm,
   effectiveRangeM,
@@ -463,6 +475,27 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
   return patch;
 }
 
+/** One coverage area as the tools report it. */
+function coverageSummary(page: FloorplanPage, c: FloorplanCoverage) {
+  return {
+    // rangeM is what is drawn: computed from the lens for a camera, else the typed reach.
+    coverageId: c.id, shape: c.shape, rangeM: Number(effectiveRangeM(c).toFixed(2)),
+    /** Where the reach comes from. "optics": change megapixels, angle or DORI level to
+     *  change it; "typed": set rangeM. */
+    rangeFrom: c.optics ? "optics" as const : "typed" as const,
+    apertureDeg: c.apertureDeg, widthM: c.widthM,
+    optics: c.optics ? { megapixels: c.optics.megapixels, dori: c.optics.dori, aspectRatio: c.optics.aspectRatio } : undefined,
+    rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: coverageLabelOf(c, page.symbols),
+    xMm: c.positionMm.x, yMm: c.positionMm.y, hidden: c.hidden ?? false,
+  };
+}
+
+function requireCoverage(page: FloorplanPage, coverageId: unknown): FloorplanCoverage {
+  const coverage = typeof coverageId === "string" ? (page.coverages ?? []).find((c) => c.id === coverageId) : undefined;
+  if (!coverage) throw new CommandError(`No coverage area "${String(coverageId)}" on floorplan "${page.id}". list_floorplans reports them under coverages.`);
+  return coverage;
+}
+
 function floorplanSummary(page: FloorplanPage) {
   const deviceLabel = (id?: string) => (id ? (st().nodes.find((n) => n.id === id)?.data as DeviceData | undefined)?.label ?? null : null);
   const counts = new Map<string, number>();
@@ -513,13 +546,7 @@ function floorplanSummary(page: FloorplanPage) {
     masks: page.masks.map((m) => ({ maskId: m.id, xMm: m.positionMm.x, yMm: m.positionMm.y, wMm: m.sizeMm.w, hMm: m.sizeMm.h })),
     /** Detection and surveillance areas — what the cameras see, what the detectors reach.
      *  Ranges are metres on site; an area with a symbolId follows and turns with that device. */
-    coverages: (page.coverages ?? []).map((c) => ({
-      // rangeM is what is drawn: computed from the lens for a camera, else the typed reach.
-      coverageId: c.id, shape: c.shape, rangeM: Number(effectiveRangeM(c).toFixed(2)), apertureDeg: c.apertureDeg, widthM: c.widthM,
-      optics: c.optics ? { megapixels: c.optics.megapixels, dori: c.optics.dori, aspectRatio: c.optics.aspectRatio } : undefined,
-      rotationDeg: c.rotationDeg ?? 0, symbolId: c.symbolId, groupId: c.groupId, label: coverageLabelOf(c, page.symbols),
-      xMm: c.positionMm.x, yMm: c.positionMm.y, hidden: c.hidden ?? false,
-    })),
+    coverages: (page.coverages ?? []).map((c) => coverageSummary(page, c)),
     drawingBlock: {
       visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
       fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),
@@ -1420,6 +1447,104 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     // the same path.
     st().deleteNode(noteId);
     return { deleted: true, noteId };
+  },
+
+  // ── Coverage areas: what a camera sees, what a detector reaches ──
+
+  set_floorplan_coverage: (params) => {
+    const p = (params ?? {}) as unknown as SetFloorplanCoverageParams;
+    const page = requireFloorplan(p.pageId);
+    const num = (v: unknown, name: string, min: number, max: number): number => {
+      if (typeof v !== "number" || !Number.isFinite(v) || v < min || v > max) throw new CommandError(`${name} must be a number from ${min} to ${max}.`);
+      return v;
+    };
+
+    // Which area: a named one, the one on a symbol, or a new free-standing one.
+    let existing: FloorplanCoverage | undefined;
+    let symbol: FloorplanSymbol | undefined;
+    if (p.coverageId !== undefined) {
+      existing = requireCoverage(page, p.coverageId);
+    } else if (p.symbolId !== undefined) {
+      symbol = requireSymbol(page, p.symbolId);
+      const onSymbol = (page.coverages ?? []).filter((c) => c.symbolId === symbol!.id);
+      if (onSymbol.length > 1) throw new CommandError(`Symbol "${symbol.id}" carries ${onSymbol.length} coverage areas (${onSymbol.map((c) => c.id).join(", ")}). Pass coverageId to say which.`);
+      existing = onSymbol[0];
+    } else if (p.xM === undefined || p.yM === undefined) {
+      throw new CommandError("Say which area: coverageId, or symbolId for the area on a device symbol, or xM and yM for a new free-standing area.");
+    }
+    const anchored = Boolean(existing ? existing.symbolId && page.symbols.some((s) => s.id === existing!.symbolId) : symbol);
+
+    const patch: Partial<Omit<FloorplanCoverage, "id">> = {};
+    if (p.shape !== undefined) {
+      if (!(COVERAGE_SHAPES_WIRE as readonly string[]).includes(p.shape)) throw new CommandError(`shape must be one of ${COVERAGE_SHAPES_WIRE.join(", ")}.`);
+      patch.shape = p.shape;
+    }
+    if (p.apertureDeg !== undefined) patch.apertureDeg = num(p.apertureDeg, "apertureDeg", 1, 360);
+    if (p.widthM !== undefined) patch.widthM = num(p.widthM, "widthM", 0.1, COVERAGE_MAX_RANGE_M);
+    if (p.rotationDeg !== undefined) patch.rotationDeg = num(p.rotationDeg, "rotationDeg", -360, 360);
+    if (p.rangeM !== undefined && p.optics !== undefined) {
+      throw new CommandError("Pass rangeM or optics, not both: with optics the reach is computed from the lens, a typed rangeM replaces the lens.");
+    }
+    if (p.rangeM !== undefined) {
+      patch.rangeM = num(p.rangeM, "rangeM", COVERAGE_MIN_RANGE_M, COVERAGE_MAX_RANGE_M);
+      // A typed reach is only drawn without optics, so it takes their place.
+      patch.optics = undefined;
+    }
+    if (p.optics !== undefined) {
+      if (typeof p.optics !== "object" || p.optics === null) throw new CommandError("optics must be { megapixels, dori?, aspectRatio? }.");
+      const dori = p.optics.dori ?? existing?.optics?.dori ?? DEFAULT_DORI_LEVEL;
+      if (!(DORI_LEVELS_WIRE as readonly string[]).includes(dori)) throw new CommandError(`optics.dori must be one of ${DORI_LEVELS_WIRE.join(", ")}.`);
+      patch.optics = {
+        megapixels: num(p.optics.megapixels, "optics.megapixels", 0.1, 200),
+        dori,
+        aspectRatio: p.optics.aspectRatio !== undefined
+          ? num(p.optics.aspectRatio, "optics.aspectRatio", 0.2, 5)
+          : existing?.optics?.aspectRatio ?? DEFAULT_COVERAGE_ASPECT_RATIO,
+      };
+    }
+    if (p.xM !== undefined || p.yM !== undefined) {
+      if (anchored) throw new CommandError("This area follows its symbol — move the symbol (update_floorplan_symbol) or turn the area with rotationDeg.");
+      const current = existing ? paperToRealM(page, existing.positionMm) : { xM: p.xM as number, yM: p.yM as number };
+      const pos = validateRealPosition(p.xM ?? current.xM, p.yM ?? current.yM);
+      if (!pos.ok) throw new CommandError(pos.error);
+      patch.positionMm = realMToPaper(page, pos.xM, pos.yM);
+    }
+    if (p.label === null) { patch.label = undefined; patch.ownLabel = undefined; }
+    else if (p.label !== undefined) { patch.label = requireText(p.label, "label"); patch.ownLabel = true; }
+    if (p.hidden !== undefined) patch.hidden = p.hidden ? true : undefined;
+
+    let coverageId: string;
+    if (existing) {
+      if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one property of the area.");
+      // A shape that needs a measure the old one did not carry gets the default one.
+      const shape = patch.shape ?? existing.shape;
+      if (shape === "rect" && patch.widthM === undefined && existing.widthM === undefined) patch.widthM = DEFAULT_COVERAGE_WIDTH_M;
+      st().updateFloorplanCoverage(page.id, existing.id, patch);
+      coverageId = existing.id;
+    } else {
+      const deviceNode = symbol?.deviceNodeId ? st().nodes.find((n) => n.id === symbol!.deviceNodeId) : undefined;
+      const deviceType = (deviceNode?.data as DeviceData | undefined)?.deviceType;
+      // A camera starts with a lens, anything else with a reach in metres; an explicit
+      // shape other than the wedge starts from that shape's own defaults.
+      const base = patch.shape && patch.shape !== "sector" ? defaultCoverage(patch.shape) : defaultCoverageForDevice(symbol ? deviceType : undefined);
+      const start = "optics" in patch ? { ...base, optics: undefined } : base;
+      coverageId = st().addFloorplanCoverage(page.id, {
+        ...start,
+        ...patch,
+        ...(symbol ? { symbolId: symbol.id, groupId: symbol.groupId, positionMm: { ...symbol.positionMm } } : {}),
+      });
+    }
+    const live = requireFloorplan(page.id);
+    const saved = requireCoverage(live, coverageId);
+    return { ...coverageSummary(live, saved), ...(saved.symbolId ? {} : paperToRealM(live, saved.positionMm)) };
+  },
+
+  remove_floorplan_coverage: (params) => {
+    const { pageId, coverageId } = (params ?? {}) as unknown as RemoveFloorplanCoverageParams;
+    const page = requireFloorplan(pageId);
+    const coverage = requireCoverage(page, coverageId);
+    st().removeFloorplanCoverage(page.id, coverage.id);
+    return { removed: coverage.id };
   },
 
   // ── Floorplans (Ship 10) ─────────────────────────────────────────
