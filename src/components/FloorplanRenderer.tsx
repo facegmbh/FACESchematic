@@ -61,6 +61,8 @@ import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
 import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
+import FloorplanProjectionLayer from "./FloorplanProjectionLayer";
+import { projectionGeometry, symbolRotationFacing } from "../projection";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
@@ -125,7 +127,12 @@ type DragState =
   | { kind: "coverage"; coverageId: string; startClient: Vec2; start: Vec2 }
   /** Dragging an area's far edge: the pointer sets direction and reach at once. */
   | { kind: "coverage-aim"; coverageId: string }
-  | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 };
+  | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 }
+  /** Moving a projection's picture to its wall; the projector stays where it is. */
+  | { kind: "projection-screen"; projectionId: string; startClient: Vec2; start: Vec2 }
+  /** Turning the picture about its middle. The projector keeps its place relative to it
+   *  (`distanceMm` in front, `lateralMm` to the side, paper mm) and swings round. */
+  | { kind: "projection-turn"; projectionId: string; distanceMm: number; lateralMm: number };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
 function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "tintSymbol" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
@@ -156,6 +163,10 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const removeFloorplanMask = useSchematicStore((s) => s.removeFloorplanMask);
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
+  const updateFloorplanProjection = useSchematicStore((s) => s.updateFloorplanProjection);
+  /** False until the first step of a projection drag has been written, so the whole drag
+   *  lands in the undo history as one step. */
+  const projectionDragStartedRef = useRef(false);
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
   const addFloorplanWall = useSchematicStore((s) => s.addFloorplanWall);
   const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
@@ -628,6 +639,43 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       } else if (dragging.kind === "coverage") {
         const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
         updateFloorplanCoverage(page.id, dragging.coverageId, { positionMm: { x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) } });
+      } else if (dragging.kind === "projection-screen") {
+        const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+        updateFloorplanProjection(
+          page.id,
+          dragging.projectionId,
+          { screenCenterMm: clampToSheet({ x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) }, page) },
+          { continuing: projectionDragStartedRef.current },
+        );
+        projectionDragStartedRef.current = true;
+      } else if (dragging.kind === "projection-turn") {
+        const projection = (page.projections ?? []).find((pr) => pr.id === dragging.projectionId);
+        const at = clientToPaperMm(e.clientX, e.clientY);
+        if (projection) {
+          const c = projection.screenCenterMm;
+          const dx = at.x - c.x, dy = at.y - c.y;
+          if (Math.hypot(dx, dy) > 0.5) {
+            // The handle sits on the surface's own line, a quarter turn from where it faces.
+            const raw = (Math.atan2(dy, dx) * 180) / Math.PI - 90;
+            const deg = free ? raw : Math.round(raw / 5) * 5;
+            const rad = (deg * Math.PI) / 180;
+            const n = { x: Math.cos(rad), y: Math.sin(rad) };
+            updateFloorplanProjection(
+              page.id,
+              dragging.projectionId,
+              { screenRotationDeg: ((deg % 360) + 360) % 360 },
+              {
+                symbolPositionMm: {
+                  x: c.x + n.x * dragging.distanceMm - n.y * dragging.lateralMm,
+                  y: c.y + n.y * dragging.distanceMm + n.x * dragging.lateralMm,
+                },
+                symbolRotationDeg: symbolRotationFacing(deg),
+                continuing: projectionDragStartedRef.current,
+              },
+            );
+            projectionDragStartedRef.current = true;
+          }
+        }
       } else if (dragging.kind === "coverage-aim") {
         const coverage = (page.coverages ?? []).find((c) => c.id === dragging.coverageId);
         if (coverage) {
@@ -675,7 +723,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setViewport(vpRef.current.zoom, { x: panning.startPan.x + dx, y: panning.startPan.y + dy });
       }
     }
-  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, updateFloorplanCoverage, setViewport]);
+  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, updateFloorplanCoverage, updateFloorplanProjection, setViewport]);
 
   const handleMouseUp = useCallback(() => {
     if (dragging?.kind === "mask-draw") {
@@ -981,6 +1029,33 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               setSelection({ kind: "wall", id });
               const rest = wallCandidates.candidates.filter((_, i) => i !== index);
               onWallCandidatesChange(rest.length ? { ...wallCandidates, candidates: rest } : null);
+            }}
+          />
+
+          <FloorplanProjectionLayer
+            page={page}
+            mmToPx={mmToPx}
+            sheetPx={{ w: pageWPx, h: pageHPx }}
+            interactive={tool === "select"}
+            selectedSymbolIds={selection.kind === "symbols" ? selection.ids : []}
+            onSelect={(projection) => {
+              const next: Selection = { kind: "symbols", ids: [projection.symbolId] };
+              setSelection(next);
+              selectionRef.current = next;
+            }}
+            onMoveStart={(e, projection) => {
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-screen", projectionId: projection.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...projection.screenCenterMm } });
+            }}
+            onTurnStart={(_e, projection) => {
+              const symbol = page.symbols.find((sym) => sym.id === projection.symbolId);
+              if (!symbol) return;
+              const g = projectionGeometry(projection, symbol.positionMm, page.scaleDenominator);
+              const mmPerM = 1000 / page.scaleDenominator;
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-turn", projectionId: projection.id, distanceMm: g.distanceM * mmPerM, lateralMm: g.lateralM * mmPerM });
             }}
           />
 

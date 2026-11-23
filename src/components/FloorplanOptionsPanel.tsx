@@ -11,6 +11,7 @@ import { collectAccessPoints, coveredFraction, computeHeatmap, planningRadiusM, 
 import { getTemplateById as lookupTemplate } from "../templateApi";
 import { symbolLibraryName } from "../symbolLibrary";
 import SymbolLibraryPicker from "./SymbolLibraryPicker";
+import FloorplanProjectionPanel from "./FloorplanProjectionPanel";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
@@ -443,6 +444,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   {t("Delete")}
                 </button>
               </div>
+
+              {/* A projector plans its picture right here, with its symbol. */}
+              {!many && ((device?.data as DeviceData | undefined)?.deviceType === "projector" || (page.projections ?? []).some((pr) => pr.symbolId === first.id)) && (
+                <FloorplanProjectionPanel page={page} symbol={first} device={device?.data as DeviceData | undefined} />
+              )}
             </div>
           </details>
         );
