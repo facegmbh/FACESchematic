@@ -68,7 +68,7 @@ ergibt 2,92–4,74 m, das entspricht dem veröffentlichten Projektionsverhältni
 
 ### Planobjekt
 
-`FloorplanPage.projections: FloorplanProjection[]` (Migration v49 → v50):
+`FloorplanPage.projections?: FloorplanProjection[]` (optionales Feld, keine Migration):
 
     id, symbolId            Beamer-Symbol, dem die Projektion folgt
     source                  { kind: "epson", code, name, lensId? } | { kind: "manual", throwMin, throwMax, shift… }
@@ -123,9 +123,117 @@ Der Block „Projektion“ im Inspektor:
   Beschriftung (Modell · Diagonale · Abstand). Mehr nicht.
 - Ein Zug am Regler oder am Beamer ist ein Undo-Schritt.
 
+### Betrachtungsabstand nach AVIXA (Erweiterung, noch nicht freigegeben)
+
+Grundlage: AVIXA DISCAS (ANSI/AVIXA V202.01). Die Norm gibt eine Empfehlung, kein
+Gerätelimit — deshalb eigene Hinweisfarbe, nie die rote Warnfarbe des Kegels.
+
+**Zuschauerzone.** Der Planer zieht auf dem Plan ein Rechteck auf: dort sitzen die Zuschauer.
+Es gehört zu einer Projektion (eine Zone je Bildfläche) und wird beim Anlegen parallel zur
+Bildfläche ausgerichtet. Griffe: verschieben, an den Ecken ziehen, drehen.
+
+    FloorplanProjection.audience?: { centerMm, widthM, depthM, rotationDeg }
+    FloorplanProjection.viewing?:  { task: "bdm" | "adm", elementPct?, pixelsV? }
+
+Beide Felder sind optional, alte Dateien brauchen keine Migration.
+
+**Rechnung** — `evaluateViewing(...)` in `src/projection.ts`, reine Funktion:
+
+Formeln und Faktoren wie im AVIXA-Rechner (avixa.org, „Analytical and Basic Decision Making
+Calculations“, aus dessen Rechencode abgelesen am 23.11.2026):
+
+- BDM (Präsentation, Besprechung): fernster Platz = Bildhöhe × 200 × Zeichenhöhe [%] ÷ 100.
+  Die Norm führt Zeichenhöhen von 0,5 % bis 5 % (Betrachtungsverhältnis 1 bis 10).
+- ADM (Detailarbeit): fernster Platz = Bildhöhe × 3438 ÷ vertikale Pixelzahl. Einen nächsten
+  Platz rechnet der AVIXA-Rechner für ADM nicht; die seitliche Grenze gilt trotzdem.
+- Nächster Platz (BDM): Bildversatz = Bildunterkante − Augenhöhe; senkrechter Sichtfaktor =
+  Bildhöhe + Bildversatz (Bildoberkante über Augenhöhe); nächster Platz = 1,732 × Sichtfaktor,
+  das ist ein Blick von 30° nach oben zur Bildoberkante. Liegt der Sichtfaktor unter 50 % der
+  Bildhöhe, ist der nächste Platz nicht definiert und wird nicht angezeigt.
+- Seitliche Grenze: von jeder Bildkante eine Linie 60° zur Senkrechten, zur gegenüberliegenden
+  Seite hin. Ein Platz im Abstand d vor der Bildebene und x neben der Bildmitte liegt drin,
+  wenn |x| ≤ 1,732 × d − Bildbreite ÷ 2. (Der Rechner nennt die Breite dieser Fläche am
+  nächsten Platz „Max. Length of CV Plane“ = 6 × Sichtfaktor − Bildbreite.)
+- Der nächste Platz braucht die Bildunterkante (steht schon unter „Mehr“) und eine Augenhöhe
+  (neu, Standard 1,20 m sitzend). Fehlt die Bildunterkante, entfällt nur „zu nah“.
+- aus dem Rechteck: fernster und nächster Platz, größter seitlicher Winkel (über die vier
+  Ecken und den der Bildfläche nächsten Punkt)
+- Ergebnis: Grenzen der Norm, Werte der Zone, was nicht passt, und die Bildhöhe, die für den
+  fernsten Platz nötig wäre
+
+**Bedienung.** Im Block „Projektion“ kommen zwei Zeilen dazu, mehr nicht:
+
+    Nutzung     [ Präsentation (BDM) ▾ ]          [ Zuschauerzone zeichnen ]
+    Betrachtung 2,10 – 9,40 m · empfohlen bis 8,10 m
+                Letzte Reihe 1,30 m zu weit — Bildhöhe mind. 1,57 m   [ Übernehmen ]
+
+- „Übernehmen“ setzt die Bildgröße auf den empfohlenen Wert (ein Undo-Schritt); danach
+  laufen Abstand, Zoom und Helligkeit wie gewohnt neu.
+- Zeichenhöhe (BDM) bzw. Pixelzahl (ADM) liegen unter „Mehr“.
+- Ohne Zuschauerzone zeigt die Zeile nur die Empfehlung („empfohlen 1,40 – 8,10 m“).
+
+**Auf dem Plan.** Das Rechteck als Rahmen, darin eine Heatmap der Sichtgüte; dazu die Grenze
+des fernsten Platzes als feine Linie. Ein- und ausblendbar zusammen mit der Projektion, im
+PDF gleich.
+
+**Heatmap der Sichtgüte.** Nur innerhalb der Zuschauerzone, nicht über den ganzen Plan.
+
+- Je Rasterpunkt ein Wert: Abstand zur Bildfläche im Verhältnis zur empfohlenen Grenze, und
+  der seitliche Blickwinkel im Verhältnis zu seiner Grenze. Der schlechtere der beiden zählt.
+- Wenige feste Stufen statt eines stufenlosen Verlaufs (gut · Grenzbereich · außerhalb der
+  Empfehlung, getrennt nach „zu weit“, „zu nah“, „zu schräg“), mit Farbschlüssel in der
+  Legende wie bei der WLAN-Heatmap.
+- `viewingGrid(...)` in `src/projection.ts` liefert das Raster im Koordinatensystem des
+  Rechtecks; gezeichnet wird es wie `FloorplanHeatmapLayer` als Canvas, im PDF als ein Bild
+  (Muster: `heatmapPng` in `src/floorplanPdf.ts`). Das Rechteck darf gedreht sein, das Bild
+  wird mitgedreht.
+- Wände und Sichthindernisse zählen nicht mit (Draufsicht, keine Höhen).
+- Schalter „Heatmap“ unter „Mehr“; aus = nur Rahmen und Grenzlinie.
+
+### Schnitt: ab wo steht jemand im Bild (Erweiterung, noch nicht freigegeben)
+
+Die Draufsicht zeigt nicht, ob ein stehender Mensch in den Lichtkegel ragt. Dafür braucht es
+den senkrechten Schnitt durch Objektiv und Bildmitte.
+
+**Erzeugter Schnitt.** Aus den Höhen, die die Projektion schon kennt (Bildunterkante,
+Objektivhöhe), plus Raumhöhe und Personenhöhe:
+
+    FloorplanProjection.section?: { roomHeightM?, personHeightM?, show?, positionMm?, widthMm? }
+
+Gezeichnet werden Boden, Decke, Bildfläche, Beamer und die Ober- und Unterkante des
+Lichtkegels, dazu eine Person an der Stelle, an der ihr Kopf die Unterkante berührt.
+
+**Rechnung** — `evaluateSection(...)` in `src/projection.ts`, reine Funktion:
+
+- Höhe der Kegel-Unterkante im Abstand x vor der Bildfläche:
+  Bildunterkante + (Objektivhöhe − Bildunterkante) · x ÷ Projektionsabstand
+- daraus der Bereich vor der Bildfläche, in dem eine Person der gewählten Höhe ins Bild ragt
+  (Deckenmontage: nah an der Bildfläche; Tischaufstellung: nah am Beamer)
+- Kopffreiheit unter dem Beamer und Abstand der Bildoberkante zur Decke
+
+**Bedienung.** Unter „Mehr“ kommt eine Zeile „Schnitt“ mit Raumhöhe und Personenhöhe
+(Standard 1,80 m stehend); darunter der kleine Schnitt und ein Satz:
+
+    Stehend (1,80 m) im Bild bis 1,78 m vor der Bildfläche
+
+**Auf dem Plan.** Der Bereich, in dem jemand im Bild steht, wird im Kegel schraffiert — das
+ist die Antwort in der Draufsicht. Der Schnitt selbst lässt sich als Kasten auf das Blatt
+legen (verschieben, Breite ziehen, wie die Legende) und geht so ins PDF.
+
+**Angefügter Schnitt.** Statt des erzeugten Schnitts ein Bild oder eine PDF-Seite des
+Architekten als Hintergrund des Kastens: zwei Punkte anklicken (Boden an der Bildfläche,
+Boden am Beamer) legt Maßstab und Lage fest, Kegel und Person werden darüber gezeichnet.
+
 ## Entscheidungen
 
 Entschieden (Jean-Luc, 23.11.2026):
+
+- Die Zuschauerzone wird als Rechteck auf dem Plan definiert.
+- Über die Zuschauerzone lässt sich eine Heatmap der Sichtgüte legen.
+- Betrachtung, vorerst so: Abstand eines Platzes = Luftlinie in der Draufsicht zur ferneren
+  Bildkante; Zeichenhöhe 3 % als Standard; Heatmap „gut“ bis 80 %, „Grenzbereich“ bis 100 %
+  der Grenze; eine Zone je Bildfläche. (Offene Punkte 4, 5, 7, 8 damit entschieden.)
+- Die Betrachtungsrechnung liegt in `src/projectionViewing.ts`, nicht in `src/projection.ts`.
 
 - Die Bildfläche bleibt an ihrer Stelle, nur der Beamer wird geschoben.
 - Einfache Bedienung geht vor Funktionsumfang; die Oberfläche wird nicht überladen.
@@ -140,22 +248,49 @@ Offen, mit Vorschlag:
 3. **Andere Hersteller** nur über manuelles Projektionsverhältnis und Lichtstrom —
    Vorschlag: ja.
 
+4. **Bezugspunkt für den fernsten Platz** — Faktoren und Winkel sind am AVIXA-Rechner
+   geprüft (200, 3438, 30° nach oben, 60° seitlich). Offen bleibt nur, wohin der Abstand
+   eines seitlich sitzenden Zuschauers gemessen wird; der Rechner kennt nur eine Zahl.
+   Vorschlag: Luftlinie in der Draufsicht zur ferneren Bildkante (die vorsichtige Lesart).
+   Nächster Platz: senkrechter Abstand zur Bildebene, wie im Glossar der Norm.
+5. **Standard-Zeichenhöhe für BDM** — Vorschlag: 3 % (ergibt 6 × Bildhöhe), änderbar.
+6. **Pixelzahl für ADM** — aus den Epson-Daten, falls dort vorhanden, sonst Eingabefeld.
+7. **Eine Zone je Bildfläche** — Vorschlag: ja; getrennte Sitzblöcke deckt ein Rechteck
+   über alle Plätze ab, weil nur die äußersten Plätze zählen.
+8. **Stufen der Heatmap** — Vorschlag: „gut“ bis 80 % der Grenze, „Grenzbereich“ bis 100 %,
+   darüber „außerhalb“. Die 80 % sind eine eigene Festlegung, nicht aus der Norm.
+9. **Schnitt: erzeugen zuerst, anfügen danach** — Vorschlag: zuerst der erzeugte Schnitt
+   mit Schraffur im Plan; der angefügte Architektenschnitt als zweiter Schritt.
+10. **Personenhöhe** — Vorschlag: 1,80 m stehend als Standard, frei änderbar; sitzend
+    (1,30 m) als zweite Vorgabe.
+
 ## Testing Strategy
+
+- `projection.test.ts`, Betrachtung: BDM 3 % bei 1,35 m Bildhöhe → 8,10 m; ADM 1200 Pixel →
+  3,87 m; Rechteck gerade, versetzt und gedreht → fernster/nächster Platz und Winkel;
+  nötige Bildhöhe für einen zu fernen Platz; ohne Zone nur die Empfehlung.
+- Nächster Platz: Bildhöhe 1,35 m, Unterkante 1,00 m, Augenhöhe 1,20 m → Sichtfaktor 1,15 m,
+  nächster Platz 1,99 m; Sichtfaktor unter 50 % der Bildhöhe → kein nächster Platz.
+  Seitlich: Bildbreite 2,15 m, 3,00 m vor der Bildebene → bis 4,12 m neben der Mitte.
+  Drei Fälle von Hand gegen den AVIXA-Rechner.
+- Heatmap-Raster: Stufe je Punkt für ein gerades und ein gedrehtes Rechteck, Punkt auf der
+  Grenze, Punkt hinter der Bildfläche.
 
 - `src/__tests__/projection.test.ts`: Referenzwerte EB-L610U (80″/100″/150″, 16:10 und 4:3),
   ein Wechselobjektiv (ELPLL06), Grenzen (zu nah, zu weit, Bild zu groß), Shift H/V einzeln
   und kombiniert, manuelles Projektionsverhältnis, Hin- und Rückrechnung Abstand ↔ Diagonale.
   Die Testdaten sind wenige abgeschriebene Koeffizienten, nicht die Epson-Datei.
-- `migrations.test.ts`: v49 → v50 ergänzt `projections: []`.
+- Keine Migration: `projections` ist ein optionales Feld (wie `heatmap`).
+- Schnitt: Deckenmontage und Tischaufstellung, Person genau an der Grenze, Person nie im Bild.
 - Abgleich von drei Fällen von Hand gegen den Epson-Rechner vor der Freigabe.
 - e2e `e2e/floorplan-projection.spec.ts`: Projektion anlegen, Beamer ziehen, Warnung erscheint.
 
 ## Boundaries
 
-- Nicht in V1: Seitenansicht, Trapez/schräge Projektion, gekrümmte Flächen, Edge-Blending,
+- Nicht in V1: Trapez/schräge Projektion, gekrümmte Flächen, Edge-Blending,
   Ultrakurzdistanz-Sonderfälle (Wandhalter-Maße), Kamera-Assist, MCP-Werkzeuge für Claude.
 - Keine Epson-Daten und keine Epson-Bilder im Repository.
-- Die Shift-Semantik (Bezug der Prozentwerte, kombinierte Grenze) wird vor dem Bau am
-  Epson-Code und am Rechner gegengeprüft; bis dahin gilt sie als Annahme.
+- Die Shift-Semantik ist am Epson-Code geprüft: Prozent der Bildhöhe (V) bzw. -breite (H);
+  bei vollem Shift H bleibt vertikal nur der kombinierte Wert, dazwischen linear.
 - Vorlagen-IDs, die auch in der Upstream-Datenbank stehen, können `projection` beim Laden
   verlieren; FACE-eigene IDs verwenden oder die Zusammenführung anpassen.
