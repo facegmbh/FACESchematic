@@ -10,6 +10,8 @@ import {
   maxVerticalShift,
   projectionCaption,
   projectionCaptionAnchorMm,
+  evaluateSection,
+  sectionDrawing,
 } from "../projection";
 import type { FloorplanProjection, ProjectionOptics } from "../types";
 
@@ -265,5 +267,91 @@ describe("caption", () => {
     const below = projectionCaptionAnchorMm({ ...p, screenRotationDeg: 270 }, 5);
     expect(below.align).toBe("middle");
     expect(below.y).toBeCloseTo(105);
+  });
+});
+
+describe("section: where someone stands in the picture", () => {
+  // Ceiling mount: lens at 2.80 m, picture from 1.00 m to 2.35 m, 4 m away.
+  const ceiling = { distanceM: 4, pictureHeightM: 1.35, screenBottomM: 1, lensHeightM: 2.8 };
+
+  it("finds the stretch in front of the picture for a ceiling-mounted projector", () => {
+    const s = evaluateSection({ ...ceiling, personHeightM: 1.8, roomHeightM: 3 })!;
+    // Lower edge of the beam climbs from 1.00 m at the picture to 2.80 m at the lens;
+    // it passes 1.80 m at 0.8 ÷ 1.8 × 4 m.
+    expect(s.inPicture).toEqual({ fromM: 0, toM: expect.closeTo(1.778, 3) });
+    expect(s.lowerEdgeAt(2)).toBeCloseTo(1.9);
+    expect(s.upperEdgeAt(0)).toBeCloseTo(2.35);
+    expect(s.clearanceUnderLensM).toBeCloseTo(1);
+    expect(s.ceilingGapM).toBeCloseTo(0.65);
+    expect(s.issues).toEqual([]);
+  });
+
+  it("finds the stretch near the projector for a table-top one", () => {
+    const s = evaluateSection({ distanceM: 4, pictureHeightM: 1.35, screenBottomM: 1.4, lensHeightM: 0.8, personHeightM: 1.3 })!;
+    // Lower edge falls from 1.40 m to 0.80 m; it passes 1.30 m after a sixth of the way.
+    expect(s.inPicture!.fromM).toBeCloseTo(4 / 6, 3);
+    expect(s.inPicture!.toM).toBe(4);
+  });
+
+  it("knows when nobody of that height is ever in the picture", () => {
+    expect(evaluateSection({ ...ceiling, screenBottomM: 2, personHeightM: 1.8 })!.inPicture).toBeNull();
+    // Exactly at the lower edge is not in the picture.
+    expect(evaluateSection({ ...ceiling, personHeightM: 1 })!.inPicture).toBeNull();
+  });
+
+  it("knows when they are in it all the way", () => {
+    const s = evaluateSection({ ...ceiling, lensHeightM: 1.5, personHeightM: 1.8 })!;
+    expect(s.inPicture).toEqual({ fromM: 0, toM: 4 });
+    expect(s.clearanceUnderLensM).toBeCloseTo(-0.3);
+  });
+
+  it("says when picture or projector do not fit under the ceiling", () => {
+    const s = evaluateSection({ ...ceiling, personHeightM: 1.8, roomHeightM: 2.2 })!;
+    expect(s.issues).toEqual(["picture-above-ceiling", "lens-above-ceiling"]);
+  });
+
+  it("needs both heights and a projector in front of the picture", () => {
+    expect(evaluateSection({ ...ceiling, lensHeightM: undefined, personHeightM: 1.8 })).toBeNull();
+    expect(evaluateSection({ ...ceiling, distanceM: 0, personHeightM: 1.8 })).toBeNull();
+  });
+
+  it("marks the same stretch inside the cone on the plan", () => {
+    const p: FloorplanProjection = {
+      id: "x", symbolId: "s", optics: L610U, aspect: "16:10", widthM: 2.16, heightM: 1.35,
+      screenCenterMm: { x: 200, y: 100 }, screenRotationDeg: 180,
+      screenBottomM: 1, lensHeightM: 2.8,
+    };
+    // 1:50, projector 4 m (80 mm) to the left.
+    const g = projectionGeometry(p, { x: 120, y: 100 }, 50);
+    expect(g.section!.inPicture!.toM).toBeCloseTo(1.778, 3);
+    const zone = g.inPictureMm!;
+    expect(zone).toHaveLength(4);
+    // Starts on the picture, ends 1.778 m (35.6 mm) in front of it, narrower there.
+    expect(zone[0].x).toBeCloseTo(200);
+    expect(zone[1].x).toBeCloseTo(200);
+    expect(zone[2].x).toBeCloseTo(200 - 35.56, 1);
+    expect(Math.abs(zone[2].y - zone[3].y)).toBeLessThan(Math.abs(zone[0].y - zone[1].y));
+    // No heights → no zone.
+    expect(projectionGeometry({ ...p, lensHeightM: undefined }, { x: 120, y: 100 }, 50).inPictureMm).toBeNull();
+  });
+
+  it("draws the section to fit a given width", () => {
+    const s = evaluateSection({ ...ceiling, personHeightM: 1.8, roomHeightM: 3 })!;
+    const d = sectionDrawing(s, 60);
+    expect(d.widthMm).toBe(60);
+    // 4 m throw plus half a metre either side share the width inside the margin, and the
+    // 3 m room is drawn at that same scale.
+    expect(d.mmPerM).toBeCloseTo((60 - 2 * d.padMm) / 5, 5);
+    expect(d.heightMm).toBeCloseTo(3 * d.mmPerM + 2 * d.padMm + d.labelBandMm, 5);
+    const kinds = d.items.map((i) => i.role);
+    expect(kinds).toEqual(expect.arrayContaining(["floor", "ceiling", "beam", "picture", "projector", "person", "in-picture"]));
+    for (const item of d.items) {
+      for (const pt of item.points) {
+        expect(pt.x).toBeGreaterThanOrEqual(-0.001);
+        expect(pt.x).toBeLessThanOrEqual(60.001);
+        expect(pt.y).toBeGreaterThanOrEqual(-0.001);
+        expect(pt.y).toBeLessThanOrEqual(d.heightMm + 0.001);
+      }
+    }
   });
 });

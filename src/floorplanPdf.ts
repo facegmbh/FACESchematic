@@ -83,7 +83,7 @@ import {
   PAGE_MARGIN_MM,
   type LegendRow,
 } from "./floorplan";
-import { PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, projectionCaption, projectionCaptionAnchorMm, visibleProjections } from "./projection";
+import { PROJECTION_IN_PICTURE_COLOR, PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, inPictureLabel, projectionCaption, projectionCaptionAnchorMm, sectionBoxMm, visibleProjections, type SectionRole } from "./projection";
 
 const MM_TO_PT = 72 / IN_TO_MM;
 /** Where the red rule under the legend title sits inside the title row. */
@@ -758,6 +758,21 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         setPdfAlpha(doc, 1);
         doc.lines(cone, g.lensMm.x, g.lensMm.y, [1, 1], "S", true);
       }
+      if (g.inPictureMm) {
+        // Where someone stands in the picture. The screen hatches it; a flat tint prints
+        // the same message without a pattern jsPDF does not have.
+        const [ir, ig, ib] = hexToRgb(PROJECTION_IN_PICTURE_COLOR);
+        const z = g.inPictureMm;
+        const zone: [number, number][] = [];
+        for (let k = 1; k < z.length; k++) zone.push([z[k].x - z[k - 1].x, z[k].y - z[k - 1].y]);
+        doc.setFillColor(ir, ig, ib);
+        doc.setDrawColor(ir, ig, ib);
+        doc.setLineWidth(0.2);
+        setPdfAlpha(doc, 0.35);
+        doc.lines(zone, z[0].x, z[0].y, [1, 1], "F", true);
+        setPdfAlpha(doc, 1);
+        doc.lines(zone, z[0].x, z[0].y, [1, 1], "S", true);
+      }
       if (g.bandMm) {
         const [okR, okG, okB] = hexToRgb(PROJECTION_OK_COLOR);
         const len = Math.hypot(sb.x - sa.x, sb.y - sa.y) || 1;
@@ -781,6 +796,52 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       if (ok) doc.setTextColor(17, 17, 17); else doc.setTextColor(pr, pg, pb);
       // The embedded font has no double prime; the plain inch mark reads the same.
       doc.text(projectionCaption(projection, g).replace("\u2033", '"'), at.x, at.y, { baseline: "middle", align: at.align === "start" ? "left" : at.align === "end" ? "right" : "center" });
+
+      // The section box, drawn from the same geometry and styles as on screen.
+      const box = sectionBoxMm(projection, g);
+      if (box) {
+        const style: Record<SectionRole, { stroke: string; w: number; fill?: string; alpha?: number }> = {
+          floor: { stroke: "#111111", w: 0.35 },
+          ceiling: { stroke: "#64748b", w: 0.25 },
+          beam: { stroke: "#0e7490", w: 0.2, fill: "#0e7490", alpha: 0.12 },
+          picture: { stroke: "#111111", w: 0.8 },
+          projector: { stroke: "#111111", w: 0.2, fill: "#334155", alpha: 1 },
+          person: { stroke: "#b45309", w: 0.2, fill: "#f59e0b", alpha: 0.55 },
+          "in-picture": { stroke: "#d97706", w: 1 },
+        };
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(17, 17, 17);
+        doc.setLineWidth(0.2);
+        doc.rect(box.x, box.y, box.drawing.widthMm, box.drawing.heightMm, "FD");
+        doc.setLineCap("butt");
+        for (const item of box.drawing.items) {
+          const st = style[item.role];
+          const pts = item.points.map((pt) => ({ x: box.x + pt.x, y: box.y + pt.y }));
+          doc.setDrawColor(...hexToRgb(st.stroke));
+          doc.setLineWidth(st.w);
+          if (pts.length === 2) {
+            doc.line(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+            continue;
+          }
+          const deltas: [number, number][] = [];
+          for (let k = 1; k < pts.length; k++) deltas.push([pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y]);
+          if (st.fill) {
+            doc.setFillColor(...hexToRgb(st.fill));
+            setPdfAlpha(doc, st.alpha ?? 1);
+            doc.lines(deltas, pts[0].x, pts[0].y, [1, 1], "F", true);
+            setPdfAlpha(doc, 1);
+          }
+          doc.lines(deltas, pts[0].x, pts[0].y, [1, 1], "S", true);
+        }
+        doc.setLineCap("round");
+        const text = g.section ? inPictureLabel(g.section) : undefined;
+        if (text && box.drawing.inPictureLabelMm) {
+          doc.setFont("Inter", "bold");
+          doc.setFontSize(box.drawing.labelSizeMm * MM_TO_PT);
+          doc.setTextColor(180, 83, 9);
+          doc.text(text, box.x + box.drawing.inPictureLabelMm.x, box.y + box.drawing.inPictureLabelMm.y, { baseline: "middle", align: "center" });
+        }
+      }
     }
 
     // Content border

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSchematicStore } from "../store";
 import {
+  DEFAULT_PERSON_HEIGHT_M,
   PROJECTION_ASPECTS,
+  SEATED_PERSON_HEIGHT_M,
   defaultProjectionFor,
+  inPictureLabel,
+  sectionDrawing,
   projectionGeometry,
   resizeSurface,
   symbolPositionForDistance,
@@ -20,7 +24,8 @@ import {
 } from "../projectionData";
 import { clampToSheet } from "../floorplan";
 import { useT } from "../i18n";
-import type { DeviceData, FloorplanPage, FloorplanProjection, FloorplanSymbol, ProjectionOptics } from "../types";
+import ProjectionSectionSvg from "./ProjectionSectionSvg";
+import type { DeviceData, FloorplanPage, FloorplanProjection, FloorplanSymbol, ProjectionOptics, ProjectionSection } from "../types";
 
 interface Props {
   page: FloorplanPage;
@@ -157,6 +162,19 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
         : t("No horizontal lens shift — put the projector on the picture's centre line");
       case "shift-v": return t("Shift V {v} % > {limit} %", { v: Math.abs(i.value ?? 0).toFixed(0), limit: (i.limit ?? 0).toFixed(0) });
     }
+  };
+
+  const sec = g.section;
+  const personM = projection.section?.personHeightM ?? DEFAULT_PERSON_HEIGHT_M;
+  const patchSection = (p: Partial<ProjectionSection>) => patch({ section: { ...projection.section, ...p } });
+  const sectionText = (): string => {
+    if (!sec) return "";
+    const h = sec.personHeightM.toFixed(2);
+    if (!sec.inPicture) return t("{h} m tall: never in the picture", { h });
+    const { fromM, toM } = sec.inPicture;
+    if (fromM <= 0.005 && toM >= sec.distanceM - 0.005) return t("{h} m tall: in the picture all the way to the projector", { h });
+    if (fromM <= 0.005) return t("{h} m tall: in the picture up to {m} m in front of it", { h, m: toM.toFixed(2) });
+    return t("{h} m tall: in the picture from {m} m in front of it to the projector", { h, m: fromM.toFixed(2) });
   };
 
   const lock = (on: boolean | undefined, toggle: () => void, title: string, testId: string) => (
@@ -301,6 +319,12 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
           : <span className="text-[var(--color-text-muted)]">{t("enter the light output")}</span>}
       </div>
 
+      {sec && (
+        <div className={sec.inPicture ? "text-amber-700" : "text-[var(--color-text)]"} data-testid="projection-section-text">
+          {sectionText()}
+        </div>
+      )}
+
       {r.issues.map((i, n) => (
         <div key={n} className="px-1.5 py-0.5 rounded border border-red-200 bg-red-100 text-red-800" data-testid="projection-issue">{issueText(i)}</div>
       ))}
@@ -316,17 +340,61 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
               </select>
             </label>
           )}
-          <div className={ROW} title={t("Lower edge of the picture and the lens above the floor. With both, the vertical lens shift is checked too.")}>
-            <span className="shrink-0 w-12">{t("Heights")}</span>
-            <NumberField className={`w-12 ${FIELD}`} digits={2} min={0} value={projection.screenBottomM} onCommit={(v) => patch({ screenBottomM: v })} title={t("Lower edge of the picture above the floor, m")} />
-            <span style={{ fontSize: 10 }}>{t("picture")}</span>
-            <NumberField className={`w-12 ${FIELD}`} digits={2} min={0} value={projection.lensHeightM} onCommit={(v) => patch({ lensHeightM: v })} title={t("Lens above the floor, m")} />
-            <span style={{ fontSize: 10 }}>{t("lens")} m</span>
-          </div>
+          {/* Heights: they check the vertical shift and draw the section. */}
+          <label className={ROW} title={t("Lower edge of the picture above the floor, m")}>
+            <span className="shrink-0 w-16">{t("Lower edge")}</span>
+            <NumberField className={`w-14 ${FIELD}`} digits={2} min={0} value={projection.screenBottomM} testId="projection-screen-bottom" onCommit={(v) => patch({ screenBottomM: v })} />
+            <span style={{ fontSize: 10 }}>m</span>
+          </label>
+          <label className={ROW} title={t("Lens above the floor, m")}>
+            <span className="shrink-0 w-16">{t("Lens height")}</span>
+            <NumberField className={`w-14 ${FIELD}`} digits={2} min={0} value={projection.lensHeightM} testId="projection-lens-height" onCommit={(v) => patch({ lensHeightM: v })} />
+            <span style={{ fontSize: 10 }}>m</span>
+          </label>
           {r.lensHeightRangeM && (
-            <div className="pl-14 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+            <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
               {t("Lens may hang between {a} and {b} m", { a: Math.max(0, r.lensHeightRangeM.min).toFixed(2), b: r.lensHeightRangeM.max.toFixed(2) })}
             </div>
+          )}
+          <label className={ROW} title={t("Room height, floor to ceiling, m")}>
+            <span className="shrink-0 w-16">{t("Room height")}</span>
+            <NumberField className={`w-14 ${FIELD}`} digits={2} min={0.5} value={projection.section?.roomHeightM} testId="projection-room-height" onCommit={(v) => patchSection({ roomHeightM: v })} />
+            <span style={{ fontSize: 10 }}>m</span>
+          </label>
+          <div className={ROW} title={t("Height of the person tested against the beam, m")}>
+            <span className="shrink-0 w-16">{t("Person")}</span>
+            <NumberField className={`w-14 ${FIELD}`} digits={2} min={0.5} value={personM} testId="projection-person-height"
+              onCommit={(v) => patchSection({ personHeightM: v && v !== DEFAULT_PERSON_HEIGHT_M ? v : undefined })} />
+            <span style={{ fontSize: 10 }}>m</span>
+            {[[DEFAULT_PERSON_HEIGHT_M, t("standing")], [SEATED_PERSON_HEIGHT_M, t("seated")]].map(([h, name]) => (
+              <button
+                key={String(h)}
+                className={`px-1 rounded border ${personM === h ? "border-cyan-500 text-cyan-700 bg-cyan-500/10" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                style={{ fontSize: 10 }}
+                onClick={() => patchSection({ personHeightM: h === DEFAULT_PERSON_HEIGHT_M ? undefined : (h as number) })}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          {sec ? (
+            <>
+              <div className="rounded border border-[var(--color-border)] bg-white overflow-hidden self-start">
+                <ProjectionSectionSvg drawing={sectionDrawing(sec, 70)} pxPerMm={3} label={inPictureLabel(sec)} />
+              </div>
+              {sec.issues.includes("picture-above-ceiling") && <div className="px-1.5 py-0.5 rounded border border-red-200 bg-red-100 text-red-800">{t("The picture reaches above the ceiling")}</div>}
+              {sec.issues.includes("lens-above-ceiling") && <div className="px-1.5 py-0.5 rounded border border-red-200 bg-red-100 text-red-800">{t("The lens is above the ceiling")}</div>}
+              <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("Puts the section on the plan as a box you can move and widen. It is exported with the sheet.")}>
+                <input type="checkbox" checked={Boolean(projection.section?.show)} data-testid="projection-section-show"
+                  onChange={(e) => patchSection({
+                    show: e.target.checked,
+                    positionMm: projection.section?.positionMm ?? clampToSheet({ x: projection.screenCenterMm.x + 10, y: projection.screenCenterMm.y + 10 }, page),
+                  })} />
+                <span>{t("Show the section on the sheet")}</span>
+              </label>
+            </>
+          ) : (
+            <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{t("Enter lower edge and lens height to see the section.")}</div>
           )}
           <label className={ROW} title={t("Gain of the screen material. 1 = matt white.")}>
             <span className="shrink-0 w-12">{t("Gain")}</span>

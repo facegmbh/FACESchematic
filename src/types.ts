@@ -1629,6 +1629,20 @@ export interface ProjectionOptics {
   lumens?: number;
 }
 
+/** Settings of a projection's section view. The section is computed from the heights the
+ *  projection already carries; this only adds the room and the person measured against it. */
+export interface ProjectionSection {
+  /** Floor to ceiling, metres. Undefined = no ceiling drawn or checked. */
+  roomHeightM?: number;
+  /** Height of the person tested against the beam. Undefined = 1.80 m, standing. */
+  personHeightM?: number;
+  /** Put the section on the sheet as a box (and so into the PDF). */
+  show?: boolean;
+  /** Top-left corner and width of that box, paper mm. */
+  positionMm?: { x: number; y: number };
+  widthMm?: number;
+}
+
 /**
  * A projector and its picture on the plan. The picture is the fixed point — it hangs on a
  * wall — and the projector symbol is what gets moved: the throw distance is simply how
@@ -1666,6 +1680,8 @@ export interface FloorplanProjection {
   lensHeightM?: number;
   /** Screen gain, default 1. */
   screenGain?: number;
+  /** The vertical section through lens and picture: who stands in the beam, and where. */
+  section?: ProjectionSection;
   /** Symbol group this is filed under, so it switches off with its layer. */
   groupId?: string;
   hidden?: boolean;

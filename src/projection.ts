@@ -249,6 +249,188 @@ export function resizeSurface<T extends Sized>(
 }
 
 // ---------------------------------------------------------------------------
+// Section
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_PERSON_HEIGHT_M = 1.8;
+export const SEATED_PERSON_HEIGHT_M = 1.3;
+
+export type SectionIssue = "picture-above-ceiling" | "lens-above-ceiling";
+
+export interface SectionSetup {
+  distanceM: number;
+  pictureHeightM: number;
+  screenBottomM?: number;
+  lensHeightM?: number;
+  personHeightM: number;
+  roomHeightM?: number;
+}
+
+export interface SectionResult {
+  distanceM: number;
+  screenBottomM: number;
+  screenTopM: number;
+  lensHeightM: number;
+  personHeightM: number;
+  roomHeightM?: number;
+  /** Height of the beam's lower and upper edge, x metres in front of the picture. */
+  lowerEdgeAt: (xM: number) => number;
+  upperEdgeAt: (xM: number) => number;
+  /** Where a person of that height reaches into the beam, as distances in front of the
+   *  picture. Null = nowhere. */
+  inPicture: { fromM: number; toM: number } | null;
+  /** Lens above the person's head; negative when they would walk into the projector. */
+  clearanceUnderLensM: number;
+  /** Ceiling above the picture's upper edge. */
+  ceilingGapM?: number;
+  issues: SectionIssue[];
+}
+
+/**
+ * The vertical section through lens and picture centre. The plan cannot show whether
+ * someone standing in the room throws a shadow: that depends on how high the beam's lower
+ * edge is where they stand. Under a ceiling-mounted projector that edge is lowest at the
+ * picture — so it is the presenter who ends up in it — and it clears head height some way
+ * out; a projector on a table reverses that.
+ */
+export function evaluateSection(setup: SectionSetup): SectionResult | null {
+  const { distanceM: d, screenBottomM: bottom, lensHeightM: lens, personHeightM: person } = setup;
+  if (bottom === undefined || lens === undefined || !(d > 0) || !(setup.pictureHeightM > 0)) return null;
+  const top = bottom + setup.pictureHeightM;
+  const lowerEdgeAt = (x: number) => bottom + ((lens - bottom) * x) / d;
+  const upperEdgeAt = (x: number) => top + ((lens - top) * x) / d;
+
+  // A person fills floor to head height, so they are in the beam wherever its lower edge
+  // is below their head.
+  let inPicture: SectionResult["inPicture"] = null;
+  const atPicture = person > bottom + 1e-9;
+  const atLens = person > lens + 1e-9;
+  if (atPicture && atLens) inPicture = { fromM: 0, toM: d };
+  else if (atPicture) inPicture = { fromM: 0, toM: ((person - bottom) * d) / (lens - bottom) };
+  else if (atLens) inPicture = { fromM: ((bottom - person) * d) / (bottom - lens), toM: d };
+
+  const issues: SectionIssue[] = [];
+  if (setup.roomHeightM !== undefined) {
+    if (top > setup.roomHeightM + 1e-9) issues.push("picture-above-ceiling");
+    if (lens > setup.roomHeightM + 1e-9) issues.push("lens-above-ceiling");
+  }
+
+  return {
+    distanceM: d,
+    screenBottomM: bottom,
+    screenTopM: top,
+    lensHeightM: lens,
+    personHeightM: person,
+    roomHeightM: setup.roomHeightM,
+    lowerEdgeAt,
+    upperEdgeAt,
+    inPicture,
+    clearanceUnderLensM: lens - person,
+    ceilingGapM: setup.roomHeightM !== undefined ? setup.roomHeightM - top : undefined,
+    issues,
+  };
+}
+
+export type SectionRole =
+  | "floor"
+  | "ceiling"
+  | "beam"
+  | "picture"
+  | "projector"
+  | "person"
+  | "in-picture";
+
+/** One stroke or filled outline of the section drawing, in mm from the box's top-left. */
+export interface SectionItem {
+  role: SectionRole;
+  /** Two points = a line, more = a closed outline. */
+  points: Pt[];
+}
+
+export interface SectionDrawing {
+  widthMm: number;
+  heightMm: number;
+  /** Clear margin kept around the drawing inside the box. */
+  padMm: number;
+  mmPerM: number;
+  /** Strip under the floor line for the caption, and the caption's size. */
+  labelBandMm: number;
+  labelSizeMm: number;
+  items: SectionItem[];
+  /** Where the caption of the in-picture stretch goes (below the floor), if there is one. */
+  inPictureLabelMm: Pt | null;
+}
+
+/** Room either side of picture and projector, metres. */
+const SECTION_SIDE_M = 0.5;
+
+/**
+ * The section as plain geometry, so the panel, the box on the sheet and the PDF draw the
+ * very same lines. Picture on the left, projector on the right, to scale within itself.
+ */
+export function sectionDrawing(s: SectionResult, widthMm: number): SectionDrawing {
+  const padMm = Math.min(3, widthMm * 0.05);
+  const spanM = s.distanceM + 2 * SECTION_SIDE_M;
+  const mmPerM = (widthMm - 2 * padMm) / spanM;
+  // Without a ceiling the drawing is as tall as whatever reaches highest.
+  const topM = s.roomHeightM ?? Math.max(s.screenTopM, s.lensHeightM, s.personHeightM) + 0.3;
+  const labelSizeMm = Math.max(2, widthMm * 0.04);
+  const labelBandMm = labelSizeMm * 1.3;
+  const heightMm = topM * mmPerM + 2 * padMm + labelBandMm;
+  const X = (m: number) => padMm + (SECTION_SIDE_M + m) * mmPerM;
+  const Y = (m: number) => padMm + (topM - Math.min(m, topM)) * mmPerM;
+  const items: SectionItem[] = [];
+  const left = padMm, right = widthMm - padMm;
+
+  items.push({ role: "floor", points: [{ x: left, y: Y(0) }, { x: right, y: Y(0) }] });
+  if (s.roomHeightM !== undefined) items.push({ role: "ceiling", points: [{ x: left, y: Y(topM) }, { x: right, y: Y(topM) }] });
+  items.push({
+    role: "beam",
+    points: [{ x: X(s.distanceM), y: Y(s.lensHeightM) }, { x: X(0), y: Y(s.screenTopM) }, { x: X(0), y: Y(s.screenBottomM) }],
+  });
+  items.push({ role: "picture", points: [{ x: X(0), y: Y(s.screenBottomM) }, { x: X(0), y: Y(s.screenTopM) }] });
+  const body = 0.18;
+  items.push({
+    role: "projector",
+    points: [
+      { x: X(s.distanceM), y: Y(s.lensHeightM + body / 2) },
+      { x: Math.min(right, X(s.distanceM + 2 * body)), y: Y(s.lensHeightM + body / 2) },
+      { x: Math.min(right, X(s.distanceM + 2 * body)), y: Y(s.lensHeightM - body / 2) },
+      { x: X(s.distanceM), y: Y(s.lensHeightM - body / 2) },
+    ],
+  });
+
+  let inPictureLabelMm: Pt | null = null;
+  // The person stands where it matters: at the edge of the stretch, head touching the
+  // beam — or in the middle of the room when they are never, or always, in it.
+  let personAt = s.distanceM / 2;
+  if (s.inPicture) {
+    const { fromM, toM } = s.inPicture;
+    items.push({ role: "in-picture", points: [{ x: X(fromM), y: Y(0) }, { x: X(toM), y: Y(0) }] });
+    inPictureLabelMm = { x: Math.max(left + labelSizeMm * 2.5, (X(fromM) + X(toM)) / 2), y: Y(0) + padMm * 0.4 + labelBandMm / 2 };
+    if (fromM > 0) personAt = fromM;
+    else if (toM < s.distanceM) personAt = toM;
+  }
+  const head = Math.min(0.24, s.personHeightM / 4);
+  const half = 0.2;
+  items.push({
+    role: "person",
+    points: [
+      { x: X(personAt - half), y: Y(0) },
+      { x: X(personAt - half), y: Y(s.personHeightM - head) },
+      { x: X(personAt - head / 2), y: Y(s.personHeightM - head) },
+      { x: X(personAt - head / 2), y: Y(s.personHeightM) },
+      { x: X(personAt + head / 2), y: Y(s.personHeightM) },
+      { x: X(personAt + head / 2), y: Y(s.personHeightM - head) },
+      { x: X(personAt + half), y: Y(s.personHeightM - head) },
+      { x: X(personAt + half), y: Y(0) },
+    ],
+  });
+
+  return { widthMm, heightMm, padMm, mmPerM, labelBandMm, labelSizeMm, items, inPictureLabelMm };
+}
+
+// ---------------------------------------------------------------------------
 // On the sheet
 // ---------------------------------------------------------------------------
 
@@ -271,6 +453,11 @@ export interface ProjectionGeometry {
   /** Nearest and farthest allowed lens position on the lens's own line, or null without
    *  a throw range. */
   bandMm: [Pt, Pt] | null;
+  /** The section through lens and picture, once both heights are known. */
+  section: SectionResult | null;
+  /** The part of the cone in which the tested person stands in the picture — the
+   *  section's answer, drawn in plan. Four corners, picture side first. */
+  inPictureMm: Pt[] | null;
   result: ProjectionResult;
 }
 
@@ -308,13 +495,35 @@ export function projectionGeometry(p: FloorplanProjection, symbolMm: Pt, scaleDe
     y: p.screenCenterMm.y + t.y * lateralM * mmPerM + n.y * dM * mmPerM,
   });
 
+  const pictureMm = along(result.picture.widthM / 2);
+  const section = evaluateSection({
+    distanceM,
+    pictureHeightM: result.picture.heightM,
+    screenBottomM: p.screenBottomM,
+    lensHeightM: p.lensHeightM,
+    personHeightM: p.section?.personHeightM ?? DEFAULT_PERSON_HEIGHT_M,
+    roomHeightM: p.section?.roomHeightM,
+  });
+  let inPictureMm: Pt[] | null = null;
+  if (section?.inPicture && distanceM > 0) {
+    // The cone narrows linearly from the picture's ends to the lens.
+    const at = (end: Pt, xM: number): Pt => {
+      const k = xM / distanceM;
+      return { x: end.x + (symbolMm.x - end.x) * k, y: end.y + (symbolMm.y - end.y) * k };
+    };
+    const { fromM, toM } = section.inPicture;
+    inPictureMm = [at(pictureMm[0], fromM), at(pictureMm[1], fromM), at(pictureMm[1], toM), at(pictureMm[0], toM)];
+  }
+
   return {
     distanceM,
     lateralM,
     lensMm: symbolMm,
     surfaceMm: along(p.widthM / 2),
-    pictureMm: along(result.picture.widthM / 2),
+    pictureMm,
     bandMm: result.range ? [onLine(result.range.minM), onLine(result.range.maxM)] : null,
+    section,
+    inPictureMm,
     result,
   };
 }
@@ -423,5 +632,29 @@ export function projectionCaptionAnchorMm(
   };
 }
 
+/** The stretch in which someone stands in the picture, as it is written on the drawing:
+ *  "1.78 m" from the picture, or "0.67–4.00 m" when it starts further out. */
+export function inPictureLabel(s: SectionResult): string | undefined {
+  if (!s.inPicture) return undefined;
+  const { fromM, toM } = s.inPicture;
+  return fromM > 0.005 ? `${fromM.toFixed(2)}\u2013${toM.toFixed(2)} m` : `${toM.toFixed(2)} m`;
+}
+
+export const SECTION_BOX_DEFAULT_WIDTH_MM = 70;
+export const SECTION_BOX_MIN_WIDTH_MM = 30;
+
+/** The section as a box on the sheet: where it sits and what is drawn in it. Null while
+ *  it is switched off or the heights it needs are missing. */
+export function sectionBoxMm(
+  p: FloorplanProjection,
+  g: ProjectionGeometry,
+): { x: number; y: number; drawing: SectionDrawing } | null {
+  if (!p.section?.show || !g.section) return null;
+  const widthMm = Math.max(SECTION_BOX_MIN_WIDTH_MM, p.section.widthMm ?? SECTION_BOX_DEFAULT_WIDTH_MM);
+  const at = p.section.positionMm ?? { x: p.screenCenterMm.x + 10, y: p.screenCenterMm.y + 10 };
+  return { x: at.x, y: at.y, drawing: sectionDrawing(g.section, widthMm) };
+}
+
+export const PROJECTION_IN_PICTURE_COLOR = "#d97706";
 export const PROJECTION_OK_COLOR = "#0e7490";
 export const PROJECTION_WARN_COLOR = "#dc2626";

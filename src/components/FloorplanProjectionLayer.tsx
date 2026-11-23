@@ -1,11 +1,15 @@
 import { useMemo } from "react";
 import {
+  PROJECTION_IN_PICTURE_COLOR,
   PROJECTION_OK_COLOR,
   PROJECTION_WARN_COLOR,
   projectionCaption,
   projectionCaptionAnchorMm,
+  inPictureLabel,
+  sectionBoxMm,
   visibleProjections,
 } from "../projection";
+import ProjectionSectionSvg from "./ProjectionSectionSvg";
 import { useT } from "../i18n";
 import type { FloorplanPage, FloorplanProjection } from "../types";
 
@@ -23,6 +27,9 @@ interface Props {
   onSelect: (projection: FloorplanProjection) => void;
   onMoveStart: (e: React.MouseEvent, projection: FloorplanProjection) => void;
   onTurnStart: (e: React.MouseEvent, projection: FloorplanProjection) => void;
+  /** The section box on the sheet: moved by its body, widened by its corner. */
+  onSectionMoveStart: (e: React.MouseEvent, projection: FloorplanProjection, at: { x: number; y: number }) => void;
+  onSectionResizeStart: (e: React.MouseEvent, projection: FloorplanProjection, widthMm: number) => void;
 }
 
 /**
@@ -31,7 +38,7 @@ interface Props {
  * panel; the sheet only has to show at a glance whether the position works.
  */
 export default function FloorplanProjectionLayer({
-  page, mmToPx, sheetPx, interactive, selectedSymbolIds, onSelect, onMoveStart, onTurnStart,
+  page, mmToPx, sheetPx, interactive, selectedSymbolIds, onSelect, onMoveStart, onTurnStart, onSectionMoveStart, onSectionResizeStart,
 }: Props) {
   const t = useT();
   const items = useMemo(
@@ -48,6 +55,11 @@ export default function FloorplanProjectionLayer({
       height={sheetPx.h}
       style={{ left: 0, top: 0, zIndex: PROJECTION_Z, pointerEvents: "none", overflow: "visible" }}
     >
+      <defs>
+        <pattern id="projection-in-picture" patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={6} stroke={PROJECTION_IN_PICTURE_COLOR} strokeWidth={2} />
+        </pattern>
+      </defs>
       {items.map(({ projection, geometry: g }) => {
         const ok = g.result.issues.length === 0;
         const color = ok ? PROJECTION_OK_COLOR : PROJECTION_WARN_COLOR;
@@ -71,6 +83,19 @@ export default function FloorplanProjectionLayer({
                 strokeOpacity={0.7}
                 strokeWidth={1}
               />
+            )}
+            {/* Where someone stands in the picture — the section's answer, seen from above. */}
+            {g.inPictureMm && (
+              <polygon
+                points={g.inPictureMm.map(px).join(" ")}
+                fill="url(#projection-in-picture)"
+                fillOpacity={0.7}
+                stroke={PROJECTION_IN_PICTURE_COLOR}
+                strokeWidth={1}
+                data-projection-in-picture={projection.id}
+              >
+                <title>{t("A person of the height set in the section stands in the picture here")}</title>
+              </polygon>
             )}
             {g.bandMm && (
               <g stroke={PROJECTION_OK_COLOR} strokeWidth={1} strokeOpacity={0.9}>
@@ -110,6 +135,48 @@ export default function FloorplanProjectionLayer({
             >
               {projectionCaption(projection, g)}
             </text>
+            {(() => {
+              const box = sectionBoxMm(projection, g);
+              if (!box) return null;
+              const w = mmToPx(box.drawing.widthMm), h = mmToPx(box.drawing.heightMm);
+              return (
+                <g transform={`translate(${mmToPx(box.x)} ${mmToPx(box.y)})`} data-projection-section-box={projection.id}>
+                  <rect
+                    width={w}
+                    height={h}
+                    fill="#fff"
+                    stroke={selected ? "#3b82f6" : "#111"}
+                    strokeWidth={selected ? 1.5 : 0.75}
+                    style={{ pointerEvents: interactive ? "auto" : "none", cursor: "move" }}
+                    onMouseDown={(e) => {
+                      if (!interactive) return;
+                      e.stopPropagation();
+                      onSelect(projection);
+                      onSectionMoveStart(e, projection, { x: box.x, y: box.y });
+                    }}
+                  />
+                  <g style={{ pointerEvents: "none" }}>
+                    <ProjectionSectionSvg drawing={box.drawing} pxPerMm={mmToPx(1)} label={g.section ? inPictureLabel(g.section) : undefined} />
+                  </g>
+                  {selected && interactive && (
+                    <rect
+                      x={w - 5}
+                      y={h - 5}
+                      width={10}
+                      height={10}
+                      fill="#fff"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      style={{ pointerEvents: "auto", cursor: "ew-resize" }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        onSectionResizeStart(e, projection, box.drawing.widthMm);
+                      }}
+                    />
+                  )}
+                </g>
+              );
+            })()}
             {selected && interactive && (
               <circle
                 cx={mmToPx(turnAt.x)}

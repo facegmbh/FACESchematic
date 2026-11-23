@@ -338,6 +338,17 @@ export default function FloorplansPage() {
         allowed mounting height, and the screen gain.
       </p>
 
+      <h3>The section: who stands in the picture</h3>
+      <p>
+        A plan cannot show whether someone standing in the room throws a shadow. Under{" "}
+        <strong>More</strong>, enter the picture&apos;s lower edge and the lens height, optionally the
+        room height, and the height of the person to test (<em>standing</em> 1.80 m or{" "}
+        <em>seated</em> 1.30 m). The panel then draws the vertical section through lens and picture
+        and says, for example, &ldquo;in the picture up to 1.78 m in front of it&rdquo;. On the plan
+        that stretch of the cone is hatched. <strong>Show the section on the sheet</strong> puts the
+        section on the plan as a box you can move and widen, so it is exported with the sheet.
+      </p>
+
       <h2>The legend box</h2>
       <p>
         The legend is generated from the groups in use: swatch, title, description and product

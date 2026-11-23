@@ -98,6 +98,24 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   await expect.poll(async () => (await read()).heightM).toBeCloseTo(1, 3);
   expect((await read()).widthM).toBeCloseTo(start.widthM, 3);
 
+  // The section: with both heights the panel says where a standing person is in the
+  // picture, the cone is hatched there, and the section can be put on the sheet.
+  await page.getByTestId("projection-distance").fill("4.00");
+  await panel.locator("summary").click();
+  await page.evaluate(async (arg) => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    useSchematicStore.getState().updateFloorplanProjection(arg.pageId, arg.projectionId, { screenBottomM: 1, lensHeightM: 2.8 });
+  }, state);
+  // Lower edge climbs from 1.00 m to 2.80 m over 4 m and passes 1.80 m at 1.78 m.
+  await expect(page.getByTestId("projection-section-text")).toContainText("1.78");
+  await expect(page.locator(`[data-projection-in-picture="${state.projectionId}"]`)).toBeAttached();
+  await expect(panel.getByTestId("projection-section")).toBeVisible();
+  await page.getByTestId("projection-section-show").check();
+  await expect(page.locator(`[data-projection-section-box="${state.projectionId}"]`)).toBeAttached();
+  // Seated, the same person is in the picture for a shorter stretch.
+  await page.getByRole("button", { name: /seated|sitzend/ }).click();
+  await expect(page.getByTestId("projection-section-text")).toContainText("0.67");
+
   await page.screenshot({ path: process.env.PROJECTION_SHOT ?? join(tmpdir(), "projection.png") });
   expect(errors).toEqual([]);
 });

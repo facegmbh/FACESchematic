@@ -62,7 +62,7 @@ import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanProjectionLayer from "./FloorplanProjectionLayer";
-import { projectionGeometry, symbolRotationFacing } from "../projection";
+import { SECTION_BOX_MIN_WIDTH_MM, projectionGeometry, symbolRotationFacing } from "../projection";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
@@ -132,7 +132,9 @@ type DragState =
   | { kind: "projection-screen"; projectionId: string; startClient: Vec2; start: Vec2 }
   /** Turning the picture about its middle. The projector keeps its place relative to it
    *  (`distanceMm` in front, `lateralMm` to the side, paper mm) and swings round. */
-  | { kind: "projection-turn"; projectionId: string; distanceMm: number; lateralMm: number };
+  | { kind: "projection-turn"; projectionId: string; distanceMm: number; lateralMm: number }
+  | { kind: "projection-section"; projectionId: string; startClient: Vec2; start: Vec2 }
+  | { kind: "projection-section-resize"; projectionId: string; startClient: Vec2; startWidth: number };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
 function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "tintSymbol" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
@@ -648,6 +650,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           { continuing: projectionDragStartedRef.current },
         );
         projectionDragStartedRef.current = true;
+      } else if (dragging.kind === "projection-section" || dragging.kind === "projection-section-resize") {
+        const projection = (page.projections ?? []).find((pr) => pr.id === dragging.projectionId);
+        if (projection) {
+          const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+          const section = dragging.kind === "projection-section"
+            ? { ...projection.section, positionMm: clampToSheet({ x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) }, page) }
+            : { ...projection.section, widthMm: Math.max(SECTION_BOX_MIN_WIDTH_MM, snap(dragging.startWidth + d.x, free)) };
+          updateFloorplanProjection(page.id, dragging.projectionId, { section }, { continuing: projectionDragStartedRef.current });
+          projectionDragStartedRef.current = true;
+        }
       } else if (dragging.kind === "projection-turn") {
         const projection = (page.projections ?? []).find((pr) => pr.id === dragging.projectionId);
         const at = clientToPaperMm(e.clientX, e.clientY);
@@ -1056,6 +1068,16 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               didMoveRef.current = false;
               projectionDragStartedRef.current = false;
               setDragging({ kind: "projection-turn", projectionId: projection.id, distanceMm: g.distanceM * mmPerM, lateralMm: g.lateralM * mmPerM });
+            }}
+            onSectionMoveStart={(e, projection, at) => {
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-section", projectionId: projection.id, startClient: { x: e.clientX, y: e.clientY }, start: at });
+            }}
+            onSectionResizeStart={(e, projection, widthMm) => {
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-section-resize", projectionId: projection.id, startClient: { x: e.clientX, y: e.clientY }, startWidth: widthMm });
             }}
           />
 
