@@ -851,9 +851,20 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       addToast(t("Enter the real distance in metres."), "error");
       return;
     }
+    const wasLocked = Boolean(page.underlay?.locked);
     const ok = calibrateFloorplan(page.id, calibPicks[0], calibPicks[1], metres * 1000);
     if (ok) {
-      addToast(t("Plan calibrated at {scale}.", { scale: formatScale(page.scaleDenominator) }), "success", 4000);
+      // Read the scale back from the store: a locked plan changes the page's scale, and
+      // `page` here is still the one from before the calibration.
+      const after = useSchematicStore.getState().pages.find((p) => p.id === page.id) as FloorplanPage | undefined;
+      const scale = formatScale(after?.scaleDenominator ?? page.scaleDenominator);
+      addToast(
+        wasLocked
+          ? t("The plan is locked, so it stayed where it is — the page's scale is now {scale}.", { scale })
+          : t("Plan calibrated at {scale}.", { scale }),
+        "success",
+        wasLocked ? 6000 : 4000,
+      );
       onToolChange("select");
     } else {
       addToast(t("Could not calibrate from those two points."), "error");

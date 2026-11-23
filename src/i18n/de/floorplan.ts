@@ -134,6 +134,8 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Add a symbol group first — it defines the color and legend row.":
     "Zuerst eine Symbolgruppe anlegen — sie bestimmt Farbe und Legendenzeile.",
   "Enter the real distance in metres.": "Den realen Abstand in Metern eintragen.",
+  "The plan is locked, so it stayed where it is — the page's scale is now {scale}.":
+    "Der Plan ist gesperrt und ist deshalb geblieben, wo er ist — die Seite steht jetzt im {scale}.",
   "Plan calibrated at {scale}.": "Plan auf {scale} kalibriert.",
   "Could not calibrate from those two points.": "Aus diesen beiden Punkten ließ sich nicht kalibrieren.",
   "Click the first end of a known dimension on the plan.":

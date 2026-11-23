@@ -94,6 +94,7 @@ import {
   formatSymbolLabel,
   nextSeqInLine,
   renumberLine,
+  calibratedScale,
   computeCalibration,
   createDefaultDrawingBlock,
   createDefaultLegend,
@@ -1163,7 +1164,8 @@ interface SchematicState {
   updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm" | "labelTemplate" | "kind" | "hideCoverages">>) => void;
   setFloorplanUnderlay: (pageId: string, underlay: FloorplanUnderlay | undefined) => void;
   updateFloorplanUnderlay: (pageId: string, patch: Partial<FloorplanUnderlay>) => void;
-  /** Resize the underlay from a measured reference distance (see computeCalibration). */
+  /** Resolve a measured reference distance: an unlocked underlay is resized to the page's
+   *  scale (computeCalibration), a locked one stays and the page's scale changes instead. */
   calibrateFloorplan: (pageId: string, pickA: { x: number; y: number }, pickB: { x: number; y: number }, realDistanceMm: number) => boolean;
   addFloorplanGroup: (pageId: string, group?: Partial<Omit<FloorplanSymbolGroup, "id">>) => string;
   updateFloorplanGroup: (pageId: string, groupId: string, patch: Partial<Omit<FloorplanSymbolGroup, "id">>) => void;
@@ -7061,6 +7063,28 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     const state = get();
     const page = state.pages.find((p) => p.id === pageId && p.type === "floorplan") as FloorplanPage | undefined;
     if (!page?.underlay) return false;
+
+    // A locked plan stays where it is — that is what the lock is for. The measurement is
+    // then resolved the other way round: the drawing keeps its place and size and the
+    // page's scale gives way. Positions on the sheet are paper mm throughout (symbols,
+    // walls, the middle of a projection), so they stay on their spot of the drawing, while
+    // what is measured in metres (a camera's reach, a picture's width) comes out true.
+    if (page.underlay.locked) {
+      const scaleDenominator = calibratedScale(pickA, pickB, realDistanceMm);
+      if (!scaleDenominator) return false;
+      pushUndo({ nodes: state.nodes, edges: state.edges });
+      set({
+        pages: mapFloorplanPage(state.pages, pageId, (p) => p.underlay ? ({
+          ...p,
+          scaleDenominator,
+          underlay: { ...p.underlay, mmPerPx: underlayMmPerPx(p.underlay, scaleDenominator) },
+        }) : p),
+        undoSize: undoStack.length, redoSize: 0,
+      });
+      get().saveToLocalStorage();
+      return true;
+    }
+
     const result = computeCalibration(page.underlay, pickA, pickB, realDistanceMm, page.scaleDenominator);
     if (!result) return false;
     pushUndo({ nodes: state.nodes, edges: state.edges });

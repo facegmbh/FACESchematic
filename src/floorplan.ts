@@ -189,6 +189,29 @@ export function computeCalibration(
   };
 }
 
+/** How close a measured scale has to come to a standard one to be taken as that one. Two
+ *  clicks on a plotted line are a few tenths of a millimetre off; 2 % absorbs that without
+ *  pulling a genuinely odd scan onto a scale it was not drawn at. */
+const STANDARD_SCALE_TOLERANCE = 0.02;
+
+/**
+ * The scale a measurement says the page is at: two points on the sheet and the distance they
+ * are apart on site. Used when the plan itself must not move — a locked underlay — so the
+ * page's scale gives way instead of the drawing.
+ *
+ * A plot was made at a standard scale, so a result close to one is taken as that one. A
+ * scanned or photographed plan is at no standard scale, and then the measured value stands.
+ */
+export function calibratedScale(pickA: Vec2, pickB: Vec2, realDistanceMm: number): number | null {
+  const paper = Math.hypot(pickB.x - pickA.x, pickB.y - pickA.y);
+  if (!(paper > 0) || !(realDistanceMm > 0)) return null;
+  const measured = realDistanceMm / paper;
+  const standard = [...FLOORPLAN_SCALES, 1000, 2000, 5000]
+    .find((s) => Math.abs(measured / s - 1) <= STANDARD_SCALE_TOLERANCE);
+  if (standard) return standard;
+  return measured >= 20 ? Math.round(measured) : Math.round(measured * 10) / 10;
+}
+
 /** Real-world mm per underlay source pixel for an already-placed underlay. */
 export function underlayMmPerPx(underlay: FloorplanUnderlay, scaleDenominator: number): number | undefined {
   if (underlay.naturalWidthPx <= 0 || underlay.sizeMm.w <= 0) return undefined;
