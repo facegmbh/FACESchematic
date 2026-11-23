@@ -63,6 +63,7 @@ import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanProjectionLayer from "./FloorplanProjectionLayer";
 import { SECTION_BOX_MIN_WIDTH_MM, projectionGeometry, symbolRotationFacing } from "../projection";
+import { resizeAudienceFromCorner } from "../projectionViewing";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
@@ -134,7 +135,11 @@ type DragState =
    *  (`distanceMm` in front, `lateralMm` to the side, paper mm) and swings round. */
   | { kind: "projection-turn"; projectionId: string; distanceMm: number; lateralMm: number }
   | { kind: "projection-section"; projectionId: string; startClient: Vec2; start: Vec2 }
-  | { kind: "projection-section-resize"; projectionId: string; startClient: Vec2; startWidth: number };
+  | { kind: "projection-section-resize"; projectionId: string; startClient: Vec2; startWidth: number }
+  /** A projection's audience area: moved, sized from one corner, or turned about its middle. */
+  | { kind: "projection-audience"; projectionId: string; startClient: Vec2; start: Vec2 }
+  | { kind: "projection-audience-resize"; projectionId: string; corner: number }
+  | { kind: "projection-audience-turn"; projectionId: string };
 
 /** One symbol drawn on the sheet: the shape, an optional glyph inside, plus its number. */
 function SymbolGlyph({ group, sizePx, rotationDeg, symbolSizeMm }: { group: Pick<FloorplanSymbolGroup, "shape" | "color" | "glyph" | "symbolImageSrc" | "symbolLibraryId" | "tintSymbol" | "outlineColor" | "outlineWidthMm">; sizePx: number; rotationDeg?: number; symbolSizeMm: number }) {
@@ -660,6 +665,30 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           updateFloorplanProjection(page.id, dragging.projectionId, { section }, { continuing: projectionDragStartedRef.current });
           projectionDragStartedRef.current = true;
         }
+      } else if (dragging.kind === "projection-audience" || dragging.kind === "projection-audience-resize" || dragging.kind === "projection-audience-turn") {
+        const projection = (page.projections ?? []).find((pr) => pr.id === dragging.projectionId);
+        const current = projection?.audience;
+        if (current) {
+          let audience = current;
+          if (dragging.kind === "projection-audience") {
+            const d = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+            audience = { ...current, centerMm: clampToSheet({ x: snap(dragging.start.x + d.x, free), y: snap(dragging.start.y + d.y, free) }, page) };
+          } else if (dragging.kind === "projection-audience-resize") {
+            audience = resizeAudienceFromCorner(current, dragging.corner, snapVec(clientToPaperMm(e.clientX, e.clientY), free), page.scaleDenominator);
+          } else {
+            const at = clientToPaperMm(e.clientX, e.clientY);
+            const dx = at.x - current.centerMm.x, dy = at.y - current.centerMm.y;
+            if (Math.hypot(dx, dy) > 0.5) {
+              const raw = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const deg = free ? raw : Math.round(raw / 5) * 5;
+              audience = { ...current, rotationDeg: ((deg % 360) + 360) % 360 };
+            }
+          }
+          if (audience !== current) {
+            updateFloorplanProjection(page.id, dragging.projectionId, { audience }, { continuing: projectionDragStartedRef.current });
+            projectionDragStartedRef.current = true;
+          }
+        }
       } else if (dragging.kind === "projection-turn") {
         const projection = (page.projections ?? []).find((pr) => pr.id === dragging.projectionId);
         const at = clientToPaperMm(e.clientX, e.clientY);
@@ -1078,6 +1107,22 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               didMoveRef.current = false;
               projectionDragStartedRef.current = false;
               setDragging({ kind: "projection-section-resize", projectionId: projection.id, startClient: { x: e.clientX, y: e.clientY }, startWidth: widthMm });
+            }}
+            onAudienceMoveStart={(e, projection) => {
+              if (!projection.audience) return;
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-audience", projectionId: projection.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...projection.audience.centerMm } });
+            }}
+            onAudienceResizeStart={(_e, projection, corner) => {
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-audience-resize", projectionId: projection.id, corner });
+            }}
+            onAudienceTurnStart={(_e, projection) => {
+              didMoveRef.current = false;
+              projectionDragStartedRef.current = false;
+              setDragging({ kind: "projection-audience-turn", projectionId: projection.id });
             }}
           />
 

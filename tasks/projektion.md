@@ -38,8 +38,8 @@ Spec: `SPEC-projektion.md` · freigegeben von Jean-Luc am 23.11.2026
 
 ### Phase 3: Betrachtungsabstand nach AVIXA (noch nicht freigegeben)
 - [x] Task 8: `evaluateViewing` in `src/projectionViewing.ts` — Grenzen BDM/ADM, Auswertung des Rechtecks (Tests zuerst)
-- [ ] Task 9: Zuschauerzone als Rechteck — Typ, Store-Aktionen, Aufziehen und Griffe auf dem Plan
-- [ ] Task 10: Inspektor-Zeilen „Nutzung“ und „Betrachtung“, „Übernehmen“, PDF, deutsche Texte
+- [x] Task 9: Zuschauerzone als Rechteck — Typ, Knopf „Zuschauerzone“ legt sie an, Griffe auf dem Plan (kein Aufziehen mit der Maus, keine eigene Store-Aktion nötig)
+- [x] Task 10: Inspektor-Zeilen „Nutzung“ und „Betrachtung“, „Übernehmen“, PDF, deutsche Texte
 - [x] Task 11: Heatmap der Sichtgüte in der Zone — Raster, Canvas, PDF-Bild, Farbschlüssel
 
 ### Checkpoint Phase 3

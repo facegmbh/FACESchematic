@@ -135,3 +135,133 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   await page.screenshot({ path: process.env.PROJECTION_SHOT ?? join(tmpdir(), "projection.png") });
   expect(errors).toEqual([]);
 });
+
+test("floorplan: an audience area is checked against the viewing distances", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+
+  const planPath = join(mkdtempSync(join(tmpdir(), "floorplan-")), "plan.png");
+  writeFileSync(planPath, Buffer.from(PNG_BASE64, "base64"));
+
+  await page.addInitScript(() => localStorage.setItem("easyschematic-skip-landing", "1"));
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 30_000 });
+  await page.getByTitle("Add floorplan page — an architect's drawing with device symbols").click();
+  await page.setInputFiles('input[type="file"][accept*="application/pdf"]', planPath);
+  await expect(page.locator('img[alt="plan.png"]')).toBeVisible({ timeout: 30_000 });
+
+  const state = await page.evaluate(async () => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const { defaultProjectionFor } = await import("/src/projection.ts");
+    const s = useSchematicStore.getState();
+    const plan = s.pages.find((p) => p.type === "floorplan")!;
+    const groupId = s.addFloorplanGroup(plan.id, { label: "Beamer", shape: "projector" });
+    const symbolId = s.addFloorplanSymbol(plan.id, { groupId, positionMm: { x: 80, y: 120 } });
+    const fresh = useSchematicStore.getState().pages.find((p) => p.id === plan.id)! as never as {
+      scaleDenominator: number;
+      symbols: { id: string; positionMm: { x: number; y: number }; groupId: string }[];
+    };
+    const symbol = fresh.symbols.find((x) => x.id === symbolId)!;
+    const projectionId = s.addFloorplanProjection(
+      plan.id,
+      defaultProjectionFor(symbol, { throwMin: 1.5, throwMax: 2, lumens: 5000 }, fresh.scaleDenominator),
+      0,
+    );
+    return { pageId: plan.id, symbolId, projectionId };
+  });
+
+  type Stored = {
+    heightM: number;
+    screenRotationDeg: number;
+    audience?: { centerMm: { x: number; y: number }; widthM: number; depthM: number; rotationDeg: number };
+  };
+  const read = () => page.evaluate(async (arg) => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const plan = useSchematicStore.getState().pages.find((p) => p.id === arg.pageId)! as never as {
+      scaleDenominator: number;
+      projections: ({ id: string } & Stored)[];
+    };
+    return { scale: plan.scaleDenominator, ...plan.projections.find((p) => p.id === arg.projectionId)! };
+  }, state);
+
+  const surface = page.locator(`[data-projection-surface="${state.projectionId}"]`);
+  await expect(surface).toBeAttached({ timeout: 15_000 });
+  // A real press and release on the spot: selects the projector without moving the picture.
+  const sb = (await surface.boundingBox())!;
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.getByTestId("projection-panel")).toBeVisible();
+
+  // Without an area the panel only states the recommendation: 3 % characters, 6 heights.
+  const start = await read();
+  await expect(page.getByTestId("projection-viewing")).toContainText((6 * start.heightM).toFixed(2));
+
+  // A new area lies parallel to the picture and inside the recommendation.
+  await page.getByTestId("projection-audience-add").click();
+  const area = page.locator(`[data-projection-audience="${state.projectionId}"]`);
+  await expect(area).toHaveAttribute("data-projection-audience-fits", "1");
+  await expect(page.locator(`[data-projection-recommended="${state.projectionId}"]`)).toBeAttached();
+  await expect(page.getByTestId("projection-viewing-issue")).toHaveCount(0);
+  const placed = (await read()).audience!;
+  expect(placed.rotationDeg).toBe(start.screenRotationDeg);
+
+  // Dragging a corner sizes it; the opposite corner stays, so the middle moves too.
+  const corner = area.locator('[data-projection-audience-corner="2"]');
+  const cb = (await corner.boundingBox())!;
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(cb.x + cb.width / 2 + 40, cb.y + cb.height / 2 + 30, { steps: 5 });
+  await page.mouse.up();
+  const sized = (await read()).audience!;
+  expect(sized.widthM !== placed.widthM || sized.depthM !== placed.depthM).toBe(true);
+
+  // A last row far beyond the recommendation: the panel says by how much and offers the
+  // picture height that would reach it.
+  await page.evaluate(async (arg) => {
+    const { useSchematicStore } = await import("/src/store.ts");
+    const a = (deg: number) => (deg * Math.PI) / 180;
+    const mmPerM = 1000 / arg.scale;
+    const extraM = 6 * arg.heightM;
+    useSchematicStore.getState().updateFloorplanProjection(arg.pageId, arg.projectionId, {
+      audience: {
+        ...arg.placed,
+        depthM: arg.placed.depthM + extraM,
+        centerMm: {
+          x: arg.placed.centerMm.x + (Math.cos(a(arg.placed.rotationDeg)) * extraM * mmPerM) / 2,
+          y: arg.placed.centerMm.y + (Math.sin(a(arg.placed.rotationDeg)) * extraM * mmPerM) / 2,
+        },
+      },
+    });
+  }, { ...state, placed, scale: start.scale, heightM: start.heightM });
+  await expect(area).toHaveAttribute("data-projection-audience-fits", "0");
+  // The heatmap colours the area: good near the picture, too far at the back.
+  const heatmap = page.locator(`[data-projection-heatmap="${state.projectionId}"]`);
+  await expect(heatmap.locator('[data-seat-rating="good"]').first()).toBeAttached();
+  await expect(heatmap.locator('[data-seat-rating="too-far"]').first()).toBeAttached();
+  await expect(page.getByTestId("projection-viewing-key")).toBeVisible();
+  await page.screenshot({ path: process.env.PROJECTION_AUDIENCE_SHOT ?? join(tmpdir(), "projection-audience.png") });
+  await page.getByTestId("projection-viewing-apply").click();
+  await expect(page.getByTestId("projection-viewing-apply")).toHaveCount(0);
+  expect((await read()).heightM).toBeGreaterThan(start.heightM);
+
+  // The export draws the area and the recommendation's outline without tripping.
+  const download = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export PDF" }).click(),
+  ]).then(([d]) => d);
+  expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+  if (process.env.PROJECTION_AUDIENCE_PDF) await download.saveAs(process.env.PROJECTION_AUDIENCE_PDF);
+
+  // Switched off under More, only the frame is left.
+  await page.getByTestId("projection-panel").locator("summary").click();
+  await page.getByTestId("projection-viewing-heatmap").uncheck();
+  await expect(heatmap).toHaveCount(0);
+  await expect(area).toBeAttached();
+
+  // Removing the area takes it off the plan.
+  await page.getByTestId("projection-audience-remove").click();
+  await expect(area).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});

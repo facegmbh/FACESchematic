@@ -9,6 +9,14 @@ import {
   sectionBoxMm,
   visibleProjections,
 } from "../projection";
+import {
+  SEAT_RATING_COLORS,
+  VIEWING_HEATMAP_OPACITY,
+  VIEWING_HINT_COLOR,
+  VIEWING_OK_COLOR,
+  audienceTurnHandleMm,
+  viewingOnSheet,
+} from "../projectionViewing";
 import ProjectionSectionSvg from "./ProjectionSectionSvg";
 import { useT } from "../i18n";
 import type { FloorplanPage, FloorplanProjection } from "../types";
@@ -30,6 +38,10 @@ interface Props {
   /** The section box on the sheet: moved by its body, widened by its corner. */
   onSectionMoveStart: (e: React.MouseEvent, projection: FloorplanProjection, at: { x: number; y: number }) => void;
   onSectionResizeStart: (e: React.MouseEvent, projection: FloorplanProjection, widthMm: number) => void;
+  /** The audience area: moved by its frame, sized by a corner, turned by its handle. */
+  onAudienceMoveStart: (e: React.MouseEvent, projection: FloorplanProjection) => void;
+  onAudienceResizeStart: (e: React.MouseEvent, projection: FloorplanProjection, corner: number) => void;
+  onAudienceTurnStart: (e: React.MouseEvent, projection: FloorplanProjection) => void;
 }
 
 /**
@@ -39,6 +51,7 @@ interface Props {
  */
 export default function FloorplanProjectionLayer({
   page, mmToPx, sheetPx, interactive, selectedSymbolIds, onSelect, onMoveStart, onTurnStart, onSectionMoveStart, onSectionResizeStart,
+  onAudienceMoveStart, onAudienceResizeStart, onAudienceTurnStart,
 }: Props) {
   const t = useT();
   const items = useMemo(
@@ -105,6 +118,100 @@ export default function FloorplanProjectionLayer({
                 ))}
               </g>
             )}
+            {(() => {
+              // Viewing distances are only worth ink once someone has said where people sit.
+              if (!projection.audience) return null;
+              const v = viewingOnSheet(projection, g.result.picture, page.scaleDenominator);
+              if (!v.audienceMm) return null;
+              const fits = v.result.issues.length === 0;
+              const frame = fits ? VIEWING_OK_COLOR : VIEWING_HINT_COLOR;
+              const outline = v.audienceMm.map(px).join(" ");
+              const turn = audienceTurnHandleMm(projection.audience, page.scaleDenominator, 4);
+              return (
+                <g data-projection-audience={projection.id} data-projection-audience-fits={fits ? "1" : "0"}>
+                  {v.recommendedMm && (
+                    <polygon
+                      points={v.recommendedMm.map(px).join(" ")}
+                      fill="none"
+                      stroke={VIEWING_OK_COLOR}
+                      strokeOpacity={0.8}
+                      strokeWidth={1}
+                      strokeDasharray="6 3 1 3"
+                      data-projection-recommended={projection.id}
+                    />
+                  )}
+                  {/* Opacity on the group, not on the patches: they overlap by their stroke
+                      to close the hairline seams, and that must not show as darker lines. */}
+                  {v.patches.length > 0 && (
+                    <g opacity={VIEWING_HEATMAP_OPACITY} data-projection-heatmap={projection.id}>
+                      {v.patches.map((patch, i) => (
+                        <polygon
+                          key={i}
+                          points={patch.mm.map(px).join(" ")}
+                          fill={SEAT_RATING_COLORS[patch.rating]}
+                          stroke={SEAT_RATING_COLORS[patch.rating]}
+                          strokeWidth={0.6}
+                          data-seat-rating={patch.rating}
+                        />
+                      ))}
+                    </g>
+                  )}
+                  <polygon points={outline} fill={frame} fillOpacity={v.patches.length > 0 ? 0 : 0.06} stroke={frame} strokeWidth={selected ? 1.5 : 1} />
+                  <polygon
+                    points={outline}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={12}
+                    style={{ pointerEvents: interactive ? "stroke" : "none", cursor: "move" }}
+                    data-projection-audience-frame={projection.id}
+                    onMouseDown={(e) => {
+                      if (!interactive) return;
+                      e.stopPropagation();
+                      onSelect(projection);
+                      onAudienceMoveStart(e, projection);
+                    }}
+                  >
+                    <title>{t("Audience area — drag the frame to where people sit")}</title>
+                  </polygon>
+                  {selected && interactive && v.audienceMm.map((c, i) => (
+                    <rect
+                      key={i}
+                      x={mmToPx(c.x) - 5}
+                      y={mmToPx(c.y) - 5}
+                      width={10}
+                      height={10}
+                      fill="#fff"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      style={{ pointerEvents: "auto", cursor: "nwse-resize" }}
+                      data-projection-audience-corner={i}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        onAudienceResizeStart(e, projection, i);
+                      }}
+                    />
+                  ))}
+                  {selected && interactive && (
+                    <circle
+                      cx={mmToPx(turn.x)}
+                      cy={mmToPx(turn.y)}
+                      r={5}
+                      fill="#fff"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      style={{ pointerEvents: "auto", cursor: "crosshair" }}
+                      data-projection-audience-turn={projection.id}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        onAudienceTurnStart(e, projection);
+                      }}
+                    >
+                      <title>{t("Drag to turn the audience area")}</title>
+                    </circle>
+                  )}
+                </g>
+              );
+            })()}
             {/* The surface: grabbed to put it on its wall. A wide transparent stroke under
                 the visible line makes a 2 px target catchable. */}
             <line

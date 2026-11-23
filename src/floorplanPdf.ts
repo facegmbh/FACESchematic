@@ -83,6 +83,7 @@ import {
   PAGE_MARGIN_MM,
   type LegendRow,
 } from "./floorplan";
+import { SEAT_RATING_COLORS, VIEWING_HEATMAP_OPACITY, VIEWING_HINT_COLOR, VIEWING_OK_COLOR, viewingOnSheet } from "./projectionViewing";
 import { PROJECTION_IN_PICTURE_COLOR, PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, inPictureLabel, projectionCaption, projectionCaptionAnchorMm, sectionBoxMm, visibleProjections, type SectionRole } from "./projection";
 
 const MM_TO_PT = 72 / IN_TO_MM;
@@ -783,6 +784,41 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         doc.line(g.bandMm[0].x, g.bandMm[0].y, g.bandMm[1].x, g.bandMm[1].y);
         doc.setLineDashPattern([], 0);
         for (const end of g.bandMm) doc.line(end.x - tx, end.y - ty, end.x + tx, end.y + ty);
+      }
+      if (projection.audience) {
+        // The audience area and the area the viewing recommendation covers.
+        const v = viewingOnSheet(projection, g.result.picture, page.scaleDenominator);
+        const closed = (pts: { x: number; y: number }[]): [number, number][] =>
+          pts.slice(1).map((p, k) => [p.x - pts[k].x, p.y - pts[k].y]);
+        if (v.recommendedMm) {
+          const [rr, rg, rb] = hexToRgb(VIEWING_OK_COLOR);
+          doc.setDrawColor(rr, rg, rb);
+          doc.setLineWidth(0.15);
+          doc.setLineDashPattern([1.6, 0.8, 0.3, 0.8], 0);
+          doc.lines(closed(v.recommendedMm), v.recommendedMm[0].x, v.recommendedMm[0].y, [1, 1], "S", true);
+          doc.setLineDashPattern([], 0);
+        }
+        if (v.patches.length > 0) {
+          setPdfAlpha(doc, VIEWING_HEATMAP_OPACITY);
+          for (const patch of v.patches) {
+            const [hr, hg, hb] = hexToRgb(SEAT_RATING_COLORS[patch.rating]);
+            doc.setFillColor(hr, hg, hb);
+            doc.lines(closed(patch.mm), patch.mm[0].x, patch.mm[0].y, [1, 1], "F", true);
+          }
+          setPdfAlpha(doc, 1);
+        }
+        if (v.audienceMm) {
+          const [ar, ag, ab] = hexToRgb(v.result.issues.length === 0 ? VIEWING_OK_COLOR : VIEWING_HINT_COLOR);
+          doc.setFillColor(ar, ag, ab);
+          doc.setDrawColor(ar, ag, ab);
+          doc.setLineWidth(0.25);
+          if (v.patches.length === 0) {
+            setPdfAlpha(doc, 0.06);
+            doc.lines(closed(v.audienceMm), v.audienceMm[0].x, v.audienceMm[0].y, [1, 1], "F", true);
+          }
+          setPdfAlpha(doc, 1);
+          doc.lines(closed(v.audienceMm), v.audienceMm[0].x, v.audienceMm[0].y, [1, 1], "S", true);
+        }
       }
       doc.setDrawColor(100, 116, 139);
       doc.setLineWidth(0.5);

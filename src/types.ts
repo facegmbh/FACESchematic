@@ -1659,6 +1659,33 @@ export interface ProjectionSectionUnderlay {
   floorAtProjectorPx?: { x: number; y: number };
 }
 
+/** The audience area of a projection on the sheet: a rectangle where people sit. */
+export interface ProjectionAudience {
+  /** Middle of the rectangle, paper mm. */
+  centerMm: { x: number; y: number };
+  /** Across the viewing direction and along it, metres on site. */
+  widthM: number;
+  depthM: number;
+  /** Direction of its depth axis, degrees clockwise, 0 = to the right of the sheet. Equal
+   *  to the picture's `screenRotationDeg` when the rows are parallel to the picture. */
+  rotationDeg: number;
+}
+
+/** Viewing task after AVIXA DISCAS: basic decision making (presentations, meetings) or
+ *  analytical (detail work). */
+export interface ProjectionViewing {
+  task: "bdm" | "adm";
+  /** BDM: height of the smallest character that must be read, percent of the picture
+   *  height. Undefined = 3 %. */
+  elementPct?: number;
+  /** ADM: vertical pixel count of the picture. */
+  pixelsV?: number;
+  /** Eyes above the floor, metres. Undefined = 1.20 m, seated. */
+  eyeHeightM?: number;
+  /** False = the audience area is drawn as a frame only, without its heatmap. */
+  heatmap?: boolean;
+}
+
 /**
  * A projector and its picture on the plan. The picture is the fixed point — it hangs on a
  * wall — and the projector symbol is what gets moved: the throw distance is simply how
@@ -1698,6 +1725,10 @@ export interface FloorplanProjection {
   screenGain?: number;
   /** The vertical section through lens and picture: who stands in the beam, and where. */
   section?: ProjectionSection;
+  /** Where the audience sits, tested against AVIXA's viewing distances. */
+  audience?: ProjectionAudience;
+  /** What the picture is used for — decides how far away it can still be read. */
+  viewing?: ProjectionViewing;
   /** Symbol group this is filed under, so it switches off with its layer. */
   groupId?: string;
   hidden?: boolean;

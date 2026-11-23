@@ -234,6 +234,11 @@ Entschieden (Jean-Luc, 23.11.2026):
   Bildkante; Zeichenhöhe 3 % als Standard; Heatmap „gut“ bis 80 %, „Grenzbereich“ bis 100 %
   der Grenze; eine Zone je Bildfläche. (Offene Punkte 4, 5, 7, 8 damit entschieden.)
 - Die Betrachtungsrechnung liegt in `src/projectionViewing.ts`, nicht in `src/projection.ts`.
+- Gebaut, abweichend vom Entwurf oben: Die Zuschauerzone wird per Knopf „Zuschauerzone“
+  angelegt und dann an Rahmen, Ecken und Drehgriff zurechtgezogen (kein Aufziehen mit der
+  Maus). Die Heatmap besteht aus zusammengefassten Vektorflächen statt aus einem Rasterbild,
+  am Bildschirm und im PDF aus derselben Geometrie; sie ist standardmäßig an. Der
+  Farbschlüssel steht bisher nur im Inspektor, noch nicht in der Legende auf dem Blatt.
 
 - Die Bildfläche bleibt an ihrer Stelle, nur der Beamer wird geschoben.
 - Einfache Bedienung geht vor Funktionsumfang; die Oberfläche wird nicht überladen.
