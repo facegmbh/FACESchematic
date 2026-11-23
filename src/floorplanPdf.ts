@@ -70,6 +70,7 @@ import {
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
   legendColorKeys,
+  legendKeyRows,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
   legendLinesTitleOf,
@@ -82,7 +83,7 @@ import {
   PAGE_MARGIN_MM,
   type LegendRow,
 } from "./floorplan";
-import { SEAT_RATING_COLORS, VIEWING_HEATMAP_OPACITY, VIEWING_HINT_COLOR, VIEWING_OK_COLOR, viewingOnSheet } from "./projectionViewing";
+import { VIEWING_HEATMAP_OPACITY, VIEWING_HINT_COLOR, VIEWING_OK_COLOR, viewingHeatmap, viewingOnSheet, viewingRasterPng } from "./projectionViewing";
 import { displayBarMm, displayOnSymbol } from "./projection";
 import { PROJECTION_IN_PICTURE_COLOR, PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, inPictureLabel, projectionCaption, projectionCaptionAnchorMm, sectionBoxMm, visibleProjections, type SectionRole } from "./projection";
 
@@ -264,7 +265,7 @@ function pictureForSymbol(
 function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined, lineRows: LegendLineRow[] = [], librarySymbols: Map<string, string> = new Map()) {
   const colorKeys = legendColorKeys(page);
   const { positionMm: pos, widthMm } = page.legend;
-  const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length, colorKeys.map((k) => k.steps.length));
+  const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length, colorKeys.map(legendKeyRows));
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(68, 68, 68);
@@ -373,6 +374,25 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     doc.setTextColor(17, 17, 17);
     doc.text(colorKey.title, innerX, y + 3.6, { maxWidth: innerW });
     y += LEGEND_RSSI_TITLE_MM;
+    if (colorKey.gradient) {
+      // A continuous scale: one bar of colours, its captions on the row below.
+      const { colors, labels } = colorKey.gradient;
+      const cell = innerW / colors.length;
+      colors.forEach((c, i) => {
+        const [r, g, b] = hexToRgb(c);
+        doc.setFillColor(r, g, b);
+        // A hair of overlap, so no white shows between neighbouring cells.
+        doc.rect(innerX + i * cell, y + 0.6, cell + (i < colors.length - 1 ? 0.05 : 0), LEGEND_RSSI_ROW_MM - 1.2, "F");
+      });
+      y += LEGEND_RSSI_ROW_MM;
+      doc.setFont("Inter", "normal");
+      doc.setFontSize(2.4 * MM_TO_PT);
+      doc.setTextColor(34, 34, 34);
+      for (const l of labels) {
+        doc.text(l.text, innerX + l.at * innerW, y + LEGEND_RSSI_ROW_MM * 0.72, { align: l.at <= 0 ? "left" : l.at >= 1 ? "right" : "center" });
+      }
+      y += LEGEND_RSSI_ROW_MM;
+    }
     const swatchW = innerW * LEGEND_RSSI_SWATCH_SHARE;
     for (const step of colorKey.steps) {
       const [r, g, b] = hexToRgb(step.color);
@@ -798,12 +818,15 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           doc.lines(closed(v.recommendedMm), v.recommendedMm[0].x, v.recommendedMm[0].y, [1, 1], "S", true);
           doc.setLineDashPattern([], 0);
         }
-        if (v.patches.length > 0) {
+        const heat = viewingHeatmap(projection, g.result.picture, page.scaleDenominator);
+        const heatPng = heat ? viewingRasterPng(heat) : undefined;
+        if (heat && heatPng) {
+          // One upright picture over the area's box, transparent outside the area.
           setPdfAlpha(doc, VIEWING_HEATMAP_OPACITY);
-          for (const patch of v.patches) {
-            const [hr, hg, hb] = hexToRgb(SEAT_RATING_COLORS[patch.rating]);
-            doc.setFillColor(hr, hg, hb);
-            doc.lines(closed(patch.mm), patch.mm[0].x, patch.mm[0].y, [1, 1], "F", true);
+          try {
+            doc.addImage(heatPng, "PNG", heat.xMm, heat.yMm, heat.wMm, heat.hMm, undefined, "FAST");
+          } catch {
+            // A heatmap that will not embed is left out rather than taking the plan down.
           }
           setPdfAlpha(doc, 1);
         }
@@ -812,7 +835,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           doc.setFillColor(ar, ag, ab);
           doc.setDrawColor(ar, ag, ab);
           doc.setLineWidth(0.25);
-          if (v.patches.length === 0) {
+          if (!heatPng) {
             setPdfAlpha(doc, 0.06);
             doc.lines(closed(v.audienceMm), v.audienceMm[0].x, v.audienceMm[0].y, [1, 1], "F", true);
           }

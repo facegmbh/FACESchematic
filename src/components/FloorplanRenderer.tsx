@@ -45,6 +45,7 @@ import {
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
   legendColorKeys,
+  legendKeyRows,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
   DEFAULT_LEGEND_LINES_TITLE,
@@ -884,7 +885,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   // handed over without its scale cannot be read by the customer.
   // The same goes for the heatmap of a projection's audience area.
   const legendKeys = legendColorKeys(page);
-  const legendH = legendHeightMm(legendRows, page.legend, companyProfile, legendLineRows.length, legendKeys.map((k) => k.steps.length));
+  const legendH = legendHeightMm(legendRows, page.legend, companyProfile, legendLineRows.length, legendKeys.map(legendKeyRows));
 
   const blockLogo = titleBlock.logo || companyProfile.logo || undefined;
   const drawingLayout = useMemo(
@@ -1414,6 +1415,18 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_RSSI_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>
                       {legendKey.title}
                     </div>
+                    {legendKey.gradient && (
+                      <>
+                        <div style={{ height: mmToPx(LEGEND_RSSI_ROW_MM), display: "flex", alignItems: "center" }}>
+                          <div style={{ width: "100%", height: mmToPx(LEGEND_RSSI_ROW_MM - 1.2), background: `linear-gradient(to right, ${legendKey.gradient.colors.join(", ")})` }} />
+                        </div>
+                        <div className="relative" style={{ height: mmToPx(LEGEND_RSSI_ROW_MM), fontSize: mmToPx(2.4), color: "#222" }}>
+                          {legendKey.gradient.labels.map((l) => (
+                            <span key={l.text} className="absolute whitespace-nowrap" style={{ left: `${l.at * 100}%`, top: 0, transform: `translateX(${l.at <= 0 ? 0 : l.at >= 1 ? -100 : -50}%)` }}>{l.text}</span>
+                          ))}
+                        </div>
+                      </>
+                    )}
                     {legendKey.steps.map((step) => (
                       <div key={step.label} className="flex items-center" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_RSSI_ROW_MM), color: "#222", gap: mmToPx(2) }}>
                         <span style={{ width: `${LEGEND_RSSI_SWATCH_SHARE * 100}%`, height: mmToPx(LEGEND_RSSI_ROW_MM - 1.2), background: step.color, flexShrink: 0 }} />

@@ -36,7 +36,7 @@ import type { FloorplanSymbolShape,
   TitleBlock,
 } from "./types";
 import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
-import { SEAT_RATING_COLORS, type SeatRating } from "./projectionViewing";
+import { VIEWING_KEY_LIMIT_AT, viewingKeyColors } from "./projectionViewing";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -452,18 +452,24 @@ export function legendShowsViewingKey(
 export interface LegendColorKey {
   id: "rssi" | "viewing";
   title: string;
+  /** One swatch and caption per row. Empty for a key that is a gradient. */
   steps: { color: string; label: string }[];
+  /** A continuous scale instead of steps: one bar of colours, captions under it at `at`
+   *  (0 = left end, 1 = right end). */
+  gradient?: { colors: string[]; labels: { at: number; text: string }[] };
 }
 
-const VIEWING_KEY_TEXT: Record<Locale, { title: string; labels: Record<Exclude<SeatRating, "behind">, string> }> = {
-  de: {
-    title: "SICHTGÜTE (AVIXA)",
-    labels: { good: "gut", marginal: "Grenzbereich", "too-far": "zu weit", "too-near": "zu nah", "too-oblique": "zu schräg" },
-  },
-  en: {
-    title: "VIEWING QUALITY (AVIXA)",
-    labels: { good: "good", marginal: "near the limit", "too-far": "too far", "too-near": "too near", "too-oblique": "too far to the side" },
-  },
+/** Rows a colour key takes in the legend: one per step, or bar plus captions. */
+export function legendKeyRows(key: LegendColorKey): number {
+  return key.gradient ? 2 : key.steps.length;
+}
+
+/** Colours in a gradient key's bar — enough to read as a blend at legend size. */
+const LEGEND_GRADIENT_COLORS = 32;
+
+const VIEWING_KEY_TEXT: Record<Locale, { title: string; good: string; limit: string; outside: string }> = {
+  de: { title: "SICHTGÜTE (AVIXA)", good: "gut", limit: "Grenze", outside: "außerhalb" },
+  en: { title: "VIEWING QUALITY (AVIXA)", good: "good", limit: "limit", outside: "outside" },
 };
 
 /** The colour keys this plan's legend carries, in the order they are printed. The screen,
@@ -481,7 +487,11 @@ export function legendColorKeys(
     keys.push({
       id: "viewing",
       title: text.title,
-      steps: (Object.keys(text.labels) as (keyof typeof text.labels)[]).map((k) => ({ color: SEAT_RATING_COLORS[k], label: text.labels[k] })),
+      steps: [],
+      gradient: {
+        colors: viewingKeyColors(LEGEND_GRADIENT_COLORS),
+        labels: [{ at: 0, text: text.good }, { at: VIEWING_KEY_LIMIT_AT, text: text.limit }, { at: 1, text: text.outside }],
+      },
     });
   }
   return keys;

@@ -12,7 +12,12 @@ import {
   resizeAudienceFromCorner,
   defaultAudienceFor,
   viewingAreaOutlineMm,
-  viewingPatchesMm,
+  seatQuality,
+  qualityRgb,
+  viewingKeyColors,
+  viewingRaster,
+  viewingHeatmap,
+  VIEWING_KEY_LIMIT_AT,
   AUDIENCE_MIN_SIDE_M,
   type AudienceRect,
   viewingOnSheet,
@@ -345,70 +350,115 @@ describe("heatmap of the audience area", () => {
   const scale = 100;
   const screen = { screenCenterMm: { x: 100, y: 100 }, screenRotationDeg: 0 };
   const limits = { farthestM: 8.1, closestM: 2, viewingRatio: 6 };
-  /** Shoelace area of a patch, m². */
-  const areaM2 = (mm: { x: number; y: number }[]) => {
-    let a = 0;
-    for (let i = 0; i < mm.length; i++) {
-      const p = mm[i], q = mm[(i + 1) % mm.length];
-      a += p.x * q.y - q.x * p.y;
-    }
-    return Math.abs(a) / 2 / 100;
-  };
 
-  it("an area that is good throughout is one patch", () => {
+  it("a seat's quality is the worst of its three ratios", () => {
+    // Far back on the axis: distance decides.
+    expect(seatQuality(7, 0, W, limits)).toBeCloseTo(farEdgeDistanceM(7, 0, W) / 8.1, 9);
+    // Close in front: the closest viewer decides.
+    expect(seatQuality(2.2, 0, W, limits)).toBeCloseTo(2 / 2.2, 9);
+    // Off to the side: the angle decides.
+    expect(seatQuality(3, 3.5, W, limits)).toBeCloseTo((Math.atan2(3.5 + W / 2, 3) * 180) / Math.PI / 60, 9);
+    expect(seatQuality(0, 0, W, limits)).toBeNull();
+    expect(seatQuality(-1, 0, W, limits)).toBeNull();
+  });
+
+  it("is at most 1 exactly where the seat is rated inside the recommendation", () => {
+    for (const [d, x] of [[4, 0], [7, 0], [8.2, 0], [1.5, 0], [3, 4.5], [3, 2.4], [2.05, 0.5], [7.9, 1]]) {
+      const inside = ["good", "marginal"].includes(rateSeat(d, x, W, limits));
+      expect(seatQuality(d, x, W, limits)! <= 1 + 1e-6).toBe(inside);
+    }
+  });
+
+  it("without limits only the angle colours the area", () => {
+    const none = { farthestM: null, closestM: null, viewingRatio: null };
+    expect(seatQuality(30, 0, W, none)).toBeLessThan(0.1);
+    expect(seatQuality(1, 5, W, none)).toBeGreaterThan(1);
+  });
+
+  it("colours run from green through yellow and orange to red, without steps", () => {
+    expect(qualityRgb(0)).toEqual([22, 163, 74]);
+    expect(qualityRgb(0.6)).toEqual([22, 163, 74]);
+    expect(qualityRgb(0.85)).toEqual([234, 179, 8]);
+    expect(qualityRgb(1)).toEqual([234, 88, 12]);
+    expect(qualityRgb(2)).toEqual([220, 38, 38]);
+    expect(qualityRgb(null)).toEqual([148, 163, 184]);
+    // Between two stops the colour is in between, and a small step in quality is a small
+    // step in colour everywhere on the scale.
+    expect(qualityRgb(0.725)).toEqual([128, 171, 41]);
+    for (let q = 0; q < 1.4; q += 0.01) {
+      const a = qualityRgb(q), b = qualityRgb(q + 0.01);
+      expect(Math.max(...a.map((c, i) => Math.abs(c - b[i])))).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("the colour key shows the stretch around the limit", () => {
+    const colors = viewingKeyColors(5);
+    expect(colors).toHaveLength(5);
+    expect(colors[0]).toBe("#16a34a");
+    expect(colors[4]).toBe("#dc2626");
+    expect(VIEWING_KEY_LIMIT_AT).toBeCloseTo(0.625, 6);
+  });
+
+  it("covers an upright area with one picture, every pixel coloured", () => {
+    // 2 m wide, 3 m deep, from 3 m to 6 m in front of the picture.
     const rect: AudienceRect = { centerMm: { x: 145, y: 100 }, widthM: 2, depthM: 3, rotationDeg: 0 };
-    const patches = viewingPatchesMm(rect, W, limits, screen, scale);
-    expect(patches).toHaveLength(1);
-    expect(patches[0].rating).toBe("good");
-    expect(areaM2(patches[0].mm)).toBeCloseTo(6, 6);
+    const r = viewingRaster(rect, W, limits, screen, scale)!;
+    expect(r.xMm).toBeCloseTo(130, 6);
+    expect(r.yMm).toBeCloseTo(90, 6);
+    expect(r.wMm).toBeCloseTo(30, 6);
+    expect(r.hMm).toBeCloseTo(20, 6);
+    // 4 cm pitch along the longer side.
+    expect(r.cols).toBe(75);
+    expect(r.rows).toBe(50);
+    expect(r.rgba).toHaveLength(75 * 50 * 4);
+    for (let i = 3; i < r.rgba.length; i += 4) expect(r.rgba[i]).toBe(255);
   });
 
-  it("an area across every limit shows each rating and still covers the rectangle", () => {
-    // From 1 m to 11 m in front of the picture, 12 m wide.
-    const rect: AudienceRect = { centerMm: { x: 160, y: 100 }, widthM: 12, depthM: 10, rotationDeg: 0 };
-    const patches = viewingPatchesMm(rect, W, limits, screen, scale);
-    const ratings = new Set(patches.map((p) => p.rating));
-    for (const r of ["good", "marginal", "too-far", "too-near", "too-oblique"]) expect(ratings).toContain(r);
-    expect(patches.reduce((sum, p) => sum + areaM2(p.mm), 0)).toBeCloseTo(120, 6);
-    // Joined, not a raster: far fewer patches than the 100 × 120 cells sampled.
-    expect(patches.length).toBeLessThan(1500);
-  });
-
-  it("each patch is rated like the seat in its middle", () => {
+  it("each pixel carries the colour of the seat under it", () => {
     const rect: AudienceRect = { centerMm: { x: 160, y: 100 }, widthM: 6, depthM: 10, rotationDeg: 0 };
-    for (const p of viewingPatchesMm(rect, W, limits, screen, scale)) {
-      // Patches are rows of cells; a seat in the first row's middle has the patch's rating.
-      const mid = { x: (p.mm[0].x + p.mm[1].x) / 2, y: (p.mm[0].y + p.mm[1].y) / 2 };
-      const d = (mid.x - 100) / 10 + 0.05;
-      const x = (mid.y - 100) / 10;
-      const cellsWide = Math.round(Math.abs(p.mm[1].y - p.mm[0].y));
-      // Only patches an odd number of cells wide have a cell centre in their middle.
-      if (cellsWide % 2 === 1) expect(rateSeat(d, x, W, limits)).toBe(p.rating);
+    const r = viewingRaster(rect, W, limits, screen, scale)!;
+    for (const [i, j] of [[0, 0], [10, 3], [r.cols - 1, r.rows - 1], [Math.floor(r.cols / 2), Math.floor(r.rows / 2)]]) {
+      const px = r.xMm + ((i + 0.5) * r.wMm) / r.cols, py = r.yMm + ((j + 0.5) * r.hMm) / r.rows;
+      const want = qualityRgb(seatQuality((px - 100) / 10, (py - 100) / 10, W, limits));
+      const o = (j * r.cols + i) * 4;
+      expect([r.rgba[o], r.rgba[o + 1], r.rgba[o + 2]]).toEqual(want);
     }
   });
 
-  it("a turned area keeps its size", () => {
-    const rect: AudienceRect = { centerMm: { x: 160, y: 100 }, widthM: 5, depthM: 7, rotationDeg: 25 };
-    const patches = viewingPatchesMm(rect, W, limits, screen, scale);
-    expect(patches.reduce((sum, p) => sum + areaM2(p.mm), 0)).toBeCloseTo(35, 6);
+  it("a turned area leaves the corners of its box transparent", () => {
+    const rect: AudienceRect = { centerMm: { x: 160, y: 100 }, widthM: 4, depthM: 4, rotationDeg: 45 };
+    const r = viewingRaster(rect, W, limits, screen, scale)!;
+    // The box of a square on its tip is √2 times as wide; half of it is outside the square.
+    expect(r.wMm).toBeCloseTo(40 * Math.SQRT2, 6);
+    const alpha = (i: number, j: number) => r.rgba[(j * r.cols + i) * 4 + 3];
+    expect(alpha(0, 0)).toBe(0);
+    expect(alpha(r.cols - 1, r.rows - 1)).toBe(0);
+    expect(alpha(Math.floor(r.cols / 2), Math.floor(r.rows / 2))).toBe(255);
+    let inside = 0;
+    for (let i = 3; i < r.rgba.length; i += 4) if (r.rgba[i]) inside++;
+    expect(inside / (r.cols * r.rows)).toBeCloseTo(0.5, 1);
   });
 
-  it("the part behind the picture is rated behind", () => {
-    const rect: AudienceRect = { centerMm: { x: 100, y: 100 }, widthM: 2, depthM: 2, rotationDeg: 0 };
-    const patches = viewingPatchesMm(rect, W, { farthestM: 8.1, closestM: null, viewingRatio: 6 }, screen, scale);
-    const behind = patches.filter((p) => p.rating === "behind");
-    expect(behind.reduce((sum, p) => sum + areaM2(p.mm), 0)).toBeCloseTo(2, 6);
+  it("the part behind the picture is grey", () => {
+    const rect: AudienceRect = { centerMm: { x: 90, y: 100 }, widthM: 1, depthM: 1, rotationDeg: 0 };
+    const r = viewingRaster(rect, W, limits, screen, scale)!;
+    expect([r.rgba[0], r.rgba[1], r.rgba[2]]).toEqual([148, 163, 184]);
   });
 
-  it("a very large area is sampled coarser, not without end", () => {
-    const rect: AudienceRect = { centerMm: { x: 400, y: 100 }, widthM: 60, depthM: 60, rotationDeg: 0 };
-    const patches = viewingPatchesMm(rect, W, limits, screen, scale);
-    expect(patches.reduce((sum, p) => sum + areaM2(p.mm), 0)).toBeCloseTo(3600, 4);
-    expect(patches.length).toBeLessThan(2000);
+  it("a very large area gets a coarser picture, not a larger one", () => {
+    const rect: AudienceRect = { centerMm: { x: 400, y: 100 }, widthM: 60, depthM: 30, rotationDeg: 0 };
+    const r = viewingRaster(rect, W, limits, screen, scale)!;
+    expect(Math.max(r.cols, r.rows)).toBe(256);
+    expect(Math.min(r.cols, r.rows)).toBe(128);
   });
 
-  it("an area without size has no patches", () => {
-    expect(viewingPatchesMm({ centerMm: { x: 0, y: 0 }, widthM: 0, depthM: 3, rotationDeg: 0 }, W, limits, screen, scale)).toEqual([]);
+  it("no picture for an area without size, without an area, or switched off", () => {
+    expect(viewingRaster({ centerMm: { x: 0, y: 0 }, widthM: 0, depthM: 3, rotationDeg: 0 }, W, limits, screen, scale)).toBeNull();
+    const audience: AudienceRect = { centerMm: { x: 145, y: 100 }, widthM: 2, depthM: 3, rotationDeg: 0 };
+    const picture = { widthM: W, heightM: H };
+    expect(viewingHeatmap({ ...screen }, picture, scale)).toBeNull();
+    expect(viewingHeatmap({ ...screen, audience, viewing: { task: "bdm", heatmap: false } }, picture, scale)).toBeNull();
+    expect(viewingHeatmap({ ...screen, audience }, picture, scale)).not.toBeNull();
   });
 });
 

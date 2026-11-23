@@ -804,11 +804,6 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Eyes of a seated viewer above the floor, m. With the picture's lower edge it gives the closest seat.": "Augen eines sitzenden Zuschauers über dem Boden, m. Zusammen mit der Bildunterkante ergibt das den nächsten Platz.",
   "Eye height": "Augenhöhe",
   "good": "gut",
-  "near the limit": "Grenzbereich",
-  "too far": "zu weit",
-  "too near": "zu nah",
-  "too far to the side": "zu schräg",
-  "behind the picture": "hinter dem Bild",
   "Colours the audience area by how well each seat sees the picture": "Färbt die Zuschauerzone danach, wie gut jeder Platz das Bild sieht",
   "Heatmap of the audience area": "Heatmap der Zuschauerzone",
   "Recommended viewing area (AVIXA): within 60° to the side, between the closest and the farthest seat": "Empfohlener Betrachtungsbereich (AVIXA): seitlich bis 60°, zwischen nächstem und fernstem Platz",
@@ -823,4 +818,6 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "For a video wall or an unusual format: type the picture's width and height": "Für eine Videowand oder ein ungewöhnliches Format: Breite und Höhe des Bildes eintippen",
   "Remove display size": "Displaygröße entfernen",
   "Width × height of the picture": "Breite × Höhe des Bildes",
+  "limit": "Grenze",
+  "outside": "außerhalb",
 };

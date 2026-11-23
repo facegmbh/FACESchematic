@@ -5,8 +5,8 @@ import {
   DEFAULT_EYE_HEIGHT_M,
   DEFAULT_VIEWING,
   MAX_OFF_AXIS_DEG,
-  SEAT_RATINGS,
-  SEAT_RATING_COLORS,
+  VIEWING_KEY_LIMIT_AT,
+  viewingKeyColors,
   defaultAudienceFor,
   viewingOnSheet,
   type ViewingIssue,
@@ -84,14 +84,6 @@ export function ViewingRows({ page, projection, picture, patch }: RowsProps) {
     if (!view.zone || view.issues.some((i) => i.kind === "behind")) return recommended;
     return `${m2(view.zone.nearestM)} – ${m2(view.zone.farthestM)} m · ${recommended}`;
   };
-  const ratingName: Record<(typeof SEAT_RATINGS)[number], string> = {
-    good: t("good"),
-    marginal: t("near the limit"),
-    "too-far": t("too far"),
-    "too-near": t("too near"),
-    "too-oblique": t("too far to the side"),
-    behind: t("behind the picture"),
-  };
   const heatmapOn = Boolean(projection.audience) && viewing.heatmap !== false;
   const viewingIssueText = (i: ViewingIssue): string => {
     switch (i.kind) {
@@ -142,13 +134,13 @@ export function ViewingRows({ page, projection, picture, patch }: RowsProps) {
         {viewingText()}
       </div>
       {heatmapOn && (
-        <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }} data-testid="projection-viewing-key">
-          {SEAT_RATINGS.filter((k) => k !== "behind").map((k) => (
-            <span key={k} className="flex items-center gap-1">
-              <span style={{ width: 8, height: 8, background: SEAT_RATING_COLORS[k], opacity: 0.7, display: "inline-block" }} />
-              {ratingName[k]}
-            </span>
-          ))}
+        <div data-testid="projection-viewing-key" className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>
+          <div style={{ height: 6, borderRadius: 2, opacity: 0.8, background: `linear-gradient(to right, ${viewingKeyColors(16).join(", ")})` }} />
+          <div className="relative" style={{ height: 13 }}>
+            <span className="absolute left-0">{t("good")}</span>
+            <span className="absolute" style={{ left: `${VIEWING_KEY_LIMIT_AT * 100}%`, transform: "translateX(-50%)" }}>{t("limit")}</span>
+            <span className="absolute right-0">{t("outside")}</span>
+          </div>
         </div>
       )}
       {view.issues.map((i, n) => (

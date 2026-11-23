@@ -235,10 +235,9 @@ test("floorplan: an audience area is checked against the viewing distances", asy
     });
   }, { ...state, placed, scale: start.scale, heightM: start.heightM });
   await expect(area).toHaveAttribute("data-projection-audience-fits", "0");
-  // The heatmap colours the area: good near the picture, too far at the back.
+  // The heatmap colours the area: one picture over it, blending from green to red.
   const heatmap = page.locator(`[data-projection-heatmap="${state.projectionId}"]`);
-  await expect(heatmap.locator('[data-seat-rating="good"]').first()).toBeAttached();
-  await expect(heatmap.locator('[data-seat-rating="too-far"]').first()).toBeAttached();
+  await expect(heatmap).toHaveAttribute("href", /^data:image\/png/);
   await expect(page.getByTestId("projection-viewing-key")).toBeVisible();
   // The legend on the sheet explains the colours, so the print does too.
   const legendKey = page.locator('[data-legend-key="viewing"]');

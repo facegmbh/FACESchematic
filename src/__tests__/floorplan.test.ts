@@ -55,6 +55,7 @@ import {
   coverageOffersOptics,
   legendShowsRssiScale,
   legendColorKeys,
+  legendKeyRows,
   FLOORPLAN_KIND_PRESETS,
   floorplanKindPreset,
   LEGEND_RSSI_GAP_MM,
@@ -1121,8 +1122,13 @@ describe("the Wi-Fi coverage plan type", () => {
     const keys = legendColorKeys(plan({ audience }), "de");
     expect(keys.map((k) => k.id)).toEqual(["viewing"]);
     expect(keys[0].title).toBe("SICHTGÜTE (AVIXA)");
-    expect(keys[0].steps.map((s) => s.label)).toEqual(["gut", "Grenzbereich", "zu weit", "zu nah", "zu schräg"]);
-    expect(legendColorKeys(plan({ audience }), "en")[0].steps[0].label).toBe("good");
+    // A continuous scale: one bar from green to red, the limit marked where it lies.
+    expect(keys[0].steps).toEqual([]);
+    expect(keys[0].gradient!.colors[0]).toBe("#16a34a");
+    expect(keys[0].gradient!.colors.at(-1)).toBe("#dc2626");
+    expect(keys[0].gradient!.labels).toEqual([{ at: 0, text: "gut" }, { at: 0.625, text: "Grenze" }, { at: 1, text: "außerhalb" }]);
+    expect(legendKeyRows(keys[0])).toBe(2);
+    expect(legendColorKeys(plan({ audience }), "en")[0].gradient!.labels[0].text).toBe("good");
     // No heatmap on the sheet, no key: switched off, projection hidden, or its layer off.
     expect(legendColorKeys(plan({ audience, viewing: { task: "bdm", heatmap: false } }), "de")).toEqual([]);
     expect(legendColorKeys(plan({ audience, hidden: true }), "de")).toEqual([]);
@@ -1141,6 +1147,7 @@ describe("the Wi-Fi coverage plan type", () => {
     expect(keys.map((k) => k.id)).toEqual(["rssi", "viewing"]);
     expect(keys[0].title).toBe("PEGEL");
     expect(keys[0].steps).toHaveLength(6);
+    expect(keys.map(legendKeyRows)).toEqual([6, 2]);
   });
 
   it("grows the legend by each colour key's rows", () => {

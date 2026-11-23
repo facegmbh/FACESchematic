@@ -320,6 +320,14 @@ unter „Mehr“. Ein unverdrehtes Display-Symbol zeigt nach unten auf dem Blatt
 13. **Videowände** — Vorschlag: vorerst über frei eingegebene Breite und Höhe unter „Mehr“;
     Raster aus Einzeldisplays später.
 
+Heatmap, Stand 23.11.2026 (ersetzt die festen Stufen oben): stufenloser Verlauf statt fünf
+Klassen. Je Platz zählt das schlechteste von drei Verhältnissen — Abstand zum fernsten Platz,
+Winkel zur 60°-Linie, nächster Platz zum eigenen Abstand; 1 = genau auf der Grenze. Farben:
+grün bis 0,6, gelb bei 0,85, orange auf der Grenze, rot ab 1,3; hinter dem Bild grau.
+Gezeichnet als ein aufrechtes Rasterbild über der Zone (4 cm Raster, höchstens 256 Punkte
+je Seite), am Bildschirm und im PDF dasselbe. Der Farbschlüssel ist ein Verlaufsbalken mit
+„gut · Grenze · außerhalb“.
+
 ## Testing Strategy
 
 - Displays: Bildgröße aus Diagonale und Format (75″ 16:9 → 1,66 × 0,93 m); Bildfläche folgt

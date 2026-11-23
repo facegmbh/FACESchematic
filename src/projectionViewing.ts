@@ -356,8 +356,8 @@ export interface ViewingOnSheet {
   audienceMm: Pt[] | null;
   /** The area the recommendation covers, paper mm. */
   recommendedMm: Pt[] | null;
-  /** The audience area's heatmap; empty when there is no area or it is switched off. */
-  patches: ViewingPatch[];
+  /** Is the audience area drawn with its heatmap (`viewingHeatmap`)? */
+  heatmapOn: boolean;
 }
 
 /** Everything the sheet, the panel and the PDF need about one projection's viewing. */
@@ -382,98 +382,167 @@ export function viewingOnSheet(
     recommendedMm: projection.viewing?.outline === false
       ? null
       : viewingAreaOutlineMm(result.limits, picture.widthM, projection, scaleDenominator),
-    patches: projection.audience && projection.viewing?.heatmap !== false
-      ? viewingPatchesMm(projection.audience, picture.widthM, result.limits, projection, scaleDenominator)
-      : [],
+    heatmapOn: Boolean(projection.audience) && projection.viewing?.heatmap !== false,
   };
 }
 
 // ---- Heatmap of the audience area -------------------------------------------------------
 
-/** One colour per rating. Stepped on purpose: the recommendation is a set of limits, and
- *  a smooth gradient would suggest a precision the standard does not have. */
-export const SEAT_RATING_COLORS: Record<SeatRating, string> = {
-  good: "#16a34a",
-  marginal: "#eab308",
-  "too-far": "#ea580c",
-  "too-near": "#9333ea",
-  "too-oblique": "#2563eb",
-  behind: "#94a3b8",
-};
-/** Order of the colour key. */
-export const SEAT_RATINGS: SeatRating[] = ["good", "marginal", "too-far", "too-near", "too-oblique", "behind"];
-export const VIEWING_HEATMAP_OPACITY = 0.45;
-/** Sample pitch on site, and the most samples along one side — a hall-sized area gets a
- *  coarser pitch instead of tens of thousands of cells. */
-const HEATMAP_PITCH_M = 0.1;
-const HEATMAP_MAX_CELLS = 160;
-
-/** A part of the audience area with one rating: four corners in paper mm, going round. */
-export interface ViewingPatch {
-  rating: SeatRating;
-  mm: Pt[];
+/**
+ * How close a seat is to the recommendation's limits, as one number: 0 is ideal, 1 is
+ * exactly on a limit, above 1 is outside. It is the worst of three ratios — distance to
+ * the farthest viewer, angle to the 60° line, and the closest viewer over the seat's own
+ * distance — so whichever limit a seat is nearest decides its colour. Null behind the
+ * picture, where there is nothing to see.
+ */
+export function seatQuality(d: number, x: number, pictureWidthM: number, limits: ViewingLimits): number | null {
+  if (!(d > EPS)) return null;
+  const far = limits.farthestM !== null ? farEdgeDistanceM(d, x, pictureWidthM) / limits.farthestM : 0;
+  const angle = offAxisDeg(d, x, pictureWidthM) / MAX_OFF_AXIS_DEG;
+  const near = limits.closestM !== null ? limits.closestM / d : 0;
+  return Math.max(far, angle, near);
 }
 
+type Rgb = [number, number, number];
+
+/** The heatmap's colours along the quality scale: green while a seat is comfortably
+ *  inside, through yellow towards orange on the limit itself, and on to red outside. */
+export const VIEWING_RAMP: { q: number; rgb: Rgb }[] = [
+  { q: 0, rgb: [22, 163, 74] },
+  { q: 0.6, rgb: [22, 163, 74] },
+  { q: 0.85, rgb: [234, 179, 8] },
+  { q: 1, rgb: [234, 88, 12] },
+  { q: 1.3, rgb: [220, 38, 38] },
+];
+/** Behind the picture. */
+export const VIEWING_BEHIND_RGB: Rgb = [148, 163, 184];
+export const VIEWING_HEATMAP_OPACITY = 0.5;
+/** The stretch of the scale a colour key shows, and where the limit sits on it. */
+export const VIEWING_KEY_RANGE = { from: 0.5, to: 1.3 };
+
+/** The colour of a quality value, blended between the ramp's stops. */
+export function qualityRgb(q: number | null): Rgb {
+  if (q === null) return VIEWING_BEHIND_RGB;
+  const ramp = VIEWING_RAMP;
+  if (q <= ramp[0].q) return ramp[0].rgb;
+  for (let i = 1; i < ramp.length; i++) {
+    if (q <= ramp[i].q) {
+      const a = ramp[i - 1], b = ramp[i];
+      const k = (q - a.q) / (b.q - a.q);
+      return [0, 1, 2].map((c) => Math.round(a.rgb[c] + (b.rgb[c] - a.rgb[c]) * k)) as Rgb;
+    }
+  }
+  return ramp[ramp.length - 1].rgb;
+}
+
+/** `count` colours evenly along the key's stretch of the scale, as #rrggbb. */
+export function viewingKeyColors(count: number): string[] {
+  const { from, to } = VIEWING_KEY_RANGE;
+  return Array.from({ length: count }, (_, i) => {
+    const q = from + ((to - from) * i) / Math.max(1, count - 1);
+    return `#${qualityRgb(q).map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+  });
+}
+
+/** Where "on the limit" sits on the key, 0…1 from its left end. */
+export const VIEWING_KEY_LIMIT_AT = (1 - VIEWING_KEY_RANGE.from) / (VIEWING_KEY_RANGE.to - VIEWING_KEY_RANGE.from);
+
+/** Sample pitch on site, and the most samples along one side — a hall-sized area gets a
+ *  coarser pitch instead of an ever larger picture. */
+const HEATMAP_PITCH_M = 0.04;
+const HEATMAP_MAX_PX = 256;
+
 /**
- * The audience area cut into patches of equal rating. Sampled on a grid in the rectangle's
- * own axes, then neighbouring cells of the same rating are joined — along a row, and rows
- * above each other — so the screen and the PDF draw a few hundred quads, not a raster. That
- * keeps a turned rectangle crisp and needs no image in the export.
+ * The audience area's heatmap as a picture: upright on the sheet, covering the area's
+ * bounding box, transparent wherever the box is outside the (possibly turned) rectangle.
+ * One upright picture is what both the screen and the PDF can place without knowing about
+ * rotation, and a raster is what makes the colours run into each other instead of
+ * stepping.
  */
-export function viewingPatchesMm(
+export interface ViewingRaster {
+  /** Top-left corner and size on the sheet, paper mm. */
+  xMm: number;
+  yMm: number;
+  wMm: number;
+  hMm: number;
+  cols: number;
+  rows: number;
+  /** RGBA, row by row from the top. Alpha is 255 inside the area, 0 outside. */
+  rgba: Uint8ClampedArray;
+}
+
+export function viewingRaster(
   rect: AudienceRect,
   pictureWidthM: number,
   limits: ViewingLimits,
   screen: ScreenOnSheet,
   scaleDenominator: number,
-): ViewingPatch[] {
-  if (!(rect.widthM > 0) || !(rect.depthM > 0)) return [];
+): ViewingRaster | null {
+  if (!(rect.widthM > 0) || !(rect.depthM > 0)) return null;
   const mmPerM = 1000 / scaleDenominator;
-  const cols = Math.min(HEATMAP_MAX_CELLS, Math.max(1, Math.ceil(rect.widthM / HEATMAP_PITCH_M)));
-  const rows = Math.min(HEATMAP_MAX_CELLS, Math.max(1, Math.ceil(rect.depthM / HEATMAP_PITCH_M)));
+  const corners = audienceOutlineMm(rect, scaleDenominator);
+  const xMm = Math.min(...corners.map((c) => c.x)), yMm = Math.min(...corners.map((c) => c.y));
+  const wMm = Math.max(...corners.map((c) => c.x)) - xMm, hMm = Math.max(...corners.map((c) => c.y)) - yMm;
+  const longestM = Math.max(wMm, hMm) / mmPerM;
+  const longestPx = Math.min(HEATMAP_MAX_PX, Math.max(2, Math.ceil(longestM / HEATMAP_PITCH_M)));
+  const pxMm = Math.max(wMm, hMm) / longestPx;
+  const cols = Math.max(1, Math.round(wMm / pxMm)), rows = Math.max(1, Math.round(hMm / pxMm));
+
   const rn = unit(rect.rotationDeg);
   const rt = { x: -rn.y, y: rn.x };
   const n = unit(screen.screenRotationDeg);
   const t = { x: -n.y, y: n.x };
-  const wMm = rect.widthM * mmPerM, dMm = rect.depthM * mmPerM;
-  /** A point of the rectangle, `u` across and `v` along it, both 0…1. */
-  const at = (u: number, v: number): Pt => ({
-    x: rect.centerMm.x + rt.x * (u - 0.5) * wMm + rn.x * (v - 0.5) * dMm,
-    y: rect.centerMm.y + rt.y * (u - 0.5) * wMm + rn.y * (v - 0.5) * dMm,
-  });
-  const rate = (i: number, j: number): SeatRating => {
-    const p = at((i + 0.5) / cols, (j + 0.5) / rows);
-    const px = (p.x - screen.screenCenterMm.x) / mmPerM, py = (p.y - screen.screenCenterMm.y) / mmPerM;
-    return rateSeat(px * n.x + py * n.y, px * t.x + py * t.y, pictureWidthM, limits);
-  };
-
-  type Open = { rating: SeatRating; c0: number; c1: number; r0: number };
-  const patches: ViewingPatch[] = [];
-  const close = (o: Open, r1: number) => {
-    patches.push({
-      rating: o.rating,
-      mm: [at(o.c0 / cols, o.r0 / rows), at(o.c1 / cols, o.r0 / rows), at(o.c1 / cols, r1 / rows), at(o.c0 / cols, r1 / rows)],
-    });
-  };
-  let open = new Map<string, Open>();
+  const halfW = (rect.widthM / 2) * mmPerM, halfD = (rect.depthM / 2) * mmPerM;
+  const rgba = new Uint8ClampedArray(cols * rows * 4);
   for (let j = 0; j < rows; j++) {
-    const next = new Map<string, Open>();
-    let c0 = 0;
-    let rating = rate(0, j);
-    for (let i = 1; i <= cols; i++) {
-      const here = i < cols ? rate(i, j) : null;
-      if (here === rating) continue;
-      const key = `${c0}:${i}:${rating}`;
-      next.set(key, open.get(key) ?? { rating, c0, c1: i, r0: j });
-      open.delete(key);
-      if (here !== null) { c0 = i; rating = here; }
+    const py = yMm + ((j + 0.5) * hMm) / rows;
+    for (let i = 0; i < cols; i++) {
+      const px = xMm + ((i + 0.5) * wMm) / cols;
+      // Inside the rectangle? Measured in its own axes.
+      const rx = px - rect.centerMm.x, ry = py - rect.centerMm.y;
+      if (Math.abs(rx * rt.x + ry * rt.y) > halfW || Math.abs(rx * rn.x + ry * rn.y) > halfD) continue;
+      const sx = (px - screen.screenCenterMm.x) / mmPerM, sy = (py - screen.screenCenterMm.y) / mmPerM;
+      const [r, g, b] = qualityRgb(seatQuality(sx * n.x + sy * n.y, sx * t.x + sy * t.y, pictureWidthM, limits));
+      const o = (j * cols + i) * 4;
+      rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = b; rgba[o + 3] = 255;
     }
-    // Whatever did not continue into this row ends above it.
-    for (const o of open.values()) close(o, j);
-    open = next;
   }
-  for (const o of open.values()) close(o, rows);
-  return patches;
+  return { xMm, yMm, wMm, hMm, cols, rows, rgba };
+}
+
+/** The raster as a PNG data URL. Browser only — returns undefined where there is no
+ *  canvas, and a heatmap that will not encode is left out rather than taking the sheet down. */
+export function viewingRasterPng(raster: ViewingRaster): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const canvas = document.createElement("canvas");
+  canvas.width = raster.cols;
+  canvas.height = raster.rows;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return undefined;
+  const img = ctx.createImageData(raster.cols, raster.rows);
+  img.data.set(raster.rgba);
+  ctx.putImageData(img, 0, 0);
+  try {
+    return canvas.toDataURL("image/png");
+  } catch {
+    return undefined;
+  }
+}
+
+/** The heatmap of a projection's audience area, or null when it has no area or the
+ *  heatmap is switched off. */
+export function viewingHeatmap(
+  projection: ScreenOnSheet & { screenBottomM?: number; audience?: AudienceRect; viewing?: ProjectionViewing },
+  picture: { widthM: number; heightM: number },
+  scaleDenominator: number,
+): ViewingRaster | null {
+  if (!projection.audience || projection.viewing?.heatmap === false) return null;
+  const limits = viewingLimits({
+    pictureHeightM: picture.heightM,
+    screenBottomM: projection.screenBottomM,
+    settings: projection.viewing ?? DEFAULT_VIEWING,
+  });
+  return viewingRaster(projection.audience, picture.widthM, limits, projection, scaleDenominator);
 }
 
 /** An audience area given the way a planner says it: starting `nearM` in front of the

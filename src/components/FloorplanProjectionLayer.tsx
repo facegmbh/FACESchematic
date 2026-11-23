@@ -10,8 +10,9 @@ import {
   visibleProjections,
 } from "../projection";
 import {
-  SEAT_RATING_COLORS,
   VIEWING_HEATMAP_OPACITY,
+  viewingHeatmap,
+  viewingRasterPng,
   VIEWING_HINT_COLOR,
   VIEWING_OK_COLOR,
   audienceTurnHandleMm,
@@ -20,6 +21,43 @@ import {
 import ProjectionSectionSvg from "./ProjectionSectionSvg";
 import { useT } from "../i18n";
 import type { FloorplanPage, FloorplanProjection } from "../types";
+
+/**
+ * The heatmap of one audience area: a small picture stretched over the area's box, so the
+ * browser's own smoothing blends the samples into each other. Computed again only when
+ * something it depends on changes — dragging anything else leaves it alone.
+ */
+function ViewingHeatmapImage({ projection, picture, scaleDenominator, mmToPx }: {
+  projection: FloorplanProjection;
+  picture: { widthM: number; heightM: number };
+  scaleDenominator: number;
+  mmToPx: (mm: number) => number;
+}) {
+  const { audience, viewing, screenCenterMm, screenRotationDeg, screenBottomM } = projection;
+  const { widthM, heightM } = picture;
+  const image = useMemo(() => {
+    const raster = viewingHeatmap({ audience, viewing, screenCenterMm, screenRotationDeg, screenBottomM }, { widthM, heightM }, scaleDenominator);
+    const href = raster ? viewingRasterPng(raster) : undefined;
+    return raster && href ? { raster, href } : null;
+    // Positions are objects that are replaced on every edit; compare what is in them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(audience), JSON.stringify(viewing), screenCenterMm.x, screenCenterMm.y, screenRotationDeg, screenBottomM, widthM, heightM, scaleDenominator]);
+  if (!image) return null;
+  const { raster, href } = image;
+  return (
+    <image
+      href={href}
+      x={mmToPx(raster.xMm)}
+      y={mmToPx(raster.yMm)}
+      width={mmToPx(raster.wMm)}
+      height={mmToPx(raster.hMm)}
+      preserveAspectRatio="none"
+      opacity={VIEWING_HEATMAP_OPACITY}
+      data-projection-heatmap={projection.id}
+      style={{ pointerEvents: "none" }}
+    />
+  );
+}
 
 /** With the coverage areas: above the covers, below the symbols, so the projector stays
  *  on top of its own cone. */
@@ -147,23 +185,8 @@ export default function FloorplanProjectionLayer({
                       <title>{t("Recommended viewing area (AVIXA): within 60° to the side, between the closest and the farthest seat")}</title>
                     </polygon>
                   )}
-                  {/* Opacity on the group, not on the patches: they overlap by their stroke
-                      to close the hairline seams, and that must not show as darker lines. */}
-                  {v.patches.length > 0 && (
-                    <g opacity={VIEWING_HEATMAP_OPACITY} data-projection-heatmap={projection.id}>
-                      {v.patches.map((patch, i) => (
-                        <polygon
-                          key={i}
-                          points={patch.mm.map(px).join(" ")}
-                          fill={SEAT_RATING_COLORS[patch.rating]}
-                          stroke={SEAT_RATING_COLORS[patch.rating]}
-                          strokeWidth={0.6}
-                          data-seat-rating={patch.rating}
-                        />
-                      ))}
-                    </g>
-                  )}
-                  <polygon points={outline} fill={frame} fillOpacity={v.patches.length > 0 ? 0 : 0.06} stroke={frame} strokeWidth={selected ? 1.5 : 1} />
+                  {v.heatmapOn && <ViewingHeatmapImage projection={projection} picture={g.result.picture} scaleDenominator={page.scaleDenominator} mmToPx={mmToPx} />}
+                  <polygon points={outline} fill={frame} fillOpacity={v.heatmapOn ? 0 : 0.06} stroke={frame} strokeWidth={selected ? 1.5 : 1} />
                   <polygon
                     points={outline}
                     fill="none"
