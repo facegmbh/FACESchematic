@@ -1592,6 +1592,85 @@ export type FloorplanToken = (typeof FLOORPLAN_TOKENS)[number];
 
 /** A scaled plan drawing: an architect's drawing as underlay, device symbols placed on
  *  it, a generated legend, and the project title block. */
+/** Throw distance against image diagonal for one aspect ratio, as the manufacturer
+ *  publishes it: distance in cm = a · diagonal in inches + b, once at the wide end of the
+ *  zoom and once at the tele end. This is the form Epson's own throw distance simulator
+ *  computes with, so the figures here agree with it to the centimetre. */
+export interface ProjectionFormat {
+  /** "16:10", "16:9", "4:3" … */
+  ratio: string;
+  wide: [a: number, b: number];
+  tele: [a: number, b: number];
+  /** Smallest and largest diagonal in inches the lens can focus. */
+  sizeMin: number;
+  sizeMax: number;
+}
+
+/** How far the lens can move the picture off its axis, in percent of the picture's height
+ *  (v) and width (h). The two do not add up: with the picture fully to one side only
+ *  `hv` is left vertically, and it tapers linearly in between. All zero = no lens shift. */
+export interface ProjectionShiftRange {
+  vMin: number;
+  vMax: number;
+  hMin: number;
+  hMax: number;
+  hvMin: number;
+  hvMax: number;
+}
+
+/** What a projector's lens can do. Either `formats` (manufacturer data) or a plain throw
+ *  ratio range (distance ÷ picture width) typed off a datasheet. */
+export interface ProjectionOptics {
+  formats?: ProjectionFormat[];
+  throwMin?: number;
+  throwMax?: number;
+  shift?: ProjectionShiftRange;
+  /** Light output in lumens. */
+  lumens?: number;
+}
+
+/**
+ * A projector and its picture on the plan. The picture is the fixed point — it hangs on a
+ * wall — and the projector symbol is what gets moved: the throw distance is simply how
+ * far the symbol sits in front of the picture, and zoom and lens shift follow from that.
+ *
+ * The optics are stored with the projection rather than looked up, so a drawing computes
+ * the same on a machine without the manufacturer data and does not change under the
+ * planner when that data is refreshed.
+ */
+export interface FloorplanProjection {
+  id: string;
+  /** The projector symbol. Its position is the lens. */
+  symbolId: string;
+  /** Model and lens as picked, for the caption and to re-select them in the editor. */
+  model?: string;
+  lens?: string;
+  optics: ProjectionOptics;
+  /** Picture aspect ratio, "16:10". */
+  aspect: string;
+  /** The projection surface in metres. The picture is the largest `aspect` rectangle
+   *  that fits it — identical to the surface unless both sides were pinned. */
+  widthM: number;
+  heightM: number;
+  /** Pinned sides keep their value when the aspect ratio changes. */
+  lockWidth?: boolean;
+  lockHeight?: boolean;
+  /** Middle of the surface on the sheet, paper mm. */
+  screenCenterMm: { x: number; y: number };
+  /** Direction the surface faces (towards the projector), degrees clockwise, 0 = to the
+   *  right of the sheet. */
+  screenRotationDeg: number;
+  /** Lower edge of the picture and lens above the floor, metres. Both set → vertical
+   *  shift is checked as well. */
+  screenBottomM?: number;
+  lensHeightM?: number;
+  /** Screen gain, default 1. */
+  screenGain?: number;
+  /** Symbol group this is filed under, so it switches off with its layer. */
+  groupId?: string;
+  hidden?: boolean;
+}
+
 export interface FloorplanPage {
   id: string;
   label: string;
