@@ -467,11 +467,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
 
   // ── Mouse handling on the sheet ──────────────────────────────────
   const handleSheetMouseDown = useCallback((e: React.MouseEvent) => {
+    // A new press starts a new gesture, for every tool. The click handler drops any click
+    // that ends a drag, so this has to be cleared before the calibrate tool returns below —
+    // it used to return first, and after one drag or pan every calibration click counted as
+    // the end of that drag and was dropped: calibrating took no point at all.
+    didMoveRef.current = false;
+    setDidMove(false);
     if (tool === "calibrate") return; // handled on click
     const willPan = e.button === 1 || spaceHeld || panMode === "pan-first";
     if (e.button === 1) e.preventDefault();
-    didMoveRef.current = false;
-    setDidMove(false);
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
     if (willPan) return;
     if (tool === "place" || tool === "note" || tool === "coverage" || tool === "wall") return; // handled on click
