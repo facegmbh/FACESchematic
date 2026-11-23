@@ -8,7 +8,7 @@
 
 import { jsPDF } from "jspdf";
 import type { CompanyProfile, ConnectionEdge, DeviceData, DeviceTemplate, FloorplanNote, FloorplanPage, FloorplanSymbolGroup, SchematicNode, SchematicPage, TitleBlock, WallMaterial, WallMaterialSpec } from "./types";
-import { DEFAULT_HEATMAP, RSSI_STEPS, WALL_MATERIAL_COLORS } from "./types";
+import { DEFAULT_HEATMAP, WALL_MATERIAL_COLORS } from "./types";
 import { collectAccessPoints, computeHeatmap, rssiColor } from "./wifiCoverage";
 import { getTemplateById } from "./templateApi";
 import { buildLegendLineRows, computeLineLoads, legendShowsLines, type LegendLineRow, type LoadSpecLookup } from "./speakerLines";
@@ -69,8 +69,7 @@ import {
   LEGEND_RSSI_TITLE_MM,
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
-  DEFAULT_RSSI_SCALE_TITLE,
-  legendShowsRssiScale,
+  legendColorKeys,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
   legendLinesTitleOf,
@@ -262,9 +261,9 @@ function pictureForSymbol(
 
 /** Legend box: one row per symbol group, then the free-text installation notes. */
 function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: string[], images: Map<string, string>, company: CompanyProfile | undefined, lineRows: LegendLineRow[] = [], librarySymbols: Map<string, string> = new Map()) {
-  const rssiSteps = legendShowsRssiScale(page) ? RSSI_STEPS : [];
+  const colorKeys = legendColorKeys(page);
   const { positionMm: pos, widthMm } = page.legend;
-  const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length, rssiSteps.length);
+  const heightMm = legendHeightMm(rows, page.legend, company, lineRows.length, colorKeys.map((k) => k.steps.length));
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(68, 68, 68);
@@ -361,9 +360,9 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     }
   }
 
-  // Signal colour key — the same swatches the heatmap is painted with, so the print
+  // Colour keys — the same swatches the heatmaps are painted with, so the print
   // explains itself.
-  if (rssiSteps.length > 0) {
+  for (const colorKey of colorKeys) {
     y += LEGEND_RSSI_GAP_MM;
     doc.setDrawColor(153, 153, 153);
     doc.setLineWidth(0.15);
@@ -371,10 +370,10 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
     doc.setFont("Inter", "bold");
     doc.setFontSize(3 * MM_TO_PT);
     doc.setTextColor(17, 17, 17);
-    doc.text(page.legend.rssiScaleTitle ?? DEFAULT_RSSI_SCALE_TITLE, innerX, y + 3.6, { maxWidth: innerW });
+    doc.text(colorKey.title, innerX, y + 3.6, { maxWidth: innerW });
     y += LEGEND_RSSI_TITLE_MM;
     const swatchW = innerW * LEGEND_RSSI_SWATCH_SHARE;
-    for (const step of rssiSteps) {
+    for (const step of colorKey.steps) {
       const [r, g, b] = hexToRgb(step.color);
       doc.setFillColor(r, g, b);
       doc.rect(innerX, y + 0.6, swatchW, LEGEND_RSSI_ROW_MM - 1.2, "F");
@@ -961,7 +960,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     const lineRows = legendShowsLines(page) && opts.edges && opts.loadSpecLookup
       ? buildLegendLineRows(computeLineLoads(page, opts.nodes, opts.edges, opts.loadSpecLookup))
       : [];
-    if (page.legend.visible && (rows.length > 0 || notes.length > 0 || lineRows.length > 0 || legendShowsRssiScale(page))) {
+    if (page.legend.visible && (rows.length > 0 || notes.length > 0 || lineRows.length > 0 || legendColorKeys(page).length > 0)) {
       // Uploaded images are data URLs already; remote references are fetched now so the
       // legend prints the same picture the screen shows — when the host allows it.
       const images = new Map<string, string>();

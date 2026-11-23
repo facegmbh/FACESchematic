@@ -240,6 +240,9 @@ test("floorplan: an audience area is checked against the viewing distances", asy
   await expect(heatmap.locator('[data-seat-rating="good"]').first()).toBeAttached();
   await expect(heatmap.locator('[data-seat-rating="too-far"]').first()).toBeAttached();
   await expect(page.getByTestId("projection-viewing-key")).toBeVisible();
+  // The legend on the sheet explains the colours, so the print does too.
+  const legendKey = page.locator('[data-legend-key="viewing"]');
+  await expect(legendKey).toBeVisible();
   await page.screenshot({ path: process.env.PROJECTION_AUDIENCE_SHOT ?? join(tmpdir(), "projection-audience.png") });
   await page.getByTestId("projection-viewing-apply").click();
   await expect(page.getByTestId("projection-viewing-apply")).toHaveCount(0);
@@ -258,6 +261,7 @@ test("floorplan: an audience area is checked against the viewing distances", asy
   await page.getByTestId("projection-viewing-heatmap").uncheck();
   await expect(heatmap).toHaveCount(0);
   await expect(area).toBeAttached();
+  await expect(legendKey).toHaveCount(0);
 
   // Removing the area takes it off the plan.
   await page.getByTestId("projection-audience-remove").click();

@@ -35,7 +35,8 @@ import type { FloorplanSymbolShape,
   FloorplanUnderlay,
   TitleBlock,
 } from "./types";
-import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, WALL_AP_APERTURE_DEG } from "./types";
+import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
+import { SEAT_RATING_COLORS, type SeatRating } from "./projectionViewing";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -365,12 +366,15 @@ export function legendShowsCompany(legend: Pick<FloorplanLegendBox, "showCompany
 
 /** Legend box height in mm for the given rows — the renderer and the PDF export share
  *  this so the on-screen box and the printed one agree. */
-export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0, rssiStepCount = 0): number {
+export function legendHeightMm(rows: LegendRow[], legend: FloorplanLegendBox, company?: CompanyProfile | null, lineRowCount = 0, keyStepCounts: number | number[] = 0): number {
   const notes = (legend.notes ?? []).filter((n) => n.trim().length > 0);
   const rowH = legend.showImages ? LEGEND_ROW_WITH_IMAGE_MM : LEGEND_ROW_MM;
   let h = LEGEND_TITLE_MM + rows.length * rowH + LEGEND_PAD_MM * 2;
   if (lineRowCount > 0) h += LEGEND_LINES_GAP_MM + LEGEND_LINES_TITLE_MM + LEGEND_LINE_ROW_MM * (lineRowCount + 1);
-  if (rssiStepCount > 0) h += LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM + LEGEND_RSSI_ROW_MM * rssiStepCount;
+  // One block per colour key (Wi-Fi signal, viewing quality), each with its own heading.
+  for (const steps of Array.isArray(keyStepCounts) ? keyStepCounts : [keyStepCounts]) {
+    if (steps > 0) h += LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM + LEGEND_RSSI_ROW_MM * steps;
+  }
   if (notes.length > 0) h += LEGEND_NOTES_GAP_MM + LEGEND_NOTES_TITLE_MM + notes.length * LEGEND_NOTE_LINE_MM;
   if (legendShowsCompany(legend) && hasCompanyProfile(company)) h += legendCompanyHeightMm(company);
   // A stretched box covers what sits under it — the planner's way of hiding the
@@ -407,6 +411,57 @@ export function legendShowsRssiScale(
 ): boolean {
   if (page.legend.showRssiScale !== undefined) return page.legend.showRssiScale;
   return page.kind === "wifi" && Boolean(page.heatmap?.visible);
+}
+
+/** Does this plan show a heatmap of an audience area? Then its colours need explaining. */
+export function legendShowsViewingKey(
+  page: Pick<FloorplanPage, "projections" | "symbols" | "groups">,
+): boolean {
+  return (page.projections ?? []).some((p) => {
+    if (p.hidden || !p.audience || p.viewing?.heatmap === false) return false;
+    const symbol = page.symbols.find((s) => s.id === p.symbolId);
+    if (!symbol) return false;
+    return !page.groups.find((g) => g.id === (p.groupId ?? symbol.groupId))?.hidden;
+  });
+}
+
+/** A block of colour swatches in the legend: what a heatmap's colours mean. */
+export interface LegendColorKey {
+  id: "rssi" | "viewing";
+  title: string;
+  steps: { color: string; label: string }[];
+}
+
+const VIEWING_KEY_TEXT: Record<Locale, { title: string; labels: Record<Exclude<SeatRating, "behind">, string> }> = {
+  de: {
+    title: "SICHTGÜTE (AVIXA)",
+    labels: { good: "gut", marginal: "Grenzbereich", "too-far": "zu weit", "too-near": "zu nah", "too-oblique": "zu schräg" },
+  },
+  en: {
+    title: "VIEWING QUALITY (AVIXA)",
+    labels: { good: "good", marginal: "near the limit", "too-far": "too far", "too-near": "too near", "too-oblique": "too far to the side" },
+  },
+};
+
+/** The colour keys this plan's legend carries, in the order they are printed. The screen,
+ *  the PDF and the legend's height all read this one list. */
+export function legendColorKeys(
+  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap" | "projections" | "symbols" | "groups">,
+  locale: Locale = getLocale(),
+): LegendColorKey[] {
+  const keys: LegendColorKey[] = [];
+  if (legendShowsRssiScale(page)) {
+    keys.push({ id: "rssi", title: page.legend.rssiScaleTitle ?? DEFAULT_RSSI_SCALE_TITLE, steps: RSSI_STEPS.map((s) => ({ color: s.color, label: s.label })) });
+  }
+  if (legendShowsViewingKey(page)) {
+    const text = VIEWING_KEY_TEXT[locale] ?? VIEWING_KEY_TEXT.en;
+    keys.push({
+      id: "viewing",
+      title: text.title,
+      steps: (Object.keys(text.labels) as (keyof typeof text.labels)[]).map((k) => ({ color: SEAT_RATING_COLORS[k], label: text.labels[k] })),
+    });
+  }
+  return keys;
 }
 
 /** Default legend box, parked in the sheet's top-right corner. */

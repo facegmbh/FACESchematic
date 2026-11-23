@@ -44,8 +44,7 @@ import {
   LEGEND_RSSI_TITLE_MM,
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
-  DEFAULT_RSSI_SCALE_TITLE,
-  legendShowsRssiScale,
+  legendColorKeys,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
   DEFAULT_LEGEND_LINES_TITLE,
@@ -70,7 +69,7 @@ import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
 import FloorplanDrawingBlockView from "./FloorplanDrawingBlockView";
 import { FLOORPLAN_DEVICE_MIME, FLOORPLAN_TEMPLATE_MIME } from "./FloorplanSidebar";
 import type { DeviceData, FloorplanCoverage, FloorplanNote, FloorplanPage, FloorplanSymbol, FloorplanSymbolGroup } from "../types";
-import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM, RSSI_STEPS } from "../types";
+import { DEFAULT_HEATMAP, DEFAULT_WALL_MATERIAL, DEFAULT_WALL_THICKNESS_MM } from "../types";
 import { collectAccessPoints } from "../wifiCoverage";
 import type { WallCandidateSet } from "../pdfWalls";
 import { getTemplateById } from "../templateApi";
@@ -872,8 +871,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const showCompany = legendShowsCompany(page.legend) && hasCompanyProfile(companyProfile);
   // The signal colour key prints on a coverage plan whose heatmap is on — a heatmap
   // handed over without its scale cannot be read by the customer.
-  const legendRssiSteps = legendShowsRssiScale(page) ? RSSI_STEPS : [];
-  const legendH = legendHeightMm(legendRows, page.legend, companyProfile, legendLineRows.length, legendRssiSteps.length);
+  // The same goes for the heatmap of a projection's audience area.
+  const legendKeys = legendColorKeys(page);
+  const legendH = legendHeightMm(legendRows, page.legend, companyProfile, legendLineRows.length, legendKeys.map((k) => k.steps.length));
 
   const blockLogo = titleBlock.logo || companyProfile.logo || undefined;
   const drawingLayout = useMemo(
@@ -1295,7 +1295,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           })()}
 
           {/* Legend box */}
-          {page.legend.visible && (legendRows.length > 0 || legendNotes.length > 0 || legendRssiSteps.length > 0) && (
+          {page.legend.visible && (legendRows.length > 0 || legendNotes.length > 0 || legendKeys.length > 0) && (
             <div
               className="absolute bg-white"
               style={{
@@ -1374,19 +1374,19 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     ))}
                   </div>
                 )}
-                {legendRssiSteps.length > 0 && (
-                  <div style={{ marginTop: mmToPx(LEGEND_RSSI_GAP_MM) }}>
+                {legendKeys.map((legendKey) => (
+                  <div key={legendKey.id} data-legend-key={legendKey.id} style={{ marginTop: mmToPx(LEGEND_RSSI_GAP_MM) }}>
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_RSSI_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>
-                      {page.legend.rssiScaleTitle ?? DEFAULT_RSSI_SCALE_TITLE}
+                      {legendKey.title}
                     </div>
-                    {legendRssiSteps.map((step) => (
+                    {legendKey.steps.map((step) => (
                       <div key={step.label} className="flex items-center" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_RSSI_ROW_MM), color: "#222", gap: mmToPx(2) }}>
                         <span style={{ width: `${LEGEND_RSSI_SWATCH_SHARE * 100}%`, height: mmToPx(LEGEND_RSSI_ROW_MM - 1.2), background: step.color, flexShrink: 0 }} />
                         <span className="truncate">{step.label}</span>
                       </div>
                     ))}
                   </div>
-                )}
+                ))}
                 {legendNotes.length > 0 && (
                   <div style={{ marginTop: mmToPx(LEGEND_NOTES_GAP_MM) }}>
                     <div style={{ fontSize: mmToPx(3), fontWeight: 700, height: mmToPx(LEGEND_NOTES_TITLE_MM), borderTop: "0.5px solid #999", paddingTop: mmToPx(1.5) }}>

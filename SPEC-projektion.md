@@ -238,7 +238,8 @@ Entschieden (Jean-Luc, 23.11.2026):
   angelegt und dann an Rahmen, Ecken und Drehgriff zurechtgezogen (kein Aufziehen mit der
   Maus). Die Heatmap besteht aus zusammengefassten Vektorflächen statt aus einem Rasterbild,
   am Bildschirm und im PDF aus derselben Geometrie; sie ist standardmäßig an. Der
-  Farbschlüssel steht bisher nur im Inspektor, noch nicht in der Legende auf dem Blatt.
+  Farbschlüssel steht im Inspektor und, sobald eine Heatmap auf dem Blatt liegt, als Block
+  „SICHTGÜTE (AVIXA)“ in der Legende (Bildschirm und PDF, nach dem WLAN-Schlüssel).
 
 - Die Bildfläche bleibt an ihrer Stelle, nur der Beamer wird geschoben.
 - Einfache Bedienung geht vor Funktionsumfang; die Oberfläche wird nicht überladen.

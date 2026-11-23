@@ -54,6 +54,7 @@ import {
   isAccessPointDeviceType,
   coverageOffersOptics,
   legendShowsRssiScale,
+  legendColorKeys,
   FLOORPLAN_KIND_PRESETS,
   floorplanKindPreset,
   LEGEND_RSSI_GAP_MM,
@@ -1103,6 +1104,51 @@ describe("the Wi-Fi coverage plan type", () => {
     // … but an explicit choice always wins, in either direction.
     expect(legendShowsRssiScale({ legend: { ...legend, showRssiScale: true }, kind: "generic" })).toBe(true);
     expect(legendShowsRssiScale({ legend: { ...legend, showRssiScale: false }, kind: "wifi", heatmap: heatOn })).toBe(false);
+  });
+
+  it("carries a viewing key when an audience area shows its heatmap", () => {
+    const legend = createDefaultLegend(paper);
+    const audience = { centerMm: { x: 0, y: 0 }, widthM: 4, depthM: 6, rotationDeg: 0 };
+    const plan = (projection: object, groupHidden = false) => ({
+      legend,
+      kind: "generic" as const,
+      symbols: [{ id: "s1", groupId: "g1" }],
+      groups: [{ id: "g1", hidden: groupHidden }],
+      projections: [{ id: "p1", symbolId: "s1", ...projection }],
+    }) as never as Parameters<typeof legendColorKeys>[0];
+
+    expect(legendColorKeys(plan({}), "de")).toEqual([]);
+    const keys = legendColorKeys(plan({ audience }), "de");
+    expect(keys.map((k) => k.id)).toEqual(["viewing"]);
+    expect(keys[0].title).toBe("SICHTGÜTE (AVIXA)");
+    expect(keys[0].steps.map((s) => s.label)).toEqual(["gut", "Grenzbereich", "zu weit", "zu nah", "zu schräg"]);
+    expect(legendColorKeys(plan({ audience }), "en")[0].steps[0].label).toBe("good");
+    // No heatmap on the sheet, no key: switched off, projection hidden, or its layer off.
+    expect(legendColorKeys(plan({ audience, viewing: { task: "bdm", heatmap: false } }), "de")).toEqual([]);
+    expect(legendColorKeys(plan({ audience, hidden: true }), "de")).toEqual([]);
+    expect(legendColorKeys(plan({ audience }, true), "de")).toEqual([]);
+  });
+
+  it("prints the Wi-Fi key first when a plan has both", () => {
+    const legend = { ...createDefaultLegend(paper), showRssiScale: true, rssiScaleTitle: "PEGEL" };
+    const keys = legendColorKeys({
+      legend,
+      kind: "generic",
+      symbols: [{ id: "s1", groupId: "g1" }],
+      groups: [{ id: "g1" }],
+      projections: [{ id: "p1", symbolId: "s1", audience: { centerMm: { x: 0, y: 0 }, widthM: 4, depthM: 6, rotationDeg: 0 } }],
+    } as never as Parameters<typeof legendColorKeys>[0], "de");
+    expect(keys.map((k) => k.id)).toEqual(["rssi", "viewing"]);
+    expect(keys[0].title).toBe("PEGEL");
+    expect(keys[0].steps).toHaveLength(6);
+  });
+
+  it("grows the legend by each colour key's rows", () => {
+    const legend = createDefaultLegend(paper);
+    const base = legendHeightMm([], legend, null, 0, 0);
+    const both = legendHeightMm([], legend, null, 0, [6, 5]);
+    expect(both - base).toBeCloseTo(2 * (LEGEND_RSSI_GAP_MM + LEGEND_RSSI_TITLE_MM) + 11 * LEGEND_RSSI_ROW_MM, 6);
+    expect(legendHeightMm([], legend, null, 0, [])).toBeCloseTo(base, 6);
   });
 
   it("grows the legend by exactly the colour key's rows", () => {
