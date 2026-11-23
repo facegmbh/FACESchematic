@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
 import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg,
-  coverageLabelOf, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition } from "../floorplan";
+  coverageLabelOf, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition,
+  defaultSymbolShapeFor,
+} from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
 import { COVERAGE_SHAPES, DORI_LEVELS, DORI_PX_PER_M, FLOORPLAN_SYMBOL_SHAPES, SPEAKER_LINE_MODES,
@@ -12,6 +14,7 @@ import { getTemplateById as lookupTemplate } from "../templateApi";
 import { symbolLibraryName } from "../symbolLibrary";
 import SymbolLibraryPicker from "./SymbolLibraryPicker";
 import FloorplanProjectionPanel from "./FloorplanProjectionPanel";
+import FloorplanDisplayPanel from "./FloorplanDisplayPanel";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
@@ -446,8 +449,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
               </div>
 
               {/* A projector plans its picture right here, with its symbol. */}
-              {!many && ((device?.data as DeviceData | undefined)?.deviceType === "projector" || (page.projections ?? []).some((pr) => pr.symbolId === first.id)) && (
+              {!many && ((device?.data as DeviceData | undefined)?.deviceType === "projector" || (page.projections ?? []).some((pr) => pr.symbolId === first.id && pr.kind !== "display")) && (
                 <FloorplanProjectionPanel page={page} symbol={first} device={device?.data as DeviceData | undefined} />
+              )}
+              {/* A display gets its true size and its viewing distances the same way. */}
+              {!many && (group?.shape === "display"
+                || defaultSymbolShapeFor((device?.data as DeviceData | undefined)?.deviceType) === "display"
+                || (page.projections ?? []).some((pr) => pr.symbolId === first.id && pr.kind === "display")) && (
+                <FloorplanDisplayPanel page={page} symbol={first} />
               )}
             </div>
           </details>

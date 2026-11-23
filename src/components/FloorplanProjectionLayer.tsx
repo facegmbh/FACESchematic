@@ -85,6 +85,10 @@ export default function FloorplanProjectionLayer({
         const tx = (sb.x - sa.x) / len, ty = (sb.y - sa.y) / len;
         const tick = 1.5;
         const turnAt = { x: sb.x + tx * 4, y: sb.y + ty * 4 };
+        // A display is its own symbol: the sheet draws it as a bar there, and it is moved
+        // and turned by moving and turning that symbol. Here only what belongs to the
+        // picture is added — caption, audience area, heatmap.
+        const isDisplay = projection.kind === "display";
         return (
           <g key={projection.id} data-projection-id={projection.id} data-projection-ok={ok ? "1" : "0"}>
             {g.distanceM > 0 && (
@@ -217,7 +221,7 @@ export default function FloorplanProjectionLayer({
             })()}
             {/* The surface: grabbed to put it on its wall. A wide transparent stroke under
                 the visible line makes a 2 px target catchable. */}
-            <line
+            {!isDisplay && <line
               x1={mmToPx(sa.x)} y1={mmToPx(sa.y)} x2={mmToPx(sb.x)} y2={mmToPx(sb.y)}
               stroke="transparent"
               strokeWidth={12}
@@ -231,9 +235,9 @@ export default function FloorplanProjectionLayer({
               }}
             >
               <title>{t("Drag the picture to its wall")}</title>
-            </line>
-            <line x1={mmToPx(sa.x)} y1={mmToPx(sa.y)} x2={mmToPx(sb.x)} y2={mmToPx(sb.y)} stroke="#64748b" strokeWidth={2} />
-            <line x1={mmToPx(a.x)} y1={mmToPx(a.y)} x2={mmToPx(b.x)} y2={mmToPx(b.y)} stroke="#111" strokeWidth={3} />
+            </line>}
+            {!isDisplay && <line x1={mmToPx(sa.x)} y1={mmToPx(sa.y)} x2={mmToPx(sb.x)} y2={mmToPx(sb.y)} stroke="#64748b" strokeWidth={2} />}
+            {!isDisplay && <line x1={mmToPx(a.x)} y1={mmToPx(a.y)} x2={mmToPx(b.x)} y2={mmToPx(b.y)} stroke="#111" strokeWidth={3} />}
             <text
               x={mmToPx(labelAt.x)}
               y={mmToPx(labelAt.y)}
@@ -287,7 +291,7 @@ export default function FloorplanProjectionLayer({
                 </g>
               );
             })()}
-            {selected && interactive && (
+            {selected && interactive && !isDisplay && (
               <circle
                 cx={mmToPx(turnAt.x)}
                 cy={mmToPx(turnAt.y)}

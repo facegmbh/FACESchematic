@@ -686,3 +686,18 @@ describe("set_floorplan_coverage / remove_floorplan_coverage", () => {
     expect(() => handlers.remove_floorplan_coverage({ pageId, coverageId: c.coverageId })).toThrow(/No coverage/);
   });
 });
+
+describe("list_floorplans reports displays", () => {
+  it("names each display with its size and the symbol it hangs on", async () => {
+    const { defaultDisplayFor } = await import("../projection");
+    const { pageId } = handlers.create_floorplan({ label: "Besprechung" }) as Summary;
+    const { groupId } = handlers.add_floorplan_group({ pageId, label: "Display", shape: "display" }) as { groupId: string };
+    const placed = handlers.place_floorplan_symbols({ pageId, symbols: [{ groupId, xM: 4, yM: 2 }] }) as { results: { result: { symbolId: string } }[] };
+    const symbolId = placed.results[0].result.symbolId;
+    const symbol = floorplans()[0].symbols.find((s) => s.id === symbolId)!;
+    useSchematicStore.getState().addFloorplanProjection(pageId, { ...defaultDisplayFor(symbol, 75), screenBottomM: 1.1 });
+
+    const page = (handlers.list_floorplans({}) as { pages: { displays: { symbolId: string; diagonalIn: number; widthM: number; heightM: number; lowerEdgeM?: number; hasAudienceArea: boolean }[] }[] }).pages[0];
+    expect(page.displays).toEqual([expect.objectContaining({ symbolId, diagonalIn: 75, widthM: 1.66, heightM: 0.93, lowerEdgeM: 1.1, hasAudienceArea: false })]);
+  });
+});

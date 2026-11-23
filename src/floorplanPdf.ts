@@ -83,6 +83,7 @@ import {
   type LegendRow,
 } from "./floorplan";
 import { SEAT_RATING_COLORS, VIEWING_HEATMAP_OPACITY, VIEWING_HINT_COLOR, VIEWING_OK_COLOR, viewingOnSheet } from "./projectionViewing";
+import { displayBarMm, displayOnSymbol } from "./projection";
 import { PROJECTION_IN_PICTURE_COLOR, PROJECTION_OK_COLOR, PROJECTION_WARN_COLOR, inPictureLabel, projectionCaption, projectionCaptionAnchorMm, sectionBoxMm, visibleProjections, type SectionRole } from "./projection";
 
 const MM_TO_PT = 72 / IN_TO_MM;
@@ -819,12 +820,15 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
           doc.lines(closed(v.audienceMm), v.audienceMm[0].x, v.audienceMm[0].y, [1, 1], "S", true);
         }
       }
-      doc.setDrawColor(100, 116, 139);
-      doc.setLineWidth(0.5);
-      doc.line(sa.x, sa.y, sb.x, sb.y);
-      doc.setDrawColor(17, 17, 17);
-      doc.setLineWidth(0.8);
-      doc.line(a.x, a.y, b.x, b.y);
+      // A display is drawn with the symbols, as a bar; only a projector has a surface line.
+      if (projection.kind !== "display") {
+        doc.setDrawColor(100, 116, 139);
+        doc.setLineWidth(0.5);
+        doc.line(sa.x, sa.y, sb.x, sb.y);
+        doc.setDrawColor(17, 17, 17);
+        doc.setLineWidth(0.8);
+        doc.line(a.x, a.y, b.x, b.y);
+      }
       const at = projectionCaptionAnchorMm(projection, page.labelSizeMm * 1.6);
       doc.setFont("Inter", "bold");
       doc.setFontSize(page.labelSizeMm * 0.85 * MM_TO_PT);
@@ -927,15 +931,26 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       // A switched-off layer prints nothing — that is the point of switching it off.
       if (!group || !isGroupVisible(group)) continue;
       const rot = symbol.rotationDeg ?? 0;
-      drawSymbol(
-        doc,
-        group,
-        symbol.positionMm.x,
-        symbol.positionMm.y,
-        page.symbolSizeMm,
-        rot,
-        pictureForSymbol(group, rot, symbolPicture(group), turnedSymbolImages),
-      );
+      const display = displayOnSymbol(page, symbol);
+      if (display) {
+        // A display with a size: a bar of its true width instead of the pictogram.
+        const bar = displayBarMm(display, page.scaleDenominator);
+        const [dr, dg, db] = hexToRgb(group.color);
+        doc.setFillColor(dr, dg, db);
+        doc.setDrawColor(17, 17, 17);
+        doc.setLineWidth(0.15);
+        doc.lines(bar.slice(1).map((p, k) => [p.x - bar[k].x, p.y - bar[k].y] as [number, number]), bar[0].x, bar[0].y, [1, 1], "FD", true);
+      } else {
+        drawSymbol(
+          doc,
+          group,
+          symbol.positionMm.x,
+          symbol.positionMm.y,
+          page.symbolSizeMm,
+          rot,
+          pictureForSymbol(group, rot, symbolPicture(group), turnedSymbolImages),
+        );
+      }
 
       const anchor = symbolLabelAnchor(symbol, page.symbolSizeMm);
       doc.setFont("Inter", "bold");

@@ -11,6 +11,11 @@ import {
   projectionCaption,
   projectionCaptionAnchorMm,
   evaluateSection,
+  defaultDisplayFor,
+  resolveProjection,
+  displayBarMm,
+  visibleProjections,
+  DISPLAY_BAR_MIN_DEPTH_MM,
   sectionDrawing,
   sectionDrawingFor,
 } from "../projection";
@@ -394,5 +399,106 @@ describe("section over an architect's drawing", () => {
   it("is the generated section without a drawing", () => {
     expect(sectionDrawingFor(s, {}, 60).image).toBeUndefined();
     expect(sectionDrawingFor(s, undefined, 60).items.map((i) => i.role)).toContain("floor");
+  });
+});
+
+describe("displays: a picture that hangs where its symbol is", () => {
+  const display = (over: Partial<FloorplanProjection> = {}): FloorplanProjection => ({
+    id: "d1",
+    symbolId: "s1",
+    kind: "display",
+    optics: {},
+    ...resizeSurface({ aspect: "16:9", widthM: 0, heightM: 0 }, { diagonalIn: 75 }),
+    screenCenterMm: { x: 0, y: 0 },
+    screenRotationDeg: 0,
+    ...over,
+  });
+  const symbol = (over: Partial<{ positionMm: { x: number; y: number }; rotationDeg: number }> = {}) => ({
+    id: "s1", groupId: "g1", positionMm: { x: 200, y: 100 }, ...over,
+  });
+
+  it("a 75″ 16:9 display is 1.66 m wide and 0.93 m high", () => {
+    const d = defaultDisplayFor(symbol(), 75);
+    expect(d.kind).toBe("display");
+    expect(d.aspect).toBe("16:9");
+    expect(d.widthM).toBeCloseTo(1.66, 2);
+    expect(d.heightM).toBeCloseTo(0.934, 3);
+    expect(d.symbolId).toBe("s1");
+    expect(d.groupId).toBe("g1");
+  });
+
+  it("an unturned display faces down the sheet, its picture across", () => {
+    const r = resolveProjection(display(), symbol());
+    expect(r.screenCenterMm).toEqual({ x: 200, y: 100 });
+    expect(r.screenRotationDeg).toBe(90);
+  });
+
+  it("follows its symbol when that is moved or turned", () => {
+    const moved = resolveProjection(display(), symbol({ positionMm: { x: 50, y: 60 }, rotationDeg: 90 }));
+    expect(moved.screenCenterMm).toEqual({ x: 50, y: 60 });
+    expect(moved.screenRotationDeg).toBe(180);
+    expect(resolveProjection(display(), symbol({ rotationDeg: 300 })).screenRotationDeg).toBe(30);
+  });
+
+  it("leaves a projector's picture where it was put", () => {
+    const beamer = display({ kind: undefined, screenCenterMm: { x: 10, y: 20 }, screenRotationDeg: 45 });
+    expect(resolveProjection(beamer, symbol())).toBe(beamer);
+  });
+
+  it("has a picture but no cone, no throw band, no section and nothing to complain about", () => {
+    const d = resolveProjection(display({ screenBottomM: 1, lensHeightM: 2 }), symbol());
+    const g = projectionGeometry(d, symbol().positionMm, 50);
+    expect(g.distanceM).toBe(0);
+    expect(g.bandMm).toBeNull();
+    expect(g.section).toBeNull();
+    expect(g.inPictureMm).toBeNull();
+    expect(g.result.issues).toEqual([]);
+    expect(g.result.picture.diagonalIn).toBeCloseTo(75, 1);
+    // 1.66 m at 1:50 is 33.2 mm, lying across the sheet through the symbol.
+    const [a, b] = g.pictureMm;
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(33.2, 1);
+    expect(a.y).toBeCloseTo(100, 6);
+    expect(b.y).toBeCloseTo(100, 6);
+    expect((a.x + b.x) / 2).toBeCloseTo(200, 6);
+  });
+
+  it("is drawn as a bar of its true width", () => {
+    const d = resolveProjection(display(), symbol());
+    const bar = displayBarMm(d, 50);
+    expect(bar).toHaveLength(4);
+    const xs = bar.map((p) => p.x), ys = bar.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(33.2, 1);
+    // 8 cm deep at 1:50 is 1.6 mm, centred on the symbol.
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(1.6, 6);
+    expect((Math.max(...ys) + Math.min(...ys)) / 2).toBeCloseTo(100, 6);
+  });
+
+  it("the bar stays visible on a small-scale plan and turns with the display", () => {
+    const d = resolveProjection(display(), symbol({ rotationDeg: 90 }));
+    const bar = displayBarMm(d, 500);
+    const xs = bar.map((p) => p.x), ys = bar.map((p) => p.y);
+    // Turned a quarter: the width now runs down the sheet. 8 cm at 1:500 would be
+    // 0.16 mm — too thin to see, so the bar keeps a minimum thickness.
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(3.32, 2);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(DISPLAY_BAR_MIN_DEPTH_MM, 6);
+  });
+
+  it("is captioned with its size, not with a distance", () => {
+    const d = resolveProjection(display({ model: "QM75C" }), symbol());
+    const g = projectionGeometry(d, symbol().positionMm, 50);
+    expect(projectionCaption(d, g)).toBe("QM75C · 75″");
+  });
+
+  it("is listed with its picture on its symbol, and hidden with its layer", () => {
+    const page = {
+      projections: [display()],
+      symbols: [symbol({ positionMm: { x: 80, y: 90 }, rotationDeg: 180 })],
+      groups: [{ id: "g1" }],
+      scaleDenominator: 50,
+    };
+    const [item] = visibleProjections(page);
+    expect(item.projection.screenCenterMm).toEqual({ x: 80, y: 90 });
+    expect(item.projection.screenRotationDeg).toBe(270);
+    expect(visibleProjections({ ...page, groups: [{ id: "g1", hidden: true }] })).toEqual([]);
   });
 });

@@ -54,7 +54,40 @@ Spec: `SPEC-projektion.md` · freigegeben von Jean-Luc am 23.11.2026
 - [x] Task 13: Schnitt als Kasten auf dem Blatt und im PDF
 - [x] Task 14: Architektenschnitt anfügen (Bild/PDF, zwei Punkte kalibrieren)
 
+### Phase 5: Displays (noch nicht freigegeben)
+- [x] Task 15: Datenmodell und Geometrie — `kind: "display"`, Bildfläche folgt dem Symbol, Balken in echter Breite (Tests zuerst)
+- [x] Task 16: Zeichnung auf dem Plan und im PDF — Balken statt Piktogramm, Zuschauerzone und Heatmap wie beim Beamer
+- [x] Task 17: Inspektor-Block „Display“ — Diagonale, Format, Auflösung, Betrachtung; deutsche Texte
+- [x] Task 18: `list_floorplans` meldet Displays; e2e
+
+### Checkpoint Phase 5
+- [ ] Offene Punkte 11–13 der Spec entschieden
+- [ ] `npx vitest run`, `npx tsc -b`, `npm run i18n:check` grün
+- [ ] Im Browser: Display planen, Größe ändern — Balken wächst; Zone anlegen; Symbol drehen
+
 ## Tasks
+
+### Task 15: Display-Datenmodell
+**Acceptance:** 75″ 16:9 → 1,66 × 0,93 m; Bildmitte = Symbolposition, Richtung =
+Symboldrehung, auch nach Verschieben und Drehen; Balken-Ecken in Papier-mm; alte Dateien
+laden unverändert; Beamer-Projektionen verhalten sich wie bisher.
+**Verification:** `npx vitest run src/__tests__/projection.test.ts src/__tests__/projectionViewing.test.ts`
+
+### Task 16: Display auf dem Plan
+**Acceptance:** Balken in echter Breite statt Piktogramm, sobald eine Größe gesetzt ist;
+kein Kegel, kein Abstandsband; Zuschauerzone, Heatmap und Farbschlüssel wie beim Beamer;
+PDF zeigt dasselbe.
+**Verification:** Browser, PDF-Export ansehen
+
+### Task 17: Inspektor „Display“
+**Acceptance:** Knopf „Display planen“ am Display-Symbol; Diagonale aus Liste oder frei;
+Auflösung setzt die Pixelzahl für ADM; Betrachtungszeilen und Hinweise wie beim Beamer.
+**Verification:** Browser, `npm run i18n:check`
+
+### Task 18: MCP-Liste und e2e
+**Acceptance:** `list_floorplans` nennt je Display Diagonale, Breite, Höhe und Symbol;
+e2e legt ein Display an, zieht eine Zone und dreht das Symbol.
+**Verification:** `mcpFloorplan.test.ts`, e2e
 
 ### Task 8: Betrachtung rechnen
 **Acceptance:** BDM 3 % und 1,35 m Bildhöhe → 8,10 m; ADM 1200 Pixel → 3,87 m; Rechteck

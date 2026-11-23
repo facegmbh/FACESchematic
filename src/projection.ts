@@ -509,11 +509,108 @@ export interface ProjectionGeometry {
   result: ProjectionResult;
 }
 
+/**
+ * A display's picture is not placed, it hangs on its symbol: the middle of the picture is
+ * the symbol, and it faces the way the symbol is turned. An unturned display symbol is a
+ * bar across the sheet, so its picture faces down the sheet — a quarter turn from the
+ * symbol's own angle. A projector's projection is returned as it is.
+ *
+ * Everything that draws or measures a projection goes through this first, so a display
+ * can never be left behind by its symbol.
+ */
+export function resolveProjection(
+  p: FloorplanProjection,
+  symbol: { positionMm: Pt; rotationDeg?: number },
+): FloorplanProjection {
+  if (p.kind !== "display") return p;
+  return {
+    ...p,
+    screenCenterMm: { ...symbol.positionMm },
+    screenRotationDeg: ((((symbol.rotationDeg ?? 0) + 90) % 360) + 360) % 360,
+  };
+}
+
+/** Depth of a display as drawn in plan, on site — and the least the bar is ever drawn
+ *  with on paper, so it does not vanish on a 1:500 site plan. */
+export const DISPLAY_DEPTH_M = 0.08;
+export const DISPLAY_BAR_MIN_DEPTH_MM = 0.8;
+
+/** A display in plan: a bar of its true picture width, centred on its symbol. Four
+ *  corners in paper mm, going round. Pass a resolved projection. */
+export function displayBarMm(p: FloorplanProjection, scaleDenominator: number): Pt[] {
+  const mmPerM = 1000 / scaleDenominator;
+  const n = unit(p.screenRotationDeg);
+  const t = { x: -n.y, y: n.x };
+  const picture = pictureSize(p.widthM, p.heightM, p.aspect);
+  const hw = (picture.widthM / 2) * mmPerM;
+  const hd = Math.max(DISPLAY_BAR_MIN_DEPTH_MM, DISPLAY_DEPTH_M * mmPerM) / 2;
+  const c = p.screenCenterMm;
+  return ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([st, sn]) => ({
+    x: c.x + t.x * st * hw + n.x * sn * hd,
+    y: c.y + t.y * st * hw + n.y * sn * hd,
+  }));
+}
+
+/** The display planned on a symbol, resolved to where the symbol is now. Undefined for a
+ *  symbol that is no display or has no size yet. */
+export function displayOnSymbol(
+  page: { projections?: FloorplanProjection[] },
+  symbol: { id: string; positionMm: Pt; rotationDeg?: number },
+): FloorplanProjection | undefined {
+  const found = (page.projections ?? []).find((p) => p.kind === "display" && p.symbolId === symbol.id && !p.hidden);
+  return found ? resolveProjection(found, symbol) : undefined;
+}
+
+/** A first display for a display symbol: the given diagonal in 16:9. */
+export function defaultDisplayFor(
+  symbol: { id: string; positionMm: Pt; rotationDeg?: number; groupId?: string },
+  diagonalIn = 65,
+): Omit<FloorplanProjection, "id"> {
+  const aspect = "16:9";
+  const sized = resizeSurface({ aspect, widthM: 0, heightM: 0 }, { diagonalIn });
+  // Centre and direction are stored as they are now, though a display reads them off its
+  // symbol every time: a file opened by an older version then still shows it in place.
+  const facing = resolveProjection({ kind: "display", screenCenterMm: symbol.positionMm, screenRotationDeg: 0 } as FloorplanProjection, symbol);
+  return {
+    symbolId: symbol.id,
+    groupId: symbol.groupId,
+    kind: "display",
+    optics: {},
+    aspect,
+    widthM: sized.widthM,
+    heightM: sized.heightM,
+    screenCenterMm: facing.screenCenterMm,
+    screenRotationDeg: facing.screenRotationDeg,
+  };
+}
+
 /** Everything the sheet and the PDF draw for one projection, in paper mm. */
 export function projectionGeometry(p: FloorplanProjection, symbolMm: Pt, scaleDenominator: number): ProjectionGeometry {
   const mmPerM = 1000 / scaleDenominator;
   const n = unit(p.screenRotationDeg);
   const t = { x: -n.y, y: n.x };
+  if (p.kind === "display") {
+    // No lens, so nothing to throw, shift or stand in: only the picture itself.
+    const picture = pictureSize(p.widthM, p.heightM, p.aspect);
+    const ends = (halfM: number): [Pt, Pt] => {
+      const h = halfM * mmPerM;
+      return [
+        { x: p.screenCenterMm.x - t.x * h, y: p.screenCenterMm.y - t.y * h },
+        { x: p.screenCenterMm.x + t.x * h, y: p.screenCenterMm.y + t.y * h },
+      ];
+    };
+    return {
+      distanceM: 0,
+      lateralM: 0,
+      lensMm: { ...symbolMm },
+      surfaceMm: ends(picture.widthM / 2),
+      pictureMm: ends(picture.widthM / 2),
+      bandMm: null,
+      section: null,
+      inPictureMm: null,
+      result: { picture, range: null, shiftH: 0, areaM2: picture.widthM * picture.heightM, issues: [] },
+    };
+  }
   const dx = symbolMm.x - p.screenCenterMm.x;
   const dy = symbolMm.y - p.screenCenterMm.y;
   const distanceM = (dx * n.x + dy * n.y) / mmPerM;
@@ -637,7 +734,7 @@ export interface ProjectionOnSheet {
  *  still on the plan. */
 export function visibleProjections(page: {
   projections?: FloorplanProjection[];
-  symbols: { id: string; positionMm: Pt; groupId: string }[];
+  symbols: { id: string; positionMm: Pt; groupId: string; rotationDeg?: number }[];
   groups: { id: string; hidden?: boolean }[];
   scaleDenominator: number;
 }): ProjectionOnSheet[] {
@@ -648,7 +745,9 @@ export function visibleProjections(page: {
     if (!symbol) continue;
     const group = page.groups.find((g) => g.id === (projection.groupId ?? symbol.groupId));
     if (group?.hidden) continue;
-    out.push({ projection, geometry: projectionGeometry(projection, symbol.positionMm, page.scaleDenominator) });
+    // A display's picture is wherever its symbol is now.
+    const resolved = resolveProjection(projection, symbol);
+    out.push({ projection: resolved, geometry: projectionGeometry(resolved, symbol.positionMm, page.scaleDenominator) });
   }
   return out;
 }

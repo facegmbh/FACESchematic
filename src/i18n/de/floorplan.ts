@@ -814,4 +814,13 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Recommended viewing area (AVIXA): within 60° to the side, between the closest and the farthest seat": "Empfohlener Betrachtungsbereich (AVIXA): seitlich bis 60°, zwischen nächstem und fernstem Platz",
   "The dash-dotted outline in front of the picture: within 60° to the side, between the closest and the farthest seat. Switch it off for a calmer plan — the recommendation stays in this panel.": "Die strichpunktierte Linie vor der Bildfläche: seitlich bis 60°, zwischen nächstem und fernstem Platz. Für einen ruhigeren Plan abschalten — die Empfehlung bleibt hier im Panel stehen.",
   "Outline of the recommended area": "Umriss des empfohlenen Bereichs",
+  "Draw the display in its true size and work out from where it can be read": "Das Display in echter Größe zeichnen und ermitteln, von wo es lesbar ist",
+  "Plan display": "Display planen",
+  "Display size": "Display",
+  "Diagonal": "Diagonale",
+  "The picture's resolution. For detail work it decides how far away the farthest seat may be.": "Die Auflösung des Bildes. Bei Detailarbeit bestimmt sie, wie weit der fernste Platz entfernt sein darf.",
+  "Resolution": "Auflösung",
+  "For a video wall or an unusual format: type the picture's width and height": "Für eine Videowand oder ein ungewöhnliches Format: Breite und Höhe des Bildes eintippen",
+  "Remove display size": "Displaygröße entfernen",
+  "Width × height of the picture": "Breite × Höhe des Bildes",
 };

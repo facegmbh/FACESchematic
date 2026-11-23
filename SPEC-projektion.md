@@ -224,6 +224,43 @@ legen (verschieben, Breite ziehen, wie die Legende) und geht so ins PDF.
 Architekten als Hintergrund des Kastens: zwei Punkte anklicken (Boden an der Bildfläche,
 Boden am Beamer) legt Maßstab und Lage fest, Kegel und Person werden darüber gezeichnet.
 
+### Displays (Erweiterung, noch nicht freigegeben)
+
+Dasselbe wie beim Beamer, ohne Beamer: Ein Display ist eine Bildfläche, die an ihrem Symbol
+hängt. Betrachtungsabstand, Zuschauerzone, Heatmap und Farbschlüssel gelten unverändert.
+
+**Planobjekt.** Kein neuer Objekttyp, sondern `FloorplanProjection` mit `kind: "display"`:
+
+    kind?: "display"        fehlt = Beamer
+    aspect, widthM, heightM Bildformat und Bildgröße, wie gehabt (Standard 16:9)
+    screenBottomM?          Bildunterkante, für den nächsten Platz
+    viewing?, audience?     wie gehabt; `pixelsV` kommt aus der gewählten Auflösung
+
+Bildmitte und Richtung werden bei einem Display nicht gespeichert-und-gezogen, sondern
+folgen dem Symbol: Das Display hängt, wo sein Symbol steht, und zeigt, wohin es gedreht ist.
+Optik, Kegel, Abstandsband, Shift, Helligkeit und Schnitt entfallen.
+
+**Symbol in echter Größe.** Hat ein Display-Symbol eine Größe, wird statt des Piktogramms
+ein Balken in echter Bildbreite gezeichnet (maßstäblich wie die Bildstrecke des Beamers),
+quer zur Blickrichtung, in der Farbe der Symbolgruppe; die Tiefe ist fest (8 cm am Bau,
+mindestens ein gut sichtbarer Strich). Die Nummer bleibt daneben. Ohne Größe bleibt das
+Piktogramm. Auf dem Bildschirm und im PDF aus derselben Geometrie.
+
+**Bedienung.** Am Display-Symbol erscheint im Inspektor der Knopf „Display planen“, danach
+der Block „Display“:
+
+    Diagonale   [ 75 ″ ▾ ]  (43 · 55 · 65 · 75 · 86 · 98 oder frei)   Format [ 16:9 ▾ ]
+    Breite 1,66 m · Höhe 0,93 m
+    Auflösung   [ UHD 2160 ▾ ]  (FHD 1080 · UHD 2160 · frei)
+    Nutzung     [ Präsentation (BDM) ▾ ]          [ Zuschauerzone ]
+    Betrachtung empfohlen 1,10 – 5,60 m
+    ▸ Mehr      Unterkante, Zeichenhöhe, Augenhöhe, Heatmap, Breite/Höhe frei (Videowand)
+
+Dieselben Zeilen und Hinweise wie beim Beamer, aus demselben Code.
+
+**MCP.** `list_floorplans` meldet Displays mit Größe; ein Befehl zum Setzen folgt erst auf
+Wunsch (wie bei den Abdeckungsbereichen).
+
 ## Entscheidungen
 
 Entschieden (Jean-Luc, 23.11.2026):
@@ -270,7 +307,24 @@ Offen, mit Vorschlag:
 10. **Personenhöhe** — Vorschlag: 1,80 m stehend als Standard, frei änderbar; sitzend
     (1,30 m) als zweite Vorgabe.
 
+Displays sind mit den Vorschlägen 11–13 gebaut (23.11.2026), die Freigabe steht aus:
+Balken ersetzt das Piktogramm, Diagonale aus Liste oder frei, Videowand über Breite/Höhe
+unter „Mehr“. Ein unverdrehtes Display-Symbol zeigt nach unten auf dem Blatt.
+
+11. **Display-Symbol** — Vorschlag: Der maßstäbliche Balken ersetzt das Piktogramm, sobald
+    eine Größe gesetzt ist; die Nummer bleibt. Alternative: Piktogramm und Balken zusammen.
+12. **Größe eines Displays** — Vorschlag: Diagonale aus einer Vorgabeliste oder frei
+    eintippen; nichts wird aus dem Modellnamen geraten.
+13. **Videowände** — Vorschlag: vorerst über frei eingegebene Breite und Höhe unter „Mehr“;
+    Raster aus Einzeldisplays später.
+
 ## Testing Strategy
+
+- Displays: Bildgröße aus Diagonale und Format (75″ 16:9 → 1,66 × 0,93 m); Bildfläche folgt
+  dem Symbol beim Verschieben und Drehen; Balken-Geometrie in echter Breite bei 1:50 und
+  1:100; Betrachtung und Heatmap liefern für ein Display dieselben Werte wie für eine
+  gleich große Beamer-Bildfläche an derselben Stelle. e2e: Display planen, Zone anlegen,
+  Symbol drehen — Zone-Bewertung ändert sich.
 
 - `projection.test.ts`, Betrachtung: BDM 3 % bei 1,35 m Bildhöhe → 8,10 m; ADM 1200 Pixel →
   3,87 m; Rechteck gerade, versetzt und gedreht → fernster/nächster Platz und Winkel;

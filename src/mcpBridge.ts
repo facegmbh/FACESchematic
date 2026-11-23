@@ -152,6 +152,7 @@ import type {
   SchematicNode,
 } from "./types";
 import { PAPER_SIZES } from "./printConfig";
+import { pictureSize } from "./projection";
 import {
   coverageLabelOf,
   defaultCoverage,
@@ -547,6 +548,16 @@ function floorplanSummary(page: FloorplanPage) {
     /** Detection and surveillance areas — what the cameras see, what the detectors reach.
      *  Ranges are metres on site; an area with a symbolId follows and turns with that device. */
     coverages: (page.coverages ?? []).map((c) => coverageSummary(page, c)),
+    /** Displays drawn in their true size: the picture hangs on its symbol and faces the
+     *  way that symbol is turned. Sizes are metres on site. */
+    displays: (page.projections ?? []).filter((p) => p.kind === "display").map((p) => {
+      const picture = pictureSize(p.widthM, p.heightM, p.aspect);
+      return {
+        symbolId: p.symbolId, model: p.model, aspect: p.aspect,
+        diagonalIn: Math.round(picture.diagonalIn), widthM: Number(picture.widthM.toFixed(2)), heightM: Number(picture.heightM.toFixed(2)),
+        lowerEdgeM: p.screenBottomM, pixelsV: p.viewing?.pixelsV, hasAudienceArea: Boolean(p.audience), hidden: p.hidden ?? false,
+      };
+    }),
     drawingBlock: {
       visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
       fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),

@@ -1700,8 +1700,13 @@ export interface ProjectionViewing {
  */
 export interface FloorplanProjection {
   id: string;
-  /** The projector symbol. Its position is the lens. */
+  /** The projector symbol. Its position is the lens. For a display: the display's own
+   *  symbol, whose position is the middle of the picture. */
   symbolId: string;
+  /** "display": the picture is a screen hanging where its symbol stands and facing the
+   *  way that is turned — no projector, no throw. `screenCenterMm` and
+   *  `screenRotationDeg` are then not read; see `resolveProjection`. Undefined = projector. */
+  kind?: "display";
   /** Model and lens as picked, for the caption and to re-select them in the editor. */
   model?: string;
   lens?: string;

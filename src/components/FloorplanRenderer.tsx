@@ -61,7 +61,7 @@ import FloorplanSymbolContextMenu from "./FloorplanSymbolContextMenu";
 import FloorplanMaskContextMenu from "./FloorplanMaskContextMenu";
 import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanProjectionLayer from "./FloorplanProjectionLayer";
-import { SECTION_BOX_MIN_WIDTH_MM, projectionGeometry, symbolRotationFacing } from "../projection";
+import { DISPLAY_BAR_MIN_DEPTH_MM, DISPLAY_DEPTH_M, SECTION_BOX_MIN_WIDTH_MM, displayOnSymbol, pictureSize, projectionGeometry, symbolRotationFacing } from "../projection";
 import { resizeAudienceFromCorner } from "../projectionViewing";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
@@ -1207,7 +1207,31 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                   }}
                   title={[symbol.label, deviceLabel, symbol.notes].filter(Boolean).join(" · ")}
                 >
-                  <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} symbolSizeMm={page.symbolSizeMm} />
+                  {(() => {
+                    // A display with a size is drawn as what it is on the wall: a bar of
+                    // its true width. It is a child of the symbol, so grabbing it anywhere
+                    // along its length drags the symbol.
+                    const display = displayOnSymbol(page, symbol);
+                    if (!display) return <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} symbolSizeMm={page.symbolSizeMm} />;
+                    const mmPerM = 1000 / page.scaleDenominator;
+                    const w = mmToPx(pictureSize(display.widthM, display.heightM, display.aspect).widthM * mmPerM);
+                    const d = mmToPx(Math.max(DISPLAY_BAR_MIN_DEPTH_MM, DISPLAY_DEPTH_M * mmPerM));
+                    return (
+                      <div
+                        className="absolute"
+                        data-display-bar={symbol.id}
+                        style={{
+                          left: "50%", top: "50%", width: w, height: d,
+                          transform: `translate(-50%, -50%) rotate(${symbol.rotationDeg ?? 0}deg)`,
+                          background: group.color,
+                          outline: "1px solid #111",
+                        }}
+                      >
+                        {/* The side the picture is on. */}
+                        <div className="absolute" style={{ left: "50%", top: "100%", width: 0, height: 0, transform: "translateX(-50%)", borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `5px solid ${group.color}` }} />
+                      </div>
+                    );
+                  })()}
                   {isSelected && (
                     <div
                       className="absolute pointer-events-none border-2 border-blue-500 rounded-sm"
