@@ -258,8 +258,10 @@ der Block „Display“:
 
 Dieselben Zeilen und Hinweise wie beim Beamer, aus demselben Code.
 
-**MCP.** `list_floorplans` meldet Displays mit Größe; ein Befehl zum Setzen folgt erst auf
-Wunsch (wie bei den Abdeckungsbereichen).
+**MCP.** `list_floorplans` meldet Displays mit Größe. `set_floorplan_display` setzt Größe,
+Unterkante, Auflösung, Nutzung und die Zuschauerzone (als „ab nearM vor dem Display, depthM
+tief, widthM breit“) und meldet die Betrachtungsabstände samt dem, was nicht passt;
+`remove_floorplan_display` nimmt die Größe wieder weg.
 
 ## Entscheidungen
 

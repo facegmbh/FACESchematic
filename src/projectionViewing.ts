@@ -475,3 +475,19 @@ export function viewingPatchesMm(
   for (const o of open.values()) close(o, rows);
   return patches;
 }
+
+/** An audience area given the way a planner says it: starting `nearM` in front of the
+ *  picture, `depthM` deep and `widthM` wide, parallel to the picture and `offsetM` to the
+ *  side of its centre line. */
+export function audienceInFront(
+  screen: ScreenOnSheet,
+  spec: { nearM: number; depthM: number; widthM: number; offsetM?: number },
+  scaleDenominator: number,
+): AudienceRect {
+  return {
+    centerMm: seatToSheetMm(spec.nearM + spec.depthM / 2, spec.offsetM ?? 0, screen, scaleDenominator),
+    widthM: spec.widthM,
+    depthM: spec.depthM,
+    rotationDeg: screen.screenRotationDeg,
+  };
+}

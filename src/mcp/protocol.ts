@@ -75,6 +75,8 @@ export type CommandType =
   | "set_floorplan_masks"
   | "set_floorplan_coverage"
   | "remove_floorplan_coverage"
+  | "set_floorplan_display"
+  | "remove_floorplan_display"
   | "list_floorplan_lines"
   | "sync_floorplan_lines"
   | "update_floorplan_line"
@@ -635,6 +637,46 @@ export interface SetFloorplanCoverageParams extends FloorplanPageRef {
 
 export interface RemoveFloorplanCoverageParams extends FloorplanPageRef {
   coverageId: string;
+}
+
+/** Viewing tasks of AVIXA DISCAS: basic decision making or analytical. */
+export const VIEWING_TASKS_WIRE = ["bdm", "adm"] as const;
+
+/**
+ * Give a display symbol its true size — it is then drawn as a bar of that width — and
+ * judge from where it can be read. The display hangs where its symbol stands and faces
+ * the way that is turned; move or turn the symbol to move or turn the display.
+ */
+export interface SetFloorplanDisplayParams extends FloorplanPageRef {
+  symbolId: string;
+  /** Picture diagonal in inches. Not together with widthM / heightM. */
+  diagonalIn?: number;
+  /** "16:9" (default), "16:10", "21:9", "4:3" or any "w:h". */
+  aspect?: string;
+  /** A video wall or an unusual format: the picture's size in metres, both together. */
+  widthM?: number;
+  heightM?: number;
+  /** Lower edge of the picture above the floor, metres; null clears it. Needed for the
+   *  closest seat. */
+  lowerEdgeM?: number | null;
+  /** Vertical pixel count (1080, 2160); null clears it. Needed for task "adm". */
+  pixelsV?: number | null;
+  model?: string | null;
+  /** "bdm" = presentations and meetings (default), "adm" = detail work. */
+  task?: (typeof VIEWING_TASKS_WIRE)[number];
+  /** BDM: smallest character that must be read, percent of the picture height (default 3). */
+  elementPct?: number;
+  /** Eyes of a seated viewer above the floor, metres (default 1.2). */
+  eyeHeightM?: number;
+  /** Where people sit: a rectangle parallel to the display, starting nearM in front of
+   *  it, depthM deep, widthM wide, offsetM to the side of its centre line. null removes it. */
+  audience?: { nearM: number; depthM: number; widthM: number; offsetM?: number } | null;
+  /** Colour the audience area by viewing quality (default true). */
+  heatmap?: boolean;
+}
+
+export interface RemoveFloorplanDisplayParams extends FloorplanPageRef {
+  symbolId: string;
 }
 
 // ── Amplifier lines & load (Ship 11) ─────────────────────────────────

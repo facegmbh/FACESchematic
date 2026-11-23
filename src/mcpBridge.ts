@@ -104,6 +104,8 @@ import {
   type SetFloorplanMasksParams,
   type SetFloorplanCoverageParams,
   type RemoveFloorplanCoverageParams,
+  type SetFloorplanDisplayParams,
+  type RemoveFloorplanDisplayParams,
   type FloorplanMaskSpec,
   type FloorplanPageRef,
   type UpdateFloorplanLineParams,
@@ -113,6 +115,7 @@ import {
   FLOORPLAN_LABEL_POSITIONS,
   COVERAGE_SHAPES_WIRE,
   DORI_LEVELS_WIRE,
+  VIEWING_TASKS_WIRE,
 } from "./mcp/protocol";
 import {
   classifyDeviceProperties,
@@ -136,6 +139,7 @@ import type {
   DeviceData,
   DeviceTemplate,
   FloorplanCoverage,
+  FloorplanProjection,
   FloorplanDrawingBlock,
   FloorplanDrawingField,
   FloorplanPage,
@@ -152,7 +156,8 @@ import type {
   SchematicNode,
 } from "./types";
 import { PAPER_SIZES } from "./printConfig";
-import { pictureSize } from "./projection";
+import { defaultDisplayFor, pictureSize, resizeSurface, resolveProjection } from "./projection";
+import { AUDIENCE_MIN_SIDE_M, DEFAULT_VIEWING, audienceInFront, viewingOnSheet } from "./projectionViewing";
 import {
   coverageLabelOf,
   defaultCoverage,
@@ -491,6 +496,16 @@ function coverageSummary(page: FloorplanPage, c: FloorplanCoverage) {
   };
 }
 
+/** One display as the tools report it. */
+function displaySummary(p: FloorplanProjection) {
+  const picture = pictureSize(p.widthM, p.heightM, p.aspect);
+  return {
+    symbolId: p.symbolId, model: p.model, aspect: p.aspect,
+    diagonalIn: Math.round(picture.diagonalIn), widthM: Number(picture.widthM.toFixed(2)), heightM: Number(picture.heightM.toFixed(2)),
+    lowerEdgeM: p.screenBottomM, pixelsV: p.viewing?.pixelsV, hasAudienceArea: Boolean(p.audience), hidden: p.hidden ?? false,
+  };
+}
+
 function requireCoverage(page: FloorplanPage, coverageId: unknown): FloorplanCoverage {
   const coverage = typeof coverageId === "string" ? (page.coverages ?? []).find((c) => c.id === coverageId) : undefined;
   if (!coverage) throw new CommandError(`No coverage area "${String(coverageId)}" on floorplan "${page.id}". list_floorplans reports them under coverages.`);
@@ -550,14 +565,7 @@ function floorplanSummary(page: FloorplanPage) {
     coverages: (page.coverages ?? []).map((c) => coverageSummary(page, c)),
     /** Displays drawn in their true size: the picture hangs on its symbol and faces the
      *  way that symbol is turned. Sizes are metres on site. */
-    displays: (page.projections ?? []).filter((p) => p.kind === "display").map((p) => {
-      const picture = pictureSize(p.widthM, p.heightM, p.aspect);
-      return {
-        symbolId: p.symbolId, model: p.model, aspect: p.aspect,
-        diagonalIn: Math.round(picture.diagonalIn), widthM: Number(picture.widthM.toFixed(2)), heightM: Number(picture.heightM.toFixed(2)),
-        lowerEdgeM: p.screenBottomM, pixelsV: p.viewing?.pixelsV, hasAudienceArea: Boolean(p.audience), hidden: p.hidden ?? false,
-      };
-    }),
+    displays: (page.projections ?? []).filter((p) => p.kind === "display").map(displaySummary),
     drawingBlock: {
       visible: page.drawingBlock.visible, title: page.drawingBlock.title, subtitle: page.drawingBlock.subtitle,
       fields: page.drawingBlock.fields.map((f) => ({ label: f.label, value: f.value, wide: f.wide ?? false })),
@@ -1548,6 +1556,114 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
     const live = requireFloorplan(page.id);
     const saved = requireCoverage(live, coverageId);
     return { ...coverageSummary(live, saved), ...(saved.symbolId ? {} : paperToRealM(live, saved.positionMm)) };
+  },
+
+  // ── Displays: true size on the plan, viewing distances after AVIXA ──
+
+  set_floorplan_display: (params) => {
+    const p = (params ?? {}) as unknown as SetFloorplanDisplayParams;
+    const page = requireFloorplan(p.pageId);
+    const symbol = requireSymbol(page, p.symbolId);
+    const onSymbol = (page.projections ?? []).filter((pr) => pr.symbolId === symbol.id);
+    if (onSymbol.some((pr) => pr.kind !== "display")) {
+      throw new CommandError(`Symbol "${symbol.id}" carries a projector's projection — a symbol is a projector or a display, not both.`);
+    }
+    const existing = onSymbol[0];
+    const num = (v: unknown, name: string, min: number, max: number): number => {
+      if (typeof v !== "number" || !Number.isFinite(v) || v < min || v > max) throw new CommandError(`${name} must be a number from ${min} to ${max}.`);
+      return v;
+    };
+
+    // Size: a diagonal in a format, or width and height typed for a wall.
+    const base = existing ?? defaultDisplayFor(symbol);
+    let sized: Pick<FloorplanProjection, "aspect" | "widthM" | "heightM" | "lockWidth" | "lockHeight"> | undefined;
+    const typed = p.widthM !== undefined || p.heightM !== undefined;
+    if (typed && p.diagonalIn !== undefined) throw new CommandError("Pass diagonalIn or widthM and heightM, not both.");
+    if (p.aspect !== undefined && !/^\s*[\d.]+\s*[:/x]\s*[\d.]+\s*$/.test(String(p.aspect))) throw new CommandError('aspect must look like "16:9".');
+    if (typed) {
+      if (p.widthM === undefined || p.heightM === undefined) throw new CommandError("widthM and heightM belong together — pass both.");
+      sized = {
+        aspect: p.aspect ?? base.aspect,
+        widthM: num(p.widthM, "widthM", 0.1, 100),
+        heightM: num(p.heightM, "heightM", 0.1, 100),
+        lockWidth: true,
+        lockHeight: true,
+      };
+    } else if (p.diagonalIn !== undefined || p.aspect !== undefined) {
+      const aspect = p.aspect ?? base.aspect;
+      const diagonalIn = p.diagonalIn !== undefined
+        ? num(p.diagonalIn, "diagonalIn", 10, 2000)
+        : pictureSize(base.widthM, base.heightM, base.aspect).diagonalIn;
+      // A diagonal describes a picture, not a wall: any pinned sides are released.
+      sized = { ...resizeSurface({ aspect, widthM: 0, heightM: 0 }, { diagonalIn }), lockWidth: undefined, lockHeight: undefined };
+    }
+
+    const patch: Partial<Omit<FloorplanProjection, "id">> = { ...sized };
+    if (p.lowerEdgeM !== undefined) patch.screenBottomM = p.lowerEdgeM === null ? undefined : num(p.lowerEdgeM, "lowerEdgeM", 0, 50);
+    if (p.model !== undefined) patch.model = p.model === null ? undefined : requireText(p.model, "model");
+
+    const viewing = { ...(existing?.viewing ?? DEFAULT_VIEWING) };
+    let viewingChanged = false;
+    if (p.task !== undefined) {
+      if (!(VIEWING_TASKS_WIRE as readonly string[]).includes(p.task)) throw new CommandError(`task must be one of ${VIEWING_TASKS_WIRE.join(", ")}.`);
+      viewing.task = p.task; viewingChanged = true;
+    }
+    if (p.pixelsV !== undefined) { viewing.pixelsV = p.pixelsV === null ? undefined : num(p.pixelsV, "pixelsV", 100, 20000); viewingChanged = true; }
+    if (p.elementPct !== undefined) { viewing.elementPct = num(p.elementPct, "elementPct", 0.1, 20); viewingChanged = true; }
+    if (p.eyeHeightM !== undefined) { viewing.eyeHeightM = num(p.eyeHeightM, "eyeHeightM", 0.3, 3); viewingChanged = true; }
+    if (p.heatmap !== undefined) { viewing.heatmap = p.heatmap ? undefined : false; viewingChanged = true; }
+    if (viewingChanged) patch.viewing = viewing;
+
+    if (p.audience === null) patch.audience = undefined;
+    else if (p.audience !== undefined) {
+      const a = p.audience;
+      if (typeof a !== "object") throw new CommandError("audience must be { nearM, depthM, widthM, offsetM? } or null.");
+      const spec = {
+        nearM: num(a.nearM, "audience.nearM", 0, 500),
+        depthM: num(a.depthM, "audience.depthM", AUDIENCE_MIN_SIDE_M, 500),
+        widthM: num(a.widthM, "audience.widthM", AUDIENCE_MIN_SIDE_M, 500),
+        offsetM: a.offsetM !== undefined ? num(a.offsetM, "audience.offsetM", -500, 500) : 0,
+      };
+      // In front of the display as it hangs now.
+      patch.audience = audienceInFront(resolveProjection({ ...base, kind: "display" } as FloorplanProjection, symbol), spec, page.scaleDenominator);
+    }
+
+    if (existing) {
+      if (Object.keys(patch).length === 0) throw new CommandError("Nothing to update — pass at least one property of the display.");
+      st().updateFloorplanProjection(page.id, existing.id, patch);
+    } else {
+      st().addFloorplanProjection(page.id, { ...defaultDisplayFor(symbol), ...patch });
+    }
+
+    const live = requireFloorplan(page.id);
+    const liveSymbol = requireSymbol(live, symbol.id);
+    const saved = resolveProjection(live.projections!.find((pr) => pr.symbolId === symbol.id && pr.kind === "display")!, liveSymbol);
+    const picture = pictureSize(saved.widthM, saved.heightM, saved.aspect);
+    const view = viewingOnSheet(saved, picture, live.scaleDenominator).result;
+    const r2 = (v: number | null) => (v === null ? null : Number(v.toFixed(2)));
+    return {
+      ...displaySummary(saved),
+      /** Viewing distances after AVIXA DISCAS, metres from the display. `issues` lists what
+       *  of the audience area lies outside the recommendation. */
+      viewing: {
+        task: (saved.viewing ?? DEFAULT_VIEWING).task,
+        farthestM: r2(view.limits.farthestM),
+        closestM: r2(view.limits.closestM),
+        audience: view.zone ? { nearestM: r2(view.zone.nearestM), farthestM: r2(view.zone.farthestM), maxAngleDeg: Math.round(view.zone.maxAngleDeg) } : null,
+        issues: view.issues.map((i) => ({ kind: i.kind, ...(i.byM !== undefined ? { byM: r2(i.byM) } : {}), ...(i.deg !== undefined ? { deg: Math.round(i.deg) } : {}) })),
+        ...(view.requiredHeightM !== undefined ? { requiredHeightM: Number((Math.ceil(view.requiredHeightM * 100) / 100).toFixed(2)) } : {}),
+      },
+    };
+  },
+
+  remove_floorplan_display: (params) => {
+    const { pageId, symbolId } = (params ?? {}) as unknown as RemoveFloorplanDisplayParams;
+    const page = requireFloorplan(pageId);
+    const symbol = requireSymbol(page, symbolId);
+    const display = (page.projections ?? []).find((pr) => pr.symbolId === symbol.id && pr.kind === "display");
+    if (!display) throw new CommandError(`Symbol "${symbol.id}" has no display size.`);
+    st().removeFloorplanProjection(page.id, display.id);
+    return { removed: symbol.id };
   },
 
   remove_floorplan_coverage: (params) => {

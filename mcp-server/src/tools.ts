@@ -652,6 +652,53 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "set_floorplan_display",
+    description:
+      "Give a display symbol its true size and judge from where it can be read. The symbol is then drawn as a bar of the picture's real width instead of a pictogram. The display hangs where its symbol stands and faces the way the symbol is turned — move or turn the symbol (update_floorplan_symbol) to move or turn the display; an unturned display faces down the sheet. Pass diagonalIn (with aspect), or widthM and heightM for a video wall. The result reports the viewing distances after AVIXA DISCAS: farthestM and closestM seat for the task (\"bdm\" presentations, \"adm\" detail work, which needs pixelsV), and — once an audience area is set — what part of it lies outside the recommendation (issues too-far / too-near / too-oblique / behind) plus requiredHeightM, the picture height that would reach the last row. closestM needs lowerEdgeM. Take the diagonal and resolution from the datasheet or the offer, never guess them from a model name. Only the properties you pass change; the display is created when the symbol has none.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string" },
+        symbolId: { type: "string", description: "The display's symbol. From list_floorplans → symbols." },
+        diagonalIn: { type: "number", description: "Picture diagonal in inches (55, 65, 75, 86, 98 …). Not together with widthM / heightM." },
+        aspect: { type: "string", description: "\"16:9\" (default), \"16:10\", \"21:9\", \"4:3\" or any \"w:h\"." },
+        widthM: { type: "number", description: "Video wall or unusual format: picture width in metres. Together with heightM." },
+        heightM: { type: "number", description: "Picture height in metres. Together with widthM." },
+        lowerEdgeM: { type: ["number", "null"], description: "Lower edge of the picture above the floor, metres. Needed for the closest seat. null clears it." },
+        pixelsV: { type: ["number", "null"], description: "Vertical pixel count (1080, 2160). Needed for task \"adm\". null clears it." },
+        model: { type: ["string", "null"], description: "Model name for the caption." },
+        task: { type: "string", enum: ["bdm", "adm"], description: "bdm = presentations and meetings (default), adm = detail work such as CAD or medical images." },
+        elementPct: { type: "number", description: "BDM: height of the smallest character that must be read, percent of the picture height. Default 3 (farthest seat = 6 picture heights)." },
+        eyeHeightM: { type: "number", description: "Eyes of a seated viewer above the floor, metres. Default 1.2." },
+        audience: {
+          type: ["object", "null"],
+          description: "Where people sit: a rectangle parallel to the display. null removes it.",
+          properties: {
+            nearM: { type: "number", description: "Distance of the first row from the display, metres." },
+            depthM: { type: "number", description: "First row to last row, metres." },
+            widthM: { type: "number", description: "Width of the seating, metres." },
+            offsetM: { type: "number", description: "Sideways shift of the seating against the display's centre line, metres. Default 0." },
+          },
+          required: ["nearM", "depthM", "widthM"],
+          additionalProperties: false,
+        },
+        heatmap: { type: "boolean", description: "Colour the audience area by viewing quality. Default true." },
+      },
+      required: ["pageId", "symbolId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "remove_floorplan_display",
+    description: "Take the display size off a symbol: it is drawn as a pictogram again and its audience area goes with it. The symbol stays.",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: { type: "string" }, symbolId: { type: "string" } },
+      required: ["pageId", "symbolId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "set_floorplan_legend",
     description:
       "Fill the legend box: its headline (e.g. \"BESCHALLUNG – LEGENDE & MONTAGE\"), the heading above the installation notes (e.g. \"MONTAGEHINWEISE\") and the notes themselves — one string per printed line, such as mounting instructions and cable specs per model. The rows of the legend (color, model, description) come from the symbol groups automatically. Only the properties you pass change; notes replaces the whole list.",

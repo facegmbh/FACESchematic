@@ -701,3 +701,114 @@ describe("list_floorplans reports displays", () => {
     expect(page.displays).toEqual([expect.objectContaining({ symbolId, diagonalIn: 75, widthM: 1.66, heightM: 0.93, lowerEdgeM: 1.1, hasAudienceArea: false })]);
   });
 });
+
+describe("set_floorplan_display / remove_floorplan_display", () => {
+  type Disp = {
+    symbolId: string; diagonalIn: number; widthM: number; heightM: number; aspect: string; lowerEdgeM?: number; pixelsV?: number; model?: string;
+    hasAudienceArea: boolean;
+    viewing: { task: string; farthestM: number | null; closestM: number | null; audience: { nearestM: number; farthestM: number } | null; issues: { kind: string }[]; requiredHeightM?: number };
+  };
+  function plan() {
+    const { pageId } = handlers.create_floorplan({ label: "Besprechung" }) as Summary;
+    const { groupId } = handlers.add_floorplan_group({ pageId, label: "Display", shape: "display" }) as { groupId: string };
+    const placed = handlers.place_floorplan_symbols({ pageId, symbols: [{ groupId, xM: 6, yM: 2 }] }) as { results: { result: { symbolId: string } }[] };
+    return { pageId, symbolId: placed.results[0].result.symbolId };
+  }
+  const displays = (pageId: string) =>
+    (handlers.list_floorplans({}) as { pages: { pageId: string; displays: { symbolId: string; diagonalIn: number }[] }[] }).pages.find((p) => p.pageId === pageId)!.displays;
+
+  it("gives a symbol its display size and reports the viewing distances", () => {
+    const { pageId, symbolId } = plan();
+    const d = handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 75, lowerEdgeM: 1.1, model: "QM75C" }) as Disp;
+    expect(d).toMatchObject({ symbolId, diagonalIn: 75, widthM: 1.66, heightM: 0.93, aspect: "16:9", lowerEdgeM: 1.1, model: "QM75C", hasAudienceArea: false });
+    // 3 % characters: six picture heights.
+    expect(d.viewing.task).toBe("bdm");
+    expect(d.viewing.farthestM).toBeCloseTo(5.6, 1);
+    expect(d.viewing.closestM).toBeCloseTo((0.934 + 1.1 - 1.2) * 1.732, 1);
+    expect(d.viewing.audience).toBeNull();
+    expect(displays(pageId)).toHaveLength(1);
+  });
+
+  it("changes only what is passed, and does not add a second display", () => {
+    const { pageId, symbolId } = plan();
+    handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 75, lowerEdgeM: 1.1 });
+    const d = handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 98 }) as Disp;
+    expect(d.diagonalIn).toBe(98);
+    expect(d.lowerEdgeM).toBe(1.1);
+    expect(displays(pageId)).toHaveLength(1);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId })).toThrow(/Nothing to update/);
+  });
+
+  it("takes a video wall by width and height", () => {
+    const { pageId, symbolId } = plan();
+    const d = handlers.set_floorplan_display({ pageId, symbolId, widthM: 4.8, heightM: 1.35, aspect: "32:9" }) as Disp;
+    expect(d.widthM).toBeCloseTo(4.8, 2);
+    expect(d.heightM).toBeCloseTo(1.35, 2);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, widthM: 2 })).toThrow(/widthM and heightM/);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55, widthM: 2, heightM: 1 })).toThrow(/diagonalIn or/);
+  });
+
+  it("detail work needs the resolution", () => {
+    const { pageId, symbolId } = plan();
+    const without = handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 75, task: "adm" }) as Disp;
+    expect(without.viewing.farthestM).toBeNull();
+    const withPx = handlers.set_floorplan_display({ pageId, symbolId, pixelsV: 2160 }) as Disp;
+    expect(withPx.viewing.farthestM).toBeCloseTo((0.934 * 3438) / 2160, 1);
+    expect(withPx.pixelsV).toBe(2160);
+  });
+
+  it("places the audience area in front of the display and says what does not fit", () => {
+    const { pageId, symbolId } = plan();
+    const fits = handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 75, audience: { nearM: 2, depthM: 3, widthM: 3 } }) as Disp;
+    expect(fits.hasAudienceArea).toBe(true);
+    expect(fits.viewing.audience!.nearestM).toBeCloseTo(2, 2);
+    expect(fits.viewing.issues).toEqual([]);
+
+    const far = handlers.set_floorplan_display({ pageId, symbolId, audience: { nearM: 2, depthM: 8, widthM: 3 } }) as Disp;
+    expect(far.viewing.issues.map((i) => i.kind)).toContain("too-far");
+    expect(far.viewing.requiredHeightM).toBeGreaterThan(0.934);
+
+    const none = handlers.set_floorplan_display({ pageId, symbolId, audience: null }) as Disp;
+    expect(none.hasAudienceArea).toBe(false);
+    expect(none.viewing.audience).toBeNull();
+  });
+
+  it("the audience area lies where the display faces", () => {
+    const { pageId, symbolId } = plan();
+    handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 75, audience: { nearM: 2, depthM: 2, widthM: 2 } });
+    const page = floorplans()[0];
+    const symbol = page.symbols.find((s) => s.id === symbolId)!;
+    const audience = page.projections!.find((p) => p.symbolId === symbolId)!.audience!;
+    // An unturned display faces down the sheet: 3 m to the middle of the area at 1:50 is 60 mm.
+    expect(audience.centerMm.x).toBeCloseTo(symbol.positionMm.x, 6);
+    expect(audience.centerMm.y).toBeCloseTo(symbol.positionMm.y + 60, 6);
+    expect(audience.rotationDeg).toBe(90);
+  });
+
+  it("rejects what it cannot draw", () => {
+    const { pageId, symbolId } = plan();
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId: "nope", diagonalIn: 55 })).toThrow(/No symbol/);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 5 })).toThrow(/diagonalIn/);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55, aspect: "wide" })).toThrow(/aspect/);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55, task: "watch" })).toThrow(/task/);
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55, audience: { nearM: 2, depthM: 0, widthM: 2 } })).toThrow(/audience/);
+    expect(displays(pageId)).toHaveLength(0);
+  });
+
+  it("refuses a symbol that carries a projector's projection", async () => {
+    const { defaultProjectionFor } = await import("../projection");
+    const { pageId, symbolId } = plan();
+    const symbol = floorplans()[0].symbols.find((s) => s.id === symbolId)!;
+    useSchematicStore.getState().addFloorplanProjection(pageId, defaultProjectionFor(symbol, { throwMin: 1.5, throwMax: 2 }, 50));
+    expect(() => handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55 })).toThrow(/projector/);
+  });
+
+  it("removes the display size; the symbol stays", () => {
+    const { pageId, symbolId } = plan();
+    handlers.set_floorplan_display({ pageId, symbolId, diagonalIn: 55 });
+    expect(handlers.remove_floorplan_display({ pageId, symbolId })).toEqual({ removed: symbolId });
+    expect(displays(pageId)).toHaveLength(0);
+    expect(floorplans()[0].symbols.some((s) => s.id === symbolId)).toBe(true);
+    expect(() => handlers.remove_floorplan_display({ pageId, symbolId })).toThrow(/no display/);
+  });
+});
