@@ -809,4 +809,7 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "behind the picture": "hinter dem Bild",
   "Colours the audience area by how well each seat sees the picture": "Färbt die Zuschauerzone danach, wie gut jeder Platz das Bild sieht",
   "Heatmap of the audience area": "Heatmap der Zuschauerzone",
+  "Recommended viewing area (AVIXA): within 60° to the side, between the closest and the farthest seat": "Empfohlener Betrachtungsbereich (AVIXA): seitlich bis 60°, zwischen nächstem und fernstem Platz",
+  "The dash-dotted outline in front of the picture: within 60° to the side, between the closest and the farthest seat. Switch it off for a calmer plan — the recommendation stays in this panel.": "Die strichpunktierte Linie vor der Bildfläche: seitlich bis 60°, zwischen nächstem und fernstem Platz. Für einen ruhigeren Plan abschalten — die Empfehlung bleibt hier im Panel stehen.",
+  "Outline of the recommended area": "Umriss des empfohlenen Bereichs",
 };

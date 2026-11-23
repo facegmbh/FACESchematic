@@ -138,7 +138,10 @@ export default function FloorplanProjectionLayer({
                       strokeWidth={1}
                       strokeDasharray="6 3 1 3"
                       data-projection-recommended={projection.id}
-                    />
+                      style={{ pointerEvents: interactive ? "stroke" : "none" }}
+                    >
+                      <title>{t("Recommended viewing area (AVIXA): within 60° to the side, between the closest and the farthest seat")}</title>
+                    </polygon>
                   )}
                   {/* Opacity on the group, not on the patches: they overlap by their stroke
                       to close the hairline seams, and that must not show as darker lines. */}

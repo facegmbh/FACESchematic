@@ -379,7 +379,9 @@ export function viewingOnSheet(
   return {
     result,
     audienceMm: projection.audience ? audienceOutlineMm(projection.audience, scaleDenominator) : null,
-    recommendedMm: viewingAreaOutlineMm(result.limits, picture.widthM, projection, scaleDenominator),
+    recommendedMm: projection.viewing?.outline === false
+      ? null
+      : viewingAreaOutlineMm(result.limits, picture.widthM, projection, scaleDenominator),
     patches: projection.audience && projection.viewing?.heatmap !== false
       ? viewingPatchesMm(projection.audience, picture.widthM, result.limits, projection, scaleDenominator)
       : [],

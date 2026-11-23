@@ -664,6 +664,13 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
               <span>{t("Heatmap of the audience area")}</span>
             </label>
           )}
+          {projection.audience && (
+            <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("The dash-dotted outline in front of the picture: within 60° to the side, between the closest and the farthest seat. Switch it off for a calmer plan — the recommendation stays in this panel.")}>
+              <input type="checkbox" checked={viewing.outline !== false} data-testid="projection-viewing-outline"
+                onChange={(e) => patchViewing({ outline: e.target.checked ? undefined : false })} />
+              <span>{t("Outline of the recommended area")}</span>
+            </label>
+          )}
           <label className={ROW} title={t("Eyes of a seated viewer above the floor, m. With the picture's lower edge it gives the closest seat.")}>
             <span className="shrink-0 w-16">{t("Eye height")}</span>
             <NumberField className={`w-14 ${FIELD}`} digits={2} min={0.1} value={viewing.eyeHeightM ?? DEFAULT_EYE_HEIGHT_M} testId="projection-viewing-eye"

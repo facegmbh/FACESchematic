@@ -1684,6 +1684,9 @@ export interface ProjectionViewing {
   eyeHeightM?: number;
   /** False = the audience area is drawn as a frame only, without its heatmap. */
   heatmap?: boolean;
+  /** False = the dash-dotted outline of the recommended viewing area is left off the sheet
+   *  and the export. The recommendation is still computed and reported in the panel. */
+  outline?: boolean;
 }
 
 /**

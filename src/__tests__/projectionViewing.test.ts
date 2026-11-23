@@ -15,6 +15,7 @@ import {
   viewingPatchesMm,
   AUDIENCE_MIN_SIDE_M,
   type AudienceRect,
+  viewingOnSheet,
 } from "../projectionViewing";
 
 /** 100″ in 16:10, as in the spec's examples. */
@@ -408,5 +409,26 @@ describe("heatmap of the audience area", () => {
 
   it("an area without size has no patches", () => {
     expect(viewingPatchesMm({ centerMm: { x: 0, y: 0 }, widthM: 0, depthM: 3, rotationDeg: 0 }, W, limits, screen, scale)).toEqual([]);
+  });
+});
+
+describe("outline of the recommended area", () => {
+  const projection = {
+    screenCenterMm: { x: 200, y: 100 },
+    screenRotationDeg: 180,
+    audience: { centerMm: { x: 120, y: 100 }, widthM: 3, depthM: 3, rotationDeg: 180 },
+  };
+  const picture = { widthM: 2.16, heightM: 1.35 };
+
+  it("is drawn unless it is switched off", () => {
+    expect(viewingOnSheet(projection, picture, 50).recommendedMm).not.toBeNull();
+    expect(viewingOnSheet({ ...projection, viewing: { task: "bdm" } }, picture, 50).recommendedMm).not.toBeNull();
+  });
+
+  it("can be switched off without touching the recommendation itself", () => {
+    const off = viewingOnSheet({ ...projection, viewing: { task: "bdm", outline: false } }, picture, 50);
+    expect(off.recommendedMm).toBeNull();
+    expect(off.result.limits.farthestM).toBeCloseTo(8.1);
+    expect(off.audienceMm).not.toBeNull();
   });
 });
