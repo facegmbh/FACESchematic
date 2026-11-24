@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useSchematicStore } from "../store";
 import FloorplanToolbar from "./FloorplanToolbar";
 import FloorplanSidebar from "./FloorplanSidebar";
@@ -6,6 +6,7 @@ import FloorplanOptionsPanel from "./FloorplanOptionsPanel";
 import FloorplanRenderer, { type Selection } from "./FloorplanRenderer";
 import type { FloorplanPage as FloorplanPageType } from "../types";
 import type { WallCandidateSet } from "../pdfWalls";
+import { useFloorplanPanelTab } from "../floorplanPanelTab";
 
 /** Active tool on a floorplan page. `place` drops symbols of the active group on click,
  *  `note` drops a free text note, `erase` drags out a white cover over part of the
@@ -16,7 +17,14 @@ export default function FloorplanPage() {
   const activePage = useSchematicStore((s) => s.activePage);
   const pages = useSchematicStore((s) => s.pages);
 
-  const [tool, setTool] = useState<FloorplanTool>("select");
+  const [tool, setToolState] = useState<FloorplanTool>("select");
+  const setPanelTab = useFloorplanPanelTab((s) => s.setTab);
+  // Drawing walls or coverage areas is planning: show that half of the side panel, so
+  // what is drawn appears where it can be set.
+  const setTool = useCallback((next: FloorplanTool) => {
+    setToolState(next);
+    if (next === "wall" || next === "coverage") setPanelTab("planning");
+  }, [setPanelTab]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   // Amplifier line new symbols are numbered on (loudspeaker plans): "4" → 4.1, 4.2 …
   const [activeLine, setActiveLine] = useState("");

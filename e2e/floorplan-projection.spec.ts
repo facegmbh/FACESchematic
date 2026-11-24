@@ -78,6 +78,19 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   await expect(page.getByTestId("projection-brightness")).toContainText("5000 lm");
   await expect(page.getByTestId("projection-brightness")).toContainText(`${lux} lx`);
 
+  // Contrast with the room light on: 150 lx against the picture's own light and an
+  // assumed 300:1 within the picture. A presentation needs 15:1.
+  await expect(page.getByTestId("contrast-result")).toContainText(/enter the room light|Raumlicht eintragen/);
+  await page.getByTestId("contrast-ambient").fill("150");
+  const screenLux = 5000 / (start.widthM * start.heightM);
+  const ratio = (screenLux + 150) / (screenLux / 300 + 150);
+  await expect(page.getByTestId("contrast-result")).toContainText(`${ratio.toFixed(1)}:1`);
+  await expect(page.getByTestId("contrast-result")).toContainText("15:1");
+  // 1724 lx against 150 lx is 12:1 — short of it, and the panel says how dark it has to be.
+  await expect(page.getByTestId("contrast-issue")).toContainText(String(Math.floor((screenLux * (1 - 15 / 300)) / 14)));
+  await page.getByTestId("contrast-ambient-preset").selectOption("50");
+  await expect(page.getByTestId("contrast-issue")).toHaveCount(0);
+
   // The slider ends are the lens's limits; the picture does not move.
   const slider = page.getByTestId("projection-distance-slider");
   await slider.focus();

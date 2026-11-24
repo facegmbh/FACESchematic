@@ -45,6 +45,7 @@ import {
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
   legendColorKeys,
+  symbolFootprintMm,
   legendKeyRows,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
@@ -64,6 +65,7 @@ import FloorplanCoverageLayer from "./FloorplanCoverageLayer";
 import FloorplanProjectionLayer from "./FloorplanProjectionLayer";
 import { DISPLAY_BAR_MIN_DEPTH_MM, DISPLAY_DEPTH_M, SECTION_BOX_MIN_WIDTH_MM, displayOnSymbol, pictureSize, projectionGeometry, symbolRotationFacing } from "../projection";
 import { resizeAudienceFromCorner } from "../projectionViewing";
+import { useFloorplanPanelTab } from "../floorplanPanelTab";
 import FloorplanCoverageContextMenu from "./FloorplanCoverageContextMenu";
 import FloorplanWallLayer from "./FloorplanWallLayer";
 import FloorplanHeatmapLayer from "./FloorplanHeatmapLayer";
@@ -171,6 +173,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
   const updateFloorplanCoverage = useSchematicStore((s) => s.updateFloorplanCoverage);
   const updateFloorplanProjection = useSchematicStore((s) => s.updateFloorplanProjection);
+  const setPanelTab = useFloorplanPanelTab((s) => s.setTab);
+  const showPlanning = useCallback(() => setPanelTab("planning"), [setPanelTab]);
   /** False until the first step of a projection drag has been written, so the whole drag
    *  lands in the undo history as one step. */
   const projectionDragStartedRef = useRef(false);
@@ -528,6 +532,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         groupId: activeGroupId ?? undefined,
       });
       setSelection({ kind: "coverage", id });
+      showPlanning();
       onToolChange("select");
       return;
     }
@@ -556,6 +561,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
     e.stopPropagation();
+    // A plain symbol is set in the plan options. One with a picture — a projector, a
+    // display — is left on whichever half of the panel is showing: it has business on both.
+    if (!(page.projections ?? []).some((pr) => pr.symbolId === symbol.id)) setPanelTab("options");
     const additive = e.shiftKey || e.metaKey || e.ctrlKey;
     const current = selectionRef.current;
     const currentIds = current.kind === "symbols" ? current.ids : [];
@@ -578,7 +586,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     }
     didMoveRef.current = false;
     setDragging({ kind: "symbols", startClient: { x: e.clientX, y: e.clientY }, starts });
-  }, [tool, page.symbols]);
+  }, [tool, page.symbols, page.projections, setPanelTab]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (tool === "calibrate" && calibPicks.length === 1) {
@@ -1099,6 +1107,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               const next: Selection = { kind: "symbols", ids: [projection.symbolId] };
               setSelection(next);
               selectionRef.current = next;
+              // Clicking a picture or an audience area is a question about planning.
+              showPlanning();
             }}
             onMoveStart={(e, projection) => {
               didMoveRef.current = false;
@@ -1151,7 +1161,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             interactive={tool === "select"}
             selectedId={selection.kind === "coverage" ? selection.id : null}
             aimingId={dragging?.kind === "coverage-aim" ? dragging.coverageId : null}
-            onSelect={(id) => setSelection({ kind: "coverage", id })}
+            onSelect={(id) => { setSelection({ kind: "coverage", id }); showPlanning(); }}
             onContextMenu={(e, id) => setCoverageMenu({ x: e.clientX, y: e.clientY, id })}
             onMoveStart={(e, coverage) => {
               didMoveRef.current = false;
@@ -1213,6 +1223,24 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                     // its true width. It is a child of the symbol, so grabbing it anywhere
                     // along its length drags the symbol.
                     const display = displayOnSymbol(page, symbol);
+                    // A group drawn in true size: the device's own outline in plan. A
+                    // device that does not say how large it is keeps its pictogram.
+                    const footprint = display ? null : symbolFootprintMm(group, device, page.scaleDenominator);
+                    if (footprint) {
+                      return (
+                        <div
+                          className="absolute"
+                          data-symbol-footprint={symbol.id}
+                          style={{
+                            left: "50%", top: "50%", width: mmToPx(footprint.wMm), height: mmToPx(footprint.hMm),
+                            transform: `translate(-50%, -50%) rotate(${symbol.rotationDeg ?? 0}deg)`,
+                            background: group.color,
+                            borderRadius: footprint.round ? "50%" : 0,
+                            outline: `1px solid ${group.outlineColor || "#111"}`,
+                          }}
+                        />
+                      );
+                    }
                     if (!display) return <SymbolGlyph group={group} sizePx={sizePx} rotationDeg={symbol.rotationDeg} symbolSizeMm={page.symbolSizeMm} />;
                     const mmPerM = 1000 / page.scaleDenominator;
                     const w = mmToPx(pictureSize(display.widthM, display.heightM, display.aspect).widthM * mmPerM);
@@ -1651,7 +1679,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           x={symbolMenu.x}
           y={symbolMenu.y}
           ids={symbolMenu.ids}
-          onSelectCoverage={(id) => setSelection({ kind: "coverage", id })}
+          onSelectCoverage={(id) => { setSelection({ kind: "coverage", id }); showPlanning(); }}
           onSelectDuplicates={(ids) => setSelection({ kind: "symbols", ids })}
           onClose={() => setSymbolMenu(null)}
         />

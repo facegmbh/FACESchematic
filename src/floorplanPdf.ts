@@ -70,6 +70,8 @@ import {
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
   legendColorKeys,
+  symbolFootprintMm,
+  symbolFootprintOutlineMm,
   legendKeyRows,
   LEGEND_LINE_ROW_MM,
   LEGEND_LINE_COLS,
@@ -955,6 +957,8 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       if (!group || !isGroupVisible(group)) continue;
       const rot = symbol.rotationDeg ?? 0;
       const display = displayOnSymbol(page, symbol);
+      const deviceData = symbol.deviceNodeId ? (opts.nodes.find((n) => n.id === symbol.deviceNodeId)?.data as DeviceData | undefined) : undefined;
+      const footprint = display ? null : symbolFootprintMm(group, deviceData, page.scaleDenominator);
       if (display) {
         // A display with a size: a bar of its true width instead of the pictogram.
         const bar = displayBarMm(display, page.scaleDenominator);
@@ -963,6 +967,15 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         doc.setDrawColor(17, 17, 17);
         doc.setLineWidth(0.15);
         doc.lines(bar.slice(1).map((p, k) => [p.x - bar[k].x, p.y - bar[k].y] as [number, number]), bar[0].x, bar[0].y, [1, 1], "FD", true);
+      } else if (footprint) {
+        // True size: the device's own outline in plan, turned with the symbol.
+        const ring = symbolFootprintOutlineMm(footprint, symbol.positionMm, rot);
+        const [fr, fg, fb] = hexToRgb(group.color);
+        const [or, og, ob] = hexToRgb(group.outlineColor || "#111111");
+        doc.setFillColor(fr, fg, fb);
+        doc.setDrawColor(or, og, ob);
+        doc.setLineWidth(0.15);
+        doc.lines(ring.slice(1).map((p, k) => [p.x - ring[k].x, p.y - ring[k].y] as [number, number]), ring[0].x, ring[0].y, [1, 1], "FD", true);
       } else {
         drawSymbol(
           doc,

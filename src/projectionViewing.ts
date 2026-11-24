@@ -350,6 +350,32 @@ export function viewingAreaOutlineMm(
 export const VIEWING_OK_COLOR = "#475569";
 export const VIEWING_HINT_COLOR = "#b45309";
 
+/** What of a projection the viewing distances read. */
+export interface ViewedPicture {
+  screenBottomM?: number;
+  audience?: AudienceRect;
+  viewing?: ProjectionViewing;
+  /** The projector's own panel, for its native pixel count. */
+  optics?: { pixelsV?: number };
+}
+
+/**
+ * The settings the viewing distances are worked out with. The pixel count is the one the
+ * planner typed, else the projector's native one — the device knows its resolution, and
+ * nobody should have to copy it off a datasheet.
+ */
+export function viewingSettingsOf(projection: Pick<ViewedPicture, "viewing" | "optics">): ProjectionViewing {
+  const viewing = projection.viewing ?? DEFAULT_VIEWING;
+  return { ...viewing, pixelsV: viewing.pixelsV ?? projection.optics?.pixelsV };
+}
+
+/** Detail work without a pixel count: the farthest seat cannot be stated, so nothing is
+ *  judged — and nothing may be drawn that looks like a judgement. */
+export function viewingLacksResolution(projection: Pick<ViewedPicture, "viewing" | "optics">): boolean {
+  const s = viewingSettingsOf(projection);
+  return s.task === "adm" && !(s.pixelsV && s.pixelsV > 0);
+}
+
 export interface ViewingOnSheet {
   result: ViewingResult;
   /** The audience area's corners, paper mm. Null without one. */
@@ -362,7 +388,7 @@ export interface ViewingOnSheet {
 
 /** Everything the sheet, the panel and the PDF need about one projection's viewing. */
 export function viewingOnSheet(
-  projection: ScreenOnSheet & { screenBottomM?: number; audience?: AudienceRect; viewing?: ProjectionViewing },
+  projection: ScreenOnSheet & ViewedPicture,
   picture: { widthM: number; heightM: number },
   scaleDenominator: number,
 ): ViewingOnSheet {
@@ -370,7 +396,7 @@ export function viewingOnSheet(
     pictureWidthM: picture.widthM,
     pictureHeightM: picture.heightM,
     screenBottomM: projection.screenBottomM,
-    settings: projection.viewing ?? DEFAULT_VIEWING,
+    settings: viewingSettingsOf(projection),
     audience: projection.audience,
     screenCenterMm: projection.screenCenterMm,
     screenRotationDeg: projection.screenRotationDeg,
@@ -382,7 +408,7 @@ export function viewingOnSheet(
     recommendedMm: projection.viewing?.outline === false
       ? null
       : viewingAreaOutlineMm(result.limits, picture.widthM, projection, scaleDenominator),
-    heatmapOn: Boolean(projection.audience) && projection.viewing?.heatmap !== false,
+    heatmapOn: Boolean(projection.audience) && projection.viewing?.heatmap !== false && !viewingLacksResolution(projection),
   };
 }
 
@@ -532,15 +558,17 @@ export function viewingRasterPng(raster: ViewingRaster): string | undefined {
 /** The heatmap of a projection's audience area, or null when it has no area or the
  *  heatmap is switched off. */
 export function viewingHeatmap(
-  projection: ScreenOnSheet & { screenBottomM?: number; audience?: AudienceRect; viewing?: ProjectionViewing },
+  projection: ScreenOnSheet & ViewedPicture,
   picture: { widthM: number; heightM: number },
   scaleDenominator: number,
 ): ViewingRaster | null {
-  if (!projection.audience || projection.viewing?.heatmap === false) return null;
+  // Without a farthest seat every seat would come out green: a picture of "all good"
+  // where in truth nothing is known.
+  if (!projection.audience || projection.viewing?.heatmap === false || viewingLacksResolution(projection)) return null;
   const limits = viewingLimits({
     pictureHeightM: picture.heightM,
     screenBottomM: projection.screenBottomM,
-    settings: projection.viewing ?? DEFAULT_VIEWING,
+    settings: viewingSettingsOf(projection),
   });
   return viewingRaster(projection.audience, picture.widthM, limits, projection, scaleDenominator);
 }

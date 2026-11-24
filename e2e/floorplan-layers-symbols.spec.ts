@@ -103,7 +103,8 @@ test("floorplan: a cover can be turned and faded, on the sheet and in the export
   const cover = page.locator("[data-floorplan-mask]").first();
   await expect(cover).toBeVisible();
 
-  // The panel opens itself now that there is a cover to edit.
+  // The covers have their own section in the plan options; it is folded until opened.
+  await page.locator("summary").filter({ hasText: /Erased areas/ }).click();
   const turn = page.getByTitle(/Rotation in degrees clockwise/).first();
   await expect(turn).toBeVisible();
   await turn.fill("20");

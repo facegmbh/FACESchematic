@@ -17,6 +17,8 @@ import {
   viewingKeyColors,
   viewingRaster,
   viewingHeatmap,
+  viewingSettingsOf,
+  viewingLacksResolution,
   VIEWING_KEY_LIMIT_AT,
   AUDIENCE_MIN_SIDE_M,
   type AudienceRect,
@@ -480,5 +482,42 @@ describe("outline of the recommended area", () => {
     expect(off.recommendedMm).toBeNull();
     expect(off.result.limits.farthestM).toBeCloseTo(8.1);
     expect(off.audienceMm).not.toBeNull();
+  });
+});
+
+describe("the pixel count for detail work", () => {
+  const screen = { screenCenterMm: { x: 100, y: 100 }, screenRotationDeg: 0 };
+  const audience: AudienceRect = { centerMm: { x: 145, y: 100 }, widthM: 2, depthM: 3, rotationDeg: 0 };
+  const picture = { widthM: W, heightM: H };
+
+  it("comes from the projector unless the planner typed another", () => {
+    expect(viewingSettingsOf({ viewing: { task: "adm" }, optics: { pixelsV: 1200 } }).pixelsV).toBe(1200);
+    expect(viewingSettingsOf({ viewing: { task: "adm", pixelsV: 1080 }, optics: { pixelsV: 1200 } }).pixelsV).toBe(1080);
+    expect(viewingSettingsOf({ optics: { pixelsV: 1200 } })).toEqual({ task: "bdm", pixelsV: 1200 });
+    expect(viewingSettingsOf({}).pixelsV).toBeUndefined();
+  });
+
+  it("gives detail work its farthest seat from the projector's own resolution", () => {
+    const v = viewingOnSheet({ ...screen, viewing: { task: "adm" }, optics: { pixelsV: 1200 } }, picture, 100);
+    expect(v.result.limits.farthestM).toBeCloseTo((H * 3438) / 1200, 6);
+  });
+
+  it("judges nothing while detail work has no pixel count: no limits, no heatmap", () => {
+    const lacking = { ...screen, audience, viewing: { task: "adm" as const } };
+    expect(viewingLacksResolution(lacking)).toBe(true);
+    const v = viewingOnSheet(lacking, picture, 100);
+    expect(v.result.limits.farthestM).toBeNull();
+    expect(v.heatmapOn).toBe(false);
+    expect(viewingHeatmap(lacking, picture, 100)).toBeNull();
+    // With the projector's resolution the same area is judged, and coloured.
+    const known = { ...lacking, optics: { pixelsV: 1200 } };
+    expect(viewingLacksResolution(known)).toBe(false);
+    expect(viewingOnSheet(known, picture, 100).heatmapOn).toBe(true);
+    expect(viewingHeatmap(known, picture, 100)).not.toBeNull();
+  });
+
+  it("presentations never need it", () => {
+    expect(viewingLacksResolution({ viewing: { task: "bdm" } })).toBe(false);
+    expect(viewingLacksResolution({})).toBe(false);
   });
 });

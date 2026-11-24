@@ -19,6 +19,9 @@ export interface CatalogModel {
   name: string;
   code: string;
   lumens?: number;
+  /** The panel's resolution as Epson names it: "WUXGA", "Full HD and 4KE". Missing in a
+   *  data file generated before this was kept. */
+  resolution?: string;
   /** Interchangeable-lens bodies: panel size, the lenses that fit, the one it ships with. */
   lcd?: string;
   lenses?: string[];
@@ -93,6 +96,36 @@ export function guessModel(catalog: ProjectionCatalog, texts: (string | undefine
   return best;
 }
 
+/** Vertical pixel counts of the resolutions projectors are named by. */
+const RESOLUTION_ROWS: [RegExp, number][] = [
+  [/^(4k|uhd)/, 2160],
+  [/^wquxga/, 2400],
+  [/^wuxga/, 1200],
+  [/^(full\s*hd|fhd|1080p?)/, 1080],
+  [/^sxga\+/, 1050],
+  [/^sxga/, 1024],
+  [/^wxga\+/, 900],
+  [/^wxga/, 800],
+  [/^xga/, 768],
+  [/^(hd|720p?)\b/, 720],
+  [/^svga/, 600],
+  [/^vga/, 480],
+];
+
+/**
+ * The vertical pixel count behind a resolution name, or undefined for a name not known.
+ * Where a model is listed as "WUXGA and 4KE" the panel itself counts — the enhancement
+ * shifts those pixels, it does not add panel rows — so the name is read from its start.
+ * A "1920x1200" style figure is read as it stands.
+ */
+export function pixelsVOfResolution(name: string | undefined): number | undefined {
+  const text = (name ?? "").trim().toLowerCase();
+  if (!text) return undefined;
+  const figure = /(\d{3,5})\s*[x×]\s*(\d{3,5})/.exec(text);
+  if (figure) return Number(figure[2]);
+  return RESOLUTION_ROWS.find(([pattern]) => pattern.test(text))?.[1];
+}
+
 /** The optics of a model, with the given lens or the one it ships with. */
 export function opticsForModel(
   catalog: ProjectionCatalog,
@@ -103,7 +136,7 @@ export function opticsForModel(
     const lens = catalog.optics[model.code];
     if (!lens) return null;
     return {
-      optics: { formats: lens.formats, shift: lens.shift, lumens: model.lumens },
+      optics: { formats: lens.formats, shift: lens.shift, lumens: model.lumens, pixelsV: pixelsVOfResolution(model.resolution) },
       throwRatio: lens.throwRatio,
     };
   }
@@ -116,6 +149,7 @@ export function opticsForModel(
       formats: lens.formats,
       shift: body?.shift ?? lens.shift,
       lumens: body?.lumens ?? model.lumens,
+      pixelsV: pixelsVOfResolution(model.resolution),
     },
     lens: id,
     throwRatio: lens.throwRatio,

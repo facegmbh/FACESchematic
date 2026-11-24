@@ -812,3 +812,41 @@ describe("set_floorplan_display / remove_floorplan_display", () => {
     expect(() => handlers.remove_floorplan_display({ pageId, symbolId })).toThrow(/no display/);
   });
 });
+
+describe("symbol groups in true size", () => {
+  type Group = { groupId: string; trueSize: boolean; footprint: string; symbolsWithoutSize?: string[] };
+  const groups = () => (handlers.list_floorplans({}) as { pages: { groups: Group[] }[] }).pages[0].groups;
+
+  it("switches a group to true size and names the symbols that cannot follow", () => {
+    const sized: SchematicNode = {
+      id: "amp-1", type: "device", position: { x: 0, y: 0 },
+      data: { label: "Amp", deviceType: "amplifier", ports: [], widthMm: 483, heightMm: 88, depthMm: 400 } as DeviceData,
+    } as SchematicNode;
+    useSchematicStore.setState({ nodes: [sized, device("device-1")], edges: [], pages: [] });
+    const { pageId } = handlers.create_floorplan({ label: "Technik" }) as Summary;
+    const { groupId } = handlers.add_floorplan_group({ pageId, label: "Verstärker", shape: "square", trueSize: true }) as { groupId: string };
+    const placed = handlers.place_floorplan_symbols({ pageId, symbols: [
+      { groupId, xM: 2, yM: 2, deviceId: "amp-1" },
+      { groupId, xM: 4, yM: 2, deviceId: "device-1" },
+      { groupId, xM: 6, yM: 2 },
+    ] }) as { results: { result: { symbolId: string } }[] };
+    const [, noSize, noDevice] = placed.results.map((r) => r.result.symbolId);
+
+    let g = groups().find((x) => x.groupId === groupId)!;
+    expect(g.trueSize).toBe(true);
+    expect(g.footprint).toBe("depth");
+    expect(g.symbolsWithoutSize).toEqual([noSize, noDevice]);
+
+    // Seen flat from above the amplifier needs its height, which it has.
+    handlers.update_floorplan_group({ pageId, groupId, footprint: "height" });
+    g = groups().find((x) => x.groupId === groupId)!;
+    expect(g.footprint).toBe("height");
+    expect(g.symbolsWithoutSize).toEqual([noSize, noDevice]);
+
+    handlers.update_floorplan_group({ pageId, groupId, trueSize: false });
+    g = groups().find((x) => x.groupId === groupId)!;
+    expect(g.trueSize).toBe(false);
+    expect(g.symbolsWithoutSize).toBeUndefined();
+    expect(() => handlers.update_floorplan_group({ pageId, groupId, footprint: "side" })).toThrow(/footprint/);
+  });
+});

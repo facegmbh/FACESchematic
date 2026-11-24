@@ -34,14 +34,15 @@ function ViewingHeatmapImage({ projection, picture, scaleDenominator, mmToPx }: 
   mmToPx: (mm: number) => number;
 }) {
   const { audience, viewing, screenCenterMm, screenRotationDeg, screenBottomM } = projection;
+  const nativePixelsV = projection.optics?.pixelsV;
   const { widthM, heightM } = picture;
   const image = useMemo(() => {
-    const raster = viewingHeatmap({ audience, viewing, screenCenterMm, screenRotationDeg, screenBottomM }, { widthM, heightM }, scaleDenominator);
+    const raster = viewingHeatmap({ audience, viewing, screenCenterMm, screenRotationDeg, screenBottomM, optics: { pixelsV: nativePixelsV } }, { widthM, heightM }, scaleDenominator);
     const href = raster ? viewingRasterPng(raster) : undefined;
     return raster && href ? { raster, href } : null;
     // Positions are objects that are replaced on every edit; compare what is in them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(audience), JSON.stringify(viewing), screenCenterMm.x, screenCenterMm.y, screenRotationDeg, screenBottomM, widthM, heightM, scaleDenominator]);
+  }, [JSON.stringify(audience), JSON.stringify(viewing), screenCenterMm.x, screenCenterMm.y, screenRotationDeg, screenBottomM, nativePixelsV, widthM, heightM, scaleDenominator]);
   if (!image) return null;
   const { raster, href } = image;
   return (

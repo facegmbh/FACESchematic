@@ -1111,6 +1111,15 @@ export interface FloorplanSymbolGroup {
   /** Rotation new symbols of this group start at, in degrees clockwise. Lets a group of
    *  projectors default to the direction they face in the room. */
   rotationDeg?: number;
+  /** Draw each symbol as the device's own outline in plan, in true size at the page's
+   *  scale, instead of a pictogram of fixed paper size. Needs the device's dimensions; a
+   *  symbol whose device has none keeps the pictogram. */
+  trueSize?: boolean;
+  /** Which two sides of the device are seen from above. "depth" (default): width × depth —
+   *  a device standing, hanging or on a wall the way its datasheet shows it. "height":
+   *  width × height — a device lying flat in the ceiling or on a table, face down or up,
+   *  like a ceiling loudspeaker or an access point. */
+  footprint?: "depth" | "height";
   /** Hidden groups are a layer switched off: their symbols are not drawn on the sheet, not
    *  exported and not listed in the legend, but they stay in the project. One drawing then
    *  yields several sheets — a loudspeaker plan and a video plan from the same underlay. */
@@ -1627,6 +1636,9 @@ export interface ProjectionOptics {
   shift?: ProjectionShiftRange;
   /** Light output in lumens. */
   lumens?: number;
+  /** Native vertical pixel count of the projector's panel (1200 for WUXGA). Decides the
+   *  farthest seat for detail work unless the planner types another count. */
+  pixelsV?: number;
 }
 
 /** Settings of a projection's section view. The section is computed from the heights the
@@ -1669,6 +1681,19 @@ export interface ProjectionAudience {
   /** Direction of its depth axis, degrees clockwise, 0 = to the right of the sheet. Equal
    *  to the picture's `screenRotationDeg` when the rows are parallel to the picture. */
   rotationDeg: number;
+}
+
+/** What the contrast of a picture in a lit room is estimated from (AVIXA ISCR). */
+export interface ProjectionLight {
+  /** Room light falling on the picture, lux. Undefined = not stated, nothing is estimated. */
+  ambientLux?: number;
+  /** Contrast the device reaches within one picture. Undefined = an assumed 300:1 for a
+   *  projector, 1000:1 for a display. */
+  nativeContrast?: number;
+  /** Display only: luminance in cd/m². */
+  nits?: number;
+  /** Display only: share of the room light its front throws back, percent. Undefined = 5. */
+  reflectancePct?: number;
 }
 
 /** Viewing task after AVIXA DISCAS: basic decision making (presentations, meetings) or
@@ -1737,6 +1762,8 @@ export interface FloorplanProjection {
   audience?: ProjectionAudience;
   /** What the picture is used for — decides how far away it can still be read. */
   viewing?: ProjectionViewing;
+  /** Room light and what the device does against it, for the contrast estimate. */
+  light?: ProjectionLight;
   /** Symbol group this is filed under, so it switches off with its layer. */
   groupId?: string;
   hidden?: boolean;

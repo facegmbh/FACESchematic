@@ -161,6 +161,7 @@ import { AUDIENCE_MIN_SIDE_M, DEFAULT_VIEWING, audienceInFront, viewingOnSheet }
 import {
   coverageLabelOf,
   defaultCoverage,
+  footprintSidesMm,
   defaultCoverageForDevice,
   COVERAGE_MIN_RANGE_M,
   COVERAGE_MAX_RANGE_M,
@@ -467,6 +468,11 @@ function groupPatchFromSpec(spec: Partial<AddFloorplanGroupParams>): Partial<Omi
   if (spec.rotationDeg !== undefined) patch.rotationDeg = Number(spec.rotationDeg) || undefined;
   if (spec.outlineColor !== undefined) patch.outlineColor = String(spec.outlineColor).trim() || undefined;
   if (spec.outlineWidthMm !== undefined) patch.outlineWidthMm = Math.max(0, Number(spec.outlineWidthMm));
+  if (spec.trueSize !== undefined) patch.trueSize = spec.trueSize ? true : undefined;
+  if (spec.footprint !== undefined) {
+    if (spec.footprint !== "depth" && spec.footprint !== "height") throw new CommandError('footprint must be "depth" (width × depth) or "height" (width × height).');
+    patch.footprint = spec.footprint === "height" ? "height" : undefined;
+  }
   if (spec.imageUrl !== undefined) {
     const url = String(spec.imageUrl).trim();
     if (url && !/^(https?:|data:image\/)/i.test(url)) throw new CommandError("imageUrl must be an https URL (or a data:image URL).");
@@ -540,6 +546,11 @@ function floorplanSummary(page: FloorplanPage) {
       imageUrl: g.imageUrl, hasUploadedImage: Boolean(g.imageSrc), imageCaption: g.imageCaption, glyph: g.glyph,
       hasUploadedSymbol: Boolean(g.symbolImageSrc), symbolLibraryId: g.symbolLibraryId, rotationDeg: g.rotationDeg, hidden: g.hidden ?? false,
       outlineColor: g.outlineColor, outlineWidthMm: g.outlineWidthMm,
+      trueSize: g.trueSize ?? false, footprint: g.footprint ?? "depth",
+      /** With trueSize: symbols whose device lacks the two dimensions and so stay a pictogram. */
+      symbolsWithoutSize: g.trueSize
+        ? page.symbols.filter((sym) => sym.groupId === g.id && !footprintSidesMm(g, sym.deviceNodeId ? (st().nodes.find((n) => n.id === sym.deviceNodeId)?.data as DeviceData | undefined) : undefined)).map((sym) => sym.id)
+        : undefined,
       symbolCount: counts.get(g.id) ?? 0,
     })),
     symbols: page.symbols.map((sym) => ({

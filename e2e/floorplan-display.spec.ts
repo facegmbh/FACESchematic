@@ -49,6 +49,8 @@ test("floorplan: a display in its true size with its audience area", async ({ pa
   // Selecting the display symbol offers to plan it.
   const symbol = page.locator(`div.absolute[title="${state.label}"]`).first();
   await symbol.click();
+  // Its basics are in the plan options; the picture is planned on the other tab.
+  await page.getByTestId("symbol-open-planning").click();
   await page.getByTestId("display-create").click();
   await expect(page.getByTestId("display-panel")).toBeVisible();
 
@@ -77,6 +79,14 @@ test("floorplan: a display in its true size with its audience area", async ({ pa
   await page.getByTestId("display-resolution").selectOption("2160");
   await expect(page.getByTestId("projection-viewing")).toContainText(((height * 3438) / 2160).toFixed(2));
   await page.getByTestId("projection-viewing-task").selectOption("bdm");
+
+  // Contrast: a 350 cd/m² display in a 300 lx office serves detail work, not moving pictures.
+  await page.getByTestId("contrast-ambient").fill("300");
+  await expect(page.getByTestId("contrast-result")).toContainText(/display's brightness|Helligkeit des Displays/);
+  await page.getByTestId("contrast-nits").fill("350");
+  const reflected = (300 * 0.05) / Math.PI;
+  await expect(page.getByTestId("contrast-result")).toContainText(`${((350 + reflected) / (0.35 + reflected)).toFixed(1)}:1`);
+  await expect(page.getByTestId("contrast-issue")).toHaveCount(0);
 
   // The audience area lies in front of the display, parallel to it, with its heatmap.
   await page.getByTestId("projection-audience-add").click();

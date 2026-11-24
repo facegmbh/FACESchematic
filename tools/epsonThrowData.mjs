@@ -108,7 +108,9 @@ for (const p of projectors) {
   const key = `${p.name}|${p.code}`;
   if (seen.has(key)) continue;
   seen.add(key);
-  const m = { name: p.name, code: p.code, lumens: num(p.whiteNormal) || undefined };
+  // The panel's resolution as Epson names it ("WUXGA", "Full HD and 4KE"); the planner
+  // turns it into a pixel count for the viewing distances.
+  const m = { name: p.name, code: p.code, lumens: num(p.whiteNormal) || undefined, resolution: p.resolution || undefined };
   if (p.lensExchange) {
     const usable = (lensesFor[p.code] ?? []).filter((id) => lenses[`${id}@${p.lcdSize}`]);
     if (usable.length === 0) continue;

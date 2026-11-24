@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSchematicStore, loadSpecLookup } from "../store";
 import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg,
   coverageLabelOf, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition,
   defaultSymbolShapeFor,
+  footprintSidesMm,
 } from "../floorplan";
 import { channelShortLabel, computeLineLoads, legendShowsLines, type LineLoadRow } from "../speakerLines";
 import { LINE_MODE_LABELS, LOAD_LIMITER_LABELS, LOAD_STATUS_LABELS, defaultTapW, formatHeadroom, formatOhm, formatWatt, type LoadStatus } from "../speakerLoad";
@@ -15,7 +16,8 @@ import { symbolLibraryName } from "../symbolLibrary";
 import SymbolLibraryPicker from "./SymbolLibraryPicker";
 import FloorplanProjectionPanel from "./FloorplanProjectionPanel";
 import FloorplanDisplayPanel from "./FloorplanDisplayPanel";
-import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
+import { useFloorplanPanelTab } from "../floorplanPanelTab";
+import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbol, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
 import FloorplanSymbolSvg from "./FloorplanSymbolSvg";
@@ -61,6 +63,21 @@ function StatusBadge({ status, title }: { status: LoadStatus; title?: string }) 
  *  amplifier lines, the legend box, the drawing block (Plankopf), erased areas and notes.
  *  Mirrors the schematic's view-options panel: theme surface, collapsible sections, folds
  *  to a rail. */
+/** Does this symbol have a picture to plan — and is it a projector's or a display's? A
+ *  projection that already exists decides; otherwise the device type and the symbol's shape. */
+function plansPicture(
+  page: FloorplanPage,
+  symbol: FloorplanSymbol,
+  group: FloorplanSymbolGroup | undefined,
+  device: DeviceData | undefined,
+): "projector" | "display" | null {
+  const existing = (page.projections ?? []).find((pr) => pr.symbolId === symbol.id);
+  if (existing) return existing.kind === "display" ? "display" : "projector";
+  if (device?.deviceType === "projector") return "projector";
+  if (group?.shape === "display" || defaultSymbolShapeFor(device?.deviceType) === "display") return "display";
+  return null;
+}
+
 export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineChange, activeGroupId, onActiveGroupChange, selection, onSelectionChange }: Props) {
   const t = useT();
   const nodes = useSchematicStore((s) => s.nodes);
@@ -120,6 +137,14 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
   const notesText = (page.legend.notes ?? []).join("\n");
 
   const [collapsed, setCollapsed] = useState(false);
+  const tab = useFloorplanPanelTab((s) => s.tab);
+  const setTab = useFloorplanPanelTab((s) => s.setTab);
+  // Selecting a coverage area or a wall on the sheet is a question about planning: turn
+  // the panel to where its settings are.
+  const selectedPlanningId = selection.kind === "coverage" || selection.kind === "wall" ? `${selection.kind}:${selection.id}` : null;
+  useEffect(() => {
+    if (selectedPlanningId) setTab("planning");
+  }, [selectedPlanningId, setTab]);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -195,9 +220,20 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
     <div className="w-64 shrink-0 bg-[var(--color-surface)] border-l border-[var(--color-border)] flex flex-col h-full overflow-hidden text-xs" data-print-hide>
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-[var(--color-text-heading)] uppercase tracking-wider">
-          {t("Plan options")}
-        </h2>
+        <div className="flex items-center gap-0.5" role="tablist">
+          {([["options", t("Plan options")], ["planning", t("Planning")]] as const).map(([id, name]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              data-testid={`panel-tab-${id}`}
+              onClick={() => setTab(id)}
+              className={`px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${tab === id ? "bg-emerald-500/15 text-[var(--color-text-heading)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => setCollapsed(true)}
           className="cursor-pointer hover:bg-[var(--color-surface-hover)] rounded p-0.5 transition-colors"
@@ -210,6 +246,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
       </div>
 
       <div className="flex-1 overflow-y-auto" data-allow-scroll>
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Selected symbol ───────────────────────────────────────── */}
       {selectedSymbols.length > 0 && (() => {
         const first = selectedSymbols[0];
@@ -448,21 +485,59 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 </button>
               </div>
 
-              {/* A projector plans its picture right here, with its symbol. */}
-              {!many && ((device?.data as DeviceData | undefined)?.deviceType === "projector" || (page.projections ?? []).some((pr) => pr.symbolId === first.id && pr.kind !== "display")) && (
-                <FloorplanProjectionPanel page={page} symbol={first} device={device?.data as DeviceData | undefined} />
+              {/* True size was asked for, but this device cannot be drawn that way. */}
+              {!many && group?.trueSize && !footprintSidesMm(group, device?.data as DeviceData | undefined)
+                && !(page.projections ?? []).some((pr) => pr.symbolId === first.id && pr.kind === "display") && (
+                <div className="px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800" data-testid="symbol-footprint-missing">
+                  {device
+                    ? (group.footprint === "height"
+                      ? t("Not in true size: the device has no width and height. Enter them in the device editor.")
+                      : t("Not in true size: the device has no width and depth. Enter them in the device editor."))
+                    : t("Not in true size: no device is linked to this symbol.")}
+                </div>
               )}
-              {/* A display gets its true size and its viewing distances the same way. */}
-              {!many && (group?.shape === "display"
-                || defaultSymbolShapeFor((device?.data as DeviceData | undefined)?.deviceType) === "display"
-                || (page.projections ?? []).some((pr) => pr.symbolId === first.id && pr.kind === "display")) && (
-                <FloorplanDisplayPanel page={page} symbol={first} />
+              {/* Projector or display: its planning lives on the other tab. */}
+              {!many && plansPicture(page, first, group, device?.data as DeviceData | undefined) && (
+                <button
+                  className="self-start px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:border-cyan-500 hover:text-cyan-700"
+                  data-testid="symbol-open-planning"
+                  onClick={() => setTab("planning")}
+                  title={t("Picture size, distance, brightness and viewing distances are on the Planning tab")}
+                >
+                  {t("Plan the picture")} →
+                </button>
               )}
             </div>
           </details>
         );
       })()}
+      </div>
 
+      {/* ── Planning for the selected projector or display ────────── */}
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
+      {selectedSymbols.length === 1 && (() => {
+        const first = selectedSymbols[0];
+        const group = page.groups.find((g) => g.id === first.groupId);
+        const device = first.deviceNodeId ? nodes.find((n) => n.id === first.deviceNodeId) : undefined;
+        const kind = plansPicture(page, first, group, device?.data as DeviceData | undefined);
+        if (!kind) return null;
+        return (
+          <div className="px-2 pb-2 border-b-2 border-cyan-500/60 bg-cyan-500/5" data-testid="planning-selected">
+            <div className="pt-2 text-[var(--color-text)] font-semibold truncate">{first.label} · {group?.label}</div>
+            {kind === "projector"
+              ? <FloorplanProjectionPanel page={page} symbol={first} device={device?.data as DeviceData | undefined} />
+              : <FloorplanDisplayPanel page={page} symbol={first} />}
+          </div>
+        );
+      })()}
+      {!(selectedSymbols.length === 1 && plansPicture(page, selectedSymbols[0], page.groups.find((g) => g.id === selectedSymbols[0].groupId), (selectedSymbols[0].deviceNodeId ? nodes.find((n) => n.id === selectedSymbols[0].deviceNodeId)?.data : undefined) as DeviceData | undefined)) && selection.kind !== "coverage" && (
+        <p className="px-2 py-2 text-[var(--color-text-muted)] leading-snug" data-testid="planning-hint">
+          {t("Select a projector, a display or a coverage area on the plan to plan it here.")}
+        </p>
+      )}
+      </div>
+
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
       {/* ── Selected coverage area ────────────────────────────────── */}
       {selection.kind === "coverage" && (() => {
         const coverage = (page.coverages ?? []).find((c) => c.id === selection.id);
@@ -779,7 +854,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           </details>
         );
       })()}
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Symbol groups ─────────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open>
         <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -930,6 +1007,25 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       >
                         ↺
                       </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+                    <label className="flex items-center gap-1.5 min-w-0" title={t("Draws each symbol as the device's own outline at the plan's scale instead of a pictogram. A device without dimensions keeps the pictogram — enter them in the device editor.")}>
+                      <input type="checkbox" checked={Boolean(group.trueSize)} data-testid="group-true-size"
+                        onChange={(e) => updateFloorplanGroup(page.id, group.id, { trueSize: e.target.checked || undefined })} />
+                      <span className="truncate">{t("True size")}</span>
+                    </label>
+                    {group.trueSize && (
+                      <select
+                        className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                        value={group.footprint ?? "depth"}
+                        data-testid="group-footprint"
+                        onChange={(e) => updateFloorplanGroup(page.id, group.id, { footprint: e.target.value === "height" ? "height" : undefined })}
+                        title={t("Which two sides of the device are seen from above")}
+                      >
+                        <option value="depth">{t("Width × depth (standing, hanging, on a wall)")}</option>
+                        <option value="height">{t("Width × height (flat in the ceiling)")}</option>
+                      </select>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -1119,9 +1215,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         onChange={(e) => { void handleSymbolImagePicked(e.target.files?.[0]); e.target.value = ""; }}
       />
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Numbering (line.speaker) ─────────────────────────────── */}
-      <details className="border-t border-[var(--color-border)]" open>
+      <details className="border-t border-[var(--color-border)]">
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
           {t("Numbering")}
         </summary>
@@ -1153,9 +1251,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         )}
       </div>
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Lines ↔ amplifier channels ────────────────────────────── */}
-      <details open>
+      <details>
         <summary className="px-2 pt-2 pb-1 flex items-center justify-between font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
         <span>{t("Lines & load")}</span>
         <button
@@ -1193,9 +1293,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         ))}
       </div>
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Legend box ────────────────────────────────────────────── */}
-      <details className="border-t border-[var(--color-border)]" open>
+      <details className="border-t border-[var(--color-border)]" open={selection.kind === "legend"}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
           {t("Legend Box")}
         </summary>
@@ -1267,9 +1369,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
         />
       </div>
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Drawing block (Plankopf) ──────────────────────────────── */}
-      <details className="border-t border-[var(--color-border)]" open>
+      <details className="border-t border-[var(--color-border)]" open={selection.kind === "drawing"}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
           {t("Drawing Block")}
         </summary>
@@ -1409,9 +1513,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           </div>
         </div>
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Covers (erased parts of the underlay) ─────────────────── */}
-      <details className="border-t border-[var(--color-border)]" open={page.masks.length > 0}>
+      <details className="border-t border-[var(--color-border)]" open={selection.kind === "mask"}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
           {t("Erased areas ({n})", { n: page.masks.length })}
         </summary>
@@ -1478,7 +1584,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           ))}
         </div>
       </details>
+      </div>
 
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
       {/* ── Walls ─────────────────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open={(page.walls ?? []).length > 0}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -1594,7 +1702,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           })}
         </div>
       </details>
+      </div>
 
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
       {/* ── Wi-Fi heatmap ─────────────────────────────────────────── */}
       {(() => {
         const cfg = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
@@ -1715,7 +1825,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           </details>
         );
       })()}
+      </div>
 
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
       {/* ── Measured wall attenuation ─────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]">
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -1776,7 +1888,9 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           })}
         </div>
       </details>
+      </div>
 
+      <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
       {/* ── Coverage areas ────────────────────────────────────────── */}
       <details className="border-t border-[var(--color-border)]" open={(page.coverages ?? []).length > 0}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -1842,9 +1956,11 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           })}
         </div>
       </details>
+      </div>
 
+      <div data-panel-section="options" style={{ display: tab === "options" ? undefined : "none" }}>
       {/* ── Notes on the plan ─────────────────────────────────────── */}
-      <details className="border-t border-[var(--color-border)]" open>
+      <details className="border-t border-[var(--color-border)]" open={selection.kind === "note"}>
         <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
           {t("Notes on the plan ({n})", { n: page.notes.length })}
         </summary>
@@ -1885,6 +2001,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           ))}
         </div>
       </details>
+      </div>
       </div>
 
       {libraryPickerGroupId && (

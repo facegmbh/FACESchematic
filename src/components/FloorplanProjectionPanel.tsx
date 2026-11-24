@@ -18,11 +18,13 @@ import {
   guessModel,
   loadProjectionCatalog,
   opticsForModel,
+  pixelsVOfResolution,
   searchModels,
   type CatalogModel,
   type ProjectionCatalog,
 } from "../projectionData";
 import { FIELD, NumberField, ROW, ViewingMoreRows, ViewingRows } from "./ProjectionViewingRows";
+import { ContrastMoreRows, ContrastRows } from "./ProjectionContrastRows";
 import { clampToSheet } from "../floorplan";
 import { useT } from "../i18n";
 import ProjectionSectionSvg from "./ProjectionSectionSvg";
@@ -145,6 +147,17 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
   }, []);
 
   const projection = (page.projections ?? []).find((pr) => pr.symbolId === symbol.id);
+  // A projection planned before the native resolution was kept: its model is known, so
+  // the pixel count is filled in from the catalogue — without an undo step, because the
+  // planner changed nothing.
+  const lacksResolution = projection && projection.kind !== "display" && projection.model && projection.optics.pixelsV === undefined
+    ? projection
+    : undefined;
+  useEffect(() => {
+    if (!catalog || !lacksResolution?.model) return;
+    const pixelsV = pixelsVOfResolution(findModel(catalog, lacksResolution.model)?.resolution);
+    if (pixelsV) updateFloorplanProjection(page.id, lacksResolution.id, { optics: { ...lacksResolution.optics, pixelsV } }, { continuing: true });
+  }, [catalog, lacksResolution, page.id, updateFloorplanProjection]);
   const [query, setQuery] = useState<string | null>(null);
   const [calibrating, setCalibrating] = useState(false);
   const sectionFile = useRef<HTMLInputElement>(null);
@@ -374,6 +387,8 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
           : <span className="text-[var(--color-text-muted)]">{t("enter the light output")}</span>}
       </div>
 
+      <ContrastRows projection={projection} patch={patch} screenLux={r.lux} />
+
       {sec && (
         <div className={sec.inPicture ? "text-amber-700" : "text-[var(--color-text)]"} data-testid="projection-section-text">
           {sectionText()}
@@ -504,6 +519,7 @@ export default function FloorplanProjectionPanel({ page, symbol, device }: Props
             <div className="text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{t("Enter lower edge and lens height to see the section.")}</div>
           )}
           <ViewingMoreRows projection={projection} patch={patch} />
+          <ContrastMoreRows projection={projection} patch={patch} />
           <label className={ROW} title={t("Gain of the screen material. 1 = matt white.")}>
             <span className="shrink-0 w-12">{t("Gain")}</span>
             <NumberField className={`w-12 ${FIELD}`} digits={1} min={0.1} value={projection.screenGain ?? 1} onCommit={(v) => patch({ screenGain: v && v !== 1 ? v : undefined })} />

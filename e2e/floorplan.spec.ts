@@ -67,6 +67,8 @@ test("floorplan: import an underlay, place numbered symbols, calibrate", async (
   await expect(page.getByText(/mm\/px/)).toBeVisible();
 
   // Drawing block: title resolves from the page label token; a revision row appears.
+  // Only the symbol groups are unfolded in the plan options; open the drawing block.
+  await page.locator("summary").filter({ hasText: /Drawing Block/i }).click();
   await page.getByPlaceholder("Drawing title, e.g. Ground floor").fill("Ground floor");
   await page.getByRole("button", { name: "+ Revision" }).click();
   await page.getByPlaceholder("Change").fill("First issue");

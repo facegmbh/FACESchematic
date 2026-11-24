@@ -36,7 +36,7 @@ import type { FloorplanSymbolShape,
   TitleBlock,
 } from "./types";
 import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
-import { VIEWING_KEY_LIMIT_AT, viewingKeyColors } from "./projectionViewing";
+import { VIEWING_KEY_LIMIT_AT, viewingKeyColors, viewingLacksResolution } from "./projectionViewing";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -441,7 +441,7 @@ export function legendShowsViewingKey(
   page: Pick<FloorplanPage, "projections" | "symbols" | "groups">,
 ): boolean {
   return (page.projections ?? []).some((p) => {
-    if (p.hidden || !p.audience || p.viewing?.heatmap === false) return false;
+    if (p.hidden || !p.audience || p.viewing?.heatmap === false || viewingLacksResolution(p)) return false;
     const symbol = page.symbols.find((s) => s.id === p.symbolId);
     if (!symbol) return false;
     return !page.groups.find((g) => g.id === (p.groupId ?? symbol.groupId))?.hidden;
@@ -671,6 +671,78 @@ export function symbolPrimitives(shape: FloorplanSymbolShape, sizeMm: number): S
     default:
       return [{ kind: "circle", center: { x: 0, y: 0 }, r, fill: "color" }];
   }
+}
+
+// ── Symbols in true size ─────────────────────────────────────────────
+
+/** The least a true-size symbol is drawn with on paper, so a small device does not vanish
+ *  on a small-scale plan. */
+export const FOOTPRINT_MIN_MM = 1.2;
+
+/** A device's outline in plan, on paper. */
+export interface SymbolFootprint {
+  /** Across the device and along it, paper mm, before the symbol's own rotation. */
+  wMm: number;
+  hMm: number;
+  /** A round body (a ceiling loudspeaker) rather than a box. */
+  round: boolean;
+  /** Drawn larger than true size because it would otherwise be too small to see. */
+  enlarged: boolean;
+}
+
+type Dimensions = { widthMm?: number; heightMm?: number; depthMm?: number };
+
+/** The two sides of a device seen from above, in real mm, or null when one is unknown. */
+export function footprintSidesMm(
+  group: Pick<FloorplanSymbolGroup, "footprint">,
+  device: Dimensions | undefined,
+): { wMm: number; hMm: number } | null {
+  const w = device?.widthMm;
+  const h = group.footprint === "height" ? device?.heightMm : device?.depthMm;
+  if (!w || !h || !(w > 0) || !(h > 0)) return null;
+  return { wMm: w, hMm: h };
+}
+
+/**
+ * A symbol's true-size outline, or null when the group does not ask for one or the device
+ * does not say how large it is — the caller then draws the pictogram, so a plan never
+ * shows a guessed size.
+ */
+export function symbolFootprintMm(
+  group: Pick<FloorplanSymbolGroup, "trueSize" | "footprint" | "shape">,
+  device: Dimensions | undefined,
+  scaleDenominator: number,
+): SymbolFootprint | null {
+  if (!group.trueSize || !(scaleDenominator > 0)) return null;
+  const sides = footprintSidesMm(group, device);
+  if (!sides) return null;
+  const w = sides.wMm / scaleDenominator, h = sides.hMm / scaleDenominator;
+  return {
+    wMm: Math.max(FOOTPRINT_MIN_MM, w),
+    hMm: Math.max(FOOTPRINT_MIN_MM, h),
+    round: group.shape === "circle",
+    enlarged: w < FOOTPRINT_MIN_MM || h < FOOTPRINT_MIN_MM,
+  };
+}
+
+/** The outline as a closed polygon on the sheet: four corners of a box, or a ring of
+ *  points for a round body. For the PDF, which has no rotated rectangle or ellipse. */
+export function symbolFootprintOutlineMm(footprint: SymbolFootprint, centerMm: Vec2, rotationDeg = 0): Vec2[] {
+  const local: Vec2[] = footprint.round
+    ? Array.from({ length: 36 }, (_, i) => {
+        const a = (i * 2 * Math.PI) / 36;
+        return { x: (Math.cos(a) * footprint.wMm) / 2, y: (Math.sin(a) * footprint.hMm) / 2 };
+      })
+    : [
+        { x: -footprint.wMm / 2, y: -footprint.hMm / 2 },
+        { x: footprint.wMm / 2, y: -footprint.hMm / 2 },
+        { x: footprint.wMm / 2, y: footprint.hMm / 2 },
+        { x: -footprint.wMm / 2, y: footprint.hMm / 2 },
+      ];
+  return local.map((p) => {
+    const r = rotateVec(p, rotationDeg);
+    return { x: centerMm.x + r.x, y: centerMm.y + r.y };
+  });
 }
 
 /** Where the glyph sits relative to the symbol center, so it lands on the body of a

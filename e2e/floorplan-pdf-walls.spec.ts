@@ -41,6 +41,8 @@ test("floorplan: walls come out of the PDF's own layer, thickness included", asy
   // ── Take them all ──
   await dialog.getByRole("button", { name: "Take all" }).click();
   await expect(dialog).toHaveCount(0);
+  // Walls are planning: they sit on that half of the side panel.
+  await page.getByTestId("panel-tab-planning").click();
   const wallsHeading = page.getByText(/Walls \(\d+\)/);
   await expect(wallsHeading).toBeVisible();
   const count = Number((await wallsHeading.textContent())!.match(/\((\d+)\)/)![1]);

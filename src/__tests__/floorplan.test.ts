@@ -56,6 +56,10 @@ import {
   legendShowsRssiScale,
   legendColorKeys,
   legendKeyRows,
+  symbolFootprintMm,
+  symbolFootprintOutlineMm,
+  footprintSidesMm,
+  FOOTPRINT_MIN_MM,
   FLOORPLAN_KIND_PRESETS,
   floorplanKindPreset,
   LEGEND_RSSI_GAP_MM,
@@ -1255,5 +1259,69 @@ describe("symbols drawn but not yet wired", () => {
   it("skips a symbol whose group is gone rather than inventing one", () => {
     const orphan = page({ symbols: [{ id: "s9", groupId: "gone", positionMm: { x: 1, y: 1 }, label: "X" }] });
     expect(planSymbolsWithoutDevice([orphan], new Set())).toEqual([]);
+  });
+});
+
+describe("symbols in true size", () => {
+  const speaker = { widthMm: 300, heightMm: 500, depthMm: 250 };
+
+  it("is off unless the group asks for it", () => {
+    expect(symbolFootprintMm({ shape: "square" }, speaker, 50)).toBeNull();
+  });
+
+  it("draws width × depth at the page's scale", () => {
+    const f = symbolFootprintMm({ trueSize: true, shape: "square" }, speaker, 50)!;
+    expect(f.wMm).toBeCloseTo(6, 6);
+    expect(f.hMm).toBeCloseTo(5, 6);
+    expect(f.round).toBe(false);
+    expect(f.enlarged).toBe(false);
+    // Half the size on a plan of half the scale.
+    expect(symbolFootprintMm({ trueSize: true, shape: "square" }, speaker, 100)!.wMm).toBeCloseTo(3, 6);
+  });
+
+  it("draws width × height for a device lying flat in the ceiling", () => {
+    const f = symbolFootprintMm({ trueSize: true, footprint: "height", shape: "circle" }, { widthMm: 280, heightMm: 280, depthMm: 120 }, 50)!;
+    expect(f.wMm).toBeCloseTo(5.6, 6);
+    expect(f.hMm).toBeCloseTo(5.6, 6);
+    expect(f.round).toBe(true);
+  });
+
+  it("keeps the pictogram when the device does not say how large it is", () => {
+    expect(symbolFootprintMm({ trueSize: true, shape: "square" }, undefined, 50)).toBeNull();
+    expect(symbolFootprintMm({ trueSize: true, shape: "square" }, { widthMm: 300 }, 50)).toBeNull();
+    expect(symbolFootprintMm({ trueSize: true, shape: "square" }, { widthMm: 300, depthMm: 0 }, 50)).toBeNull();
+    // Depth is known, height is not: the flat view cannot be drawn.
+    expect(symbolFootprintMm({ trueSize: true, footprint: "height", shape: "square" }, { widthMm: 300, depthMm: 250 }, 50)).toBeNull();
+    expect(footprintSidesMm({}, speaker)).toEqual({ wMm: 300, hMm: 250 });
+    expect(footprintSidesMm({ footprint: "height" }, speaker)).toEqual({ wMm: 300, hMm: 500 });
+  });
+
+  it("does not let a small device vanish on a small-scale plan", () => {
+    const f = symbolFootprintMm({ trueSize: true, shape: "square" }, { widthMm: 100, depthMm: 40 }, 200)!;
+    expect(f.wMm).toBeCloseTo(FOOTPRINT_MIN_MM, 6);
+    expect(f.hMm).toBeCloseTo(FOOTPRINT_MIN_MM, 6);
+    expect(f.enlarged).toBe(true);
+  });
+
+  it("gives the PDF a box that turns with the symbol", () => {
+    const f = symbolFootprintMm({ trueSize: true, shape: "square" }, speaker, 50)!;
+    const straight = symbolFootprintOutlineMm(f, { x: 100, y: 50 });
+    expect(straight).toEqual([
+      { x: expect.closeTo(97, 6), y: expect.closeTo(47.5, 6) },
+      { x: expect.closeTo(103, 6), y: expect.closeTo(47.5, 6) },
+      { x: expect.closeTo(103, 6), y: expect.closeTo(52.5, 6) },
+      { x: expect.closeTo(97, 6), y: expect.closeTo(52.5, 6) },
+    ]);
+    const turned = symbolFootprintOutlineMm(f, { x: 100, y: 50 }, 90);
+    const xs = turned.map((p) => p.x), ys = turned.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(5, 6);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(6, 6);
+  });
+
+  it("gives the PDF a ring for a round body", () => {
+    const f = symbolFootprintMm({ trueSize: true, footprint: "height", shape: "circle" }, { widthMm: 300, heightMm: 300 }, 50)!;
+    const ring = symbolFootprintOutlineMm(f, { x: 0, y: 0 });
+    expect(ring.length).toBeGreaterThan(20);
+    for (const p of ring) expect(Math.hypot(p.x, p.y)).toBeCloseTo(3, 6);
   });
 });

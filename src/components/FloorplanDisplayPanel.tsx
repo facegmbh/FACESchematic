@@ -9,6 +9,7 @@ import {
 import { DEFAULT_VIEWING } from "../projectionViewing";
 import { useT } from "../i18n";
 import { FIELD, NumberField, ROW, ViewingMoreRows, ViewingRows } from "./ProjectionViewingRows";
+import { ContrastMoreRows, ContrastRows } from "./ProjectionContrastRows";
 import type { FloorplanPage, FloorplanProjection, FloorplanSymbol } from "../types";
 
 interface Props {
@@ -16,15 +17,21 @@ interface Props {
   symbol: FloorplanSymbol;
 }
 
-/** Diagonals displays are actually sold in, inches. */
-export const DISPLAY_DIAGONALS_IN = [43, 50, 55, 65, 75, 86, 98];
+/** Diagonals displays are actually sold in, inches: desk monitors, signage and
+ *  conference displays, the large formats up to all-in-one LED walls. Anything else is
+ *  typed into the field beside the list. */
+export const DISPLAY_DIAGONALS_IN = [
+  22, 24, 27, 32, 34, 40, 43, 49, 50, 55, 58, 65, 70, 75, 77, 83, 85, 86, 98, 100, 105, 110, 115, 120, 130, 136, 146, 163,
+];
 /** Vertical pixel counts worth offering; they decide the farthest seat for detail work. */
 const RESOLUTIONS: { label: string; pixelsV: number }[] = [
   { label: "HD 720", pixelsV: 720 },
   { label: "FHD 1080", pixelsV: 1080 },
   { label: "UHD 2160", pixelsV: 2160 },
 ];
-const DISPLAY_ASPECTS = ["16:9", ...PROJECTION_ASPECTS.filter((a) => a !== "16:9")];
+/** 16:9 first, then the projector formats, then what only displays come in: upright
+ *  signage and the stretched formats. */
+const DISPLAY_ASPECTS = ["16:9", ...PROJECTION_ASPECTS.filter((a) => a !== "16:9"), "32:9", "9:16", "1:1"];
 
 /**
  * A display on the plan: how large it is, and from where it can be read. The display
@@ -106,6 +113,8 @@ export default function FloorplanDisplayPanel({ page, symbol }: Props) {
         </select>
       </label>
 
+      <ContrastRows projection={projection} patch={patch} />
+
       <ViewingRows page={page} projection={projection} picture={picture} patch={patch} />
 
       <details>
@@ -117,6 +126,7 @@ export default function FloorplanDisplayPanel({ page, symbol }: Props) {
             <span style={{ fontSize: 10 }}>m</span>
           </label>
           <ViewingMoreRows projection={projection} patch={patch} />
+          <ContrastMoreRows projection={projection} patch={patch} />
           {/* A video wall is not a diagonal off a list: type what it measures. */}
           <div className={ROW} title={t("For a video wall or an unusual format: type the picture's width and height")}>
             <span className="shrink-0 w-16">{t("Width")}</span>

@@ -77,7 +77,7 @@ export function ViewingRows({ page, projection, picture, patch }: RowsProps) {
   const m2 = (v: number) => v.toFixed(2);
   const viewingText = (): string => {
     const { farthestM, closestM } = view.limits;
-    if (farthestM === null) return t("Enter the picture's vertical pixel count under More");
+    if (farthestM === null) return t("Detail work needs the picture's vertical pixel count — nothing is judged until it is entered");
     const recommended = closestM !== null
       ? t("recommended {a} – {b} m", { a: m2(closestM), b: m2(farthestM) })
       : t("recommended up to {b} m", { b: m2(farthestM) });
@@ -179,7 +179,7 @@ export function ViewingMoreRows({ projection, patch }: { projection: FloorplanPr
           ) : (
             <label className={ROW} title={t("Vertical pixel count of the picture, e.g. 1200 for WUXGA")}>
               <span className="shrink-0 w-16">{t("Pixels V")}</span>
-              <NumberField className={`w-14 ${FIELD}`} digits={0} min={1} value={viewing.pixelsV} testId="projection-viewing-pixels"
+              <NumberField className={`w-14 ${FIELD}`} digits={0} min={1} value={viewing.pixelsV ?? projection.optics?.pixelsV} testId="projection-viewing-pixels"
                 onCommit={(v) => patchViewing({ pixelsV: v })} />
             </label>
           )}

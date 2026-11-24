@@ -425,6 +425,12 @@ export interface FloorplanGroupSpec {
   outlineColor?: string;
   /** Outline thickness in paper mm; 0 = no outline. */
   outlineWidthMm?: number;
+  /** Draw the group's symbols as the devices' own outlines at the plan's scale. A device
+   *  without dimensions keeps the pictogram. */
+  trueSize?: boolean;
+  /** Sides seen from above: "depth" = width × depth (default), "height" = width × height
+   *  (a device lying flat in the ceiling). */
+  footprint?: "depth" | "height";
   /** Hide the group from the legend box. */
   hiddenInLegend?: boolean;
   /** Switch the group off as a layer: off the sheet, out of the export and the legend. */
