@@ -34,16 +34,16 @@ Spec: `SPEC-projektion.md` · freigegeben von Jean-Luc am 23.11.2026
 - [x] `npx vitest run`, `npx tsc -b`, `npm run build`, `npm run i18n:check` grün
 - [x] Im Browser: Beamer ziehen, Modell wählen, Regler schieben, Warnung außerhalb der Grenzen
 - [ ] Drei Fälle gegen den Epson-Rechner verglichen
-- [ ] Epson-Datei liegt auf face-docker1 unter `~/faceschematic/projection/`
+- [x] Epson-Datei liegt auf face-docker1 unter `~/faceschematic/projection/` (24.11.2026 mit Auflösung erneuert; wirkt nach dem nächsten Deploy)
 
 ### Phase 3: Betrachtungsabstand nach AVIXA (noch nicht freigegeben)
 - [x] Task 8: `evaluateViewing` in `src/projectionViewing.ts` — Grenzen BDM/ADM, Auswertung des Rechtecks (Tests zuerst)
 - [x] Task 9: Zuschauerzone als Rechteck — Typ, Knopf „Zuschauerzone“ legt sie an, Griffe auf dem Plan (kein Aufziehen mit der Maus, keine eigene Store-Aktion nötig)
 - [x] Task 10: Inspektor-Zeilen „Nutzung“ und „Betrachtung“, „Übernehmen“, PDF, deutsche Texte
-- [x] Task 11: Heatmap der Sichtgüte in der Zone — Raster, Canvas, PDF-Bild, Farbschlüssel
+- [x] Task 10a: Heatmap der Sichtgüte in der Zone — Raster, Canvas, PDF-Bild, Farbschlüssel
 
 ### Checkpoint Phase 3
-- [ ] Offene Punkte 4–8 der Spec entschieden
+- [x] Offene Punkte 4–8 der Spec entschieden (4, 5, 7, 8 am 23.11.; 6 am 24.11.2026 gebaut)
 - [ ] Drei Fälle gegen den AVIXA-Rechner verglichen (fernster Platz, nächster Platz, CV-Ebene)
 - [ ] `npx vitest run`, `npx tsc -b`, `npm run i18n:check` grün
 - [ ] Im Browser: Zone aufziehen, zu weit ziehen, Hinweis erscheint, „Übernehmen“ vergrößert das Bild
@@ -64,6 +64,22 @@ Spec: `SPEC-projektion.md` · freigegeben von Jean-Luc am 23.11.2026
 - [ ] Offene Punkte 11–13 der Spec entschieden
 - [ ] `npx vitest run`, `npx tsc -b`, `npm run i18n:check` grün
 - [ ] Im Browser: Display planen, Größe ändern — Balken wächst; Zone anlegen; Symbol drehen
+
+### Phase 6: Auflösung, Kontrast, echte Größe, Panel (gebaut 24.11.2026, Commit ec7d0f3)
+- [x] Task 19: Mehr Display-Diagonalen (22–163 ″) und Formate (32:9, 9:16, 1:1)
+- [x] Task 20: Vertikale Auflösung aus dem Epson-Katalog; ADM ohne Auflösung zeigt keine Heatmap
+- [x] Task 21: Symbole einer Gruppe in echter Gerätegröße — Plan, PDF, Connector
+- [x] Task 22: Panel in die Reiter „Planoptionen“ und „Planung“ geteilt; nur Gruppen aufgeklappt
+- [x] Task 23: Kontrastschätzung für Beamer und Displays (`src/projectionContrast.ts`)
+
+### Checkpoint Phase 6
+- [x] `npx vitest run`, `npx tsc -b`, `npm run i18n:check`, `npm run build` grün
+- [x] e2e Grundriss: 25 bestanden (ein Lauf direkt nach dem Build fiel mit 16 Fehlern aus, Ursache ungeklärt)
+- [ ] Deploy nach dem rsync der neuen `epson.json` — der Container hat noch die alte Datei ohne Auflösung
+- [ ] Mindestwerte des Kontrasts (7, 15, 50, 80) am Normtext geprüft
+- [ ] „4K PRO-UHD“: tatsächliche Zeilenzahl geklärt
+- [ ] Gerätemaße in der Bibliothek ergänzt (419/784 allgemein, 36/153 FACE)
+- [ ] Kontrast über den Connector und im PDF — nicht gebaut, bei Bedarf
 
 ## Tasks
 
@@ -106,7 +122,7 @@ Dateien laden ohne Migration.
 setzt die Bildgröße in einem Undo-Schritt; PDF zeigt Zone und Grenzlinie.
 **Verification:** Browser, e2e, `npm run i18n:check`
 
-### Task 11: Heatmap der Sichtgüte
+### Task 10a: Heatmap der Sichtgüte
 **Acceptance:** `viewingGrid` liefert je Rasterpunkt eine Stufe (gut, Grenzbereich, zu weit,
 zu nah, zu schräg); Canvas nur innerhalb des Rechtecks, auch gedreht; Schalter unter „Mehr“;
 PDF zeigt dasselbe Bild und den Farbschlüssel in der Legende.

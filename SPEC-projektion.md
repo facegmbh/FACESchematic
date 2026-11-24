@@ -249,19 +249,116 @@ Piktogramm. Auf dem Bildschirm und im PDF aus derselben Geometrie.
 **Bedienung.** Am Display-Symbol erscheint im Inspektor der Knopf „Display planen“, danach
 der Block „Display“:
 
-    Diagonale   [ 75 ″ ▾ ]  (43 · 55 · 65 · 75 · 86 · 98 oder frei)   Format [ 16:9 ▾ ]
+    Diagonale   [ 75 ″ ▾ ]  (28 Größen von 22 bis 163 ″ oder frei)   Format [ 16:9 ▾ ]
     Breite 1,66 m · Höhe 0,93 m
     Auflösung   [ UHD 2160 ▾ ]  (FHD 1080 · UHD 2160 · frei)
     Nutzung     [ Präsentation (BDM) ▾ ]          [ Zuschauerzone ]
     Betrachtung empfohlen 1,10 – 5,60 m
     ▸ Mehr      Unterkante, Zeichenhöhe, Augenhöhe, Heatmap, Breite/Höhe frei (Videowand)
 
-Dieselben Zeilen und Hinweise wie beim Beamer, aus demselben Code.
+Dieselben Zeilen und Hinweise wie beim Beamer, aus demselben Code. Formate: die des Beamers,
+dazu 32:9, 9:16 (hochkant) und 1:1.
 
 **MCP.** `list_floorplans` meldet Displays mit Größe. `set_floorplan_display` setzt Größe,
 Unterkante, Auflösung, Nutzung und die Zuschauerzone (als „ab nearM vor dem Display, depthM
 tief, widthM breit“) und meldet die Betrachtungsabstände samt dem, was nicht passt;
 `remove_floorplan_display` nimmt die Größe wieder weg.
+
+### Auflösung aus dem Gerät (gebaut 24.11.2026)
+
+ADM rechnet mit der vertikalen Pixelzahl. Sie kommt beim Beamer aus dem gewählten Modell:
+
+- `tools/epsonThrowData.mjs` übernimmt Epsons Angabe `resolution` je Modell („WUXGA“,
+  „Full HD“, „4K PRO-UHD“) in `epson.json`; `pixelsVOfResolution` macht daraus die
+  Pixelzahl (aus „1920 x 1200“ direkt, sonst über eine Namensliste).
+- `opticsForModel` legt sie als `optics.pixelsV` zur Projektion. Eine Projektion, die vor
+  dieser Änderung angelegt wurde, bekommt den Wert nachgetragen, sobald sie im Inspektor
+  offen ist und der Katalog geladen ist.
+- Es gilt `viewing.pixelsV ?? optics.pixelsV` (`viewingSettingsOf`): eine von Hand
+  eingetragene Zahl geht vor.
+- Fehlt die Pixelzahl bei ADM, gibt es keine Heatmap und keinen Farbschlüssel, und der
+  Inspektor fragt nach der Auflösung. Vorher war in diesem Fall jeder Platz grün.
+
+Offen: „4K PRO-UHD“ ist als 2160 Zeilen eingetragen, obwohl das Panel dieser Geräte weniger
+hat. Beamer anderer Hersteller haben keine Auflösung; dort bleibt das Eingabefeld.
+
+### Kontrast (gebaut 24.11.2026)
+
+DISCAS sagt nichts zur Helligkeit. Dafür gibt es eine Vorab-Schätzung des Kontrasts im
+Raumlicht, angelehnt an AVIXAs Kontrastnorm (ISCR/PISCR). Die Norm wird vor Ort gemessen;
+das hier ist eine Rechnung für die Planung, kein Nachweis.
+
+    FloorplanProjection.light?: { ambientLux?, nativeContrast?, nits?, reflectancePct? }
+
+**Rechnung** — `src/projectionContrast.ts`, reine Funktionen:
+
+- Kontrast = (Weiß + Raumlicht) ÷ (Weiß ÷ Gerätekontrast + Raumlicht).
+- Beamer (`projectedContrast`): Weiß = Beleuchtungsstärke auf der Bildfläche in Lux, wie
+  sie die Helligkeitszeile schon rechnet (Lichtstrom × Gain ÷ Bildfläche); Raumlicht in Lux
+  auf der Bildfläche.
+- Display (`displayContrast`): Weiß = Leuchtdichte in cd/m²; das Raumlicht zählt mit dem
+  Anteil, den die Displayfront zurückwirft (Reflexion ÷ π je Lux).
+- Mindestwerte je Nutzung: passiv 7:1, Präsentation (BDM) 15:1, Detailarbeit (ADM) 50:1,
+  Bewegtbild 80:1. Der Planer benutzt die Werte für BDM und ADM.
+- Ergebnis: Kontrast, Mindestwert, ob er reicht, und das höchste Raumlicht, bei dem er
+  noch reichen würde.
+
+**Annahmen, nicht verifiziert:**
+
+- Die vier Mindestwerte sind aus dem Gedächtnis, nicht am Normtext geprüft.
+- Gerätekontrast 300:1 beim Beamer, 1000:1 beim Display; Reflexion der Displayfront 5 %.
+  Alle drei unter „Mehr“ änderbar.
+- Richtwerte für das Raumlicht: abgedunkelt 10 lx, gedimmt 50 lx, Besprechungsraum 150 lx,
+  helles Büro 300 lx — eigene Festlegung, keine Messwerte.
+- Epsons Kontrastangabe wird nicht benutzt: Sie ist der dynamische Kontrast (10.000:1 bis
+  über 5.000.000:1), die Norm misst Weiß und Schwarz gleichzeitig. Bei Raumlicht ändert der
+  Gerätekontrast das Ergebnis ohnehin kaum (500 lx Bild, 50 lx Raum: 10,6:1 statt 11:1).
+
+**Bedienung.** Im Block „Projektion“ bzw. „Display“ (`ProjectionContrastRows.tsx`):
+
+    Raumlicht   [ 150 lx ]  [ Besprechungsraum ▾ ]
+    Helligkeit  [ 350 cd/m² ]                         (nur Display)
+    Kontrast    69:1 · eine Präsentation braucht 15:1
+                Reicht nicht — höchstens 40 lx Raumlicht        (nur wenn zu wenig)
+    ▸ Mehr      Gerätekontrast, Reflexion (Display)
+
+Ohne Raumlicht-Angabe erscheint keine Kontrastzeile. Nicht im PDF, nicht über den Connector.
+
+### Symbole in echter Größe (gebaut 24.11.2026)
+
+Eine Symbolgruppe kann ihre Geräte maßstäblich zeichnen statt als Piktogramm:
+
+    FloorplanSymbolGroup.trueSize?: boolean
+    FloorplanSymbolGroup.footprint?: "depth" | "height"    Standard "depth"
+
+- Grundfläche = Breite × Tiefe des Geräts aus der Zeichnung; bei „height“ Breite × Höhe
+  (für Geräte, die flach an der Wand hängen). Geteilt durch den Planmaßstab.
+- `symbolFootprintMm` in `src/floorplan.ts`. Hat das Gerät keine Maße, bleibt das
+  Piktogramm — eine Größe wird nie geraten. Der Inspektor nennt die Symbole ohne Maße.
+- Sehr kleine Geräte werden auf 1,2 mm Papier angehoben, damit sie sichtbar bleiben.
+- Runde Gruppenform ergibt eine Ellipse, sonst ein Rechteck; gedreht mit dem Symbol. Am
+  Bildschirm und im PDF aus derselben Geometrie.
+- Connector: Gruppenfelder `trueSize` und `footprint`; die Antwort nennt
+  `symbolsWithoutSize`.
+- Displays mit geplanter Bildgröße behalten ihren Balken in Bildbreite (siehe oben).
+
+Offen: Die Gerätebibliothek kennt die Maße nur zum Teil (419 von 784 allgemeinen, 36 von
+153 FACE-Geräten).
+
+### Rechtes Panel: Planoptionen und Planung (gebaut 24.11.2026)
+
+Das Panel hat zwei Reiter (`src/floorplanPanelTab.ts`, `FloorplanOptionsPanel.tsx`):
+
+- **Planoptionen:** ausgewähltes Symbol, Gruppen, Nummerierung, Linien und Last, Legende,
+  Plankopf, Abdeckflächen, Notizen. Aufgeklappt sind nur die Gruppen und der Block des
+  ausgewählten Symbols; Legende, Plankopf, Abdeckflächen und Notizen klappen auf, wenn ihr
+  Objekt auf dem Plan ausgewählt ist.
+- **Planung:** Beamer- bzw. Display-Block des ausgewählten Symbols, ausgewählter
+  Abdeckungsbereich, Wände, WLAN-Heatmap, Wanddämpfung, Abdeckungsbereiche.
+- **Wechsel von selbst:** zu „Planung“ bei Auswahl einer Bildfläche, Zuschauerzone, eines
+  Abdeckungsbereichs oder einer Wand und beim Werkzeug Wand oder Abdeckung; zurück zu
+  „Planoptionen“ beim Klick auf ein gewöhnliches Symbol. Am Beamer- oder Display-Symbol
+  führt der Knopf „Bild planen →“ hinüber.
 
 ## Entscheidungen
 
@@ -300,6 +397,7 @@ Offen, mit Vorschlag:
    Nächster Platz: senkrechter Abstand zur Bildebene, wie im Glossar der Norm.
 5. **Standard-Zeichenhöhe für BDM** — Vorschlag: 3 % (ergibt 6 × Bildhöhe), änderbar.
 6. **Pixelzahl für ADM** — aus den Epson-Daten, falls dort vorhanden, sonst Eingabefeld.
+   (So gebaut am 24.11.2026, siehe „Auflösung aus dem Gerät“.)
 7. **Eine Zone je Bildfläche** — Vorschlag: ja; getrennte Sitzblöcke deckt ein Rechteck
    über alle Plätze ab, weil nur die äußersten Plätze zählen.
 8. **Stufen der Heatmap** — Vorschlag: „gut“ bis 80 % der Grenze, „Grenzbereich“ bis 100 %,
@@ -329,6 +427,17 @@ je Seite), am Bildschirm und im PDF dasselbe. Der Farbschlüssel ist ein Verlauf
 „gut · Grenze · außerhalb“.
 
 ## Testing Strategy
+
+- Auflösung: `pixelsVOfResolution` für Epsons Namen und für „1920 x 1200“; `opticsForModel`
+  trägt die Pixelzahl ein; ADM ohne Pixelzahl → keine Heatmap, kein Farbschlüssel
+  (`projectionData.test.ts`, `projectionViewing.test.ts`).
+- Kontrast (`projectionContrast.test.ts`): dunkler Raum ergibt den Gerätekontrast; mehr
+  Raumlicht senkt ihn; höchstes Raumlicht trifft genau den Mindestwert; Display mit
+  Reflexion; ungültige Eingaben → kein Ergebnis.
+- Echte Größe (`floorplan.test.ts`, `mcpFloorplan.test.ts`, e2e `floorplan-true-size.spec.ts`):
+  Grundfläche bei 1:50 und 1:100, Tiefe gegen Höhe, Mindestgröße, ohne Maße kein Umriss,
+  Connector setzt die Gruppenfelder.
+- Panel: e2e wechselt die Reiter und prüft den Wechsel von selbst (Wand, Abdeckung, Symbol).
 
 - Displays: Bildgröße aus Diagonale und Format (75″ 16:9 → 1,66 × 0,93 m); Bildfläche folgt
   dem Symbol beim Verschieben und Drehen; Balken-Geometrie in echter Breite bei 1:50 und
