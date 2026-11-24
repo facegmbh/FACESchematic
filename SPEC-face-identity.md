@@ -49,6 +49,23 @@ Backend wie `SPEC-backend-deploy.md`. Frontend: React 19 + Zustand wie die App, 
 - Ohne das Flag (öffentlicher Build, `npm run dev` ohne Flag) bleibt das Upstream-Verhalten.
 - Anmeldezustand liegt im Store (`faceUser`), beim Start einmal per `/face/api/me` geladen.
 
+## Pflichtanmeldung (ergänzt 23.11.2026)
+
+Im FACE-Build kommt niemand ohne Odoo-Anmeldung in die App (`FaceLoginGate` um die ganze
+Oberfläche, Regeln in `faceGate` in `src/faceBackend.ts`):
+
+- Nicht angemeldet → nur der Anmeldedialog, ohne „Abbrechen“; die App wird nicht geladen.
+- Endet die Sitzung mitten in der Arbeit (Abmelden, Schlüssel widerrufen), legt sich der Dialog
+  über den Editor; die Zeichnung bleibt geladen.
+- Eingebetteter Betrachter (`?embed=1`, Odoo) bleibt ohne Anmeldung — er zeigt nur, was Odoo
+  ihm übergibt, und das Cookie käme im fremden Rahmen ohnehin nicht an.
+- Backend nicht erreichbar (offline, Container aus): Ein Gerät, auf dem sich schon jemand
+  angemeldet hat (Marker `face-signed-in` im localStorage, ohne Name und Schlüssel), arbeitet
+  weiter; ein unbekanntes Gerät sieht „Anmeldung nicht erreichbar“ mit „Erneut versuchen“.
+- Grenze: Das ist eine Sperre in der Oberfläche. nginx liefert die statischen Dateien (App,
+  `/symbols/`) weiterhin an jeden aus, der den Host erreicht; eine Sperre dort (`auth_request`)
+  wäre ein eigener Schritt.
+
 ## Commands / Structure / Style
 
 Wie `SPEC-backend-deploy.md`. Neue Dateien: `mcp-server/src/cloud/{odoo,store,auth}.ts`,

@@ -5,6 +5,8 @@ import { useT } from "../i18n";
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** The gate in front of the app (FaceLoginGate): no way out but signing in. */
+  required?: boolean;
 }
 
 const fieldStyle = {
@@ -14,7 +16,7 @@ const fieldStyle = {
 };
 
 /** Sign-in with the user's Odoo account (SPEC-face-identity.md). Same frame as LoginDialog. */
-export default function FaceLoginDialog({ open, onClose }: Props) {
+export default function FaceLoginDialog({ open, onClose, required = false }: Props) {
   const t = useT();
   const titleId = useId();
   const loginId = useId();
@@ -25,13 +27,13 @@ export default function FaceLoginDialog({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || required) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, required]);
 
   if (!open) return null;
 
@@ -63,8 +65,8 @@ export default function FaceLoginDialog({ open, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-      onClick={close}
+      style={{ backgroundColor: required ? "var(--color-bg)" : "rgba(0,0,0,0.5)" }}
+      onClick={required ? undefined : close}
     >
       <form
         role="dialog"
@@ -86,7 +88,9 @@ export default function FaceLoginDialog({ open, onClose }: Props) {
         </div>
         <div className="px-5 py-4 space-y-3">
           <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {t("Your drawings are stored on Odoo projects, with your Odoo rights.")}
+            {required
+              ? t("FACESchematic is for FACE staff. Sign in with your Odoo account to continue.")
+              : t("Your drawings are stored on Odoo projects, with your Odoo rights.")}
           </p>
           <div>
             <label htmlFor={loginId} className="block text-xs font-medium mb-1">
@@ -129,14 +133,16 @@ export default function FaceLoginDialog({ open, onClose }: Props) {
           )}
         </div>
         <div className="px-5 py-3 flex justify-end gap-2 border-t" style={{ borderColor: "var(--color-border)" }}>
-          <button
-            type="button"
-            onClick={close}
-            className="px-3 py-1.5 text-xs rounded transition-colors cursor-pointer"
-            style={{ backgroundColor: "var(--color-surface)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
-          >
-            {t("Cancel")}
-          </button>
+          {!required && (
+            <button
+              type="button"
+              onClick={close}
+              className="px-3 py-1.5 text-xs rounded transition-colors cursor-pointer"
+              style={{ backgroundColor: "var(--color-surface)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
+            >
+              {t("Cancel")}
+            </button>
+          )}
           <button
             type="submit"
             disabled={busy}

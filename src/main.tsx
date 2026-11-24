@@ -5,6 +5,7 @@ import "./index.css";
 import ErrorBoundary from "./components/ErrorBoundary.tsx";
 import { initServiceWorkerUpdates } from "./sw-register";
 import { loadSymbolLibrary } from "./symbolLibrary";
+import FaceLoginGate from "./components/FaceLoginGate.tsx";
 
 initServiceWorkerUpdates();
 // The BHE symbols are served, not bundled, so the catalogue is fetched once at startup.
@@ -50,7 +51,9 @@ function Root() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <Root />
+      <FaceLoginGate>
+        <Root />
+      </FaceLoginGate>
     </ErrorBoundary>
   </StrictMode>,
 );

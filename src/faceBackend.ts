@@ -54,17 +54,69 @@ interface FaceSessionState {
   user: FaceUser | null;
   /** False until the first /me answer, so the button doesn't flash "Anmelden" for a signed-in user. */
   loaded: boolean;
+  /** The last /me got no answer from the backend at all (offline, container down) — which
+   *  says nothing about whether the session is still good. */
+  unreachable: boolean;
 }
 
-export const useFaceSession = create<FaceSessionState>(() => ({ user: null, loaded: false }));
+export const useFaceSession = create<FaceSessionState>(() => ({ user: null, loaded: false, unreachable: false }));
+
+/** A bare marker that somebody signed in on this device — no name, no key. It only decides
+ *  whether the app may open while the backend cannot be asked (see faceGate). */
+const SIGNED_IN_KEY = "face-signed-in";
+
+function rememberSignedIn(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SIGNED_IN_KEY, "1");
+    else localStorage.removeItem(SIGNED_IN_KEY);
+  } catch {
+    /* private mode / storage disabled */
+  }
+}
+
+export function wasSignedInHere(): boolean {
+  try {
+    return localStorage.getItem(SIGNED_IN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export type FaceGate = "app" | "loading" | "login" | "unreachable";
+
+/**
+ * Sign-in is required in the FACE build (SPEC-face-identity.md, „Pflichtanmeldung“): what to
+ * show instead of the app. The viewer Odoo embeds stays open — it only renders the file its
+ * embedder hands it, and the session cookie would not reach a third-party frame anyway. With
+ * the backend out of reach, a device somebody signed in on keeps working (a technician on
+ * site without network); the Odoo features fail on their own until it is back.
+ */
+export function faceGate(s: {
+  faceBackend: boolean;
+  embedded: boolean;
+  loaded: boolean;
+  user: FaceUser | null;
+  unreachable: boolean;
+  remembered: boolean;
+}): FaceGate {
+  if (!s.faceBackend || s.embedded) return "app";
+  if (!s.loaded) return "loading";
+  if (s.user) return "app";
+  if (!s.unreachable) return "login";
+  return s.remembered ? "app" : "unreachable";
+}
 
 export async function loadFaceSession(): Promise<void> {
   try {
     const user = await faceApi<FaceUser>("/face/api/me");
-    useFaceSession.setState({ user, loaded: true });
-  } catch {
-    // 401 is simply "signed out"; an unreachable backend leaves the user signed out too.
-    useFaceSession.setState({ user: null, loaded: true });
+    rememberSignedIn(true);
+    useFaceSession.setState({ user, loaded: true, unreachable: false });
+  } catch (err) {
+    // Only the backend's own 401 means "signed out". Anything else — no network, the proxy's
+    // 502 — leaves the question open.
+    const signedOut = err instanceof FaceApiError && err.status === 401;
+    if (signedOut) rememberSignedIn(false);
+    useFaceSession.setState({ user: null, loaded: true, unreachable: !signedOut });
   }
 }
 
@@ -73,11 +125,13 @@ export async function faceLogin(login: string, apiKey: string): Promise<FaceUser
     method: "POST",
     body: { login: login.trim(), apiKey: apiKey.trim() },
   });
-  useFaceSession.setState({ user, loaded: true });
+  rememberSignedIn(true);
+  useFaceSession.setState({ user, loaded: true, unreachable: false });
   return user;
 }
 
 export async function faceLogout(): Promise<void> {
   await faceApi<void>("/face/api/logout", { method: "POST" });
-  useFaceSession.setState({ user: null, loaded: true });
+  rememberSignedIn(false);
+  useFaceSession.setState({ user: null, loaded: true, unreachable: false });
 }

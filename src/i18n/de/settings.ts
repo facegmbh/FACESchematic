@@ -186,6 +186,11 @@ export const DE_SETTINGS: Record<string, string> = {
   "Signing in…": "Anmelden…",
   "Sign in": "Anmelden",
   "Signed in with Odoo as {login}": "Mit Odoo angemeldet als {login}",
+  "FACESchematic is for FACE staff. Sign in with your Odoo account to continue.":
+    "FACESchematic ist für FACE-Mitarbeiter. Zum Weiterarbeiten mit dem Odoo-Konto anmelden.",
+  "Sign-in is not reachable": "Anmeldung nicht erreichbar",
+  "FACESchematic cannot reach the sign-in service right now. Check your network connection and try again.":
+    "FACESchematic erreicht die Anmeldung gerade nicht. Netzwerkverbindung prüfen und erneut versuchen.",
 
   // ─── Footer ────────────────────────────────────────────────────
   "Reset to defaults": "Auf Standard zurücksetzen",
