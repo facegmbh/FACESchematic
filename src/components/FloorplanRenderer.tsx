@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { micCoverageSpecFor } from "../micCoverageData";
 import { useSchematicStore, loadSpecLookup } from "../store";
 import { resolveDeviceLabel } from "../displayName";
 import { buildLegendLineRows, computeLineLoads, legendShowsLines } from "../speakerLines";
@@ -26,6 +27,9 @@ import {
   rectFromDrag,
   MASK_MIN_SIZE_MM,
   coverageAnchorMm,
+  coverageRotationDeg,
+  micCoverageFor,
+  rotateVec,
   defaultCoverage,
   paperMmToRealMm,
   COVERAGE_MAX_RANGE_M,
@@ -129,6 +133,7 @@ type DragState =
   | { kind: "mask-resize"; maskId: string; startClient: Vec2; startSize: { w: number; h: number } }
   | { kind: "coverage"; coverageId: string; startClient: Vec2; start: Vec2 }
   /** Dragging an area's far edge: the pointer sets direction and reach at once. */
+  | { kind: "coverage-offset"; coverageId: string; startClient: Vec2; start: Vec2 }
   | { kind: "coverage-aim"; coverageId: string }
   | { kind: "label"; symbolId: string; startClient: Vec2; start: Vec2 }
   /** Moving a projection's picture to its wall; the projector stays where it is. */
@@ -415,8 +420,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       positionMm: { x: snap(pos.x, e.altKey), y: snap(pos.y, e.altKey) },
       lineNo: activeLine.trim() || undefined,
     });
+    // A ceiling microphone arrives with the floor it covers, the way its maker states it.
+    const mic = micCoverageSpecFor((data?.templateId ? getTemplateById(data.templateId, customTemplates) : undefined) ?? data);
+    if (mic) {
+      addFloorplanCoverage(page.id, { ...micCoverageFor(mic), symbolId: id, groupId, positionMm: { x: pos.x, y: pos.y } });
+    }
     setSelection({ kind: "symbols", ids: [id] });
-  }, [resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, activeLine, setSelection]);
+  }, [resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, addFloorplanCoverage, customTemplates, activeLine, setSelection]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     const nodeId = e.dataTransfer.getData(FLOORPLAN_DEVICE_MIME);
@@ -728,6 +738,17 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             );
             projectionDragStartedRef.current = true;
           }
+        }
+      } else if (dragging.kind === "coverage-offset") {
+        const coverage = (page.coverages ?? []).find((c) => c.id === dragging.coverageId);
+        if (coverage) {
+          // Pointer travel on paper, turned back into the area's own axes and into metres.
+          const dPaper = clientDeltaToMm(e.clientX - dragging.startClient.x, e.clientY - dragging.startClient.y);
+          const local = rotateVec(dPaper, -coverageRotationDeg(coverage, page.symbols));
+          const toM = (mm: number) => paperMmToRealMm(mm, page.scaleDenominator) / 1000;
+          const round = (m: number) => (free ? m : Math.round(m * 10) / 10);
+          const next = { x: round(dragging.start.x + toM(local.x)), y: round(dragging.start.y + toM(local.y)) };
+          updateFloorplanCoverage(page.id, dragging.coverageId, { offsetM: next.x === 0 && next.y === 0 ? undefined : next });
         }
       } else if (dragging.kind === "coverage-aim") {
         const coverage = (page.coverages ?? []).find((c) => c.id === dragging.coverageId);
@@ -1167,6 +1188,12 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
               didMoveRef.current = false;
               // An anchored area is moved by moving its device — dragging the wedge itself
               // would silently break the link the plan relies on.
+              // A microphone's area is the exception: it lies where the seats are, so it
+              // is dragged against its device and stays tied to it.
+              if (coverage.symbolId && coverage.mic && coverage.shape === "box") {
+                setDragging({ kind: "coverage-offset", coverageId: coverage.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...(coverage.offsetM ?? { x: 0, y: 0 }) } });
+                return;
+              }
               if (coverage.symbolId) return;
               setDragging({ kind: "coverage", coverageId: coverage.id, startClient: { x: e.clientX, y: e.clientY }, start: { ...coverage.positionMm } });
             }}

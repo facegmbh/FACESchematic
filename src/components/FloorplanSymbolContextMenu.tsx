@@ -1,7 +1,8 @@
 import { useSchematicStore } from "../store";
+import { micCoverageSpecFor } from "../micCoverageData";
 import { useContextMenuPosition } from "../hooks/useContextMenuPosition";
 import { useDismissMenu } from "../hooks/useDismissMenu";
-import { clampToSheet, defaultCoverageForDevice } from "../floorplan";
+import { clampToSheet, defaultCoverageForDevice, nextMicCoverage } from "../floorplan";
 import { planningRadiusM } from "../wifiCoverage";
 import { getTemplateById } from "../templateApi";
 import { DEFAULT_HEATMAP } from "../types";
@@ -40,6 +41,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
   const removeFloorplanSymbol = useSchematicStore((s) => s.removeFloorplanSymbol);
   const addFloorplanSymbol = useSchematicStore((s) => s.addFloorplanSymbol);
   const addFloorplanCoverage = useSchematicStore((s) => s.addFloorplanCoverage);
+  const addToast = useSchematicStore((s) => s.addToast);
   const nodes = useSchematicStore((s) => s.nodes);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
 
@@ -120,11 +122,20 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
             const dev = sym.deviceNodeId ? nodes.find((n) => n.id === sym.deviceNodeId) : undefined;
             const devData = dev?.data as DeviceData | undefined;
             const tpl = devData?.templateId ? getTemplateById(devData.templateId, customTemplates) : undefined;
+            // A microphone's further areas are its own kind, and it carries only so many.
+            const micSpec = micCoverageSpecFor(tpl ?? devData);
+            const micNext = micSpec
+              ? nextMicCoverage((page.coverages ?? []).filter((c) => c.symbolId === sym.id), micSpec)
+              : undefined;
+            if (micNext === null) {
+              addToast(t("{name} carries no more than {n} coverage areas.", { name: sym.label || tpl?.label || "", n: micSpec!.maxAreas ?? 1 }), "info");
+              continue;
+            }
             addFloorplanCoverage(page.id, {
-              ...defaultCoverageForDevice(devData?.deviceType, {
+              ...(micNext ?? defaultCoverageForDevice(devData?.deviceType, {
                 rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
                 mount: tpl?.wifi?.mount,
-              }),
+              })),
               symbolId: sym.id,
               groupId: sym.groupId,
               positionMm: { ...sym.positionMm },

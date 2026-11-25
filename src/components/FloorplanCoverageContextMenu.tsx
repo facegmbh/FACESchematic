@@ -51,6 +51,7 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
     sector: t("Sector — detector or lens wedge"),
     circle: t("Circle — all-round, ceiling mounted"),
     rect: t("Corridor — rectangular field"),
+    box: t("Rectangle — around the device"),
   };
 
   /** Switching shape has to bring the field that shape needs, or a wedge turned into a
@@ -59,6 +60,8 @@ export default function FloorplanCoverageContextMenu({ page, x, y, coverageId, o
     shape,
     apertureDeg: shape === "sector" ? coverageApertureDeg(coverage) : coverage.apertureDeg,
     widthM: shape === "rect" ? (coverage.widthM ?? 2) : coverage.widthM,
+    // A microphone's figures only mean something on the rectangle they were stated for.
+    mic: shape === "box" ? coverage.mic : undefined,
   });
 
   return (

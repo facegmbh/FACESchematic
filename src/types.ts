@@ -668,6 +668,8 @@ export interface DeviceTemplate {
   ampLoad?: AmplifierLoadSpec;
   /** What an access point radiates, per band. Feeds the Wi-Fi heatmap on floorplans. */
   wifi?: WifiRadioSpec;
+  /** What a ceiling array microphone covers. A coverage area on a floorplan starts from it. */
+  micCoverage?: MicCoverageSpec;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -1238,10 +1240,54 @@ export interface FloorplanMask {
 
 /** How a coverage area is shaped. "sector" is the wedge a PIR or a lens throws, "circle"
  *  the all-round reach of a ceiling detector or a siren, "rect" the corridor a curtain
- *  lens or a rectangular sensor field covers. */
-export type CoverageShape = "sector" | "circle" | "rect";
+ *  lens or a rectangular sensor field covers, "box" a rectangle around the device — the
+ *  floor a ceiling microphone listens to. */
+export type CoverageShape = "sector" | "circle" | "rect" | "box";
 
-export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect"];
+export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect", "box"];
+
+/**
+ * What a ceiling array microphone covers, as its maker states it. A template carries this,
+ * and an area drawn for the device starts from it.
+ *
+ * Sizes are metres on the floor. `maxTalkerDistanceM` is the straight line from the
+ * microphone to the talker's mouth, so how far out a talker may sit depends on how high
+ * the microphone hangs.
+ */
+export interface MicCoverageSpec {
+  /** The area the microphone covers out of the box. */
+  areaM: { w: number; d: number };
+  /** Smallest side the area can be set to. Undefined together with `fixed` = not adjustable. */
+  minSideM?: number;
+  /** The size is what it is — the device offers no way to change it. */
+  fixed?: boolean;
+  /** How many areas one microphone carries. Undefined counts as 1. */
+  maxAreas?: number;
+  /** Size of an area that is steered at one seat rather than following talkers. */
+  dedicatedAreaM?: { w: number; d: number };
+  /** Farthest a talker should be from the microphone, mouth to array, in metres. */
+  maxTalkerDistanceM?: number;
+  /** Highest recommended mounting height in metres. */
+  maxMountHeightM?: number;
+}
+
+/** A microphone's side of a coverage area: where it hangs and what it was built for. The
+ *  maker's figures are copied in when the area is made, so the plan and the export need no
+ *  template to draw it and a custom device can be given its own. */
+export interface CoverageMic {
+  /** Height of the microphone above the floor, in metres. */
+  mountHeightM: number;
+  /** Height of a talker's mouth above the floor. Undefined counts as seated, 1.2 m. */
+  talkerHeightM?: number;
+  maxTalkerDistanceM?: number;
+  maxMountHeightM?: number;
+  minSideM?: number;
+  maxSideM?: number;
+  fixed?: boolean;
+  maxAreas?: number;
+  /** Steered at one seat: a small area that does not follow talkers. */
+  dedicated?: boolean;
+}
 
 // ── Wi-Fi coverage ───────────────────────────────────────────────────
 
@@ -1498,6 +1544,13 @@ export interface FloorplanCoverage {
    *  anchored area this is an offset on top of the symbol's own rotation, so a lens
    *  mounted off-axis can still be drawn true. */
   rotationDeg?: number;
+  /** Where the area's middle lies from its anchor, in metres on site, turned with the
+   *  area. A ceiling microphone covers seats that are not under it; this is how far off.
+   *  Read by "box" only. */
+  offsetM?: { x: number; y: number };
+  /** A ceiling microphone's area: adds the mounting height and the reach that follows
+   *  from it. Only on "box". */
+  mic?: CoverageMic;
   /** Fill color, #rrggbb. Undefined = the group's color, else the default coverage blue. */
   color?: string;
   /** Fill opacity, 0–1. Overlapping areas have to stay readable, so this is well below 1

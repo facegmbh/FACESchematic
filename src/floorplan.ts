@@ -16,8 +16,10 @@ import { getLocale, type Locale } from "./i18n";
 import { defaultSymbolLibraryIdFor } from "./symbolLibrary";
 import type { FloorplanSymbolShape,
   CompanyProfile,
+  CoverageMic,
   CoverageOptics,
   CoverageShape,
+  MicCoverageSpec,
   DoriLevel,
   FloorplanCoverage,
   FloorplanKind,
@@ -297,10 +299,13 @@ export function nextSymbolLabel(existingLabels: string[], labelPrefix?: string):
  * and for a free-standing area, which has no device to read from.
  */
 export function coverageLabelOf(
-  coverage: Pick<FloorplanCoverage, "label" | "ownLabel" | "symbolId">,
+  coverage: Pick<FloorplanCoverage, "label" | "ownLabel" | "symbolId" | "mic">,
   symbols: Pick<FloorplanSymbol, "id" | "label">[],
 ): string {
   if (coverage.ownLabel) return coverage.label ?? "";
+  // A microphone's areas lie around the device that already carries the number; printing
+  // it again on each of up to eight areas only clutters the room.
+  if (coverage.mic) return "";
   const symbol = coverage.symbolId ? symbols.find((s) => s.id === coverage.symbolId) : undefined;
   // A dangling symbol id (the device was deleted) falls back to whatever text is there.
   return symbol ? symbol.label : coverage.label ?? "";
@@ -1364,6 +1369,21 @@ export function effectiveRangeM(
   return clampRange(coverageDoriRangeM(coverage.optics, coverageApertureDeg(coverage)));
 }
 
+/** A box's width in metres: its own, else as wide as it is long — a square. */
+export function coverageBoxWidthM(coverage: Pick<FloorplanCoverage, "rangeM" | "widthM">): number {
+  const w = coverage.widthM;
+  return Number.isFinite(w) && (w as number) > 0 ? clampRange(w as number) : clampRange(coverage.rangeM);
+}
+
+/** A box's offset from its anchor in paper mm, unrotated. Zero for every other shape. */
+export function coverageOffsetMm(coverage: Pick<FloorplanCoverage, "shape" | "offsetM">, scaleDenominator: number): Vec2 {
+  if (coverage.shape !== "box" || !coverage.offsetM) return { x: 0, y: 0 };
+  return {
+    x: realMmToPaperMm(coverage.offsetM.x * 1000, scaleDenominator),
+    y: realMmToPaperMm(coverage.offsetM.y * 1000, scaleDenominator),
+  };
+}
+
 /**
  * The outline of a coverage area in paper mm, relative to its anchor point and unrotated
  * (0° faces +x, to the right of the sheet). One closed polygon serves both renderers:
@@ -1374,7 +1394,7 @@ export function effectiveRangeM(
  * device and reach away from it, a circle is centred on it.
  */
 export function coverageOutlineMm(
-  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics">,
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics" | "offsetM">,
   scaleDenominator: number,
 ): Vec2[] {
   const r = realMmToPaperMm(effectiveRangeM(coverage) * 1000, scaleDenominator);
@@ -1402,6 +1422,17 @@ export function coverageOutlineMm(
         { x: r, y: -halfW },
         { x: r, y: halfW },
         { x: 0, y: halfW },
+      ];
+    }
+    case "box": {
+      // Around the device, not in front of it — and off to one side where the seats are.
+      const halfW = realMmToPaperMm(coverageBoxWidthM(coverage) * 1000, scaleDenominator) / 2;
+      const o = coverageOffsetMm(coverage, scaleDenominator);
+      return [
+        { x: o.x - r / 2, y: o.y - halfW },
+        { x: o.x + r / 2, y: o.y - halfW },
+        { x: o.x + r / 2, y: o.y + halfW },
+        { x: o.x - r / 2, y: o.y + halfW },
       ];
     }
     case "sector":
@@ -1484,7 +1515,7 @@ export function isCoverageVisible(
 /** How an area reads in a legend or a list: "12.0 m / 90°", "R 8.0 m", "15.0 × 2.0 m",
  *  and for a camera the lens it follows from: "4 MP · 90° · 10.7 m (recognise)". */
 export function formatCoverageSpec(
-  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics">,
+  coverage: Pick<FloorplanCoverage, "shape" | "rangeM" | "apertureDeg" | "widthM" | "optics" | "mic">,
 ): string {
   const range = effectiveRangeM(coverage).toFixed(1);
   if (coverage.optics) {
@@ -1496,6 +1527,10 @@ export function formatCoverageSpec(
       return `R ${range} m`;
     case "rect":
       return `${range} × ${Math.max(0.1, coverage.widthM ?? DEFAULT_COVERAGE_WIDTH_M).toFixed(1)} m`;
+    case "box": {
+      const size = `${range} × ${coverageBoxWidthM(coverage).toFixed(1)} m`;
+      return coverage.mic ? `${size} · H ${coverage.mic.mountHeightM.toFixed(1)} m` : size;
+    }
     case "sector":
     default:
       return `${range} m / ${Math.round(coverageApertureDeg(coverage))}°`;
@@ -1537,8 +1572,10 @@ export function isAccessPointDeviceType(deviceType?: string): boolean {
  */
 export function defaultCoverageForDevice(
   deviceType?: string,
-  opts?: { rangeM?: number; mount?: "ceiling" | "wall" },
+  opts?: { rangeM?: number; mount?: "ceiling" | "wall"; mic?: MicCoverageSpec },
 ): Omit<FloorplanCoverage, "id"> {
+  // A ceiling microphone is judged by the floor under it, whatever its device type says.
+  if (opts?.mic) return micCoverageFor(opts.mic);
   if (isAccessPointDeviceType(deviceType)) {
     // A wall or in-wall unit throws into the room; only a ceiling unit is all round.
     if (opts?.mount === "wall") {
@@ -1584,7 +1621,12 @@ export function coverageLabelAnchorMm(
   const turn = coverageRotationDeg(coverage, page.symbols);
   const r = realMmToPaperMm(effectiveRangeM(coverage) * 1000, page.scaleDenominator) + 2;
   // A circle has no direction to write along, so its caption drops below the ring.
-  const out = rotateVec(coverage.shape === "circle" ? { x: 0, y: r } : { x: r, y: 0 }, turn);
+  const o = coverageOffsetMm(coverage, page.scaleDenominator);
+  const local = coverage.shape === "circle"
+    ? { x: 0, y: r }
+    // A box reaches half its length either way from its middle.
+    : coverage.shape === "box" ? { x: o.x + (r - 2) / 2 + 2, y: o.y } : { x: r, y: 0 };
+  const out = rotateVec(local, turn);
   return { x: anchor.x + out.x, y: anchor.y + out.y };
 }
 
@@ -1596,9 +1638,183 @@ export function defaultCoverage(shape: CoverageShape = "sector"): Omit<Floorplan
     positionMm: { x: 0, y: 0 },
     rangeM: DEFAULT_COVERAGE_RANGE_M,
     apertureDeg: shape === "sector" ? DEFAULT_COVERAGE_APERTURE_DEG : undefined,
-    widthM: shape === "rect" ? DEFAULT_COVERAGE_WIDTH_M : undefined,
+    widthM: shape === "rect" ? DEFAULT_COVERAGE_WIDTH_M : shape === "box" ? DEFAULT_COVERAGE_RANGE_M : undefined,
     opacity: DEFAULT_COVERAGE_OPACITY,
   };
+}
+
+// ── Ceiling microphones ──────────────────────────────────────────────
+
+/** Where a ceiling microphone hangs when nobody has said: an ordinary suspended ceiling. */
+export const DEFAULT_MIC_MOUNT_HEIGHT_M = 2.7;
+/** A seated talker's mouth above the floor. */
+export const DEFAULT_TALKER_HEIGHT_M = 1.2;
+export const MIC_MOUNT_HEIGHT_RANGE_M = { min: 1.8, max: 12 };
+
+/** The area a microphone covers out of the box: the maker's size, centred under it. */
+export function micCoverageFor(spec: MicCoverageSpec, opts?: { dedicated?: boolean; mountHeightM?: number }): Omit<FloorplanCoverage, "id"> {
+  const dedicated = Boolean(opts?.dedicated && spec.dedicatedAreaM);
+  const area = dedicated ? spec.dedicatedAreaM! : spec.areaM;
+  const mic: CoverageMic = {
+    mountHeightM: opts?.mountHeightM ?? DEFAULT_MIC_MOUNT_HEIGHT_M,
+    maxTalkerDistanceM: spec.maxTalkerDistanceM,
+    maxMountHeightM: spec.maxMountHeightM,
+    minSideM: spec.minSideM,
+    maxSideM: spec.fixed || spec.minSideM !== undefined ? Math.max(spec.areaM.w, spec.areaM.d) : undefined,
+    fixed: spec.fixed || dedicated || undefined,
+    maxAreas: spec.maxAreas,
+    dedicated: dedicated || undefined,
+  };
+  return {
+    shape: "box",
+    positionMm: { x: 0, y: 0 },
+    rangeM: area.d,
+    widthM: area.w,
+    opacity: DEFAULT_COVERAGE_OPACITY,
+    mic,
+  };
+}
+
+/**
+ * How far out a talker may sit, measured along the floor from the point under the
+ * microphone. The maker states the straight line from mouth to array; the height between
+ * the two eats part of it, so a higher ceiling leaves a smaller circle.
+ *
+ * Null when the maker states no distance. Zero when the microphone hangs so high that
+ * even the seat right under it is too far.
+ */
+export function micReachM(mic: Pick<CoverageMic, "mountHeightM" | "talkerHeightM" | "maxTalkerDistanceM">): number | null {
+  const d = mic.maxTalkerDistanceM;
+  if (!d || d <= 0) return null;
+  const rise = Math.max(0, mic.mountHeightM - (mic.talkerHeightM ?? DEFAULT_TALKER_HEIGHT_M));
+  return rise >= d ? 0 : Math.sqrt(d * d - rise * rise);
+}
+
+/** The area of a simple polygon, whichever way it winds. */
+export function polygonArea(points: readonly Vec2[]): number {
+  let twice = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    twice += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(twice) / 2;
+}
+
+/** `subject` cut down to what lies inside the convex polygon `clip` (Sutherland–Hodgman). */
+export function clipToConvex(subject: readonly Vec2[], clip: readonly Vec2[]): Vec2[] {
+  if (clip.length < 3) return [];
+  // Which side is inside depends on the way the clip polygon winds.
+  let twice = 0;
+  for (let i = 0; i < clip.length; i++) {
+    const a = clip[i], b = clip[(i + 1) % clip.length];
+    twice += a.x * b.y - b.x * a.y;
+  }
+  const sign = twice >= 0 ? 1 : -1;
+  let out = [...subject];
+  for (let i = 0; i < clip.length && out.length > 0; i++) {
+    const a = clip[i], b = clip[(i + 1) % clip.length];
+    const side = (p: Vec2) => sign * ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+    const input = out;
+    out = [];
+    for (let k = 0; k < input.length; k++) {
+      const p = input[k], q = input[(k + 1) % input.length];
+      const sp = side(p), sq = side(q);
+      if (sp >= 0) out.push(p);
+      if ((sp >= 0) !== (sq >= 0)) {
+        const f = sp / (sp - sq);
+        out.push({ x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f });
+      }
+    }
+  }
+  return out;
+}
+
+/** A side length the device can actually be set to. */
+export function clampMicSideM(mic: Pick<CoverageMic, "minSideM" | "maxSideM"> | undefined, sideM: number): number {
+  const lo = Math.max(COVERAGE_MIN_RANGE_M, mic?.minSideM ?? COVERAGE_MIN_RANGE_M);
+  const hi = Math.min(COVERAGE_MAX_RANGE_M, mic?.maxSideM ?? COVERAGE_MAX_RANGE_M);
+  return Math.min(hi, Math.max(lo, sideM));
+}
+
+/** What a microphone's area looks like against its reach, on the sheet in paper mm. */
+export interface MicReachOnSheet {
+  /** The point under the microphone. */
+  center: Vec2;
+  /** How far out a talker may sit, on paper. */
+  radiusMm: number;
+  /** The reach as a closed ring of points. Empty when the reach is zero. */
+  ring: Vec2[];
+  /** The part of the area a talker can be heard in. Empty when none of it is. */
+  within: Vec2[];
+  /** Share of the area inside the reach, 0–1. */
+  share: number;
+}
+
+/**
+ * A microphone area set against the reach its mounting height leaves. Null for an area
+ * that is not a microphone's, or whose maker states no talker distance.
+ */
+export function micReachOnSheet(
+  coverage: FloorplanCoverage,
+  page: Pick<FloorplanPage, "symbols" | "scaleDenominator">,
+): MicReachOnSheet | null {
+  if (coverage.shape !== "box" || !coverage.mic) return null;
+  const reachM = micReachM(coverage.mic);
+  if (reachM === null) return null;
+  const center = coverageAnchorMm(coverage, page.symbols);
+  const radiusMm = realMmToPaperMm(reachM * 1000, page.scaleDenominator);
+  const area = coveragePointsOnSheet(coverage, page);
+  const ring: Vec2[] = [];
+  if (radiusMm > 0) {
+    const steps = Math.ceil(360 / COVERAGE_ARC_STEP_DEG);
+    for (let i = 0; i < steps; i++) {
+      const rad = (i * 2 * Math.PI) / steps;
+      ring.push({ x: center.x + radiusMm * Math.cos(rad), y: center.y + radiusMm * Math.sin(rad) });
+    }
+  }
+  const within = ring.length > 0 ? clipToConvex(ring, area) : [];
+  const whole = polygonArea(area);
+  const share = whole > 0 && within.length >= 3 ? Math.min(1, polygonArea(within) / whole) : 0;
+  return { center, radiusMm, ring, within: within.length >= 3 ? within : [], share };
+}
+
+/** What is wrong with a microphone's area, for the panel to say in words. */
+export type MicCoverageIssue = "too-high" | "out-of-reach" | "partly-out-of-reach" | "too-many-areas";
+
+export function micCoverageIssues(
+  coverage: FloorplanCoverage,
+  page: Pick<FloorplanPage, "symbols" | "scaleDenominator" | "coverages">,
+): MicCoverageIssue[] {
+  const mic = coverage.mic;
+  if (!mic) return [];
+  const issues: MicCoverageIssue[] = [];
+  if (mic.maxMountHeightM && mic.mountHeightM > mic.maxMountHeightM + 1e-9) issues.push("too-high");
+  const reach = micReachOnSheet(coverage, page);
+  // A ring of straight pieces falls a hair short of the circle; that is not a finding.
+  if (reach) {
+    if (reach.share <= 0) issues.push("out-of-reach");
+    else if (reach.share < 0.995) issues.push("partly-out-of-reach");
+  }
+  if (coverage.symbolId && mic.maxAreas) {
+    const onDevice = (page.coverages ?? []).filter((c) => c.symbolId === coverage.symbolId && c.mic).length;
+    if (onDevice > mic.maxAreas) issues.push("too-many-areas");
+  }
+  return issues;
+}
+
+/** One more area for a microphone that already has some: steered at a seat if the device
+ *  has such areas, and set beside the others so it does not land on top of them. Null
+ *  when the device carries no more. */
+export function nextMicCoverage(
+  existing: readonly FloorplanCoverage[],
+  spec: MicCoverageSpec,
+): Omit<FloorplanCoverage, "id"> | null {
+  const mics = existing.filter((c) => c.mic);
+  if (mics.length === 0) return micCoverageFor(spec);
+  if (mics.length >= (spec.maxAreas ?? 1)) return null;
+  const next = micCoverageFor(spec, { dedicated: true, mountHeightM: mics[0].mic!.mountHeightM });
+  // Side by side along the device's own axis, a step apart per area already there.
+  return { ...next, mic: { ...next.mic!, talkerHeightM: mics[0].mic!.talkerHeightM }, offsetM: { x: (mics.length - 1) * (next.rangeM + 0.5), y: 0 } };
 }
 
 // ── What is drawn but not yet wired ─────────────────────────────────

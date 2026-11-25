@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { micCoverageSpecFor } from "../micCoverageData";
 import { useSchematicStore, loadSpecLookup } from "../store";
-import { COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg,
+import { clampMicSideM, coverageBoxWidthM, COVERAGE_ASPECT_PRESETS, COVERAGE_MAX_RANGE_M, COVERAGE_MIN_RANGE_M, COVERAGE_MP_PRESETS, DEFAULT_COVERAGE_ASPECT_RATIO, DEFAULT_COVERAGE_OPACITY, coverageApertureDeg,
   coverageLabelOf, coverageColor, coverageOffersOptics, coveragePixelDensityAt, defaultCameraOptics, defaultCoverageForDevice, effectiveRangeM, formatCoverageSpec, isOwnLegendHeading, legendNotesTitleOf, legendShowsCompany, legendTitleOf, legendLinesTitleOf, DEFAULT_SYMBOL_OUTLINE, DEFAULT_SYMBOL_OUTLINE_RATIO, FLOORPLAN_GROUP_COLORS, FLOORPLAN_SYMBOL_SHAPE_LABELS, LABEL_POSITIONS, drawingAreaMm, effectiveLabelTemplate, formatPlanDate, labelPlacementFor, nextDrawingFieldId, nextRevisionIndex, type LabelPosition,
   defaultSymbolShapeFor,
   footprintSidesMm,
@@ -17,6 +18,7 @@ import SymbolLibraryPicker from "./SymbolLibraryPicker";
 import FloorplanProjectionPanel from "./FloorplanProjectionPanel";
 import FloorplanDisplayPanel from "./FloorplanDisplayPanel";
 import { useFloorplanPanelTab } from "../floorplanPanelTab";
+import MicCoverageRows from "./MicCoverageRows";
 import type { CoverageShape, DoriLevel, DeviceData, WallMaterial, FloorplanDrawingBlock, FloorplanPage, FloorplanRevision, FloorplanSymbol, FloorplanSymbolGroup, SpeakerLineMode } from "../types";
 import { importLegendImage, importSymbolImage } from "../floorplanUnderlay";
 import { getTemplateById } from "../templateApi";
@@ -456,6 +458,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                             ...defaultCoverageForDevice(devData?.deviceType, {
                               rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
                               mount: tpl?.wifi?.mount,
+                              mic: micCoverageSpecFor(tpl ?? devData),
                             }),
                             symbolId: sym.id,
                             groupId: sym.groupId,
@@ -567,7 +570,10 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
           sector: t("Sector"),
           circle: t("Circle"),
           rect: t("Corridor"),
+          box: t("Rectangle"),
         };
+        const isMic = coverage.shape === "box" && Boolean(coverage.mic);
+        const sizeLocked = isMic && Boolean(coverage.mic?.fixed);
         return (
           <details className="border-b-2 border-sky-400/60 bg-sky-500/5" open>
             <summary className="px-2 pt-2 pb-1 font-semibold text-[var(--color-text-muted)] uppercase tracking-wider cursor-pointer select-none" style={{ fontSize: 9 }}>
@@ -603,7 +609,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 />
               </label>
 
-              <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
+              {!isMic && <label className="flex items-center gap-2 text-[var(--color-text-muted)]">
                 <span className="shrink-0 w-12">{t("Shape")}</span>
                 <select
                   className="flex-1 min-w-0 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
@@ -615,15 +621,16 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                       shape,
                       apertureDeg: shape === "sector" ? coverageApertureDeg(coverage) : coverage.apertureDeg,
                       widthM: shape === "rect" ? (coverage.widthM ?? 2) : coverage.widthM,
+                      mic: shape === "box" ? coverage.mic : undefined,
                     });
                   }}
                 >
                   {COVERAGE_SHAPES.map((sh) => <option key={sh} value={sh}>{shapeLabels[sh]}</option>)}
                 </select>
-              </label>
+              </label>}
 
               {/* A camera is set by its lens; everything else by a measured reach. */}
-              {offersOptics && (
+              {offersOptics && !isMic && (
                 <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]" title={t("A camera has no range of its own — it has pixels spread over an angle. Switch this on and the reach is computed from the megapixels, the opening angle and the DORI level you need.")}>
                   <input
                     type="checkbox"
@@ -715,17 +722,19 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 );
               })() : (
                 <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Reach on site, in metres — the number off the datasheet. It is converted through the drawing scale, so it stays true when the plan is re-scaled.")}>
-                  <span className="shrink-0 w-12">{t("Range")}</span>
+                  <span className="shrink-0 w-12">{coverage.shape === "box" ? t("Length") : t("Range")}</span>
                   <input
                     type="number"
                     step={0.5}
                     min={COVERAGE_MIN_RANGE_M}
                     max={COVERAGE_MAX_RANGE_M}
-                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
+                    disabled={sizeLocked}
+                    data-testid="coverage-length"
+                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 disabled:opacity-60"
                     value={coverage.rangeM}
                     onChange={(e) => {
                       const v = Number(e.target.value);
-                      if (Number.isFinite(v)) patch({ rangeM: Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, v)) });
+                      if (Number.isFinite(v)) patch({ rangeM: isMic ? clampMicSideM(coverage.mic, v) : Math.min(COVERAGE_MAX_RANGE_M, Math.max(COVERAGE_MIN_RANGE_M, v)) });
                     }}
                   />
                   <span style={{ fontSize: 10 }}>m</span>
@@ -748,18 +757,20 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                 </label>
               )}
 
-              {coverage.shape === "rect" && (
-                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("How wide the corridor is, in metres on site.")}>
+              {(coverage.shape === "rect" || coverage.shape === "box") && (
+                <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={coverage.shape === "box" ? t("How wide the area is, in metres on site.") : t("How wide the corridor is, in metres on site.")}>
                   <span className="shrink-0 w-12">{t("Width")}</span>
                   <input
                     type="number"
                     step={0.5}
                     min={0.1}
-                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400"
-                    value={coverage.widthM ?? 2}
+                    disabled={sizeLocked}
+                    data-testid="coverage-width"
+                    className="w-16 border border-[var(--color-border)] rounded px-1 py-0.5 bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-emerald-400 disabled:opacity-60"
+                    value={coverage.shape === "box" ? coverageBoxWidthM(coverage) : coverage.widthM ?? 2}
                     onChange={(e) => {
                       const v = Number(e.target.value);
-                      if (Number.isFinite(v) && v > 0) patch({ widthM: v });
+                      if (Number.isFinite(v) && v > 0) patch({ widthM: isMic ? clampMicSideM(coverage.mic, v) : v });
                     }}
                   />
                   <span style={{ fontSize: 10 }}>m</span>
@@ -781,6 +792,8 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                   <span style={{ fontSize: 10 }}>°</span>
                 </label>
               )}
+
+              {isMic && <MicCoverageRows page={page} coverage={coverage} patch={patch} />}
 
               <label className="flex items-center gap-2 text-[var(--color-text-muted)]" title={t("Areas overlap constantly — two detectors on one room is normal. A light fill keeps the overlap readable.")}>
                 <span className="shrink-0 w-12">{t("Opacity")}</span>

@@ -28,6 +28,7 @@ import {
   coverageLabelAnchorMm,
   coveragePointsOnSheet,
   isCoverageVisible,
+  micReachOnSheet,
   DEFAULT_COVERAGE_OPACITY,
   layoutDrawingBlock,
   layoutNote,
@@ -779,9 +780,22 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       doc.setFillColor(cr2, cg2, cb2);
       doc.setDrawColor(cr2, cg2, cb2);
       doc.setLineWidth(0.25);
-      if (alpha < 1) setPdfAlpha(doc, alpha);
+      // A microphone's area against its reach, as on screen: the part a talker is heard
+      // in full, the rest pale, the reach itself a dashed ring.
+      const reach = micReachOnSheet(coverage, page);
+      const deltasOf = (pts: { x: number; y: number }[]) => pts.slice(1).map((pt, k): [number, number] => [pt.x - pts[k].x, pt.y - pts[k].y]);
+      setPdfAlpha(doc, reach ? alpha * 0.35 : alpha);
       doc.lines(deltas, points[0].x, points[0].y, [1, 1], "F", true);
-      if (alpha < 1) setPdfAlpha(doc, 1);
+      if (reach && reach.within.length >= 3) {
+        setPdfAlpha(doc, alpha);
+        doc.lines(deltasOf(reach.within), reach.within[0].x, reach.within[0].y, [1, 1], "F", true);
+      }
+      setPdfAlpha(doc, 1);
+      if (reach && reach.ring.length >= 3) {
+        doc.setLineDashPattern([1.2, 0.9], 0);
+        doc.lines(deltasOf(reach.ring), reach.ring[0].x, reach.ring[0].y, [1, 1], "S", true);
+        doc.setLineDashPattern([], 0);
+      }
       // The boundary is the line being documented — where the detector stops — so it is
       // drawn at full strength rather than through the fill's alpha.
       if (outline) doc.lines(deltas, points[0].x, points[0].y, [1, 1], "S", true);

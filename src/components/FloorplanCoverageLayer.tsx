@@ -10,6 +10,7 @@ import {
   effectiveRangeM,
   formatCoverageSpec,
   isCoverageVisible,
+  micReachOnSheet,
   DEFAULT_COVERAGE_OPACITY,
   realMmToPaperMm,
   type Vec2,
@@ -90,20 +91,24 @@ export default function FloorplanCoverageLayer({
         // Read from the device, not copied at creation — see coverageLabelOf.
         const labelText = coverageLabelOf(coverage, page.symbols);
         const grabbable = interactive && !coverage.locked;
+        // A microphone's area against its reach: the part a talker is heard in is drawn
+        // full, the rest pale, with the reach as a dashed ring around the device.
+        const reach = micReachOnSheet(coverage, page);
+        const movable = !coverage.symbolId || Boolean(coverage.mic);
 
         return (
           <g key={coverage.id}>
             <path
               d={coveragePathD(points, mmToPx)}
               fill={fill}
-              fillOpacity={opacity}
+              fillOpacity={reach ? opacity * 0.35 : opacity}
               stroke={isSel ? "#3b82f6" : outline ? fill : "none"}
               strokeOpacity={isSel ? 1 : 0.85}
               strokeWidth={isSel ? 1.5 : outline ? 1 : 0}
               strokeDasharray={isSel ? "4 3" : undefined}
               style={{
                 pointerEvents: interactive ? "auto" : "none",
-                cursor: grabbable ? (coverage.symbolId ? "pointer" : "move") : "default",
+                cursor: grabbable ? (movable ? "move" : "pointer") : "default",
               }}
               data-coverage-id={coverage.id}
               onMouseDown={(e) => {
@@ -123,6 +128,15 @@ export default function FloorplanCoverageLayer({
               <title>{[labelText, formatCoverageSpec(coverage)].filter(Boolean).join(" · ")}</title>
             </path>
 
+            {reach && reach.within.length >= 3 && (
+              <path d={coveragePathD(reach.within, mmToPx)} fill={fill} fillOpacity={opacity}
+                style={{ pointerEvents: "none" }} data-coverage-within={coverage.id} />
+            )}
+            {reach && reach.ring.length >= 3 && (
+              <path d={coveragePathD(reach.ring, mmToPx)} fill="none" stroke={fill} strokeWidth={1}
+                strokeDasharray="5 4" style={{ pointerEvents: "none" }} data-coverage-reach={coverage.id} />
+            )}
+
             {/* The caption sits outside the fill, upright — a plan is read from one side. */}
             {labelText && (
               <text
@@ -140,7 +154,7 @@ export default function FloorplanCoverageLayer({
 
             {/* Aim handle at the far edge: one drag sets both direction and reach, which is
                 how a detector is actually adjusted — point it, then dial in the range. */}
-            {(isSel || isAiming) && grabbable && (
+            {(isSel || isAiming) && grabbable && coverage.shape !== "box" && (
               <circle
                 cx={mmToPx(handle.x)}
                 cy={mmToPx(handle.y)}

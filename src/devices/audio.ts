@@ -1,4 +1,5 @@
 import { port, ports } from "./_helpers";
+import { SHURE_MIC_COVERAGE } from "../micCoverageData";
 import type { DeviceTemplate } from "../types";
 
 export const templates: DeviceTemplate[] = [
@@ -1406,5 +1407,47 @@ export const templates: DeviceTemplate[] = [
     depthMm: 12,
     weightKg: 0.2,
     ports: [port("XLR Out", "analog-audio", "output", "xlr-3")],
+  },
+  // ── Shure Microflex Advance ceiling arrays ───────────────────────
+  // What each one covers is Shure's own figure; a coverage area on a floorplan starts
+  // from it. Power draw is left out until it is read off a datasheet.
+  {
+    id: "c0a80101-01b5-4000-8000-000000000437",
+    deviceType: "wired-mic",
+    label: "Shure MXA920",
+    manufacturer: "Shure",
+    modelNumber: "MXA920",
+    referenceUrl: "https://www.shure.com/en-US/products/microphones/mxa920",
+    searchTerms: ["shure", "mxa920", "mxa925", "ceiling", "array", "deckenmikrofon", "microflex", "dante", "konferenz"],
+    planSymbol: { shape: "square", glyph: "M" },
+    installNotes: "Deckenmikrofon: Montagehöhe bis 3,7 m, Sprecherabstand bis 4,9 m (Shure)",
+    micCoverage: SHURE_MIC_COVERAGE.MXA920,
+    ports: [port("Dante / PoE", "dante", "bidirectional")],
+  },
+  {
+    id: "c0a80101-01b5-4000-8000-000000000438",
+    deviceType: "wired-mic",
+    label: "Shure MXA901",
+    manufacturer: "Shure",
+    modelNumber: "MXA901",
+    referenceUrl: "https://www.shure.com/en-US/products/microphones/mxa901",
+    searchTerms: ["shure", "mxa901", "ceiling", "array", "deckenmikrofon", "microflex", "dante", "konferenz", "rund"],
+    planSymbol: { shape: "circle", glyph: "M" },
+    installNotes: "Deckenmikrofon: Montagehöhe bis 3,7 m (Shure)",
+    micCoverage: SHURE_MIC_COVERAGE.MXA901,
+    ports: [port("Dante / PoE", "dante", "bidirectional")],
+  },
+  {
+    id: "c0a80101-01b5-4000-8000-000000000439",
+    deviceType: "wired-mic",
+    label: "Shure MXA902",
+    manufacturer: "Shure",
+    modelNumber: "MXA902",
+    referenceUrl: "https://www.shure.com/en-US/products/microphones/mxa902",
+    searchTerms: ["shure", "mxa902", "ceiling", "array", "deckenmikrofon", "lautsprecher", "microflex", "dante", "konferenz"],
+    planSymbol: { shape: "square", glyph: "M" },
+    // Microphone, loudspeaker and DSP in one.
+    micCoverage: SHURE_MIC_COVERAGE.MXA902,
+    ports: [port("Dante / PoE", "dante", "bidirectional")],
   },
 ];
