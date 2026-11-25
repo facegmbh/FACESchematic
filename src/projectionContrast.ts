@@ -114,3 +114,96 @@ export function displayContrast(input: {
     maxAmbientFor(input.nits, native, requiredContrast(input.level)) / perLux,
   );
 }
+
+/**
+ * The rating scale of Epson's Throw Distance Simulator ("Brightness & Contrast guide"),
+ * read from its code on 25.11.2026: five bands of contrast per kind of room, and the room
+ * light Epson assumes for each. A cinema wants far more contrast than a classroom, so the
+ * same picture rates differently by what the room is for.
+ *
+ * Epson works out its contrast as screen light ÷ room light + 1, without a device
+ * contrast; the estimate above comes out a little lower in a dark room and the same in a
+ * lit one.
+ */
+export const CONTRAST_APPLICATIONS = [
+  { id: "meeting", ambientLux: 140, bands: [20, 15, 8, 3] },
+  { id: "classroom", ambientLux: 210, bands: [15, 10, 7, 5] },
+  { id: "hall", ambientLux: 140, bands: [15, 7, 5, 3] },
+  { id: "living", ambientLux: 70, bands: [10, 5, 4, 3] },
+  { id: "theatre", ambientLux: 14, bands: [80, 50, 30, 20] },
+] as const;
+export type ContrastApplication = (typeof CONTRAST_APPLICATIONS)[number]["id"];
+export const DEFAULT_CONTRAST_APPLICATION: ContrastApplication = "meeting";
+
+/** The five bands, best first. */
+export const CONTRAST_BANDS = ["best", "recommended", "enough", "limit", "too-low"] as const;
+export type ContrastBand = (typeof CONTRAST_BANDS)[number];
+/** One colour per band, best first — the run of the viewing heatmap, so green means the
+ *  same thing all over the plan. */
+export const CONTRAST_BAND_COLORS = ["#16a34a", "#84cc16", "#eab308", "#ea580c", "#dc2626"] as const;
+/** Where the scale ends: Epson shows anything above as "greater than 200:1". */
+export const CONTRAST_SCALE_TOP = 200;
+
+export function contrastApplication(id: ContrastApplication | undefined) {
+  return CONTRAST_APPLICATIONS.find((a) => a.id === id) ?? CONTRAST_APPLICATIONS[0];
+}
+
+export interface ContrastRating {
+  band: ContrastBand;
+  /** Index of the band, 0 = best. */
+  index: number;
+  /** Where the contrast sits on a scale of five equal bands: 0 = top of "best",
+   *  1 = bottom of "too low". Within a band it runs linearly, as in Epson's guide. */
+  at: number;
+}
+
+/** Rate a contrast ratio for a kind of room. */
+export function rateContrast(ratio: number, application?: ContrastApplication): ContrastRating | null {
+  if (!(ratio >= 0)) return null;
+  const { bands } = contrastApplication(application);
+  const edges = [CONTRAST_SCALE_TOP, ...bands, 0];
+  if (ratio >= CONTRAST_SCALE_TOP) return { band: "best", index: 0, at: 0 };
+  for (let i = 0; i < CONTRAST_BANDS.length; i++) {
+    const max = edges[i], min = edges[i + 1];
+    if (ratio >= min) return { band: CONTRAST_BANDS[i], index: i, at: (i + (max - ratio) / (max - min)) / CONTRAST_BANDS.length };
+  }
+  return { band: "too-low", index: 4, at: 1 };
+}
+
+/** What a picture's contrast is worked out from — the fields of a projection that matter. */
+export interface ContrastPicture {
+  kind?: "display";
+  viewing?: { task: "bdm" | "adm" };
+  light?: {
+    ambientLux?: number;
+    nativeContrast?: number;
+    nits?: number;
+    reflectancePct?: number;
+    application?: ContrastApplication;
+  };
+}
+
+/**
+ * Contrast of one picture on the plan, or null while something it needs is missing: the
+ * room light, a display's luminance, a projector's light on its screen (`screenLux`).
+ */
+export function pictureContrast(picture: ContrastPicture, screenLux: number | undefined): ContrastResult | null {
+  const light = picture.light ?? {};
+  const level: ContrastLevel = picture.viewing?.task ?? "bdm";
+  if (light.ambientLux === undefined) return null;
+  if (picture.kind === "display") {
+    return light.nits
+      ? displayContrast({ nits: light.nits, ambientLux: light.ambientLux, level, nativeContrast: light.nativeContrast, reflectancePct: light.reflectancePct })
+      : null;
+  }
+  return screenLux
+    ? projectedContrast({ screenLux, ambientLux: light.ambientLux, level, nativeContrast: light.nativeContrast })
+    : null;
+}
+
+/** Contrast as it is printed: one decimal below 100, whole numbers above, capped like
+ *  Epson's guide. */
+export function formatContrast(ratio: number, decimal = "."): string {
+  if (ratio >= CONTRAST_SCALE_TOP) return `> ${CONTRAST_SCALE_TOP}:1`;
+  return `${(ratio >= 100 ? String(Math.round(ratio)) : ratio.toFixed(1)).replace(".", decimal)}:1`;
+}

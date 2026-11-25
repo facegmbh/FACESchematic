@@ -88,8 +88,29 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   await expect(page.getByTestId("contrast-result")).toContainText("15:1");
   // 1724 lx against 150 lx is 12:1 — short of it, and the panel says how dark it has to be.
   await expect(page.getByTestId("contrast-issue")).toContainText(String(Math.floor((screenLux * (1 - 15 / 300)) / 14)));
-  await page.getByTestId("contrast-ambient-preset").selectOption("50");
+  // The scale after Epson's guide: 12:1 is "enough" for a meeting room (8 to 15), and the
+  // legend on the plan carries the same rating.
+  await expect(page.getByTestId("contrast-scale")).toHaveAttribute("data-contrast-band", "enough");
+  await expect(page.locator(`[data-legend-contrast="${state.projectionId}"]`)).toContainText(`${ratio.toFixed(1)}:1`);
+  // A cinema is darker and asks for more: choosing it sets Epson's 14 lx, and the same
+  // projector is in the top band there.
+  // Leaving the field, as a click on the list would.
+  await page.getByTestId("contrast-ambient").blur();
+  await page.getByTestId("contrast-application").selectOption("theatre");
+  await expect(page.getByTestId("contrast-ambient")).toHaveValue("14");
+  await expect(page.getByTestId("contrast-scale")).toHaveAttribute("data-contrast-band", "best");
   await expect(page.getByTestId("contrast-issue")).toHaveCount(0);
+
+  // Execution plan: the cone and the contrast legend come off, the picture stays.
+  const cone = page.locator(`[data-projection-id="${state.projectionId}"] > polygon`);
+  await expect(cone).toHaveCount(1);
+  await page.getByTestId("plan-execution").check();
+  await expect(cone).toHaveCount(0);
+  await expect(page.locator('[data-legend-key="contrast"]')).toHaveCount(0);
+  await expect(surface).toBeAttached();
+  await page.getByTestId("plan-execution").uncheck();
+  await expect(cone).toHaveCount(1);
+  await expect(page.locator('[data-legend-key="contrast"]')).toHaveCount(1);
 
   // The slider ends are the lens's limits; the picture does not move.
   const slider = page.getByTestId("projection-distance-slider");

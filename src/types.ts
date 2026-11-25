@@ -1694,6 +1694,9 @@ export interface ProjectionLight {
   nits?: number;
   /** Display only: share of the room light its front throws back, percent. Undefined = 5. */
   reflectancePct?: number;
+  /** What the room is for — picks the rating scale (Epson's Brightness & Contrast guide).
+   *  Undefined = meeting room. */
+  application?: "meeting" | "classroom" | "hall" | "living" | "theatre";
 }
 
 /** Viewing task after AVIXA DISCAS: basic decision making (presentations, meetings) or
@@ -1796,6 +1799,11 @@ export interface FloorplanPage {
    *  stay in the project: this is the switch for the sheet that goes to the electrician,
    *  who is looking for mounting points, not for fields of view. */
   hideCoverages?: boolean;
+  /** Execution plan: everything that only serves planning comes off this plan — cones,
+   *  audience areas and their heatmaps, the Wi-Fi heatmap, coverage areas and the colour
+   *  keys that explain them. What gets built stays: symbols, pictures, walls. One plan,
+   *  two prints: the planning plan for the customer, the execution plan for the fitter. */
+  hidePlanning?: boolean;
   /** Walls with their build-up and thickness. They document the building and they are
    *  what the Wi-Fi heatmap attenuates through. */
   walls: FloorplanWall[];

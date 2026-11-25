@@ -33,7 +33,8 @@ interface Props {
  */
 export default function FloorplanHeatmapLayer({ page, mmToPx, aps, materialOverrides }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const cfg = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
+  // An execution plan carries no heatmap: it is planning, not something that gets built.
+  const cfg = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}), ...(page.hidePlanning ? { visible: false } : {}) };
 
   // The drawing area inside the sheet margins — the heatmap has no business over the
   // border, the legend or the title block.

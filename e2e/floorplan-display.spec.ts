@@ -87,6 +87,8 @@ test("floorplan: a display in its true size with its audience area", async ({ pa
   const reflected = (300 * 0.05) / Math.PI;
   await expect(page.getByTestId("contrast-result")).toContainText(`${((350 + reflected) / (0.35 + reflected)).toFixed(1)}:1`);
   await expect(page.getByTestId("contrast-issue")).toHaveCount(0);
+  // 69:1 is the top band of a meeting room on Epson's scale.
+  await expect(page.getByTestId("contrast-scale")).toHaveAttribute("data-contrast-band", "best");
 
   // The audience area lies in front of the display, parallel to it, with its heatmap.
   await page.getByTestId("projection-audience-add").click();

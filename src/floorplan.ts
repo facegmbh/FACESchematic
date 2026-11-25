@@ -37,6 +37,8 @@ import type { FloorplanSymbolShape,
 } from "./types";
 import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
 import { VIEWING_KEY_LIMIT_AT, viewingKeyColors, viewingLacksResolution } from "./projectionViewing";
+import { visibleProjections } from "./projection";
+import { CONTRAST_BAND_COLORS, contrastApplication, formatContrast, pictureContrast, rateContrast, type ContrastApplication, type ContrastBand } from "./projectionContrast";
 
 export const IN_TO_MM = 25.4;
 export const PAGE_MARGIN_MM = PAGE_MARGIN_IN * IN_TO_MM;
@@ -430,16 +432,24 @@ export const DEFAULT_RSSI_SCALE_TITLE = "SIGNALSTÄRKE";
 /** Does this plan print the Wi-Fi colour key? Explicit setting first, else a coverage
  *  plan with its heatmap switched on. */
 export function legendShowsRssiScale(
-  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap">,
+  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap" | "hidePlanning">,
 ): boolean {
+  if (page.hidePlanning) return false;
   if (page.legend.showRssiScale !== undefined) return page.legend.showRssiScale;
   return page.kind === "wifi" && Boolean(page.heatmap?.visible);
 }
 
+/** Coverage areas are off: switched off on their own, or with everything else that only
+ *  serves planning. */
+export function coveragesHidden(page: Pick<FloorplanPage, "hideCoverages" | "hidePlanning">): boolean {
+  return Boolean(page.hideCoverages || page.hidePlanning);
+}
+
 /** Does this plan show a heatmap of an audience area? Then its colours need explaining. */
 export function legendShowsViewingKey(
-  page: Pick<FloorplanPage, "projections" | "symbols" | "groups">,
+  page: Pick<FloorplanPage, "projections" | "symbols" | "groups" | "hidePlanning">,
 ): boolean {
+  if (page.hidePlanning) return false;
   return (page.projections ?? []).some((p) => {
     if (p.hidden || !p.audience || p.viewing?.heatmap === false || viewingLacksResolution(p)) return false;
     const symbol = page.symbols.find((s) => s.id === p.symbolId);
@@ -450,17 +460,22 @@ export function legendShowsViewingKey(
 
 /** A block of colour swatches in the legend: what a heatmap's colours mean. */
 export interface LegendColorKey {
-  id: "rssi" | "viewing";
+  id: "rssi" | "viewing" | "contrast";
   title: string;
   /** One swatch and caption per row. Empty for a key that is a gradient. */
   steps: { color: string; label: string }[];
   /** A continuous scale instead of steps: one bar of colours, captions under it at `at`
    *  (0 = left end, 1 = right end). */
   gradient?: { colors: string[]; labels: { at: number; text: string }[] };
+  /** A rating scale per picture: a caption, then a bar of bands with a mark where the
+   *  picture sits (0 = left end, 1 = right end). `ends` names the two ends of the bars,
+   *  once, under the last one. */
+  scales?: { bars: { id: string; caption: string; colors: string[]; markerAt: number }[]; ends: [string, string] };
 }
 
 /** Rows a colour key takes in the legend: one per step, or bar plus captions. */
 export function legendKeyRows(key: LegendColorKey): number {
+  if (key.scales) return key.scales.bars.length * 2 + 1;
   return key.gradient ? 2 : key.steps.length;
 }
 
@@ -472,10 +487,71 @@ const VIEWING_KEY_TEXT: Record<Locale, { title: string; good: string; limit: str
   en: { title: "VIEWING QUALITY (AVIXA)", good: "good", limit: "limit", outside: "outside" },
 };
 
+const CONTRAST_KEY_TEXT: Record<Locale, {
+  title: string;
+  bands: Record<ContrastBand, string>;
+  rooms: Record<ContrastApplication, string>;
+}> = {
+  de: {
+    title: "BILDKONTRAST IM RAUMLICHT",
+    bands: { best: "sehr gut", recommended: "empfohlen", enough: "ausreichend", limit: "Grenze", "too-low": "zu niedrig" },
+    rooms: { meeting: "Besprechungsraum", classroom: "Klassenraum", hall: "Saal", living: "Wohnraum", theatre: "Kino" },
+  },
+  en: {
+    title: "PICTURE CONTRAST IN ROOM LIGHT",
+    bands: { best: "best", recommended: "recommended", enough: "enough", limit: "limit", "too-low": "too low" },
+    rooms: { meeting: "meeting room", classroom: "classroom", hall: "hall", living: "living room", theatre: "cinema" },
+  },
+};
+
+/** The words of the contrast scale, for the panel and the legend alike. */
+export function contrastKeyText(locale: Locale = getLocale()) {
+  return CONTRAST_KEY_TEXT[locale] ?? CONTRAST_KEY_TEXT.en;
+}
+
+/** One picture's contrast rating as the legend prints it. */
+export interface PictureContrastRow {
+  projectionId: string;
+  /** The projector's or display's label on the plan. */
+  label: string;
+  ratio: number;
+  band: ContrastBand;
+  markerAt: number;
+  application: ContrastApplication;
+  ambientLux: number;
+}
+
+/** Every visible picture whose contrast can be worked out — room light stated, light
+ *  output known. None on an execution plan. */
+export function pictureContrastRows(
+  page: Pick<FloorplanPage, "projections" | "symbols" | "groups" | "scaleDenominator" | "hidePlanning">,
+): PictureContrastRow[] {
+  if (page.hidePlanning) return [];
+  const rows: PictureContrastRow[] = [];
+  // Only pictures whose room light is stated are worked out at all.
+  const stated = (page.projections ?? []).filter((p) => p.light?.ambientLux !== undefined);
+  if (stated.length === 0) return [];
+  for (const { projection, geometry } of visibleProjections({ ...page, projections: stated })) {
+    const result = pictureContrast(projection, geometry.result.lux);
+    const rating = result && rateContrast(result.ratio, projection.light?.application);
+    if (!result || !rating) continue;
+    rows.push({
+      projectionId: projection.id,
+      label: page.symbols.find((s) => s.id === projection.symbolId)?.label ?? "",
+      ratio: result.ratio,
+      band: rating.band,
+      markerAt: rating.at,
+      application: contrastApplication(projection.light?.application).id,
+      ambientLux: projection.light?.ambientLux ?? 0,
+    });
+  }
+  return rows;
+}
+
 /** The colour keys this plan's legend carries, in the order they are printed. The screen,
  *  the PDF and the legend's height all read this one list. */
 export function legendColorKeys(
-  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap" | "projections" | "symbols" | "groups">,
+  page: Pick<FloorplanPage, "legend" | "kind" | "heatmap" | "projections" | "symbols" | "groups" | "scaleDenominator" | "hidePlanning">,
   locale: Locale = getLocale(),
 ): LegendColorKey[] {
   const keys: LegendColorKey[] = [];
@@ -491,6 +567,25 @@ export function legendColorKeys(
       gradient: {
         colors: viewingKeyColors(LEGEND_GRADIENT_COLORS),
         labels: [{ at: 0, text: text.good }, { at: VIEWING_KEY_LIMIT_AT, text: text.limit }, { at: 1, text: text.outside }],
+      },
+    });
+  }
+  const contrast = pictureContrastRows(page);
+  if (contrast.length > 0) {
+    const text = contrastKeyText(locale);
+    const decimal = locale === "de" ? "," : ".";
+    keys.push({
+      id: "contrast",
+      title: text.title,
+      steps: [],
+      scales: {
+        bars: contrast.map((c) => ({
+          id: c.projectionId,
+          caption: [c.label, formatContrast(c.ratio, decimal), text.bands[c.band], `${text.rooms[c.application]} ${Math.round(c.ambientLux)} lx`].filter(Boolean).join(" · "),
+          colors: [...CONTRAST_BAND_COLORS],
+          markerAt: c.markerAt,
+        })),
+        ends: [text.bands.best, text.bands["too-low"]],
       },
     });
   }

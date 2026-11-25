@@ -2,8 +2,13 @@ import { describe, it, expect } from "vitest";
 import {
   CONTRAST_LEVELS,
   contrastLevelReached,
+  CONTRAST_APPLICATIONS,
+  contrastApplication,
   displayContrast,
+  formatContrast,
+  pictureContrast,
   projectedContrast,
+  rateContrast,
   requiredContrast,
 } from "../projectionContrast";
 
@@ -101,5 +106,65 @@ describe("a display in a lit room", () => {
 
   it("claims nothing without the display's brightness", () => {
     expect(displayContrast({ nits: 0, ambientLux: 300, level: "bdm" })).toBeNull();
+  });
+});
+
+describe("the rating scale of Epson's Brightness & Contrast guide", () => {
+  it("carries Epson's rooms with their usual light and band limits", () => {
+    expect(CONTRAST_APPLICATIONS.map((a) => [a.id, a.ambientLux, [...a.bands]])).toEqual([
+      ["meeting", 140, [20, 15, 8, 3]],
+      ["classroom", 210, [15, 10, 7, 5]],
+      ["hall", 140, [15, 7, 5, 3]],
+      ["living", 70, [10, 5, 4, 3]],
+      ["theatre", 14, [80, 50, 30, 20]],
+    ]);
+    expect(contrastApplication(undefined).id).toBe("meeting");
+  });
+
+  it("puts a contrast into one of five bands for the room", () => {
+    expect(rateContrast(25, "meeting")!.band).toBe("best");
+    expect(rateContrast(20, "meeting")!.band).toBe("best");
+    expect(rateContrast(19.9, "meeting")!.band).toBe("recommended");
+    expect(rateContrast(12, "meeting")!.band).toBe("enough");
+    expect(rateContrast(5, "meeting")!.band).toBe("limit");
+    expect(rateContrast(2.9, "meeting")!.band).toBe("too-low");
+    // The same picture rates worse in a cinema.
+    expect(rateContrast(25, "theatre")!.band).toBe("limit");
+    expect(rateContrast(25)!.band).toBe("best");
+    expect(rateContrast(Number.NaN)).toBeNull();
+  });
+
+  it("places the mark as Epson does: five equal bands, linear inside each", () => {
+    expect(rateContrast(500, "meeting")!.at).toBe(0);
+    expect(rateContrast(200, "meeting")!.at).toBe(0);
+    // Top band runs from 200 down to 20: halfway is 110.
+    expect(rateContrast(110, "meeting")!.at).toBeCloseTo(0.1, 6);
+    expect(rateContrast(20, "meeting")!.at).toBeCloseTo(0.2, 6);
+    expect(rateContrast(15, "meeting")!.at).toBeCloseTo(0.4, 6);
+    expect(rateContrast(11.5, "meeting")!.at).toBeCloseTo(0.5, 6);
+    expect(rateContrast(3, "meeting")!.at).toBeCloseTo(0.8, 6);
+    expect(rateContrast(1.5, "meeting")!.at).toBeCloseTo(0.9, 6);
+    expect(rateContrast(0, "meeting")!.at).toBe(1);
+  });
+
+  it("works out a picture's contrast from the projection's own fields", () => {
+    expect(pictureContrast({}, 1000)).toBeNull();
+    expect(pictureContrast({ light: { ambientLux: 100 } }, undefined)).toBeNull();
+    const beamer = pictureContrast({ light: { ambientLux: 100 } }, 1000)!;
+    expect(beamer.ratio).toBeCloseTo(1100 / (1000 / 300 + 100), 6);
+    expect(beamer.required).toBe(15);
+    expect(pictureContrast({ viewing: { task: "adm" }, light: { ambientLux: 100 } }, 1000)!.required).toBe(50);
+    // A display needs its luminance, not a screen illuminance.
+    expect(pictureContrast({ kind: "display", light: { ambientLux: 300 } }, 1000)).toBeNull();
+    const display = pictureContrast({ kind: "display", light: { ambientLux: 300, nits: 350 } }, undefined)!;
+    const reflected = (300 * 0.05) / Math.PI;
+    expect(display.ratio).toBeCloseTo((350 + reflected) / (0.35 + reflected), 6);
+  });
+
+  it("prints a contrast the way the scale reads", () => {
+    expect(formatContrast(12.04)).toBe("12.0:1");
+    expect(formatContrast(12.04, ",")).toBe("12,0:1");
+    expect(formatContrast(150.4)).toBe("150:1");
+    expect(formatContrast(250)).toBe("> 200:1");
   });
 });

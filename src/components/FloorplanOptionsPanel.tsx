@@ -515,6 +515,20 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
 
       {/* ── Planning for the selected projector or display ────────── */}
       <div data-panel-section="planning" style={{ display: tab === "planning" ? undefined : "none" }}>
+      {/* One plan, two prints: the planning plan shows how the positions were found, the
+          execution plan only what gets built. */}
+      <div className="px-2 py-2 border-b border-[var(--color-border)]">
+        <label className="flex items-center gap-1 text-[var(--color-text)] cursor-pointer"
+          title={t("Takes everything that only serves planning off the sheet and the export: cones, audience areas and heatmaps, the Wi-Fi heatmap, coverage areas and their colour keys. Symbols, pictures and walls stay. Nothing is deleted — untick to get the planning plan back.")}>
+          <input
+            type="checkbox"
+            data-testid="plan-execution"
+            checked={Boolean(page.hidePlanning)}
+            onChange={(e) => updateFloorplanPage(page.id, { hidePlanning: e.target.checked || undefined })}
+          />
+          {t("Execution plan — hide the planning")}
+        </label>
+      </div>
       {selectedSymbols.length === 1 && (() => {
         const first = selectedSymbols[0];
         const group = page.groups.find((g) => g.id === first.groupId);

@@ -75,11 +75,22 @@ Spec: `SPEC-projektion.md` · freigegeben von Jean-Luc am 23.11.2026
 ### Checkpoint Phase 6
 - [x] `npx vitest run`, `npx tsc -b`, `npm run i18n:check`, `npm run build` grün
 - [x] e2e Grundriss: 25 bestanden (ein Lauf direkt nach dem Build fiel mit 16 Fehlern aus, Ursache ungeklärt)
-- [ ] Deploy nach dem rsync der neuen `epson.json` — der Container hat noch die alte Datei ohne Auflösung
+- [x] Deploy nach dem rsync der neuen `epson.json` (24.11.2026, im Container geprüft: 1156 Modelle mit Auflösung)
 - [ ] Mindestwerte des Kontrasts (7, 15, 50, 80) am Normtext geprüft
 - [ ] „4K PRO-UHD“: tatsächliche Zeilenzahl geklärt
 - [ ] Gerätemaße in der Bibliothek ergänzt (419/784 allgemein, 36/153 FACE)
 - [ ] Kontrast über den Connector und im PDF — nicht gebaut, bei Bedarf
+
+### Phase 7: Kontrast-Skala und Ausführungsplan (gebaut 25.11.2026, noch nicht committet)
+- [x] Task 24: Kontrast-Skala nach Epsons Leitfaden — Raumart, fünf Stufen, Marke im Inspektor
+- [x] Task 25: Block „BILDKONTRAST IM RAUMLICHT“ in der Legende, Bildschirm und PDF
+- [x] Task 26: Schalter „Ausführungsplan“ blendet die Planung aus (`hidePlanning`)
+
+### Checkpoint Phase 7
+- [x] `npx vitest run`, `npx tsc -b`, `npm run i18n:check`, `npm run build` grün; e2e Grundriss 25 bestanden
+- [ ] PDF mit Legendenblock angesehen (bisher nur der Bildschirm)
+- [ ] Jean-Luc: passt, was der Ausführungsplan ausblendet? Passt die Skala für Displays?
+- [ ] Connector: Raumart, Raumlicht und `hidePlanning` setzen — nicht gebaut
 
 ## Tasks
 

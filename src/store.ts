@@ -1161,7 +1161,7 @@ interface SchematicState {
   /** Change the drawing scale. The underlay is re-fitted so the plan keeps covering the
    *  same real-world extent; symbols keep their paper positions. */
   setFloorplanScale: (pageId: string, scaleDenominator: number) => void;
-  updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm" | "labelTemplate" | "kind" | "hideCoverages">>) => void;
+  updateFloorplanPage: (pageId: string, patch: Partial<Pick<FloorplanPage, "showTitleBlock" | "symbolSizeMm" | "labelSizeMm" | "labelTemplate" | "kind" | "hideCoverages" | "hidePlanning">>) => void;
   setFloorplanUnderlay: (pageId: string, underlay: FloorplanUnderlay | undefined) => void;
   updateFloorplanUnderlay: (pageId: string, patch: Partial<FloorplanUnderlay>) => void;
   /** Resolve a measured reference distance: an unlocked underlay is resized to the page's

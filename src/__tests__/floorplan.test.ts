@@ -55,6 +55,7 @@ import {
   coverageOffersOptics,
   legendShowsRssiScale,
   legendColorKeys,
+  coveragesHidden,
   legendKeyRows,
   symbolFootprintMm,
   symbolFootprintOutlineMm,
@@ -1137,6 +1138,66 @@ describe("the Wi-Fi coverage plan type", () => {
     expect(legendColorKeys(plan({ audience, viewing: { task: "bdm", heatmap: false } }), "de")).toEqual([]);
     expect(legendColorKeys(plan({ audience, hidden: true }), "de")).toEqual([]);
     expect(legendColorKeys(plan({ audience }, true), "de")).toEqual([]);
+  });
+
+  it("carries a contrast scale for every picture whose room light is stated", () => {
+    const legend = createDefaultLegend(paper);
+    const display = (light: object | undefined, extra: object = {}) => ({
+      id: "p1", symbolId: "s1", kind: "display" as const, aspect: "16:9", widthM: 1.66, heightM: 0.93,
+      screenCenterMm: { x: 100, y: 100 }, screenRotationDeg: 0, light, ...extra,
+    });
+    const plan = (projection: object, extra: object = {}) => ({
+      legend,
+      kind: "generic" as const,
+      scaleDenominator: 50,
+      symbols: [{ id: "s1", groupId: "g1", label: "D1", positionMm: { x: 100, y: 100 } }],
+      groups: [{ id: "g1" }],
+      projections: [projection],
+      ...extra,
+    }) as never as Parameters<typeof legendColorKeys>[0];
+
+    // Nothing stated, nothing rated.
+    expect(legendColorKeys(plan(display(undefined)), "de")).toEqual([]);
+    expect(legendColorKeys(plan(display({ ambientLux: 300 })), "de")).toEqual([]);
+
+    // 350 cd/m² in 300 lx: 69:1 — the top band of a meeting room.
+    const keys = legendColorKeys(plan(display({ ambientLux: 300, nits: 350 })), "de");
+    expect(keys.map((k) => k.id)).toEqual(["contrast"]);
+    expect(keys[0].title).toBe("BILDKONTRAST IM RAUMLICHT");
+    const { bars, ends } = keys[0].scales!;
+    expect(bars).toHaveLength(1);
+    expect(bars[0].caption).toBe("D1 · 69,2:1 · sehr gut · Besprechungsraum 300 lx");
+    expect(bars[0].colors).toHaveLength(5);
+    expect(bars[0].markerAt).toBeGreaterThan(0);
+    expect(bars[0].markerAt).toBeLessThan(0.2);
+    expect(ends).toEqual(["sehr gut", "zu niedrig"]);
+    // Caption and bar per picture, one row for the ends.
+    expect(legendKeyRows(keys[0])).toBe(3);
+
+    // The same display rates lower in a cinema.
+    const cinema = legendColorKeys(plan(display({ ambientLux: 300, nits: 350, application: "theatre" })), "en");
+    expect(cinema[0].scales!.bars[0].caption).toBe("D1 · 69.2:1 · recommended · cinema 300 lx");
+
+    // Hidden pictures and an execution plan carry no scale.
+    expect(legendColorKeys(plan(display({ ambientLux: 300, nits: 350 }, { hidden: true })), "de")).toEqual([]);
+    expect(legendColorKeys(plan(display({ ambientLux: 300, nits: 350 }), { hidePlanning: true }), "de")).toEqual([]);
+  });
+
+  it("an execution plan drops every colour key and the coverage areas", () => {
+    const legend = { ...createDefaultLegend(paper), showRssiScale: true };
+    const page = {
+      legend,
+      kind: "wifi" as const,
+      scaleDenominator: 50,
+      symbols: [{ id: "s1", groupId: "g1" }],
+      groups: [{ id: "g1" }],
+      projections: [{ id: "p1", symbolId: "s1", audience: { centerMm: { x: 0, y: 0 }, widthM: 4, depthM: 6, rotationDeg: 0 } }],
+    };
+    expect(legendColorKeys(page as never, "de").map((k) => k.id)).toEqual(["rssi", "viewing"]);
+    expect(legendColorKeys({ ...page, hidePlanning: true } as never, "de")).toEqual([]);
+    expect(coveragesHidden({})).toBe(false);
+    expect(coveragesHidden({ hideCoverages: true })).toBe(true);
+    expect(coveragesHidden({ hidePlanning: true })).toBe(true);
   });
 
   it("prints the Wi-Fi key first when a plan has both", () => {

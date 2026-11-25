@@ -98,6 +98,9 @@ export default function FloorplanProjectionLayer({
     [page],
   );
   if (items.length === 0) return null;
+  // An execution plan keeps what gets built — the picture and its caption — and drops
+  // what only served to find it: cone, distance band, audience area, section.
+  const planning = !page.hidePlanning;
   const px = (p: { x: number; y: number }) => `${mmToPx(p.x)},${mmToPx(p.y)}`;
 
   return (
@@ -130,7 +133,7 @@ export default function FloorplanProjectionLayer({
         const isDisplay = projection.kind === "display";
         return (
           <g key={projection.id} data-projection-id={projection.id} data-projection-ok={ok ? "1" : "0"}>
-            {g.distanceM > 0 && (
+            {planning && g.distanceM > 0 && (
               <polygon
                 points={`${px(g.lensMm)} ${px(a)} ${px(b)}`}
                 fill={color}
@@ -141,7 +144,7 @@ export default function FloorplanProjectionLayer({
               />
             )}
             {/* Where someone stands in the picture — the section's answer, seen from above. */}
-            {g.inPictureMm && (
+            {planning && g.inPictureMm && (
               <polygon
                 points={g.inPictureMm.map(px).join(" ")}
                 fill="url(#projection-in-picture)"
@@ -153,7 +156,7 @@ export default function FloorplanProjectionLayer({
                 <title>{t("A person of the height set in the section stands in the picture here")}</title>
               </polygon>
             )}
-            {g.bandMm && (
+            {planning && g.bandMm && (
               <g stroke={PROJECTION_OK_COLOR} strokeWidth={1} strokeOpacity={0.9}>
                 <line x1={mmToPx(g.bandMm[0].x)} y1={mmToPx(g.bandMm[0].y)} x2={mmToPx(g.bandMm[1].x)} y2={mmToPx(g.bandMm[1].y)} strokeDasharray="3 3" />
                 {g.bandMm.map((p, i) => (
@@ -163,7 +166,7 @@ export default function FloorplanProjectionLayer({
             )}
             {(() => {
               // Viewing distances are only worth ink once someone has said where people sit.
-              if (!projection.audience) return null;
+              if (!planning || !projection.audience) return null;
               const v = viewingOnSheet(projection, g.result.picture, page.scaleDenominator);
               if (!v.audienceMm) return null;
               const fits = v.result.issues.length === 0;
@@ -274,7 +277,7 @@ export default function FloorplanProjectionLayer({
               {projectionCaption(projection, g)}
             </text>
             {(() => {
-              const box = sectionBoxMm(projection, g);
+              const box = planning ? sectionBoxMm(projection, g) : null;
               if (!box) return null;
               const w = mmToPx(box.drawing.widthMm), h = mmToPx(box.drawing.heightMm);
               return (

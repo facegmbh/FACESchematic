@@ -308,21 +308,69 @@ das hier ist eine Rechnung für die Planung, kein Nachweis.
 - Die vier Mindestwerte sind aus dem Gedächtnis, nicht am Normtext geprüft.
 - Gerätekontrast 300:1 beim Beamer, 1000:1 beim Display; Reflexion der Displayfront 5 %.
   Alle drei unter „Mehr“ änderbar.
-- Richtwerte für das Raumlicht: abgedunkelt 10 lx, gedimmt 50 lx, Besprechungsraum 150 lx,
-  helles Büro 300 lx — eigene Festlegung, keine Messwerte.
+- Richtwerte für das Raumlicht kommen seit dem 25.11.2026 aus Epsons Rechner (siehe
+  „Kontrast-Skala“ unten); die eigenen Werte 10/50/150/300 lx sind entfallen.
 - Epsons Kontrastangabe wird nicht benutzt: Sie ist der dynamische Kontrast (10.000:1 bis
   über 5.000.000:1), die Norm misst Weiß und Schwarz gleichzeitig. Bei Raumlicht ändert der
   Gerätekontrast das Ergebnis ohnehin kaum (500 lx Bild, 50 lx Raum: 10,6:1 statt 11:1).
 
 **Bedienung.** Im Block „Projektion“ bzw. „Display“ (`ProjectionContrastRows.tsx`):
 
-    Raumlicht   [ 150 lx ]  [ Besprechungsraum ▾ ]
+    Raum        [ Besprechungsraum · 140 lx ▾ ]
+    Raumlicht   [ 140 lx ]
     Helligkeit  [ 350 cd/m² ]                         (nur Display)
-    Kontrast    69:1 · eine Präsentation braucht 15:1
+    Kontrast    12,0:1 · eine Präsentation braucht 15:1
+                ▓▓▓▓▒▒▒▒░░░░|░░▒▒▒▒▓▓▓▓      Skala mit Marke, darunter 20 · 15 · 8 · 3
+                ■ ausreichend · Besprechungsraum
                 Reicht nicht — höchstens 40 lx Raumlicht        (nur wenn zu wenig)
     ▸ Mehr      Gerätekontrast, Reflexion (Display)
 
-Ohne Raumlicht-Angabe erscheint keine Kontrastzeile. Nicht im PDF, nicht über den Connector.
+Ohne Raumlicht-Angabe erscheint keine Kontrastzeile. Nicht über den Connector.
+
+**Kontrast-Skala nach dem Epson-Rechner (gebaut 25.11.2026).** Epsons Throw Distance
+Simulator hat einen „Leitfaden zu Helligkeit & Kontrast“; Raumarten, übliches Raumlicht und
+Stufengrenzen sind aus dessen Code abgelesen (25.11.2026):
+
+    Raumart            Raumlicht   sehr gut  empfohlen  ausreichend  Grenze   zu niedrig
+    Besprechungsraum   140 lx      ≥ 20      ≥ 15       ≥ 8          ≥ 3      darunter
+    Klassenraum        210 lx      ≥ 15      ≥ 10       ≥ 7          ≥ 5      darunter
+    Saal               140 lx      ≥ 15      ≥ 7        ≥ 5          ≥ 3      darunter
+    Wohnraum            70 lx      ≥ 10      ≥ 5        ≥ 4          ≥ 3      darunter
+    Kino                14 lx      ≥ 80      ≥ 50       ≥ 30         ≥ 20     darunter
+
+- `light.application` wählt die Raumart (fehlt = Besprechungsraum). Die Wahl setzt das
+  Raumlicht auf Epsons Wert; die Zahl lässt sich danach überschreiben.
+- `rateContrast` ordnet den Kontrast einer Stufe zu und legt die Marke wie Epson: fünf
+  gleich breite Stufen, innerhalb einer Stufe linear, oben bei 200:1 gekappt.
+- Farben grün bis rot wie die Sichtgüte, nicht Epsons Blautöne.
+- Abweichung von Epson: Epson rechnet Kontrast = Bildlicht ÷ Raumlicht + 1, ohne
+  Gerätekontrast und ohne Gain. Hier bleibt die Rechnung von oben; sie liefert im hellen
+  Raum praktisch dasselbe und im dunklen Raum etwas weniger. Beispiel 1724 lx Bild, 14 lx
+  Raum: Epson 124:1, hier 88:1.
+- Die Skala gilt auch für Displays, obwohl Epson sie nur für Beamer führt.
+- Die AVIXA-Zeile („braucht 15:1“) und der gelbe Hinweis bleiben daneben stehen. In einem
+  Besprechungsraum fällt AVIXAs 15:1 mit Epsons Grenze zu „empfohlen“ zusammen.
+
+**In der Legende.** Jede sichtbare Bildfläche mit bekanntem Kontrast bekommt im Block
+„BILDKONTRAST IM RAUMLICHT“ eine Zeile Text („1 · 12,0:1 · ausreichend · Besprechungsraum
+150 lx“) und darunter den Stufenbalken mit Marke; unter dem letzten Balken stehen die Enden
+„sehr gut“ und „zu niedrig“. Bildschirm und PDF aus derselben Liste (`pictureContrastRows`,
+`legendColorKeys`), nach WLAN-Schlüssel und Sichtgüte.
+
+### Planungsplan und Ausführungsplan (gebaut 25.11.2026)
+
+Ein Plan, zwei Ausdrucke. `FloorplanPage.hidePlanning` (Haken „Ausführungsplan — Planung
+ausblenden“ oben im Reiter „Planung“) nimmt alles vom Blatt und aus dem PDF, was nur der
+Planung dient:
+
+- Projektionskegel, Abstandsband, Schraffur „im Bild“, Schnittkasten
+- Zuschauerzone, empfohlene Betrachtungsfläche, Heatmap der Sichtgüte
+- WLAN-Heatmap
+- Abdeckungsbereiche (wie `hideCoverages`, das als eigener Schalter bleibt)
+- die Farbschlüssel der Legende: Signalstärke, Sichtgüte, Bildkontrast
+
+Es bleibt, was gebaut wird: Symbole, Bildfläche mit Beschriftung, Display-Balken, Wände.
+Nichts wird gelöscht; Haken weg, und der Planungsplan ist wieder da. Nicht über den Connector.
 
 ### Symbole in echter Größe (gebaut 24.11.2026)
 
@@ -431,6 +479,9 @@ je Seite), am Bildschirm und im PDF dasselbe. Der Farbschlüssel ist ein Verlauf
 - Auflösung: `pixelsVOfResolution` für Epsons Namen und für „1920 x 1200“; `opticsForModel`
   trägt die Pixelzahl ein; ADM ohne Pixelzahl → keine Heatmap, kein Farbschlüssel
   (`projectionData.test.ts`, `projectionViewing.test.ts`).
+- Kontrast-Skala: Stufe und Lage der Marke je Raumart, Kappung bei 200:1; Legendenblock je
+  Bildfläche; Ausführungsplan ohne Farbschlüssel und ohne Abdeckungsbereiche. e2e: Raumart
+  Kino setzt 14 lx, Haken „Ausführungsplan“ nimmt Kegel und Legendenblock weg.
 - Kontrast (`projectionContrast.test.ts`): dunkler Raum ergibt den Gerätekontrast; mehr
   Raumlicht senkt ihn; höchstes Raumlicht trifft genau den Mindestwert; Display mit
   Reflexion; ungültige Eingaben → kein Ergebnis.

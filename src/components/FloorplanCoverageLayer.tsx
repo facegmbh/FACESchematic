@@ -56,14 +56,14 @@ export default function FloorplanCoverageLayer({
   const t = useT();
   const visible = useMemo(() => {
     // One switch takes them all off — for an export that is about mounting points.
-    if (page.hideCoverages) return [];
+    if (page.hideCoverages || page.hidePlanning) return [];
     const areas = (page.coverages ?? []).filter((c) => isCoverageVisible(c, page.groups));
     // Sort by drawn extent, biggest at the back. Ties keep their document order.
     return areas
       .map((c, i) => ({ c, i, reach: effectiveRangeM(c) }))
       .sort((a, b) => b.reach - a.reach || a.i - b.i)
       .map((e) => e.c);
-  }, [page.coverages, page.groups, page.hideCoverages]);
+  }, [page.coverages, page.groups, page.hideCoverages, page.hidePlanning]);
 
   if (visible.length === 0) return null;
 

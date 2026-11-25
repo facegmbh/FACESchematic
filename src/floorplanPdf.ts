@@ -70,6 +70,7 @@ import {
   LEGEND_RSSI_ROW_MM,
   LEGEND_RSSI_SWATCH_SHARE,
   legendColorKeys,
+  coveragesHidden,
   symbolFootprintMm,
   symbolFootprintOutlineMm,
   legendKeyRows,
@@ -395,6 +396,35 @@ function drawLegend(doc: jsPDF, page: FloorplanPage, rows: LegendRow[], notes: s
       }
       y += LEGEND_RSSI_ROW_MM;
     }
+    if (colorKey.scales) {
+      // One rating scale per picture: caption, then the bands with a mark on them.
+      const { bars, ends } = colorKey.scales;
+      doc.setFontSize(2.4 * MM_TO_PT);
+      for (const bar of bars) {
+        doc.setFont("Inter", "normal");
+        doc.setTextColor(34, 34, 34);
+        doc.text(bar.caption, innerX, y + LEGEND_RSSI_ROW_MM * 0.72, { maxWidth: innerW });
+        y += LEGEND_RSSI_ROW_MM;
+        const cell = innerW / bar.colors.length;
+        bar.colors.forEach((c, i) => {
+          const [r, g, b] = hexToRgb(c);
+          doc.setFillColor(r, g, b);
+          doc.rect(innerX + i * cell, y + 0.9, cell + (i < bar.colors.length - 1 ? 0.05 : 0), LEGEND_RSSI_ROW_MM - 1.8, "F");
+        });
+        // The mark: a black bar with a white edge, readable on every band.
+        const mx = innerX + Math.min(1, Math.max(0, bar.markerAt)) * innerW;
+        doc.setFillColor(255, 255, 255);
+        doc.rect(mx - 0.55, y + 0.2, 1.1, LEGEND_RSSI_ROW_MM - 0.4, "F");
+        doc.setFillColor(17, 17, 17);
+        doc.rect(mx - 0.3, y + 0.2, 0.6, LEGEND_RSSI_ROW_MM - 0.4, "F");
+        y += LEGEND_RSSI_ROW_MM;
+      }
+      doc.setFont("Inter", "normal");
+      doc.setTextColor(34, 34, 34);
+      doc.text(ends[0], innerX, y + LEGEND_RSSI_ROW_MM * 0.72);
+      doc.text(ends[1], innerX + innerW, y + LEGEND_RSSI_ROW_MM * 0.72, { align: "right" });
+      y += LEGEND_RSSI_ROW_MM;
+    }
     const swatchW = innerW * LEGEND_RSSI_SWATCH_SHARE;
     for (const step of colorKey.steps) {
       const [r, g, b] = hexToRgb(step.color);
@@ -681,7 +711,9 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
     // per sample would put tens of thousands of paths in the file for a picture that is a
     // raster by nature.
     const heat = { ...DEFAULT_HEATMAP, ...(page.heatmap ?? {}) };
-    if (heat.visible) {
+    // An execution plan drops what only serves planning, as the screen does.
+    const planning = !page.hidePlanning;
+    if (heat.visible && planning) {
       const aps = collectAccessPoints(page, heat.band, (nodeId) => {
         const node = opts.nodes.find((n) => n.id === nodeId);
         const templateId = (node?.data as DeviceData | undefined)?.templateId;
@@ -731,7 +763,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
 
     // Detection and surveillance areas, over the plan but under the symbols — the same
     // order the screen draws them in, so the print is what was judged on screen.
-    for (const coverage of page.hideCoverages ? [] : page.coverages ?? []) {
+    for (const coverage of coveragesHidden(page) ? [] : page.coverages ?? []) {
       if (!isCoverageVisible(coverage, page.groups)) continue;
       const points = coveragePointsOnSheet(coverage, page);
       if (points.length < 3) continue;
@@ -771,7 +803,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       const [pr, pg, pb] = hexToRgb(ok ? PROJECTION_OK_COLOR : PROJECTION_WARN_COLOR);
       const [a, b] = g.pictureMm;
       const [sa, sb] = g.surfaceMm;
-      if (g.distanceM > 0) {
+      if (planning && g.distanceM > 0) {
         const cone: [number, number][] = [[a.x - g.lensMm.x, a.y - g.lensMm.y], [b.x - a.x, b.y - a.y]];
         doc.setFillColor(pr, pg, pb);
         doc.setDrawColor(pr, pg, pb);
@@ -781,7 +813,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         setPdfAlpha(doc, 1);
         doc.lines(cone, g.lensMm.x, g.lensMm.y, [1, 1], "S", true);
       }
-      if (g.inPictureMm) {
+      if (planning && g.inPictureMm) {
         // Where someone stands in the picture. The screen hatches it; a flat tint prints
         // the same message without a pattern jsPDF does not have.
         const [ir, ig, ib] = hexToRgb(PROJECTION_IN_PICTURE_COLOR);
@@ -796,7 +828,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         setPdfAlpha(doc, 1);
         doc.lines(zone, z[0].x, z[0].y, [1, 1], "S", true);
       }
-      if (g.bandMm) {
+      if (planning && g.bandMm) {
         const [okR, okG, okB] = hexToRgb(PROJECTION_OK_COLOR);
         const len = Math.hypot(sb.x - sa.x, sb.y - sa.y) || 1;
         const tx = ((sb.x - sa.x) / len) * 1.5, ty = ((sb.y - sa.y) / len) * 1.5;
@@ -807,7 +839,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
         doc.setLineDashPattern([], 0);
         for (const end of g.bandMm) doc.line(end.x - tx, end.y - ty, end.x + tx, end.y + ty);
       }
-      if (projection.audience) {
+      if (planning && projection.audience) {
         // The audience area and the area the viewing recommendation covers.
         const v = viewingOnSheet(projection, g.result.picture, page.scaleDenominator);
         const closed = (pts: { x: number; y: number }[]): [number, number][] =>
@@ -862,7 +894,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
       doc.text(projectionCaption(projection, g).replace("\u2033", '"'), at.x, at.y, { baseline: "middle", align: at.align === "start" ? "left" : at.align === "end" ? "right" : "center" });
 
       // The section box, drawn from the same geometry and styles as on screen.
-      const box = sectionBoxMm(projection, g);
+      const box = planning ? sectionBoxMm(projection, g) : null;
       if (box) {
         const style: Record<SectionRole, { stroke: string; w: number; fill?: string; alpha?: number }> = {
           floor: { stroke: "#111111", w: 0.35 },

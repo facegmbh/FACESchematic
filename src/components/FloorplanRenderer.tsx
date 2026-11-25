@@ -1455,6 +1455,29 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
                         </div>
                       </>
                     )}
+                    {legendKey.scales && (
+                      <>
+                        {legendKey.scales.bars.map((bar) => (
+                          <div key={bar.id} data-legend-contrast={bar.id}>
+                            <div className="truncate" style={{ height: mmToPx(LEGEND_RSSI_ROW_MM), lineHeight: `${mmToPx(LEGEND_RSSI_ROW_MM)}px`, fontSize: mmToPx(2.4), color: "#222" }}>{bar.caption}</div>
+                            <div className="relative" style={{ height: mmToPx(LEGEND_RSSI_ROW_MM) }}>
+                              <div className="absolute flex" style={{ left: 0, right: 0, top: mmToPx(0.9), height: mmToPx(LEGEND_RSSI_ROW_MM - 1.8) }}>
+                                {bar.colors.map((c) => <span key={c} style={{ flex: 1, background: c }} />)}
+                              </div>
+                              <span
+                                className="absolute"
+                                data-legend-contrast-mark={bar.markerAt.toFixed(3)}
+                                style={{ left: `${Math.min(1, Math.max(0, bar.markerAt)) * 100}%`, top: mmToPx(0.2), height: mmToPx(LEGEND_RSSI_ROW_MM - 0.4), width: mmToPx(0.6), marginLeft: -mmToPx(0.3), background: "#111", outline: `${mmToPx(0.25)}px solid #fff` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-between" style={{ height: mmToPx(LEGEND_RSSI_ROW_MM), lineHeight: `${mmToPx(LEGEND_RSSI_ROW_MM)}px`, fontSize: mmToPx(2.4), color: "#222" }}>
+                          <span>{legendKey.scales.ends[0]}</span>
+                          <span>{legendKey.scales.ends[1]}</span>
+                        </div>
+                      </>
+                    )}
                     {legendKey.steps.map((step) => (
                       <div key={step.label} className="flex items-center" style={{ fontSize: mmToPx(2.4), height: mmToPx(LEGEND_RSSI_ROW_MM), color: "#222", gap: mmToPx(2) }}>
                         <span style={{ width: `${LEGEND_RSSI_SWATCH_SHARE * 100}%`, height: mmToPx(LEGEND_RSSI_ROW_MM - 1.2), background: step.color, flexShrink: 0 }} />
