@@ -838,6 +838,7 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "enter the room light": "Raumlicht eintragen",
   "enter the display's brightness": "Helligkeit des Displays eintragen",
   "Room light": "Raumlicht",
+  "choose…": "wählen…",
   "What the room is for. It sets the scale the contrast is rated on and a usual room light to start from — a cinema needs far more contrast than a classroom.": "Wofür der Raum da ist. Bestimmt die Skala, auf der der Kontrast bewertet wird, und ein übliches Raumlicht als Startwert — ein Kino braucht viel mehr Kontrast als ein Klassenraum.",
   "Light of the room falling on the picture, in lux — measured on site, or the usual figure of the room chosen above. It is what turns black into grey.": "Licht des Raums, das auf die Bildfläche fällt, in Lux — vor Ort gemessen oder der übliche Wert des oben gewählten Raums. Es macht aus Schwarz Grau.",
   "Rating after Epson's Brightness & Contrast guide for this kind of room. The figures under the bar are the contrast at which one band ends and the next begins.": "Bewertung nach Epsons Leitfaden zu Helligkeit & Kontrast für diese Raumart. Die Zahlen unter dem Balken sind der Kontrast, bei dem eine Stufe endet und die nächste beginnt.",

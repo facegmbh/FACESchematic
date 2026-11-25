@@ -67,13 +67,15 @@ export function ContrastRows({ projection, patch, screenLux }: Props) {
         <span className="shrink-0 w-12">{t("Room")}</span>
         <select
           className={`flex-1 min-w-0 ${FIELD}`}
-          value={room.id}
+          value={light.ambientLux === undefined ? "" : room.id}
           data-testid="contrast-application"
           onChange={(e) => {
             const next = contrastApplication(e.target.value as ContrastApplication);
             patchLight({ application: next.id === CONTRAST_APPLICATIONS[0].id ? undefined : next.id, ambientLux: next.ambientLux });
           }}
         >
+          {/* Nothing is chosen until a room light is there — the list must not look answered. */}
+          {light.ambientLux === undefined && <option value="">{t("choose…")}</option>}
           {CONTRAST_APPLICATIONS.map((a) => <option key={a.id} value={a.id}>{text.rooms[a.id]} · {a.ambientLux} lx</option>)}
         </select>
       </label>

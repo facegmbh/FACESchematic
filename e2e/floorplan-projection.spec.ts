@@ -81,6 +81,8 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   // Contrast with the room light on: 150 lx against the picture's own light and an
   // assumed 300:1 within the picture. A presentation needs 15:1.
   await expect(page.getByTestId("contrast-result")).toContainText(/enter the room light|Raumlicht eintragen/);
+  // No room is shown as chosen while the room light is empty.
+  await expect(page.getByTestId("contrast-application")).toHaveValue("");
   await page.getByTestId("contrast-ambient").fill("150");
   const screenLux = 5000 / (start.widthM * start.heightM);
   const ratio = (screenLux + 150) / (screenLux / 300 + 150);
@@ -91,7 +93,16 @@ test("floorplan: slide a projector through its throw range", async ({ page }) =>
   // The scale after Epson's guide: 12:1 is "enough" for a meeting room (8 to 15), and the
   // legend on the plan carries the same rating.
   await expect(page.getByTestId("contrast-scale")).toHaveAttribute("data-contrast-band", "enough");
+  await expect(page.getByTestId("contrast-application")).toHaveValue("meeting");
   await expect(page.locator(`[data-legend-contrast="${state.projectionId}"]`)).toContainText(`${ratio.toFixed(1)}:1`);
+  // The print carries the scale too.
+  const contrastPdf = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export PDF" }).click(),
+  ]).then(([d]) => d);
+  expect(contrastPdf.suggestedFilename()).toMatch(/\.pdf$/);
+  if (process.env.PROJECTION_CONTRAST_PDF) await contrastPdf.saveAs(process.env.PROJECTION_CONTRAST_PDF);
+  await page.screenshot({ path: process.env.PROJECTION_CONTRAST_SHOT ?? join(tmpdir(), "projection-contrast.png") });
   // A cinema is darker and asks for more: choosing it sets Epson's 14 lx, and the same
   // projector is in the top band there.
   // Leaving the field, as a click on the list would.
