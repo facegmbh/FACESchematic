@@ -43,7 +43,21 @@ export default defineConfig({
         // page claude.ai opens, later — must reach the server, not the cached app shell.
         navigateFallbackDenylist: [/^\/face\//],
         globPatterns: ['**/*.{js,css,html,svg,png,ttf,json}'],
+        // FACE: /symbols/ (BHE) and /projection/ (Epson) are only served to a signed-in
+        // browser (docker/nginx.conf). Precached, one 401 among them would fail the whole
+        // service-worker install for everybody who is not signed in yet. So they are cached
+        // as they are used instead: what a plan has shown once still shows offline.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && (url.pathname.startsWith('/symbols/') || url.pathname.startsWith('/projection/')),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'face-licensed', expiration: { maxEntries: 800 } },
+          },
+        ],
         globIgnores: [
+          '**/symbols/**',
+          '**/projection/**',
           '**/deviceLibrary.fallback.json',
           '**/og-image.png',
           '**/github-social.png',

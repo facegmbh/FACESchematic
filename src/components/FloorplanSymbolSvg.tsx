@@ -41,8 +41,19 @@ export default function FloorplanSymbolSvg({ group, sizePx, rotationDeg = 0, pad
   const librarySrc = group.symbolLibraryId ? symbolLibraryUrl(group.symbolLibraryId) : undefined;
   const tinted = useTintedSymbol(librarySrc, group.color, Boolean(group.tintSymbol) && !group.symbolImageSrc);
   const pictureSrc = group.symbolImageSrc || tinted || librarySrc;
-  const picture = pictureSrc ? (
-    <image href={pictureSrc} x={0} y={0} width={sizePx} height={sizePx} preserveAspectRatio="xMidYMid meet" />
+  // A picture that does not load — the library is only served to a signed-in browser, and
+  // the viewer Odoo embeds may not be one — leaves the drawn shape rather than a hole.
+  const [failedSrc, setFailedSrc] = useState<string>();
+  const picture = pictureSrc && failedSrc !== pictureSrc ? (
+    <image
+      href={pictureSrc}
+      x={0}
+      y={0}
+      width={sizePx}
+      height={sizePx}
+      preserveAspectRatio="xMidYMid meet"
+      onError={() => setFailedSrc(pictureSrc)}
+    />
   ) : (
     symbolPrimitives(group.shape, sizePx).map((p, i) => {
       if (p.kind === "line") {

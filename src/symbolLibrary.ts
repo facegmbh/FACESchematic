@@ -52,11 +52,21 @@ export function symbolLibraryCategories(): SymbolLibraryCategory[] {
 
 /** Fetch the catalogue once. Safe to call from anywhere and as often as you like: the
  *  second caller gets the first one's promise, and a build without the library resolves
- *  to nothing rather than failing. */
+ *  to nothing rather than failing.
+ *
+ *  A refusal is not kept: the FACE server only hands the library to a signed-in browser
+ *  (docker/nginx.conf), and the first call comes before anyone has signed in. The next
+ *  call — after the sign-in — asks again. */
 export function loadSymbolLibrary(): Promise<SymbolLibraryCategory[]> {
   if (loading) return loading;
-  loading = fetch(`${SYMBOL_LIBRARY_BASE}catalog.json`)
-    .then((res) => (res.ok ? res.json() : { categories: [] }))
+  const attempt: Promise<SymbolLibraryCategory[]> = fetch(`${SYMBOL_LIBRARY_BASE}catalog.json`)
+    .then((res) => {
+      if (res.status === 401 || res.status === 403 || res.status >= 500) {
+        if (loading === attempt) loading = null;
+        return { categories: [] };
+      }
+      return res.ok ? res.json() : { categories: [] };
+    })
     .then((data: { categories?: SymbolLibraryCategory[] }) => {
       loaded = Array.isArray(data.categories) ? data.categories : [];
       return loaded;
@@ -65,7 +75,8 @@ export function loadSymbolLibrary(): Promise<SymbolLibraryCategory[]> {
       loaded = [];
       return loaded;
     });
-  return loading;
+  loading = attempt;
+  return attempt;
 }
 
 /** Tests drive the catalogue directly rather than over the network. */

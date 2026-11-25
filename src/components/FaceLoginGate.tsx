@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isEmbedded } from "../embed";
 import { FACE_BACKEND, faceGate, loadFaceSession, useFaceSession, wasSignedInHere } from "../faceBackend";
 import { useT } from "../i18n";
+import { loadSymbolLibrary } from "../symbolLibrary";
 import FaceLoginDialog from "./FaceLoginDialog";
 
 const noop = () => {};
@@ -28,6 +29,13 @@ export default function FaceLoginGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (gated) void loadFaceSession();
   }, [gated]);
+
+  // The server only hands the BHE symbols to a signed-in browser, so the catalogue asked
+  // for at startup came back empty on a new device. Ask again once somebody is in.
+  const uid = user?.uid;
+  useEffect(() => {
+    if (uid !== undefined) void loadSymbolLibrary();
+  }, [uid]);
 
   const gate = faceGate({
     faceBackend: FACE_BACKEND,

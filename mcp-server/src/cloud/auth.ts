@@ -33,27 +33,49 @@ export interface SignedInUser {
   login: string;
 }
 
-function readCookie(header: string | undefined, name: string): string | undefined {
+/** Every value sent under this name — a browser holding the cookie on two paths sends both. */
+function readCookies(header: string | undefined, name: string): string[] {
+  const values: string[] = [];
   for (const part of (header ?? "").split(";")) {
     const [k, ...v] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(v.join("="));
+    if (k !== name) continue;
+    try {
+      values.push(decodeURIComponent(v.join("=")));
+    } catch {
+      /* not ours */
+    }
   }
-  return undefined;
+  return values;
 }
 
 export function createAuth(config: Config, store: Store, opts: AuthOptions = {}) {
   const now = opts.now ?? Date.now;
   const secure = config.publicUrl.startsWith("https://");
-  const cookieAttrs = `Path=/face; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+  const flags = `HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+  /** The cookie covers the whole site: nginx asks /face/api/me before it serves /symbols/
+   *  (docker/nginx.conf), and the browser only sends the cookie along where its path reaches. */
+  const cookieAttrs = `Path=/; ${flags}`;
+  /** Until 23.11.2026 the cookie lived on /face. Dropped wherever a cookie is set, so an old
+   *  one never sits next to the new one. Removable once those sessions have run out (30 days). */
+  const dropOldCookie = `${SESSION_COOKIE}=; Path=/face; ${flags}; Max-Age=0`;
   let globalPausedUntil = 0;
   /** Lower-cased e-mail → paused until. */
   const pausedLogins = new Map<string, number>();
   let refusals: number[] = [];
   const clients = new Map<number, OdooClient>();
 
+  /** The first cookie that is a live session — a stale one beside it must not sign anyone out. */
+  function currentSession(req: express.Request) {
+    for (const id of readCookies(req.headers.cookie, SESSION_COOKIE)) {
+      const session = store.session(id);
+      if (session) return { id, session };
+    }
+    return undefined;
+  }
+
   function currentUser(req: express.Request): UserRecord | undefined {
-    const session = store.session(readCookie(req.headers.cookie, SESSION_COOKIE));
-    return session ? store.user(session.uid) : undefined;
+    const found = currentSession(req);
+    return found ? store.user(found.session.uid) : undefined;
   }
 
   /** The Odoo client acting as this user, with the key they signed in with last. */
@@ -144,27 +166,37 @@ export function createAuth(config: Config, store: Store, opts: AuthOptions = {})
     }
     store.putUser(uid, login, name, apiKey);
     const sessionId = store.createSession(uid, SESSION_TTL_MS);
-    res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${sessionId}; ${cookieAttrs}; Max-Age=${SESSION_TTL_MS / 1000}`);
+    res.setHeader("Set-Cookie", [
+      `${SESSION_COOKIE}=${sessionId}; ${cookieAttrs}; Max-Age=${SESSION_TTL_MS / 1000}`,
+      dropOldCookie,
+    ]);
     const body: SignedInUser = { uid, name, login };
     res.json(body);
   });
 
   router.get("/me", (req, res) => {
-    const user = currentUser(req);
-    if (!user) {
+    const found = currentSession(req);
+    const user = found ? store.user(found.session.uid) : undefined;
+    if (!found || !user) {
       res.status(401).json({ error: "Nicht angemeldet." });
       return;
     }
+    // A session from before the cookie covered the whole site moves over here, with the
+    // time it has left — the app asks /me on every start.
+    const left = Math.max(1, Math.floor((found.session.expiresAt - Date.now()) / 1000));
+    res.setHeader("Set-Cookie", [`${SESSION_COOKIE}=${found.id}; ${cookieAttrs}; Max-Age=${left}`, dropOldCookie]);
     const body: SignedInUser = { uid: user.uid, name: user.name, login: user.login };
     res.json(body);
   });
 
   router.post("/logout", (req, res) => {
-    const id = readCookie(req.headers.cookie, SESSION_COOKIE);
-    const uid = id ? store.session(id)?.uid : undefined;
-    if (id) store.deleteSession(id);
+    let uid: number | undefined;
+    for (const id of readCookies(req.headers.cookie, SESSION_COOKIE)) {
+      uid ??= store.session(id)?.uid;
+      store.deleteSession(id);
+    }
     if (uid !== undefined) opts.onSignOut?.(uid);
-    res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; ${cookieAttrs}; Max-Age=0`);
+    res.setHeader("Set-Cookie", [`${SESSION_COOKIE}=; ${cookieAttrs}; Max-Age=0`, dropOldCookie]);
     res.status(204).end();
   });
 

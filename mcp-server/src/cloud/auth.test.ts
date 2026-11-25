@@ -55,7 +55,8 @@ test("valid Odoo credentials sign in, set the session cookie and /me knows the u
     assert.match(setCookie, /^face_session=/);
     assert.match(setCookie, /HttpOnly/i);
     assert.match(setCookie, /SameSite=Lax/i);
-    assert.match(setCookie, /Path=\/face/);
+    // The whole site, not just /face: nginx asks for the session before it serves /symbols/.
+    assert.match(setCookie, /Path=\/;/);
 
     const me = await fetch(`${app.base}/face/api/me`, { headers: { Cookie: cookieOf(res) } });
     assert.equal(me.status, 200);
@@ -195,6 +196,65 @@ test("store.json holds neither the API key nor the session id in clear text", as
     assert.ok(!raw.includes(MOCK_USER.apiKey), "API key in clear text");
     assert.ok(!raw.includes(sessionId), "session id in clear text");
     assert.ok(raw.includes(MOCK_USER.login));
+  } finally {
+    app.close();
+  }
+});
+
+// --- the session cookie covers the whole site (SPEC-face-identity, „Sperre am Server“) ---
+
+const sessionCookies = (res: Response) => res.headers.getSetCookie().filter((c) => c.startsWith("face_session="));
+
+test("sign-in drops a cookie left on the old /face path, so the two can never disagree", async () => {
+  const app = start();
+  try {
+    const cookies = sessionCookies(await login(app.base, MOCK_USER.login, MOCK_USER.apiKey));
+    assert.equal(cookies.length, 2);
+    assert.match(cookies[0], /^face_session=[^;]+; Path=\/;/);
+    assert.match(cookies[1], /^face_session=; Path=\/face;.*Max-Age=0/);
+  } finally {
+    app.close();
+  }
+});
+
+test("/me moves a session signed in before the change onto the whole-site path, keeping its expiry", async () => {
+  const app = start();
+  try {
+    const cookie = cookieOf(await login(app.base, MOCK_USER.login, MOCK_USER.apiKey));
+    const me = await fetch(`${app.base}/face/api/me`, { headers: { Cookie: cookie } });
+    const cookies = sessionCookies(me);
+    assert.equal(cookies.length, 2);
+    assert.ok(cookies[0].startsWith(`${cookie}; Path=/;`));
+    const maxAge = Number(/Max-Age=(\d+)/.exec(cookies[0])?.[1]);
+    assert.ok(maxAge > 29 * 24 * 3600 && maxAge <= 30 * 24 * 3600, `Max-Age ${maxAge}`);
+    assert.match(cookies[1], /^face_session=; Path=\/face;.*Max-Age=0/);
+    // Signed out, /me sets nothing.
+    assert.equal(sessionCookies(await fetch(`${app.base}/face/api/me`)).length, 0);
+  } finally {
+    app.close();
+  }
+});
+
+test("a stale cookie next to a good one does not sign the user out", async () => {
+  const app = start();
+  try {
+    const cookie = cookieOf(await login(app.base, MOCK_USER.login, MOCK_USER.apiKey));
+    const me = await fetch(`${app.base}/face/api/me`, { headers: { Cookie: `face_session=stale; ${cookie}` } });
+    assert.equal(me.status, 200);
+  } finally {
+    app.close();
+  }
+});
+
+test("logout clears the cookie on both paths", async () => {
+  const app = start();
+  try {
+    const cookie = cookieOf(await login(app.base, MOCK_USER.login, MOCK_USER.apiKey));
+    const out = await fetch(`${app.base}/face/api/logout`, { method: "POST", headers: { ...json, Cookie: cookie } });
+    const cookies = sessionCookies(out);
+    assert.equal(cookies.length, 2);
+    assert.match(cookies[0], /^face_session=; Path=\/;.*Max-Age=0/);
+    assert.match(cookies[1], /^face_session=; Path=\/face;.*Max-Age=0/);
   } finally {
     app.close();
   }

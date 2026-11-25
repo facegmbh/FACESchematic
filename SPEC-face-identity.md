@@ -62,9 +62,23 @@ Oberfläche, Regeln in `faceGate` in `src/faceBackend.ts`):
 - Backend nicht erreichbar (offline, Container aus): Ein Gerät, auf dem sich schon jemand
   angemeldet hat (Marker `face-signed-in` im localStorage, ohne Name und Schlüssel), arbeitet
   weiter; ein unbekanntes Gerät sieht „Anmeldung nicht erreichbar“ mit „Erneut versuchen“.
-- Grenze: Das ist eine Sperre in der Oberfläche. nginx liefert die statischen Dateien (App,
-  `/symbols/`) weiterhin an jeden aus, der den Host erreicht; eine Sperre dort (`auth_request`)
-  wäre ein eigener Schritt.
+- Grenze: Das ist eine Sperre in der Oberfläche. Die App-Dateien selbst liefert nginx
+  weiterhin an jeden aus (öffentliches Repository, und die Anmeldeseite muss laden können).
+
+## Sperre am Server (ergänzt 25.11.2026)
+
+Lizenzmaterial gibt nginx nur an angemeldete Browser: `/symbols/` (BHE) und `/projection/`
+(Epson) laufen über `auth_request` gegen `/face/api/me` (`docker/nginx.conf`); ohne Sitzung 401.
+
+- Das Cookie `face_session` gilt dafür für die ganze Seite (`Path=/` statt `/face`). Sitzungen
+  von vorher zieht `/face/api/me` beim nächsten App-Start um (gleiche Restlaufzeit); das alte
+  Cookie wird bei Anmeldung, `/me` und Abmeldung gelöscht.
+- Der Service Worker lädt beides nicht mehr vorab (ein 401 ließe sonst seine Installation
+  scheitern), sondern merkt es sich beim Benutzen. Offline ist also da, was schon einmal
+  gezeigt wurde — nicht mehr die ganze Bibliothek.
+- Eingebetteter Betrachter: bekommt die Symbole, wenn der Nutzer im selben Browser hier
+  angemeldet ist (portal.face-gmbh.com ist dieselbe Site); sonst die gezeichneten Formen.
+- Backend aus → nginx verweigert (500), die App zeichnet ihre eigenen Formen.
 
 ## Commands / Structure / Style
 

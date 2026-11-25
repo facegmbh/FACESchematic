@@ -6,7 +6,7 @@
  * rules would otherwise be untested. The stub keeps the CD's real shape: BHE chapter
  * numbers and the German names the files carry.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   defaultSymbolLibraryIdFor,
   findSymbolLibraryEntry,
@@ -143,5 +143,34 @@ describe("assigning a symbol to a device type", () => {
     expect(idFor("pir-detector")).toBe("1-einbruchmeldetechnik/infrarot-bewegungsmelder");
     expect(idFor("")).toBeUndefined();
     expect(defaultSymbolLibraryIdFor("ip-camera", [])).toBeUndefined();
+  });
+});
+
+describe("loading from a server that wants a sign-in first", () => {
+  it("asks again after a refusal, and keeps the answer once it has one", async () => {
+    vi.resetModules();
+    const lib = await import("../symbolLibrary");
+    const catalog = { categories: [{ id: "c", no: "9.1", label: "Kameras", section: "Video", symbols: [{ id: "c/dome", name: "Fix-Dome" }] }] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(catalog), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await lib.loadSymbolLibrary()).toEqual([]);
+    expect(await lib.loadSymbolLibrary()).toHaveLength(1);
+    expect(await lib.loadSymbolLibrary()).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+  });
+
+  it("a build without the library (404) is asked only once", async () => {
+    vi.resetModules();
+    const lib = await import("../symbolLibrary");
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await lib.loadSymbolLibrary();
+    await lib.loadSymbolLibrary();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });
