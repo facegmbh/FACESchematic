@@ -29,6 +29,9 @@ function serveDevReferenceIndex() {
 
 export default defineConfig({
   cacheDir,
+  // "/" on the docs' own host. The FACE image serves them next to the app under
+  // /handbuch/ (Dockerfile); src/navigate.ts reads this back as BASE.
+  base: process.env.DOCS_BASE || "/",
   plugins: [react(), serveDevReferenceIndex()],
   // Resolve TypeScript sources before .js so stale emitted .js shadows can't silently win.
   resolve: {

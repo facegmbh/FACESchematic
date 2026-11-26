@@ -6,6 +6,7 @@ import { parseCsvImport } from "../import/parseCsv";
 import type { ParsedTemplate } from "../import/types";
 import { createSubmission } from "../templateApi";
 import { useT } from "../i18n";
+import { docsUrl } from "../docsUrl";
 
 type Tab = "json" | "csv";
 
@@ -176,11 +177,11 @@ export default function ImportDevicesDialog({ open, onClose }: Props) {
           </div>
           <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
             {t("Bulk-add device templates to your library. See the")}{" "}
-            <a href="https://docs.easyschematic.live/import-devices" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+            <a href={docsUrl("import-devices")} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
               {t("import guide")}
             </a>{" "}
             {t("for sample files and walkthroughs, or the")}{" "}
-            <a href="https://docs.easyschematic.live/device-template-schema" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+            <a href={docsUrl("device-template-schema")} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
               {t("schema reference")}
             </a>{" "}
             {t("for the full field list.")}

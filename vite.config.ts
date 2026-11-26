@@ -41,7 +41,9 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         // FACE: /face/ is the backend (SPEC-backend-deploy.md). Its pages — the sign-in
         // page claude.ai opens, later — must reach the server, not the cached app shell.
-        navigateFallbackDenylist: [/^\/face\//],
+        // /handbuch/ is the manual, a second small site served next to the app
+        // (docker/nginx.conf) — it must not be answered with the app shell either.
+        navigateFallbackDenylist: [/^\/face\//, /^\/handbuch(\/|$)/],
         globPatterns: ['**/*.{js,css,html,svg,png,ttf,json}'],
         // FACE: /symbols/ (BHE) and /projection/ (Epson) are only served to a signed-in
         // browser (docker/nginx.conf). Precached, one 401 among them would fail the whole

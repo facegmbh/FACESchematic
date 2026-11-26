@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "./components/Layout";
-import { getPath, onNavigate } from "./navigate";
+import { BASE, getPath, navigateTo, onNavigate, withBase } from "./navigate";
 import OverviewPage from "./pages/Overview";
 import GettingStartedPage from "./pages/GettingStarted";
 import DevicesAndPortsPage from "./pages/DevicesAndPorts";
@@ -50,7 +50,7 @@ function initPath(): string {
   // Redirect legacy hash-based URLs to path equivalents
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash && hash in routes) {
-    window.history.replaceState({}, "", "/" + hash);
+    window.history.replaceState({}, "", withBase(hash));
     return hash;
   }
   return getPath();
@@ -61,6 +61,29 @@ export default function DocsApp() {
 
   useEffect(() => {
     return onNavigate(() => setPath(getPath()));
+  }, []);
+
+  // The pages link to each other and to their example files with site-absolute paths
+  // ("/racks", "/examples/x.csv"). Served under a sub-path those would leave the docs, so
+  // every such click is taken here: a page is opened in place, a file from under BASE.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a");
+      const href = a?.getAttribute("href");
+      if (!a || !href || !href.startsWith("/") || href.startsWith("//") || a.target === "_blank") return;
+      if (BASE !== "/" && href.startsWith(BASE)) return;
+      const [slug, anchor] = href.slice(1).split("#");
+      if (slug in routes) {
+        e.preventDefault();
+        navigateTo(slug);
+        if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
+      } else if (BASE !== "/") {
+        a.setAttribute("href", withBase(href));
+      }
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
   }, []);
 
   const route = routes[path] ?? routes[""];

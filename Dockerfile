@@ -3,6 +3,9 @@ FROM node:lts-bookworm AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
+# The manual (docs/) is a second small site with its own dependencies.
+COPY docs/package.json docs/package-lock.json ./docs/
+RUN cd docs && npm ci
 COPY . .
 # Talk to our own origin instead of the upstream API directly: nginx forwards the
 # device library and blocks every account/upload path (docker/nginx.conf).
@@ -37,6 +40,10 @@ ENV VITE_COMPANY_NAME="${VITE_COMPANY_NAME}" \
     VITE_COMPANY_WEB="${VITE_COMPANY_WEB}" \
     VITE_COMPANY_LOGO="${VITE_COMPANY_LOGO}"
 RUN npm run build
+# The manual, served under /handbuch/ (docker/nginx.conf, src/docsUrl.ts). The upstream docs
+# site does not describe what was built here, so the image carries its own. Without the
+# generated developer reference (TypeDoc) — that is for people working on the code.
+RUN cd docs && node scripts/build-search-index.mjs && DOCS_BASE=/handbuch/ npx vite build
 
 # Production stage
 FROM nginx:bookworm
@@ -44,5 +51,6 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 # A broken config fails the build here, and the running container stays as it is.
 RUN nginx -t
 COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/docs/dist /usr/share/nginx/html/handbuch
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

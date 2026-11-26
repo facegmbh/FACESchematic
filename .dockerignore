@@ -5,7 +5,9 @@ dist
 
 # Sub-projects not needed for frontend build
 devices
-docs
+# docs/ is built into the image as the manual (/handbuch/), minus what it generates.
+docs/dist
+docs/public/dev
 api/src
 api/migrations
 api/backup-*.sql

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { navigateTo, getPath, onNavigate } from "../navigate";
+import { BASE, navigateTo, getPath, onNavigate, withBase } from "../navigate";
 import SearchBar from "./SearchBar";
 
 const navItems = [
@@ -33,7 +33,7 @@ function NavLink({ hash, label, onClick }: { hash: string; label: string; onClic
   const isActive = current === hash;
   return (
     <a
-      href={`/${hash}`}
+      href={withBase(hash)}
       onClick={(e) => {
         e.preventDefault();
         navigateTo(hash);
@@ -86,12 +86,15 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
         >
           Device Database &rarr;
         </a>
-        <a
-          href="/dev/"
-          className="block text-sm text-blue-600 hover:text-blue-800"
-        >
-          Developer Reference &rarr;
-        </a>
+        {/* The generated developer reference is only built for the docs' own host. */}
+        {BASE === "/" && (
+          <a
+            href="/dev/"
+            className="block text-sm text-blue-600 hover:text-blue-800"
+          >
+            Developer Reference &rarr;
+          </a>
+        )}
         <a
           href="mailto:support@easyschematic.live"
           className="block text-sm text-blue-600 hover:text-blue-800"
@@ -134,11 +137,11 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <nav className="hidden md:flex w-64 shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto p-4 flex-col">
         <a
-          href="/"
+          href={BASE}
           onClick={(e) => { e.preventDefault(); navigateTo(""); }}
           className="flex items-center gap-2 text-lg font-bold text-gray-900 mb-4 px-3"
         >
-          <img src="/favicon.svg" alt="" className="w-6 h-6" />
+          <img src={withBase("favicon.svg")} alt="" className="w-6 h-6" />
           EasySchematic
         </a>
         <SearchBar />
@@ -163,11 +166,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
         </button>
         <a
-          href="/"
+          href={BASE}
           onClick={(e) => { e.preventDefault(); navigateTo(""); }}
           className="flex items-center gap-2 text-base font-bold text-gray-900 ml-2"
         >
-          <img src="/favicon.svg" alt="" className="w-5 h-5" />
+          <img src={withBase("favicon.svg")} alt="" className="w-5 h-5" />
           EasySchematic
         </a>
       </div>

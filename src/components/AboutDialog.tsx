@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DEVICE_TEMPLATES } from "../deviceLibrary";
 import { forceFullReset } from "../sw-register";
 import { useT } from "../i18n";
+import { docsUrl } from "../docsUrl";
 
 declare const __APP_VERSION__: string;
 declare const __BUILD_HASH__: string;
@@ -111,7 +112,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
             {[
               { label: "Website", href: "https://easyschematic.live" },
-              { label: "Docs", href: "https://docs.easyschematic.live" },
+              { label: "Docs", href: docsUrl() },
               { label: "GitHub", href: "https://github.com/facegmbh/FACESchematic" },
               { label: "Device Database", href: "https://devices.easyschematic.live" },
               { label: "Support", href: "mailto:support@easyschematic.live" },

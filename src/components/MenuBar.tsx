@@ -26,6 +26,7 @@ import { useTheme } from "../hooks/useTheme";
 import { useT } from "../i18n";
 import { FACE_BACKEND } from "../faceBackend";
 import OdooDialogs, { OdooViewers, saveToOdooIfLinked, showOdooDialog } from "./OdooDialogs";
+import { docsUrl } from "../docsUrl";
 
 // ─── Menu data types ─────────────────────────────────────────────
 
@@ -772,7 +773,7 @@ export default function MenuBar() {
       {
         type: "item",
         label: t("Documentation \u2197"),
-        onClick: () => window.open("https://docs.easyschematic.live", "_blank", "noopener,noreferrer"),
+        onClick: () => window.open(docsUrl(), "_blank", "noopener,noreferrer"),
       },
       {
         type: "item",
