@@ -13,6 +13,11 @@ const traverse = traverseMod.default ?? traverseMod;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_SRC = path.resolve(__dirname, "..", "src");
 
+// DOCS_LOCALE=de indexes the German edition: the translated page where there is one
+// (src/pages-de/, same rule as docs/vite.config.ts) and the German page titles.
+const LOCALE = process.env.DOCS_LOCALE === "de" ? "de" : "en";
+const TITLES = LOCALE === "de" ? JSON.parse(fs.readFileSync(path.join(DOCS_SRC, "locale-de.json"), "utf8")) : {};
+
 // ---- 1. Pull the routes map out of DocsApp.tsx --------------------------------
 
 const appSrc = fs.readFileSync(path.join(DOCS_SRC, "DocsApp.tsx"), "utf8");
@@ -124,13 +129,16 @@ for (const [slug, { componentName }] of Object.entries(routes)) {
   }
 }
 const seenComponents = new Set();
-for (const [slug, { title, componentName }] of Object.entries(routes)) {
+for (const [slug, { title: routeTitle, componentName }] of Object.entries(routes)) {
+  const title = TITLES[routeTitle] ?? routeTitle;
   if (seenComponents.has(componentName)) continue;
   if (componentToPreferredSlug[componentName] !== slug) continue;
   seenComponents.add(componentName);
   const rel = importedComponents[componentName];
   if (!rel) continue;
-  const file = path.join(DOCS_SRC, rel + ".tsx");
+  const original = path.join(DOCS_SRC, rel + ".tsx");
+  const translated = path.join(DOCS_SRC, `pages-${LOCALE}`, path.basename(original));
+  const file = LOCALE !== "en" && fs.existsSync(translated) ? translated : original;
   if (!fs.existsSync(file)) continue;
 
   const ast = parse(fs.readFileSync(file, "utf8"), {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Layout from "./components/Layout";
 import { BASE, getPath, navigateTo, onNavigate, withBase } from "./navigate";
+import { tr } from "./locale";
 import OverviewPage from "./pages/Overview";
 import GettingStartedPage from "./pages/GettingStarted";
 import DevicesAndPortsPage from "./pages/DevicesAndPorts";
@@ -90,7 +91,7 @@ export default function DocsApp() {
   const Page = route.component;
 
   useEffect(() => {
-    document.title = `${route.title} — EasySchematic Docs`;
+    document.title = `${tr(route.title)} — EasySchematic ${tr("Docs")}`;
     document.querySelector("main")?.scrollTo(0, 0);
 
     // Update JSON-LD structured data per page

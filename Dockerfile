@@ -43,7 +43,9 @@ RUN npm run build
 # The manual, served under /handbuch/ (docker/nginx.conf, src/docsUrl.ts). The upstream docs
 # site does not describe what was built here, so the image carries its own. Without the
 # generated developer reference (TypeDoc) — that is for people working on the code.
-RUN cd docs && node scripts/build-search-index.mjs && DOCS_BASE=/handbuch/ npx vite build
+# In German (DOCS_LOCALE=de): the pages translated in docs/src/pages-de/ replace their English
+# originals, a page without a translation stays English.
+RUN cd docs && DOCS_LOCALE=de node scripts/build-search-index.mjs && DOCS_LOCALE=de DOCS_BASE=/handbuch/ npx vite build
 
 # Production stage
 FROM nginx:bookworm

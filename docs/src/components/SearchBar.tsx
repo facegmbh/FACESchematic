@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type MiniSearchModule from "minisearch";
 import { navigateTo, getPath } from "../navigate";
+import { tr } from "../locale";
 
 interface SearchEntry {
   id: number;
@@ -187,15 +188,15 @@ export default function SearchBar() {
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => { warm(); setOpen(true); }}
         onKeyDown={onKeyDown}
-        placeholder="Search docs..."
+        placeholder={tr("Search docs...")}
         className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-400"
-        aria-label="Search documentation"
+        aria-label={tr("Search documentation")}
       />
       {open && query.trim() && (
         <div className="absolute left-1 right-1 top-full mt-1 z-50 bg-white border border-gray-200 rounded shadow-lg max-h-[70vh] overflow-y-auto">
           {hits.length === 0 ? (
             <div className="px-3 py-2 text-xs text-gray-500">
-              {loaded ? "No matches." : "Loading…"}
+              {loaded ? tr("No matches.") : tr("Loading…")}
             </div>
           ) : (
             <ul className="py-1">

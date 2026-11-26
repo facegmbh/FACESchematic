@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { BASE, navigateTo, getPath, onNavigate, withBase } from "../navigate";
 import SearchBar from "./SearchBar";
+import { tr } from "../locale";
 
 const navItems = [
   { hash: "overview", label: "Overview" },
@@ -45,7 +46,7 @@ function NavLink({ hash, label, onClick }: { hash: string; label: string; onClic
           : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
       }`}
     >
-      {label}
+      {tr(label)}
     </a>
   );
 }
@@ -58,7 +59,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
           "children" in item && item.children ? (
             <div key={item.label} className="mt-3 mb-1">
               <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                {item.label}
+                {tr(item.label)}
               </div>
               {item.children.map((child) => (
                 <NavLink key={child.hash} hash={child.hash} label={child.label} onClick={onNavigate} />
@@ -71,12 +72,13 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <div className="mt-8 px-3 flex flex-col gap-2">
         <a
-          href="https://easyschematic.live/"
+          // Served next to an app (BASE is a sub-path), "the app" is that one.
+          href={BASE === "/" ? "https://easyschematic.live/" : "/"}
           target="_blank"
           rel="noopener noreferrer"
           className="block text-sm text-blue-600 hover:text-blue-800"
         >
-          Open App &rarr;
+          {tr("Open App")} &rarr;
         </a>
         <a
           href="https://devices.easyschematic.live/"
@@ -84,7 +86,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
           rel="noopener noreferrer"
           className="block text-sm text-blue-600 hover:text-blue-800"
         >
-          Device Database &rarr;
+          {tr("Device Database")} &rarr;
         </a>
         {/* The generated developer reference is only built for the docs' own host. */}
         {BASE === "/" && (
@@ -92,7 +94,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             href="/dev/"
             className="block text-sm text-blue-600 hover:text-blue-800"
           >
-            Developer Reference &rarr;
+            {tr("Developer Reference")} &rarr;
           </a>
         )}
         <a
@@ -153,7 +155,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="p-1.5 rounded hover:bg-gray-100 text-gray-700"
-          aria-label="Toggle navigation"
+          aria-label={tr("Toggle navigation")}
         >
           {menuOpen ? (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
