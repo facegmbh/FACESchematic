@@ -94,6 +94,17 @@ export function detectScaleInText(text: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
+/** Every scale a sheet states, each once, in the order they appear. A plan with details
+ *  names several — then nobody but the reader can say which one the floor plan is at. */
+export function detectScalesInText(text: string): number[] {
+  const found: number[] = [];
+  for (const m of text.matchAll(/\b1\s*:\s*(20|25|50|75|100|125|200|250|500)\b/g)) {
+    const n = Number(m[1]);
+    if (!found.includes(n)) found.push(n);
+  }
+  return found;
+}
+
 /** The layer that holds the walls, by name. Architects are consistent about this one word,
  *  in either language and in both spellings. */
 export function guessWallLayer(layers: readonly { id: string; name: string }[]): string | undefined {

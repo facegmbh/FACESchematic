@@ -35,6 +35,8 @@ import type { FloorplanSymbolShape,
   FloorplanSymbolGroup,
   FloorplanToken,
   FloorplanUnderlay,
+  FloorplanWall,
+  FloorplanDimension,
   TitleBlock,
 } from "./types";
 import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
@@ -99,6 +101,196 @@ export function measureRealDistanceMm(a: Vec2, b: Vec2, scaleDenominator: number
 /** Real-world distance formatted the way plans annotate it (metres, 2 decimals). */
 export function formatMetres(realMm: number): string {
   return `${(realMm / 1000).toFixed(2)} m`;
+}
+
+// ── Dimension lines ──────────────────────────────────────────────────
+
+/** How a dimension line is drawn, in paper mm — shared by the sheet and the PDF so the two
+ *  cannot drift apart. */
+export const DIMENSION_COLOR = "#1d4ed8";
+export const DIMENSION_LINE_MM = 0.25;
+/** Font size of the figure on paper (3 mm is 8.5 pt). */
+export const DIMENSION_TEXT_MM = 3;
+const DIMENSION_TICK_MM = 1.5;
+const DIMENSION_LABEL_GAP_MM = 0.8;
+
+export interface DimensionLayout {
+  /** The distance at the page's scale, as written on the line. */
+  text: string;
+  /** Bottom-middle of the figure. */
+  labelAtMm: Vec2;
+  /** Clockwise rotation of the figure. Always readable: between -90° and 90°, a vertical
+   *  line read from the bottom up as on any drawing. */
+  labelAngleDeg: number;
+  /** The short stroke across the line at each end. */
+  ticksMm: [Vec2, Vec2][];
+}
+
+export function dimensionLayout(
+  dim: { fromMm: Vec2; toMm: Vec2 },
+  scaleDenominator: number,
+): DimensionLayout | null {
+  const dx = dim.toMm.x - dim.fromMm.x;
+  const dy = dim.toMm.y - dim.fromMm.y;
+  const len = Math.hypot(dx, dy);
+  if (!(len > 0.01)) return null;
+  // The direction the figure is read in: left to right, and bottom to top when vertical.
+  let rx = dx / len;
+  let ry = dy / len;
+  if (rx < -1e-9 || (Math.abs(rx) <= 1e-9 && ry > 0)) {
+    rx = -rx;
+    ry = -ry;
+  }
+  // "Above" for somebody reading along r, with y pointing down the sheet.
+  const up = { x: ry, y: -rx };
+  const mid = { x: (dim.fromMm.x + dim.toMm.x) / 2, y: (dim.fromMm.y + dim.toMm.y) / 2 };
+  const tick = (p: Vec2): [Vec2, Vec2] => [
+    { x: p.x + up.x * DIMENSION_TICK_MM, y: p.y + up.y * DIMENSION_TICK_MM },
+    { x: p.x - up.x * DIMENSION_TICK_MM, y: p.y - up.y * DIMENSION_TICK_MM },
+  ];
+  return {
+    text: formatMetres(measureRealDistanceMm(dim.fromMm, dim.toMm, scaleDenominator)),
+    labelAtMm: { x: mid.x + up.x * DIMENSION_LABEL_GAP_MM, y: mid.y + up.y * DIMENSION_LABEL_GAP_MM },
+    labelAngleDeg: (Math.atan2(ry, rx) * 180) / Math.PI,
+    ticksMm: [tick(dim.fromMm), tick(dim.toMm)],
+  };
+}
+
+// ── Snapping a measuring point ───────────────────────────────────────
+
+/** What a measuring point caught: a corner (of a wall, or the end of a dimension line), the
+ *  face of a wall, or only the horizontal/vertical through the first point. */
+export type MeasureSnapKind = "corner" | "edge" | "axis";
+
+export interface MeasureSnap {
+  pointMm: Vec2;
+  kind: MeasureSnapKind;
+}
+
+export interface MeasureSnapTargets {
+  walls?: FloorplanWall[];
+  dimensions?: FloorplanDimension[];
+  scaleDenominator: number;
+}
+
+/**
+ * The outline of a wall as it is drawn: both faces, set off from the axis by half the
+ * thickness at the page's scale and mitred where a run turns, plus the two butt ends.
+ * A measurement goes from face to face — the clear width — never from axis to axis.
+ */
+function wallOutline(wall: FloorplanWall, scaleDenominator: number): { corners: Vec2[]; edges: [Vec2, Vec2][] } {
+  const pts = wall.pointsMm.filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-6);
+  if (pts.length < 2) return { corners: [], edges: [] };
+  const half = realMmToPaperMm(wall.thicknessMm, scaleDenominator) / 2;
+  const normals: Vec2[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x;
+    const dy = pts[i + 1].y - pts[i].y;
+    const len = Math.hypot(dx, dy);
+    normals.push({ x: -dy / len || 0, y: dx / len || 0 });
+  }
+  const side = (s: 1 | -1): Vec2[] => pts.map((p, k) => {
+    const before = normals[k - 1];
+    const after = normals[k];
+    if (!before || !after) {
+      const n = before ?? after;
+      return { x: p.x + s * half * n.x, y: p.y + s * half * n.y };
+    }
+    // Where the two set-off faces meet. A run doubling back on itself has no such point.
+    const dot = before.x * after.x + before.y * after.y;
+    if (1 + dot < 0.05) return { x: p.x + s * half * after.x, y: p.y + s * half * after.y };
+    return {
+      x: p.x + (s * half * (before.x + after.x)) / (1 + dot),
+      y: p.y + (s * half * (before.y + after.y)) / (1 + dot),
+    };
+  });
+  const a = side(1);
+  const b = side(-1);
+  const edges: [Vec2, Vec2][] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    edges.push([a[i], a[i + 1]], [b[i], b[i + 1]]);
+  }
+  edges.push([a[0], b[0]], [a[a.length - 1], b[b.length - 1]]);
+  return { corners: [...a, ...b], edges };
+}
+
+function nearestOnSegment(p: Vec2, [a, b]: [Vec2, Vec2]): Vec2 {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) return { x: a.x, y: a.y };
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+/**
+ * Where a measuring click near `p` should land, or null when nothing is within
+ * `toleranceMm` (paper mm — the caller turns a few screen pixels into it, so the catch
+ * feels the same at every zoom).
+ *
+ * A corner beats a face. With `anchorMm` — the first point of the measurement — the second
+ * point also holds the horizontal or vertical through it; where that line crosses a wall
+ * face, the point is on the face *and* level with the first, which is how a clear width is
+ * measured square.
+ */
+export function snapMeasurePoint(
+  p: Vec2,
+  targets: MeasureSnapTargets,
+  toleranceMm: number,
+  anchorMm?: Vec2 | null,
+): MeasureSnap | null {
+  const dist = (q: Vec2) => Math.hypot(q.x - p.x, q.y - p.y);
+  const corners: Vec2[] = [];
+  const edges: [Vec2, Vec2][] = [];
+  for (const wall of targets.walls ?? []) {
+    if (wall.hidden) continue;
+    const outline = wallOutline(wall, targets.scaleDenominator);
+    corners.push(...outline.corners);
+    edges.push(...outline.edges);
+  }
+  for (const d of targets.dimensions ?? []) corners.push(d.fromMm, d.toMm);
+
+  let corner: Vec2 | null = null;
+  for (const c of corners) {
+    if (dist(c) <= toleranceMm && (!corner || dist(c) < dist(corner))) corner = c;
+  }
+  if (corner) return { pointMm: { x: corner.x, y: corner.y }, kind: "corner" };
+
+  // The horizontal or vertical through the first point, whichever the pointer is closer to.
+  let axis: { horizontal: boolean; pointMm: Vec2 } | null = null;
+  if (anchorMm) {
+    const offH = Math.abs(p.y - anchorMm.y);
+    const offV = Math.abs(p.x - anchorMm.x);
+    if (Math.min(offH, offV) <= toleranceMm) {
+      axis = offH <= offV
+        ? { horizontal: true, pointMm: { x: p.x, y: anchorMm.y } }
+        : { horizontal: false, pointMm: { x: anchorMm.x, y: p.y } };
+    }
+  }
+
+  let onEdge: Vec2 | null = null;
+  let onEdgeAndAxis: Vec2 | null = null;
+  for (const edge of edges) {
+    const q = nearestOnSegment(p, edge);
+    if (dist(q) > toleranceMm) continue;
+    if (!onEdge || dist(q) < dist(onEdge)) onEdge = q;
+    if (!axis || !anchorMm) continue;
+    // Where this face crosses the held line.
+    const [a, b] = edge;
+    const along = axis.horizontal ? b.y - a.y : b.x - a.x;
+    if (Math.abs(along) < 1e-9) continue; // the face runs along the line, no single crossing
+    const t = ((axis.horizontal ? anchorMm.y - a.y : anchorMm.x - a.x)) / along;
+    if (t < 0 || t > 1) continue;
+    const x: Vec2 = axis.horizontal
+      ? { x: a.x + t * (b.x - a.x), y: anchorMm.y }
+      : { x: anchorMm.x, y: a.y + t * (b.y - a.y) };
+    if (dist(x) > 2 * toleranceMm) continue;
+    if (!onEdgeAndAxis || dist(x) < dist(onEdgeAndAxis)) onEdgeAndAxis = x;
+  }
+  if (onEdgeAndAxis) return { pointMm: onEdgeAndAxis, kind: "edge" };
+  if (onEdge) return { pointMm: onEdge, kind: "edge" };
+  if (axis) return { pointMm: axis.pointMm, kind: "axis" };
+  return null;
 }
 
 // ── Sheet geometry ───────────────────────────────────────────────────
@@ -220,6 +412,29 @@ export function calibratedScale(pickA: Vec2, pickB: Vec2, realDistanceMm: number
 export function underlayMmPerPx(underlay: FloorplanUnderlay, scaleDenominator: number): number | undefined {
   if (underlay.naturalWidthPx <= 0 || underlay.sizeMm.w <= 0) return undefined;
   return paperMmToRealMm(underlay.sizeMm.w / underlay.naturalWidthPx, scaleDenominator);
+}
+
+/**
+ * Is this plan lying on the sheet at the size it was plotted at?
+ *
+ * An architect's PDF carries its physical page size, and the import lays it on the sheet at
+ * exactly that. As long as it is, the page's scale is a statement about the plan ("this is
+ * drawn at 1:100") and changing it must leave the drawing alone — see setFloorplanScale.
+ * Once the plan was resized, by hand or by a calibration, its size on paper is a
+ * measurement instead and the scale converts it.
+ *
+ * Images have no plotted size, and a DXF goes on at its real size. A PDF from before the
+ * dpi was kept counts when it still covers the sheet.
+ */
+export function underlayAtPlottedSize(
+  underlay: Pick<FloorplanUnderlay, "kind" | "dpi" | "naturalWidthPx" | "naturalHeightPx" | "sizeMm">,
+  sheet: { w: number; h: number },
+): boolean {
+  if (underlay.kind !== "pdf" || underlay.naturalWidthPx <= 0 || underlay.sizeMm.w <= 0) return false;
+  // The dpi is kept rounded, and a poster-sized sheet is rasterized at few of them: 2 %.
+  const near = (a: number, b: number) => b > 0 && Math.abs(a / b - 1) < 0.02;
+  if (underlay.dpi && underlay.dpi > 0) return near(underlay.sizeMm.w, (underlay.naturalWidthPx / underlay.dpi) * 25.4);
+  return near(underlay.sizeMm.w, sheet.w) && near(underlay.sizeMm.h, sheet.h);
 }
 
 /** Re-fit an underlay when the drawing scale changes so the plan keeps covering the

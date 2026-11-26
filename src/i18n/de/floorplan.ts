@@ -74,6 +74,22 @@ export const DE_FLOORPLAN: Record<string, string> = {
   "Click two points a known distance apart, then enter that distance":
     "Zwei Punkte mit bekanntem Abstand anklicken, dann diesen Abstand eintragen",
   "Calibrate": "Kalibrieren",
+  "Measure": "Messen",
+  "Draw dimension": "Maß einzeichnen",
+  "Keep this measurement on the plan as a dimension line. Select it with the Select tool and press Delete to remove it.":
+    "Diese Messung als Maßlinie in den Plan einzeichnen. Zum Entfernen mit „Auswählen“ anklicken und Entf drücken.",
+  "Click two points on the plan to read the distance between them at the plan's scale":
+    "Zwei Punkte im Plan anklicken — der Abstand wird im Maßstab des Plans angezeigt",
+  "Click the first point to measure from.": "Ersten Messpunkt anklicken.",
+  "Click the second point.": "Zweiten Messpunkt anklicken.",
+  "Catches walls and dimensions — hold Alt to place freely.": "Rastet an Wänden und Maßen ein — mit Alt frei setzen.",
+  "{dx} across, {dy} up — at {scale}": "{dx} waagerecht, {dy} senkrecht — bei {scale}",
+  "Plan imported at {scale}, as the plan states — the sheet now has the plan's format. Check a known dimension with the measuring tool.":
+    "Plan mit {scale} importiert, wie auf dem Plan angegeben — das Blatt hat jetzt das Format des Plans. Ein bekanntes Maß mit dem Messwerkzeug gegenprüfen.",
+  "Plan imported — it states several scales ({scales}). Pick the floor plan's one in the toolbar.":
+    "Plan importiert — er nennt mehrere Maßstäbe ({scales}). Den des Grundrisses oben in der Leiste wählen.",
+  "Plan imported — the sheet now has the plan's format. No scale was found on it: set it in the toolbar, or calibrate against a known dimension.":
+    "Plan importiert — das Blatt hat jetzt das Format des Plans. Ein Maßstab steht nicht darauf: oben in der Leiste einstellen oder an einem bekannten Maß kalibrieren.",
   "Real-world size of one pixel of the imported drawing":
     "Reale Größe eines Pixels der importierten Zeichnung",
   "not calibrated": "nicht kalibriert",
@@ -95,8 +111,6 @@ export const DE_FLOORPLAN: Record<string, string> = {
     "Mit {actual} dpi gerastert — {wanted} dpi bräuchten ein größeres Bild, als der Browser für dieses Blattformat bauen kann.",
   "The plan is {mb} MB — autosave to browser storage may fail. Save the project to a file.":
     "Der Plan hat {mb} MB — die automatische Sicherung im Browser kann fehlschlagen. Das Projekt in eine Datei speichern.",
-  "Plan imported — the sheet now has the plan's format. Calibrate it against a known dimension next.":
-    "Plan importiert — das Blatt hat jetzt das Format des Plans. Als Nächstes an einem bekannten Maß kalibrieren.",
   "Plan imported — calibrate it against a known dimension next.":
     "Plan importiert — als Nächstes an einem bekannten Maß kalibrieren.",
   "Could not import that file.": "Diese Datei ließ sich nicht importieren.",

@@ -11,6 +11,7 @@ import { PT_TO_MM, rotatedSquareFactor } from "./floorplan";
 import type { DxfUnit, PdfLayerChoice } from "./types";
 import type { DxfRasterized } from "./dxfImport";
 import { t } from "./i18n";
+import { detectScalesInText } from "./pdfWalls";
 
 /** What the file picker accepts. DWG is deliberately absent — see importUnderlayFile. */
 export const UNDERLAY_ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/svg+xml,.pdf,.png,.jpg,.jpeg,.webp,.svg,.dxf";
@@ -57,6 +58,9 @@ export interface ImportedUnderlay {
   layers?: PdfLayerChoice[];
   /** Resolution the PDF was rasterized at, in dpi of the real sheet. */
   dpi?: number;
+  /** The scales the PDF page states in its text ("M 1:100"), each once. Empty when it
+   *  states none, or carries no text at all (a scan, lettering turned into curves). */
+  statedScales?: number[];
   /** Real-world mm per pixel, when the source says so itself — a DXF does. Set means the
    *  underlay can go on the sheet already calibrated. */
   mmPerPx?: number;
@@ -289,10 +293,19 @@ async function renderPdfPage(file: File, pageNumber: number, dpi: number, layers
       ...(config ? { optionalContentConfigPromise: Promise.resolve(config) } : {}),
     }).promise;
 
+    let statedScales: number[] = [];
+    try {
+      const text = await page.getTextContent();
+      statedScales = detectScalesInText(text.items.map((it) => (it as { str?: string }).str ?? "").join(" "));
+    } catch {
+      // No text layer, no stated scale.
+    }
+
     const src = encodeCanvas(canvas);
     return {
       src,
       kind: "pdf",
+      statedScales,
       naturalWidthPx: canvas.width,
       naturalHeightPx: canvas.height,
       sourceName: file.name,

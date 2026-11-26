@@ -7,6 +7,10 @@ import {
   buildLegendRows,
   clampToSheet,
   drawingAreaMm,
+  DIMENSION_COLOR,
+  DIMENSION_LINE_MM,
+  DIMENSION_TEXT_MM,
+  dimensionLayout,
   formatMetres,
   formatScale,
   layoutDrawingBlock,
@@ -24,6 +28,8 @@ import {
   LEGEND_COMPANY_LINE_MM,
   LEGEND_COMPANY_LOGO_MM,
   measureRealDistanceMm,
+  snapMeasurePoint,
+  type MeasureSnap,
   rectFromDrag,
   MASK_MIN_SIZE_MM,
   coverageAnchorMm,
@@ -87,6 +93,8 @@ const IN_TO_MM = 25.4;
 const SCREEN_PPI = 96;
 /** Symbol positions snap to this grid on paper; hold Alt for free placement. */
 const SNAP_MM = 0.5;
+/** How close, in screen pixels, the measuring tool has to come to something to catch it. */
+const MEASURE_SNAP_PX = 10;
 
 interface Props {
   page: FloorplanPage;
@@ -114,7 +122,8 @@ export type Selection =
   | { kind: "note"; id: string }
   | { kind: "mask"; id: string }
   | { kind: "coverage"; id: string }
-  | { kind: "wall"; id: string };
+  | { kind: "wall"; id: string }
+  | { kind: "dimension"; id: string };
 
 type DragState =
   | { kind: "symbols"; startClient: Vec2; starts: Record<string, Vec2> }
@@ -186,6 +195,8 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const removeFloorplanCoverage = useSchematicStore((s) => s.removeFloorplanCoverage);
   const addFloorplanWall = useSchematicStore((s) => s.addFloorplanWall);
   const removeFloorplanWall = useSchematicStore((s) => s.removeFloorplanWall);
+  const addFloorplanDimension = useSchematicStore((s) => s.addFloorplanDimension);
+  const removeFloorplanDimension = useSchematicStore((s) => s.removeFloorplanDimension);
   const wallMaterials = useSchematicStore((s) => s.wallMaterials);
   const customTemplates = useSchematicStore((s) => s.customTemplates);
   const companyProfile = useSchematicStore((s) => s.companyProfile);
@@ -323,6 +334,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const [calibCursor, setCalibCursor] = useState<Vec2 | null>(null);
   const [calibInput, setCalibInput] = useState("");
 
+  // The measuring tool: two clicks, the distance between them at the page's scale. Nothing
+  // of it is kept — it answers a question, it does not draw a dimension onto the plan.
+  const [measurePicks, setMeasurePicks] = useState<Vec2[]>([]);
+  const [measureCursor, setMeasureCursor] = useState<Vec2 | null>(null);
+  // What the pointer has caught — a wall corner, a wall face, the level of the first point.
+  const [measureSnap, setMeasureSnap] = useState<MeasureSnap | null>(null);
+
   // Switching tools drops any half-finished calibration. Adjusting state during render
   // (React's "derive state from props" pattern) keeps this off the effect path, so the
   // stale picks never get a frame to render in.
@@ -331,6 +349,9 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     setToolAtLastRender(tool);
     if (calibPicks.length > 0) setCalibPicks([]);
     if (calibCursor) setCalibCursor(null);
+    if (measurePicks.length > 0) setMeasurePicks([]);
+    if (measureCursor) setMeasureCursor(null);
+    if (measureSnap) setMeasureSnap(null);
   }
 
   /** Client coordinates → paper mm on the sheet. */
@@ -350,6 +371,20 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     const { zoom: z } = vpRef.current;
     return { x: (dx / z / SCREEN_PPI) * IN_TO_MM, y: (dy / z / SCREEN_PPI) * IN_TO_MM };
   }, []);
+
+  /** A measuring point under the pointer: caught by what is drawn within ~10 screen pixels,
+   *  free with Alt held — the same key that frees every other placement. */
+  const measurePointAt = useCallback((e: React.MouseEvent): { pointMm: Vec2; snap: MeasureSnap | null } => {
+    const pos = clientToPaperMm(e.clientX, e.clientY);
+    if (e.altKey) return { pointMm: pos, snap: null };
+    const caught = snapMeasurePoint(
+      pos,
+      { walls: page.walls, dimensions: page.dimensions, scaleDenominator: page.scaleDenominator },
+      clientDeltaToMm(MEASURE_SNAP_PX, 0).x,
+      measurePicks.length === 1 ? measurePicks[0] : null,
+    );
+    return { pointMm: caught?.pointMm ?? pos, snap: caught };
+  }, [clientToPaperMm, clientDeltaToMm, page.walls, page.dimensions, page.scaleDenominator, measurePicks]);
 
   const snap = (v: number, free: boolean) => (free ? v : Math.round(v / SNAP_MM) * SNAP_MM);
 
@@ -487,7 +522,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
     // the end of that drag and was dropped: calibrating took no point at all.
     didMoveRef.current = false;
     setDidMove(false);
-    if (tool === "calibrate") return; // handled on click
+    if (tool === "calibrate" || tool === "measure") return; // handled on click
     const willPan = e.button === 1 || spaceHeld || panMode === "pan-first";
     if (e.button === 1) e.preventDefault();
     setPanning({ startClient: { x: e.clientX, y: e.clientY }, startPan: { ...vpRef.current.pan } });
@@ -506,6 +541,15 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const handleSheetClick = useCallback((e: React.MouseEvent) => {
     if (didMoveRef.current) return;
     const pos = clientToPaperMm(e.clientX, e.clientY);
+
+    if (tool === "measure") {
+      // A third click starts the next measurement.
+      const { pointMm } = measurePointAt(e);
+      setMeasurePicks(measurePicks.length >= 2 ? [pointMm] : [...measurePicks, pointMm]);
+      setMeasureCursor(null);
+      setMeasureSnap(null);
+      return;
+    }
 
     if (tool === "calibrate") {
       if (!page.underlay) return;
@@ -566,7 +610,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       setNoteDraft(t("Note"));
       onToolChange("select");
     }
-  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addFloorplanCoverage, finishWall, snapVec, addToast, onToolChange]);
+  }, [tool, page.underlay, page.id, page.scaleDenominator, activeGroupId, activeLine, calibPicks, measurePicks, measurePointAt, clientToPaperMm, addFloorplanSymbol, addFloorplanNote, addFloorplanCoverage, finishWall, snapVec, addToast, onToolChange]);
 
   const handleSymbolMouseDown = useCallback((e: React.MouseEvent, symbol: FloorplanSymbol) => {
     if (tool === "calibrate") return;
@@ -601,6 +645,11 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (tool === "calibrate" && calibPicks.length === 1) {
       setCalibCursor(clientToPaperMm(e.clientX, e.clientY));
+    }
+    if (tool === "measure") {
+      const at = measurePointAt(e);
+      setMeasureSnap(at.snap);
+      if (measurePicks.length === 1) setMeasureCursor(at.pointMm);
     }
     if (tool === "wall") {
       // Deliberately no `wallDraft` read here: the updater sees the live value, so the
@@ -797,7 +846,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         setViewport(vpRef.current.zoom, { x: panning.startPan.x + dx, y: panning.startPan.y + dy });
       }
     }
-  }, [tool, calibPicks.length, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, updateFloorplanCoverage, updateFloorplanProjection, setViewport]);
+  }, [tool, calibPicks.length, measurePicks.length, measurePointAt, dragging, panning, page, clientToPaperMm, clientDeltaToMm, updateFloorplanSymbol, updateFloorplanUnderlay, updateFloorplanLegend, updateFloorplanDrawingBlock, updateFloorplanNote, updateFloorplanMask, updateFloorplanCoverage, updateFloorplanProjection, setViewport]);
 
   const handleMouseUp = useCallback(() => {
     if (dragging?.kind === "mask-draw") {
@@ -837,6 +886,12 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       e.preventDefault();
       finishWall(wallDraft.pointsMm);
       setWallDraft(null);
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "dimension") {
+      e.preventDefault();
+      removeFloorplanDimension(page.id, selection.id);
+      setSelection({ kind: "none" });
       return;
     }
     if ((e.key === "Delete" || e.key === "Backspace") && selection.kind === "wall") {
@@ -933,7 +988,7 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         className="absolute inset-0 bg-neutral-300 outline-none"
         tabIndex={0}
         style={{
-          cursor: tool === "calibrate" || tool === "erase" || tool === "coverage" || tool === "wall" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
+          cursor: tool === "calibrate" || tool === "measure" || tool === "erase" || tool === "coverage" || tool === "wall" ? "crosshair" : tool === "place" ? "copy" : tool === "note" ? "text" : isPanning ? "grabbing" : spaceHeld ? "grab" : "default",
           userSelect: "none",
         }}
         onKeyDown={handleKeyDown}
@@ -1385,6 +1440,80 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
             );
           })()}
 
+          {/* Dimension lines kept from the measuring tool */}
+          {(page.dimensions ?? []).length > 0 && (
+            <svg className="absolute inset-0" width={pageWPx} height={pageHPx} style={{ zIndex: 22, pointerEvents: "none" }} data-testid="floorplan-dimensions">
+              {(page.dimensions ?? []).map((dim) => {
+                const l = dimensionLayout(dim, page.scaleDenominator);
+                if (!l) return null;
+                const selected = selection.kind === "dimension" && selection.id === dim.id;
+                const color = selected ? "#059669" : DIMENSION_COLOR;
+                return (
+                  <g key={dim.id} data-dimension-id={dim.id}>
+                    <line x1={mmToPx(dim.fromMm.x)} y1={mmToPx(dim.fromMm.y)} x2={mmToPx(dim.toMm.x)} y2={mmToPx(dim.toMm.y)} stroke={color} strokeWidth={Math.max(1, mmToPx(DIMENSION_LINE_MM)) * (selected ? 2 : 1)} />
+                    {l.ticksMm.map(([p, q], i) => (
+                      <line key={i} x1={mmToPx(p.x)} y1={mmToPx(p.y)} x2={mmToPx(q.x)} y2={mmToPx(q.y)} stroke={color} strokeWidth={Math.max(1, mmToPx(DIMENSION_LINE_MM))} />
+                    ))}
+                    <text
+                      x={mmToPx(l.labelAtMm.x)} y={mmToPx(l.labelAtMm.y)}
+                      transform={`rotate(${l.labelAngleDeg} ${mmToPx(l.labelAtMm.x)} ${mmToPx(l.labelAtMm.y)})`}
+                      textAnchor="middle" fontSize={mmToPx(DIMENSION_TEXT_MM)} fill={color} fontWeight={500}
+                      stroke="#ffffff" strokeWidth={mmToPx(0.6)} paintOrder="stroke"
+                    >
+                      {l.text}
+                    </text>
+                    {/* A grab strip of ~12 real pixels whatever the zoom. */}
+                    {tool === "select" && (
+                      <line
+                        x1={mmToPx(dim.fromMm.x)} y1={mmToPx(dim.fromMm.y)} x2={mmToPx(dim.toMm.x)} y2={mmToPx(dim.toMm.y)}
+                        stroke="transparent" strokeWidth={12 / Math.max(zoom, 0.05)}
+                        style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                        onMouseDown={(e) => { e.stopPropagation(); setSelection({ kind: "dimension", id: dim.id }); }}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          )}
+
+          {/* Measuring overlay */}
+          {tool === "measure" && measurePicks.length > 0 && (() => {
+            const a = measurePicks[0];
+            const b = measurePicks[1] ?? measureCursor;
+            if (!b) return <svg className="absolute inset-0 pointer-events-none" width={pageWPx} height={pageHPx} style={{ zIndex: 40 }}><circle cx={mmToPx(a.x)} cy={mmToPx(a.y)} r={4} fill="#2563eb" /></svg>;
+            return (
+              <svg className="absolute inset-0 pointer-events-none" width={pageWPx} height={pageHPx} style={{ zIndex: 40 }} data-testid="floorplan-measure-line">
+                <line x1={mmToPx(a.x)} y1={mmToPx(a.y)} x2={mmToPx(b.x)} y2={mmToPx(b.y)} stroke="#2563eb" strokeWidth={2} />
+                <circle cx={mmToPx(a.x)} cy={mmToPx(a.y)} r={4} fill="#2563eb" />
+                <circle cx={mmToPx(b.x)} cy={mmToPx(b.y)} r={4} fill="#2563eb" />
+                <text
+                  x={mmToPx((a.x + b.x) / 2)} y={mmToPx((a.y + b.y) / 2) - 8}
+                  textAnchor="middle" fontSize={13} fill="#1e3a8a" fontWeight={600}
+                  stroke="#ffffff" strokeWidth={3} paintOrder="stroke"
+                >
+                  {formatMetres(measureRealDistanceMm(a, b, page.scaleDenominator))}
+                </text>
+              </svg>
+            );
+          })()}
+
+          {/* What the measuring point has caught: a square on a corner, a diamond on a wall
+              face, a ring where only the level of the first point is held. */}
+          {tool === "measure" && measureSnap && (() => {
+            const x = mmToPx(measureSnap.pointMm.x);
+            const y = mmToPx(measureSnap.pointMm.y);
+            const r = 7 / Math.max(zoom, 0.05);
+            const stroke = { fill: "none", stroke: "#f97316", strokeWidth: 2 / Math.max(zoom, 0.05) };
+            return (
+              <svg className="absolute inset-0 pointer-events-none" width={pageWPx} height={pageHPx} style={{ zIndex: 41, overflow: "visible" }} data-testid="floorplan-measure-snap" data-snap-kind={measureSnap.kind}>
+                {measureSnap.kind === "corner" && <rect x={x - r} y={y - r} width={2 * r} height={2 * r} {...stroke} />}
+                {measureSnap.kind === "edge" && <path d={`M${x - r},${y} L${x},${y - r} L${x + r},${y} L${x},${y + r} Z`} {...stroke} />}
+                {measureSnap.kind === "axis" && <circle cx={x} cy={y} r={r} {...stroke} />}
+              </svg>
+            );
+          })()}
+
           {/* Legend box */}
           {page.legend.visible && (legendRows.length > 0 || legendNotes.length > 0 || legendKeys.length > 0) && (
             <div
@@ -1793,6 +1922,51 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
         </div>
       )}
 
+      {/* Measuring read-out */}
+      {tool === "measure" && (() => {
+        const a = measurePicks[0];
+        const b = measurePicks[1] ?? measureCursor;
+        const toM = (mm: number) => formatMetres(paperMmToRealMm(Math.abs(mm), page.scaleDenominator));
+        return (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-white border border-blue-300 rounded shadow-lg px-3 py-2 text-xs flex items-center gap-2" data-print-hide data-testid="floorplan-measure">
+            {!a || !b ? (
+              <span className="text-blue-800">
+                {!a ? t("Click the first point to measure from.") : t("Click the second point.")}
+                <span className="text-neutral-500 ml-2">{t("Catches walls and dimensions — hold Alt to place freely.")}</span>
+              </span>
+            ) : (
+              <>
+                <span className="text-neutral-700">{t("Distance")}</span>
+                <span className="font-semibold text-blue-900" data-testid="floorplan-measure-value">{formatMetres(measureRealDistanceMm(a, b, page.scaleDenominator))}</span>
+                <span className="text-neutral-500">
+                  {t("{dx} across, {dy} up — at {scale}", { dx: toM(b.x - a.x), dy: toM(b.y - a.y), scale: formatScale(page.scaleDenominator) })}
+                </span>
+                {measurePicks.length === 2 && (
+                  <button
+                    className="px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    title={t("Keep this measurement on the plan as a dimension line. Select it with the Select tool and press Delete to remove it.")}
+                    data-testid="floorplan-measure-keep"
+                    onClick={() => {
+                      addFloorplanDimension(page.id, { fromMm: measurePicks[0], toMm: measurePicks[1] });
+                      setMeasurePicks([]);
+                      setMeasureCursor(null);
+                    }}
+                  >
+                    {t("Draw dimension")}
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              className="px-2 py-0.5 text-neutral-500 hover:text-neutral-800"
+              onClick={() => { setMeasurePicks([]); onToolChange("select"); }}
+            >
+              {t("Close")}
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Tool + zoom controls */}
       <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white/90 border border-neutral-300 rounded shadow px-2 py-1 text-xs select-none" data-print-hide>
         <button
@@ -1815,6 +1989,14 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
           title={t("Click the plan to add a text note (installation hint, remark)")}
         >
           ✎ {t("Note")}
+        </button>
+        <button
+          className={`px-2 py-0.5 rounded cursor-pointer ${tool === "measure" ? "bg-blue-100 text-blue-800" : "text-neutral-600 hover:bg-neutral-100"}`}
+          onClick={() => onToolChange(tool === "measure" ? "select" : "measure")}
+          title={t("Click two points on the plan to read the distance between them at the plan's scale")}
+          data-testid="floorplan-tool-measure"
+        >
+          📐 {t("Measure")}
         </button>
         <button
           className={`px-2 py-0.5 rounded cursor-pointer ${tool === "wall" ? "bg-emerald-100 text-emerald-800" : "text-neutral-600 hover:bg-neutral-100"}`}

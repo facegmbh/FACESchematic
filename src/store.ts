@@ -48,6 +48,7 @@ import type {
   FloorplanCoverage,
   FloorplanProjection,
   FloorplanWall,
+  FloorplanDimension,
   FloorplanHeatmap,
   WallMaterial,
   WallMaterialSpec,
@@ -101,6 +102,8 @@ import {
   nextSymbolLabel,
   renumberGroup,
   rescaleUnderlayForScale,
+  sheetSizeMm,
+  underlayAtPlottedSize,
   underlayMmPerPx,
 } from "./floorplan";
 import type { Orientation } from "./printConfig";
@@ -1203,6 +1206,9 @@ interface SchematicState {
   addFloorplanWalls: (pageId: string, walls: Omit<FloorplanWall, "id">[]) => string[];
   updateFloorplanWall: (pageId: string, wallId: string, patch: Partial<Omit<FloorplanWall, "id">>) => void;
   removeFloorplanWall: (pageId: string, wallId: string) => void;
+  /** Keep a measurement as a dimension line. Null when both points are the same spot. */
+  addFloorplanDimension: (pageId: string, dim: Omit<FloorplanDimension, "id">) => string | null;
+  removeFloorplanDimension: (pageId: string, dimensionId: string) => void;
   updateFloorplanHeatmap: (pageId: string, patch: Partial<FloorplanHeatmap>) => void;
   /** Move a rack (and all its placements + accessories) from one rack-elevation page to another. */
   moveRackToPage: (srcPageId: string, rackId: string, dstPageId: string) => void;
@@ -1328,6 +1334,11 @@ function nextFloorplanWallId(): string {
   return `fpwall-${++floorplanWallIdCounter}`;
 }
 
+let floorplanDimensionIdCounter = 0;
+function nextFloorplanDimensionId(): string {
+  return `fpdim-${++floorplanDimensionIdCounter}`;
+}
+
 let rackIdCounter = 0;
 function nextRackId(): string {
   return `rack-${++rackIdCounter}`;
@@ -1430,6 +1441,10 @@ function syncRackCounters(pages: SchematicPage[]) {
       for (const wall of page.walls ?? []) {
         const wm2 = wall.id.match(/^fpwall-(\d+)$/);
         if (wm2) floorplanWallIdCounter = Math.max(floorplanWallIdCounter, Number(wm2[1]));
+      }
+      for (const dim of page.dimensions ?? []) {
+        const dm2 = dim.id.match(/^fpdim-(\d+)$/);
+        if (dm2) floorplanDimensionIdCounter = Math.max(floorplanDimensionIdCounter, Number(dm2[1]));
       }
       continue;
     }
@@ -6957,6 +6972,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       groups,
       symbols,
       walls: (src.walls ?? []).map((w) => ({ ...w, id: nextFloorplanWallId(), pointsMm: w.pointsMm.map((pt) => ({ ...pt })) })),
+      ...(src.dimensions
+        ? { dimensions: src.dimensions.map((d) => ({ id: nextFloorplanDimensionId(), fromMm: { ...d.fromMm }, toMm: { ...d.toMm } })) }
+        : {}),
       coverages: (src.coverages ?? []).map((c) => ({
         ...c,
         id: nextFloorplanCoverageId(),
@@ -7011,6 +7029,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => {
         if (!p.underlay) return { ...p, scaleDenominator };
+        // An architect's PDF at the size it was plotted at stays as it is: the scale says
+        // what the plan is drawn at, it does not ask for a smaller drawing. What is placed
+        // on it is in paper mm and keeps its spot; what is measured in metres follows.
+        if (underlayAtPlottedSize(p.underlay, sheetSizeMm(p))) {
+          return { ...p, scaleDenominator, underlay: { ...p.underlay, mmPerPx: underlayMmPerPx(p.underlay, scaleDenominator) } };
+        }
         // A plan drawn at 1:50 covers half the paper at 1:100 — resize the underlay so
         // the building keeps its real-world size, and carry the calibration along.
         const fitted = rescaleUnderlayForScale(p.underlay, p.scaleDenominator, scaleDenominator);
@@ -7465,6 +7489,32 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     pushUndo({ nodes: state.nodes, edges: state.edges });
     set({
       pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, walls: (p.walls ?? []).filter((w) => w.id !== wallId) })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+  },
+
+  addFloorplanDimension: (pageId, dim) => {
+    if (Math.hypot(dim.toMm.x - dim.fromMm.x, dim.toMm.y - dim.fromMm.y) <= 0.01) return null;
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    const id = nextFloorplanDimensionId();
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({
+        ...p,
+        dimensions: [...(p.dimensions ?? []), { id, fromMm: { ...dim.fromMm }, toMm: { ...dim.toMm } }],
+      })),
+      undoSize: undoStack.length, redoSize: 0,
+    });
+    get().saveToLocalStorage();
+    return id;
+  },
+
+  removeFloorplanDimension: (pageId, dimensionId) => {
+    const state = get();
+    pushUndo({ nodes: state.nodes, edges: state.edges });
+    set({
+      pages: mapFloorplanPage(state.pages, pageId, (p) => ({ ...p, dimensions: (p.dimensions ?? []).filter((d) => d.id !== dimensionId) })),
       undoSize: undoStack.length, redoSize: 0,
     });
     get().saveToLocalStorage();

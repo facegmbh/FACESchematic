@@ -110,6 +110,13 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
       if (dxfPlacement && dxfPlacement.scaleDenominator !== page.scaleDenominator) {
         setFloorplanScale(page.id, dxfPlacement.scaleDenominator);
       }
+      // The scale an architect's PDF states is the scale it is plotted at. One stated
+      // scale is taken; several (a sheet with details) are left for the reader to pick.
+      const stated = !keepPlacement && imported.kind === "pdf" ? imported.statedScales ?? [] : [];
+      const adoptedScale = stated.length === 1 ? stated[0] : undefined;
+      if (adoptedScale !== undefined && adoptedScale !== page.scaleDenominator) {
+        setFloorplanScale(page.id, adoptedScale);
+      }
       const fitted = dxfPlacement
         ? dxfPlacement
         : imported.naturalSizeMm
@@ -178,13 +185,25 @@ export default function FloorplanToolbar({ page, tool, onToolChange, wallCandida
           dxfPlacement.fits && !imported.dxf?.unitAssumed ? "success" : "info",
           imported.dxf?.unitAssumed || !dxfPlacement.fits ? 9000 : 5000,
         );
+      } else if (!keepPlacement && adoptedScale !== undefined) {
+        addToast(
+          t("Plan imported at {scale}, as the plan states — the sheet now has the plan's format. Check a known dimension with the measuring tool.", { scale: formatScale(adoptedScale) }),
+          "success",
+          6000,
+        );
+      } else if (!keepPlacement && stated.length > 1) {
+        addToast(
+          t("Plan imported — it states several scales ({scales}). Pick the floor plan's one in the toolbar.", { scales: stated.map(formatScale).join(", ") }),
+          "info",
+          8000,
+        );
       } else if (!keepPlacement) {
         addToast(
           imported.naturalSizeMm
-            ? t("Plan imported — the sheet now has the plan's format. Calibrate it against a known dimension next.")
+            ? t("Plan imported — the sheet now has the plan's format. No scale was found on it: set it in the toolbar, or calibrate against a known dimension.")
             : t("Plan imported — calibrate it against a known dimension next."),
           "success",
-          4500,
+          6000,
         );
       }
     } catch (e) {

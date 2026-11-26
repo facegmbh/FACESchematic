@@ -1627,6 +1627,16 @@ export interface FloorplanDrawingBlock {
   minHeightMm?: number;
 }
 
+/** A dimension line drawn onto the plan: two points and the distance between them. Only
+ *  the points are kept — the figure is worked out from the page's scale whenever the line
+ *  is drawn, so it cannot go stale when the scale is corrected. */
+export interface FloorplanDimension {
+  id: string;
+  /** Both ends on the sheet, in paper mm. */
+  fromMm: { x: number; y: number };
+  toMm: { x: number; y: number };
+}
+
 /** Free text placed on the plan — installation notes, cable-route remarks, anything the
  *  fitter should read next to the symbol it concerns. */
 export interface FloorplanNote {
@@ -1860,6 +1870,8 @@ export interface FloorplanPage {
   /** Walls with their build-up and thickness. They document the building and they are
    *  what the Wi-Fi heatmap attenuates through. */
   walls: FloorplanWall[];
+  /** Dimension lines kept from the measuring tool. Undefined counts as none. */
+  dimensions?: FloorplanDimension[];
   /** Projectors with their picture: throw distance, zoom and lens shift worked out on the
    *  plan. Undefined counts as none — plans from before this existed need no migration. */
   projections?: FloorplanProjection[];

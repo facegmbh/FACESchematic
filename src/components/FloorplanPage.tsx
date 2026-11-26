@@ -11,7 +11,7 @@ import { useFloorplanPanelTab } from "../floorplanPanelTab";
 /** Active tool on a floorplan page. `place` drops symbols of the active group on click,
  *  `note` drops a free text note, `erase` drags out a white cover over part of the
  *  underlay, `calibrate` collects two reference points to scale the underlay. */
-export type FloorplanTool = "select" | "place" | "note" | "erase" | "calibrate" | "coverage" | "wall";
+export type FloorplanTool = "select" | "place" | "note" | "erase" | "calibrate" | "coverage" | "wall" | "measure";
 
 export default function FloorplanPage() {
   const activePage = useSchematicStore((s) => s.activePage);

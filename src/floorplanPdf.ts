@@ -20,6 +20,10 @@ import { fetchImageAsDataUrl, isVectorUnderlay, rasterizeLibrarySymbol, rasteriz
 import { symbolLibraryUrl } from "./symbolLibrary";
 import { tintSymbol } from "./symbolTint";
 import {
+  DIMENSION_COLOR,
+  DIMENSION_LINE_MM,
+  DIMENSION_TEXT_MM,
+  dimensionLayout,
   coverageLabelOf,
   buildLegendRows,
   realMmToPaperMm,
@@ -621,6 +625,26 @@ function drawDrawingBlock(doc: jsPDF, page: FloorplanPage, titleBlock: TitleBloc
   }
 }
 
+/** Dimension lines, laid out exactly as on screen (dimensionLayout). */
+function drawDimensions(doc: jsPDF, page: FloorplanPage) {
+  const [r, g, b] = hexToRgb(DIMENSION_COLOR);
+  doc.setFont("Inter", "normal");
+  doc.setFontSize(DIMENSION_TEXT_MM * MM_TO_PT);
+  for (const dim of page.dimensions ?? []) {
+    const l = dimensionLayout(dim, page.scaleDenominator);
+    if (!l) continue;
+    doc.setDrawColor(r, g, b);
+    doc.setLineWidth(DIMENSION_LINE_MM);
+    doc.line(dim.fromMm.x, dim.fromMm.y, dim.toMm.x, dim.toMm.y);
+    for (const [p, q] of l.ticksMm) doc.line(p.x, p.y, q.x, q.y);
+    // Centred by hand along the rotated baseline; jsPDF's angle is counter-clockwise.
+    const rad = (l.labelAngleDeg * Math.PI) / 180;
+    const w = doc.getTextWidth(l.text);
+    doc.setTextColor(r, g, b);
+    doc.text(l.text, l.labelAtMm.x - (w / 2) * Math.cos(rad), l.labelAtMm.y - (w / 2) * Math.sin(rad), { angle: -l.labelAngleDeg });
+  }
+}
+
 /** Free text notes, wrapped exactly as on screen. */
 function drawNotes(doc: jsPDF, notes: FloorplanNote[]) {
   for (const note of notes) {
@@ -1050,6 +1074,7 @@ export async function exportFloorplanPdf(opts: FloorplanPdfOptions): Promise<voi
 
     // Notes sit above symbols, below the legend and drawing block.
     drawNotes(doc, page.notes);
+    drawDimensions(doc, page);
 
     // Legend
     const rows = buildLegendRows(page);
