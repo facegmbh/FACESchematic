@@ -133,6 +133,9 @@ export type SignalType =
   | "fibra"
   | "jeweller"
   | "bus-2"
+  | "com2bus"
+  | "bus-1"
+  | "dss2"
   | "custom";
 
 export type LineStyle = "solid" | "dashed" | "dotted" | "dash-dot";
@@ -670,6 +673,8 @@ export interface DeviceTemplate {
   wifi?: WifiRadioSpec;
   /** What a ceiling array microphone covers. A coverage area on a floorplan starts from it. */
   micCoverage?: MicCoverageSpec;
+  /** What a detector reaches, off its datasheet. A coverage area on a floorplan starts from it. */
+  detection?: DetectionSpec;
   slots?: SlotDefinition[];
   slotFamily?: string;           // only set on expansion card templates
   powerDrawW?: number;           // Max power consumption in watts
@@ -958,6 +963,11 @@ export interface AmplifierLoadSpec {
   peakCurrentA?: number;
   /** Lowest load impedance a channel accepts. Undefined = the lowest impedance with a rating. */
   minImpedanceOhm?: number;
+  /** 70 V / 100 V bridges two channels into one output (Blaze PowerZone Connect, Audac SCP
+   *  and MFA): channels 1+2, 3+4, … are one line each. The 70 V / 100 V rating is then that
+   *  of the pair, shared by whatever hangs on either channel, and a pair run that way has no
+   *  low-impedance channel left. */
+  hiZBridgesPairs?: boolean;
 }
 
 /** An amplifier line on a loudspeaker plan: its printed number, the amplifier channel that
@@ -1245,6 +1255,22 @@ export interface FloorplanMask {
 export type CoverageShape = "sector" | "circle" | "rect" | "box";
 
 export const COVERAGE_SHAPES: CoverageShape[] = ["sector", "circle", "rect", "box"];
+
+/**
+ * What a detector reaches, as its maker states it: a PIR's "15 m, 90°" is a sector, a
+ * ceiling detector's footprint a circle (radius at the stated mounting height), a curtain
+ * or long-range lens a corridor. A template carries this, and an area drawn for the device
+ * starts from it — the planner turns and trims it, they do not look the figures up again.
+ */
+export interface DetectionSpec {
+  shape: "sector" | "circle" | "rect";
+  /** Reach in metres: a sector's and a corridor's depth, a circle's radius. */
+  rangeM: number;
+  /** Opening angle in degrees, "sector" only. */
+  apertureDeg?: number;
+  /** Width of the corridor in metres, "rect" only. */
+  widthM?: number;
+}
 
 /**
  * What a ceiling array microphone covers, as its maker states it. A template carries this,
@@ -2214,6 +2240,9 @@ export const SIGNAL_COLORS: Record<SignalType, string> = {
   fibra: "var(--color-fibra)",
   jeweller: "var(--color-jeweller)",
   "bus-2": "var(--color-bus-2)",
+  com2bus: "var(--color-com2bus)",
+  "bus-1": "var(--color-bus-1)",
+  dss2: "var(--color-dss2)",
   sensor: "var(--color-sensor)",
   custom: "var(--color-custom)",
 };
@@ -2395,6 +2424,9 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   fibra: "Ajax Fibra",
   jeweller: "Ajax Jeweller",
   "bus-2": "Telenot BUS-2",
+  com2bus: "Telenot com2BUS",
+  "bus-1": "Telenot BUS-1",
+  dss2: "Telenot Funk (DSS2)",
   nlight: "nLight",
   sensor: "Sensor",
   custom: "Custom",
@@ -2408,7 +2440,7 @@ export const SIGNAL_GROUPS: Record<string, SignalType[]> = {
   "Network": ["ethernet", "fiber"],
   "Control / Data": ["dmx", "artnet", "sacn", "rs422", "rs485", "serial", "gpio", "contact-closure", "ir", "midi", "tally", "usb", "thunderbolt", "dxlink", "ebus", "control-voltage", "cresnet", "nlight", "sensor"],
   "Building Automation": ["dali", "knx"],
-  "Security": ["fibra", "jeweller", "bus-2"],
+  "Security": ["fibra", "jeweller", "bus-2", "com2bus", "bus-1", "dss2"],
   "Sync / Clock": ["genlock", "wordclock", "timecode", "dars", "gps"],
   "Power": ["power", "power-l1", "power-l2", "power-l3", "power-neutral", "power-ground"],
   "Streaming": ["rtmp", "rtsp", "mpeg-ts", "rf"],

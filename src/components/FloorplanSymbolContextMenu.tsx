@@ -135,6 +135,7 @@ export default function FloorplanSymbolContextMenu({ page, x, y, ids, onSelectCo
               ...(micNext ?? defaultCoverageForDevice(devData?.deviceType, {
                 rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
                 mount: tpl?.wifi?.mount,
+                detection: tpl?.detection,
               })),
               symbolId: sym.id,
               groupId: sym.groupId,

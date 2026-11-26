@@ -93,7 +93,11 @@ export function hasSpeakerLoadData(spec: SpeakerLoadSpec | undefined, mode: Spea
  *  speaker-level output ports, used when the spec does not state the channel count. */
 export function resolveAmpLimits(spec: AmplifierLoadSpec, portChannels = 1): AmpLimits {
   const r = spec.ratedW ?? {};
-  const rated = [r.ohm2, r.ohm4, r.ohm8, r.v70, r.v100].filter(hasNumber);
+  // Where 70 V / 100 V bridges two channels, that rating is a pair's, not a channel's: what
+  // one channel delivers and swings is read off the low-impedance ratings alone.
+  const bridged = spec.hiZBridgesPairs === true;
+  const loZRated = [r.ohm2, r.ohm4, r.ohm8].filter(hasNumber);
+  const rated = bridged && loZRated.length ? loZRated : [r.ohm2, r.ohm4, r.ohm8, r.v70, r.v100].filter(hasNumber);
   const highestRated = rated.length ? Math.max(...rated) : 0;
   const channels = hasNumber(spec.channels) ? Math.round(spec.channels) : Math.max(1, portChannels);
   const totalRatedW = hasNumber(spec.totalRatedW) ? spec.totalRatedW : highestRated * channels;
@@ -106,8 +110,8 @@ export function resolveAmpLimits(spec: AmplifierLoadSpec, portChannels = 1): Amp
   if (hasNumber(r.ohm8)) vCandidates.push(Math.sqrt(2 * r.ohm8 * 8));
   if (hasNumber(r.ohm4)) vCandidates.push(Math.sqrt(2 * r.ohm4 * 4));
   if (hasNumber(r.ohm2)) vCandidates.push(Math.sqrt(2 * r.ohm2 * 2));
-  if (hasNumber(r.v70)) vCandidates.push(Math.SQRT2 * 70);
-  if (hasNumber(r.v100)) vCandidates.push(Math.SQRT2 * 100);
+  if (hasNumber(r.v70) && !(bridged && loZRated.length)) vCandidates.push(Math.SQRT2 * 70);
+  if (hasNumber(r.v100) && !(bridged && loZRated.length)) vCandidates.push(Math.SQRT2 * 100);
   const peakVoltageV = hasNumber(spec.peakVoltageV) ? spec.peakVoltageV : (vCandidates.length ? Math.max(...vCandidates) : Math.sqrt(2 * maxBurstPerChannelW * 8));
 
   // Peak current: what the lowest rated impedance draws at its rating.
@@ -322,12 +326,18 @@ export function computeAmplifierLoad(spec: AmplifierLoadSpec | undefined, inputs
   const poolAverageHeadroomDb = totalAverageW > 0 ? dB10(limits.maxAvgTotalW / totalAverageW) : undefined;
   const poolHiZHeadroomDb = hiZRequestedW > 0 ? dB10(limits.totalRatedW / hiZRequestedW) : undefined;
 
-  const channels = demands.map<ChannelLoadResult>((d) => {
+  const channels = demands.map<ChannelLoadResult>((d, i) => {
     if (d.speakerCount === 0) return { ...d, headroom: {}, status: "empty" };
     if (d.requestedW <= 0) return { ...d, headroom: {}, status: "no-data" };
 
     const modeOk = d.mode === "lo-z" ? limits.supportsLoZ : d.mode === "70v" ? limits.supports70V : limits.supports100V;
     if (!modeOk) return { ...d, headroom: {}, limitedBy: "mode", status: "unsupported" };
+
+    // Where 70 V / 100 V bridges two channels, the other channel of the pair is part of
+    // the same output: it cannot drive a low-impedance load at the same time.
+    const partner = spec.hiZBridgesPairs ? demands[i % 2 === 0 ? i + 1 : i - 1] : undefined;
+    const partnerHiZ = partner && partner.mode !== "lo-z" && partner.requestedW > 0 ? partner : undefined;
+    if (d.mode === "lo-z" && partnerHiZ) return { ...d, headroom: {}, limitedBy: "mode", status: "unsupported" };
 
     const headroom: Partial<Record<LoadLimiter, number>> = {};
     if (d.mode === "lo-z") {
@@ -340,7 +350,8 @@ export function computeAmplifierLoad(spec: AmplifierLoadSpec | undefined, inputs
       }
     } else {
       const rating = d.mode === "70v" ? limits.ratedW.v70! : limits.ratedW.v100!;
-      headroom["channel-power"] = dB10(rating / d.requestedW);
+      // A bridged pair is one output: its rating covers both channels' lines together.
+      headroom["channel-power"] = dB10(rating / (d.requestedW + (partnerHiZ?.requestedW ?? 0)));
       headroom.current = dB20(limits.peakCurrentA / d.peakCurrentA!) + dB10(d.minImpedanceOhm! / d.impedanceOhm!);
       if (poolHiZHeadroomDb !== undefined) headroom["pool-hiz"] = poolHiZHeadroomDb;
     }

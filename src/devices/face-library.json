@@ -1064,7 +1064,7 @@
       "amplifier",
       "dsp"
     ],
-    "powerDrawW": 1000,
+    "powerDrawW": 174,
     "heightMm": 44,
     "widthMm": 483,
     "depthMm": 410,
@@ -1193,7 +1193,21 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 2,
+      "ratedW": {
+        "ohm2": 500,
+        "ohm4": 500,
+        "ohm8": 250,
+        "v70": 1000,
+        "v100": 1000
+      },
+      "totalRatedW": 1000,
+      "peakVoltageV": 65,
+      "minImpedanceOhm": 2,
+      "hiZBridgesPairs": true
+    }
   },
   {
     "id": "face-0001-0000-4000-8000-000000000020",
@@ -12513,7 +12527,7 @@
       "4-kanal",
       "matrix"
     ],
-    "powerDrawW": 1400,
+    "powerDrawW": 346,
     "heightMm": 44,
     "widthMm": 483,
     "depthMm": 350,
@@ -12523,7 +12537,7 @@
     "auxiliaryData": [
       {
         "label": "Leistung",
-        "value": "4× 500W @ 4Ω / 4× 500W @ 70V/100V"
+        "value": "4× 500W @ 4Ω / 2× 1000W @ 70V/100V (je Kanalpaar gebrückt)"
       },
       {
         "label": "Bauform",
@@ -12684,7 +12698,21 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 4,
+      "ratedW": {
+        "ohm2": 500,
+        "ohm4": 500,
+        "ohm8": 250,
+        "v70": 1000,
+        "v100": 1000
+      },
+      "totalRatedW": 2000,
+      "peakVoltageV": 65,
+      "minImpedanceOhm": 2,
+      "hiZBridgesPairs": true
+    }
   },
   {
     "id": "face-crown-itech-hd-0000-4000-8000-000000000001",
@@ -13077,7 +13105,7 @@
       "amplifier",
       "dsp"
     ],
-    "powerDrawW": 4000,
+    "powerDrawW": 689,
     "heightMm": 88,
     "widthMm": 483,
     "depthMm": 410,
@@ -13286,7 +13314,21 @@
         "connectorType": "iec",
         "section": "Power"
       }
-    ]
+    ],
+    "ampLoad": {
+      "channels": 8,
+      "ratedW": {
+        "ohm2": 500,
+        "ohm4": 500,
+        "ohm8": 250,
+        "v70": 1000,
+        "v100": 1000
+      },
+      "totalRatedW": 4000,
+      "peakVoltageV": 65,
+      "minImpedanceOhm": 2,
+      "hiZBridgesPairs": true
+    }
   },
   {
     "id": "custom-1780314302519",

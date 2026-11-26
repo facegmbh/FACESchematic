@@ -90,6 +90,10 @@ export const SIGNAL_TO_CABLE: Record<SignalType, string> = {
   fibra: "Ajax Fibra (4-core, shielded)",
   "bus-2": "Telenot BUS-2 (J-Y(St)Y 4x2x0,8)",
   jeweller: "Wireless",
+  // Telenot names the installation cable per project; no cable type is asserted here.
+  com2bus: "Telenot com2BUS",
+  "bus-1": "Telenot BUS-1",
+  dss2: "Wireless",
   nlight: "Ethernet",
   sensor: "Sensor",
   custom: "Other",

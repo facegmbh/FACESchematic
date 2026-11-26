@@ -8,6 +8,12 @@ import type { DeviceTemplate } from "../types";
  * Port counts/specs are representative starting points; verify against the
  * concrete model variant before relying on a schematic for procurement.
  */
+/** Spends the port ids a removed template used, so the ids after it do not move. */
+function retired(portCount: number): DeviceTemplate[] {
+  ports("retired", "analog-audio", "input", portCount);
+  return [];
+}
+
 export const templates: DeviceTemplate[] = [
   // ── Bose Professional — ControlSpace DSP ─────────────────────────
   // The EX-1280C used to live here as `c0a80101-0fac-4000-8000-000000000f01` with a
@@ -39,29 +45,11 @@ export const templates: DeviceTemplate[] = [
   },
 
   // ── Blaze Audio — PowerZone Connect amplifiers ───────────────────
-  {
-    id: "c0a80101-0fac-4000-8000-000000000f03",
-    deviceType: "amplifier",
-    headerColor: "#006aff",
-    label: "Blaze PowerZone Connect 1004",
-    manufacturer: "Blaze Audio",
-    modelNumber: "PowerZone Connect 1004",
-    referenceUrl: "https://www.blaze-audio.com/powerzone-connect",
-    searchTerms: ["blaze", "powerzone", "connect", "1004", "amplifier", "4 channel", "dsp amp"],
-    powerDrawW: 1100,
-    voltage: "230V",
-    heightMm: 44,
-    widthMm: 483,
-    depthMm: 333,
-    weightKg: 5.4,
-    ports: [
-      ...ports("Analog In", "analog-audio", "input", 4, "phoenix"),
-      ...ports("Speaker Out", "speaker-level", "output", 4, "phoenix"),
-      port("Network (App/Control)", "ethernet", "bidirectional"),
-      port("GPIO", "gpio", "bidirectional"),
-      port("AC Power", "power", "input"),
-    ],
-  },
+  // "PowerZone Connect 1004" stood here until 26.11.2026. No Blaze datasheet lists such a
+  // model (the Connect range has a 504 and a 1008, the plain range a 1004), so it was taken
+  // out. Its eleven port ids stay spent: the helpers number ports in order, and every
+  // template after this one would otherwise get new ids.
+  ...retired(11),
   {
     id: "c0a80101-0fac-4000-8000-000000000f04",
     deviceType: "amplifier",
@@ -71,12 +59,22 @@ export const templates: DeviceTemplate[] = [
     modelNumber: "PowerZone Connect 504D",
     referenceUrl: "https://www.blaze-audio.com/powerzone-connect",
     searchTerms: ["blaze", "powerzone", "connect", "504d", "amplifier", "dante", "dsp amp"],
-    powerDrawW: 600,
+    // Datasheet Rev E (06/2025): half rack, 4 × 125 W, 250 W per bridged pair on 70 / 100 V;
+    // consumption at 1/8 power. See blaze-amps.ts for the rest of the range.
+    powerDrawW: 107,
     voltage: "230V",
     heightMm: 44,
-    widthMm: 483,
-    depthMm: 333,
-    weightKg: 5.0,
+    widthMm: 220,
+    depthMm: 319,
+    weightKg: 2.8,
+    ampLoad: {
+      channels: 4,
+      ratedW: { ohm4: 125, ohm8: 125, v70: 250, v100: 250 },
+      totalRatedW: 500,
+      peakVoltageV: 63.6,
+      minImpedanceOhm: 4,
+      hiZBridgesPairs: true,
+    },
     ports: [
       ...ports("Analog In", "analog-audio", "input", 4, "phoenix"),
       port("Dante", "dante", "bidirectional"),

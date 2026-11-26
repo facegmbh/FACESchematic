@@ -1448,7 +1448,7 @@ export default function DeviceEditor() {
                 />
               </Field>
             )}
-            {ports.some((p) => p.signalType === "bus-2" || p.signalType === "fibra" || p.signalType === "jeweller") && (
+            {ports.some((p) => ["bus-2", "com2bus", "bus-1", "dss2", "fibra", "jeweller"].includes(p.signalType)) && (
               <Field label="Bus-/Melderadresse">
                 <input
                   className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-2 py-1.5 text-xs text-[var(--color-text-heading)] outline-none focus:border-blue-500"

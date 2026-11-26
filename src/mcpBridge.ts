@@ -1553,10 +1553,15 @@ export const handlers: Record<CommandType, (params: Record<string, unknown>) => 
       coverageId = existing.id;
     } else {
       const deviceNode = symbol?.deviceNodeId ? st().nodes.find((n) => n.id === symbol!.deviceNodeId) : undefined;
-      const deviceType = (deviceNode?.data as DeviceData | undefined)?.deviceType;
+      const deviceData = deviceNode?.data as DeviceData | undefined;
+      const deviceType = deviceData?.deviceType;
+      // A detector whose model states its reach starts from the datasheet, as on the plan.
+      const detection = symbol && deviceData?.templateId
+        ? getTemplateById(deviceData.templateId, st().customTemplates)?.detection
+        : undefined;
       // A camera starts with a lens, anything else with a reach in metres; an explicit
       // shape other than the wedge starts from that shape's own defaults.
-      const base = patch.shape && patch.shape !== "sector" ? defaultCoverage(patch.shape) : defaultCoverageForDevice(symbol ? deviceType : undefined);
+      const base = patch.shape && patch.shape !== "sector" ? defaultCoverage(patch.shape) : defaultCoverageForDevice(symbol ? deviceType : undefined, { detection });
       const start = "optics" in patch ? { ...base, optics: undefined } : base;
       coverageId = st().addFloorplanCoverage(page.id, {
         ...start,

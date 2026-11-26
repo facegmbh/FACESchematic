@@ -35,6 +35,7 @@ import {
   coverageAnchorMm,
   coverageRotationDeg,
   micCoverageFor,
+  detectionCoverageFor,
   rotateVec,
   defaultCoverage,
   paperMmToRealMm,
@@ -456,9 +457,13 @@ export default function FloorplanRenderer({ page, tool, onToolChange, activeGrou
       lineNo: activeLine.trim() || undefined,
     });
     // A ceiling microphone arrives with the floor it covers, the way its maker states it.
-    const mic = micCoverageSpecFor((data?.templateId ? getTemplateById(data.templateId, customTemplates) : undefined) ?? data);
+    const tpl = data?.templateId ? getTemplateById(data.templateId, customTemplates) : undefined;
+    const mic = micCoverageSpecFor(tpl ?? data);
     if (mic) {
       addFloorplanCoverage(page.id, { ...micCoverageFor(mic), symbolId: id, groupId, positionMm: { x: pos.x, y: pos.y } });
+    } else if (tpl?.detection) {
+      // So does a detector: the reach and angle off its datasheet, ready to be aimed.
+      addFloorplanCoverage(page.id, { ...detectionCoverageFor(tpl.detection), symbolId: id, groupId, positionMm: { x: pos.x, y: pos.y } });
     }
     setSelection({ kind: "symbols", ids: [id] });
   }, [resolveGroupForDevice, clientToPaperMm, page, addFloorplanSymbol, addFloorplanCoverage, customTemplates, activeLine, setSelection]);

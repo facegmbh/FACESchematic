@@ -132,6 +132,8 @@ export const templates: DeviceTemplate[] = [
     searchTerms: ["ajax", "bewegungsmelder", "pir", "motion", "melder", "jeweller", "funk"],
     // 12 m / 88.5° per datasheet — the figure a coverage area on the plan starts from.
     planSymbol: { shape: "triangle", glyph: "BM" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 12, apertureDeg: 88.5 },
     installNotes: "Reichweite 12 m / 88,5°; Montagehöhe 2,4 m",
     heightMm: 110,
     widthMm: 65,
@@ -148,6 +150,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/motionprotect-curtain/",
     searchTerms: ["ajax", "vorhang", "curtain", "bewegungsmelder", "pir", "jeweller", "funk"],
     planSymbol: { shape: "triangle", glyph: "VM" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 15, apertureDeg: 6 },
     installNotes: "Vorhanglinse, Reichweite 15 m / 6°",
     ports: [port("Jeweller", "jeweller", "bidirectional")],
   },
@@ -161,6 +165,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/motioncam/",
     searchTerms: ["ajax", "motioncam", "bewegungsmelder", "fotoverifikation", "pir", "jeweller", "kamera"],
     planSymbol: { shape: "triangle", glyph: "MC" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 12, apertureDeg: 88.5 },
     installNotes: "Bewegungsmelder mit Fotoverifikation; Reichweite 12 m / 88,5°",
     ports: [port("Jeweller", "jeweller", "bidirectional")],
   },
@@ -174,6 +180,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/motionprotect-outdoor/",
     searchTerms: ["ajax", "aussen", "outdoor", "bewegungsmelder", "pir", "jeweller", "funk"],
     planSymbol: { shape: "triangle", glyph: "BA" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 15, apertureDeg: 90 },
     installNotes: "Außenbereich, zwei PIR-Sensoren; Reichweite 15 m / 60°",
     ports: [port("Jeweller", "jeweller", "bidirectional")],
   },
@@ -212,6 +220,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/glassprotect/",
     searchTerms: ["ajax", "glasbruch", "glass break", "melder", "jeweller", "funk"],
     planSymbol: { shape: "circle", glyph: "GB" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 9, apertureDeg: 180 },
     installNotes: "Glasbruchmelder, Erfassung bis 9 m",
     ports: [port("Jeweller", "jeweller", "bidirectional")],
   },
@@ -225,6 +235,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/combiprotect/",
     searchTerms: ["ajax", "kombimelder", "bewegung", "glasbruch", "combi", "jeweller"],
     planSymbol: { shape: "triangle", glyph: "KM" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 12, apertureDeg: 88.5 },
     installNotes: "Bewegung 12 m / 88,5° und Glasbruch bis 9 m in einem Melder",
     ports: [port("Jeweller", "jeweller", "bidirectional")],
   },
@@ -365,6 +377,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/motionprotect-fibra/",
     searchTerms: ["ajax", "fibra", "bewegungsmelder", "pir", "verdrahtet", "bus", "melder"],
     planSymbol: { shape: "triangle", glyph: "BM" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 12, apertureDeg: 88.5 },
     installNotes: "Reichweite 12 m / 88,5°; Speisung über die Fibra-Linie",
     // Bus-powered: the "In" / "Out" pair is what makes a line run through the device,
     // so a Fibra beam can be drawn hop by hop the way it is actually pulled.
@@ -383,6 +397,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/motioncam-fibra/",
     searchTerms: ["ajax", "fibra", "motioncam", "fotoverifikation", "bewegungsmelder", "bus"],
     planSymbol: { shape: "triangle", glyph: "MC" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 12, apertureDeg: 88.5 },
     installNotes: "Bewegungsmelder mit Fotoverifikation; Speisung über die Fibra-Linie",
     ports: [
       port("Fibra In", "fibra", "input"),
@@ -414,6 +430,8 @@ export const templates: DeviceTemplate[] = [
     referenceUrl: "https://ajax.systems/products/glassprotect-fibra/",
     searchTerms: ["ajax", "fibra", "glasbruch", "glass break", "melder", "bus"],
     planSymbol: { shape: "circle", glyph: "GB" },
+    // The maker's reach and angle (ajax.systems spec page) — what an area on the plan starts from.
+    detection: { shape: "sector", rangeM: 9, apertureDeg: 180 },
     installNotes: "Glasbruchmelder, Erfassung bis 9 m; Speisung über die Fibra-Linie",
     ports: [
       port("Fibra In", "fibra", "input"),

@@ -37,6 +37,7 @@ import type { FloorplanSymbolShape,
   FloorplanUnderlay,
   FloorplanWall,
   FloorplanDimension,
+  DetectionSpec,
   TitleBlock,
 } from "./types";
 import { DEFAULT_FLOORPLAN_SCALE, DEFAULT_FLOORPLAN_SYMBOL_SIZE_MM, DORI_PX_PER_M, RSSI_STEPS, WALL_AP_APERTURE_DEG } from "./types";
@@ -1787,10 +1788,12 @@ export function isAccessPointDeviceType(deviceType?: string): boolean {
  */
 export function defaultCoverageForDevice(
   deviceType?: string,
-  opts?: { rangeM?: number; mount?: "ceiling" | "wall"; mic?: MicCoverageSpec },
+  opts?: { rangeM?: number; mount?: "ceiling" | "wall"; mic?: MicCoverageSpec; detection?: DetectionSpec },
 ): Omit<FloorplanCoverage, "id"> {
   // A ceiling microphone is judged by the floor under it, whatever its device type says.
   if (opts?.mic) return micCoverageFor(opts.mic);
+  // A detector whose datasheet figures are on the model starts from those.
+  if (opts?.detection) return detectionCoverageFor(opts.detection);
   if (isAccessPointDeviceType(deviceType)) {
     // A wall or in-wall unit throws into the room; only a ceiling unit is all round.
     if (opts?.mount === "wall") {
@@ -1855,6 +1858,17 @@ export function defaultCoverage(shape: CoverageShape = "sector"): Omit<Floorplan
     apertureDeg: shape === "sector" ? DEFAULT_COVERAGE_APERTURE_DEG : undefined,
     widthM: shape === "rect" ? DEFAULT_COVERAGE_WIDTH_M : shape === "box" ? DEFAULT_COVERAGE_RANGE_M : undefined,
     opacity: DEFAULT_COVERAGE_OPACITY,
+  };
+}
+
+/** The area a detector covers out of the box: the maker's reach and angle. */
+export function detectionCoverageFor(spec: DetectionSpec): Omit<FloorplanCoverage, "id"> {
+  const base = defaultCoverage(spec.shape);
+  return {
+    ...base,
+    rangeM: spec.rangeM,
+    apertureDeg: spec.shape === "sector" ? spec.apertureDeg ?? base.apertureDeg : undefined,
+    widthM: spec.shape === "rect" ? spec.widthM ?? base.widthM : undefined,
   };
 }
 

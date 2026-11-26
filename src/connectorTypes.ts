@@ -78,6 +78,9 @@ export const DEFAULT_CONNECTOR: Record<SignalType, ConnectorType> = {
   fibra: "terminal-block",
   "bus-2": "terminal-block",
   jeweller: "wireless",
+  com2bus: "terminal-block",
+  "bus-1": "terminal-block",
+  dss2: "wireless",
   nlight: "rj45",
   sensor: "phoenix",
   custom: "other",
@@ -747,6 +750,9 @@ export const MULTI_CONNECT_DEFAULT_SIGNALS: Set<SignalType> = new Set([
   // Alarm buses: a Fibra or BUS-2 line carries many detectors, and one Jeweller hub
   // holds dozens of wireless devices.
   "fibra", "bus-2", "jeweller",
+  // Telenot: com2BUS and BUS-1 lines are shared the same way, and one radio gateway
+  // holds many DSS2 devices.
+  "com2bus", "bus-1", "dss2",
 ]);
 
 /** Connector types whose new ports default to multi-connect — wireless/RF carriers where many TX → one RX. */

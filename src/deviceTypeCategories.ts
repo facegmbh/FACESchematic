@@ -147,6 +147,10 @@ export const DEVICE_TYPE_TO_CATEGORY: Record<string, string> = {
   "siren-indoor": "Security",
   "siren-outdoor": "Security",
   "transponder-reader": "Security",
+  "heat-detector": "Security",
+  "panic-button": "Security",
+  "alarm-power-supply": "Security",
+  "alarm-distributor": "Security",
   "ip-camera": "Security",
   "nvr": "Security",
   // ── Residential / security (#315) ────────────────────────────────────

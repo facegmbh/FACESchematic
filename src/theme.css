@@ -80,6 +80,9 @@
   --color-fibra: #86198f;     /* deep plum — Ajax Fibra wired detector bus */
   --color-jeweller: #4c1d95;  /* deep violet — Ajax Jeweller radio link */
   --color-bus-2: #0f5132;     /* dark green — Telenot BUS-2 detector bus */
+  --color-com2bus: #00a651;   /* green — Telenot com2BUS (complex / hiplex) */
+  --color-bus-1: #a3e635;     /* lime — Telenot BUS-1 detector bus */
+  --color-dss2: #00acc1;      /* cyan — Telenot DSS2 radio link */
   --color-custom: #64748b;    /* cool gray */
 }
 

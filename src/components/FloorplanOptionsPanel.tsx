@@ -459,6 +459,7 @@ export default function FloorplanOptionsPanel({ page, activeLine, onActiveLineCh
                               rangeM: tpl?.wifi ? planningRadiusM(tpl.wifi, cfgHm.band, cfgHm.pathLossExponent) : undefined,
                               mount: tpl?.wifi?.mount,
                               mic: micCoverageSpecFor(tpl ?? devData),
+                              detection: tpl?.detection,
                             }),
                             symbolId: sym.id,
                             groupId: sym.groupId,

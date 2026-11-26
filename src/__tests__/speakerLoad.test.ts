@@ -256,3 +256,57 @@ describe("formatting", () => {
     expect(formatChannelLoad({ mode: "lo-z", impedanceOhm: undefined, requestedW: 0, speakerCount: 0 })).toBe("–");
   });
 });
+
+describe("amplifiers that bridge two channels for 70 V / 100 V", () => {
+  // Blaze PowerZone Connect 2004: 4 × 500 W low impedance, or 1000 W per bridged pair.
+  const PZC2004: AmplifierLoadSpec = {
+    channels: 4,
+    ratedW: { ohm2: 500, ohm4: 500, ohm8: 250, v70: 1000, v100: 1000 },
+    totalRatedW: 2000,
+    hiZBridgesPairs: true,
+  };
+  const line = (tapTotalW: number) => ({ mode: "100v" as const, speakers: [{ spec: { tapsW: [tapTotalW] }, count: 1 }] });
+  const empty = { mode: "lo-z" as const, speakers: [] };
+
+  it("gives one line the whole pair", () => {
+    const r = computeAmplifierLoad(PZC2004, [line(700), empty, empty, empty]);
+    expect(r.channels[0].status).toBe("ok");
+    expect(r.channels[0].headroom["channel-power"]).toBeCloseTo(10 * Math.log10(1000 / 700), 6);
+  });
+
+  it("counts two lines on one pair against the pair's rating, not twice", () => {
+    const r = computeAmplifierLoad(PZC2004, [line(900), line(900), empty, empty]);
+    expect(r.channels[0].status).toBe("exceeds");
+    expect(r.channels[1].status).toBe("exceeds");
+    expect(r.channels[0].headroom["channel-power"]).toBeCloseTo(10 * Math.log10(1000 / 1800), 6);
+    // The same two lines on different pairs are fine.
+    const apart = computeAmplifierLoad(PZC2004, [line(700), empty, line(700), empty]);
+    expect(apart.channels[0].status).toBe("ok");
+    expect(apart.channels[2].status).toBe("ok");
+  });
+
+  it("leaves no low-impedance channel on a bridged pair", () => {
+    const loZ = { mode: "lo-z" as const, speakers: [{ spec: DM6, count: 1 }] };
+    const r = computeAmplifierLoad(PZC2004, [line(400), loZ, loZ, empty]);
+    expect(r.channels[1].status).toBe("unsupported");
+    expect(r.channels[1].limitedBy).toBe("mode");
+    // The other pair is untouched.
+    expect(r.channels[2].status).not.toBe("unsupported");
+    expect(r.channels[2].limitedBy).not.toBe("mode");
+  });
+
+  it("reads a single channel's power and swing off the low-impedance ratings", () => {
+    const limits = resolveAmpLimits(PZC2004);
+    // 500 W per channel, not the pair's 1000 W; 500 W into 4 Ω swings 63 V, not a 100 V line's 141 V.
+    expect(limits.maxBurstPerChannelW).toBe(500);
+    expect(limits.peakVoltageV).toBeCloseTo(Math.sqrt(2 * 250 * 8), 6);
+    expect(limits.totalRatedW).toBe(2000);
+    expect(limits.supports100V).toBe(true);
+  });
+
+  it("changes nothing for an amplifier that drives 100 V per channel", () => {
+    const perChannel = { ...PZC2004, hiZBridgesPairs: undefined };
+    const r = computeAmplifierLoad(perChannel, [line(700), line(700), empty, empty]);
+    expect(r.channels[0].status).toBe("ok");
+  });
+});

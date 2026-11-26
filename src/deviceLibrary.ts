@@ -27,6 +27,9 @@ import { templates as security } from "./devices/security";
 import { templates as wirelessLan } from "./devices/wireless-lan";
 import { templates as faceProducts } from "./devices/face-products";
 import { templates as faceLibrary } from "./devices/face-library";
+import { templates as audacAmps } from "./devices/audac-amps";
+import { templates as blazeAmps } from "./devices/blaze-amps";
+import { templates as securityFace } from "./devices/security-face";
 
 import { DEVICE_TYPE_TO_CATEGORY } from "./deviceTypeCategories";
 export { DEVICE_TYPE_TO_CATEGORY };
@@ -58,6 +61,9 @@ export const DEVICE_TEMPLATES: DeviceTemplate[] = [
   ...wirelessLan,
   ...faceProducts,
   ...faceLibrary,
+  ...audacAmps,
+  ...blazeAmps,
+  ...securityFace,
 ];
 
 export const CARD_TEMPLATES: DeviceTemplate[] = [...expansionCards, ...storageMedia];

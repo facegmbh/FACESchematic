@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { templates as security } from "../devices/security";
+import { templates as securityFace } from "../devices/security-face";
 import { DEVICE_TEMPLATES, DEVICE_TYPE_TO_CATEGORY } from "../deviceLibrary";
 import { CONNECTOR_LABELS, SIGNAL_LABELS, SIGNAL_COLORS, SIGNAL_GROUPS, type SignalType } from "../types";
 import { DEFAULT_CONNECTOR, shouldDefaultMultiConnect } from "../connectorTypes";
 import { SIGNAL_TO_CABLE } from "../cableTypes";
 import { DEVICE_TYPE_LABELS } from "../deviceTypeCategories";
 
-const ALARM_BUSES: SignalType[] = ["fibra", "jeweller", "bus-2"];
+const ALARM_BUSES: SignalType[] = ["fibra", "jeweller", "bus-2", "com2bus", "bus-1", "dss2"];
 
 describe("intrusion-alarm bus signal types", () => {
   it("are registered in every table a signal has to appear in", () => {
@@ -31,6 +32,9 @@ describe("intrusion-alarm bus signal types", () => {
     expect(DEFAULT_CONNECTOR.fibra).toBe("terminal-block");
     expect(DEFAULT_CONNECTOR["bus-2"]).toBe("terminal-block");
     expect(DEFAULT_CONNECTOR.jeweller).toBe("wireless");
+    expect(DEFAULT_CONNECTOR.com2bus).toBe("terminal-block");
+    expect(DEFAULT_CONNECTOR["bus-1"]).toBe("terminal-block");
+    expect(DEFAULT_CONNECTOR.dss2).toBe("wireless");
   });
 });
 
@@ -112,7 +116,8 @@ describe("security device library", () => {
     expect(makers).toContain("Ajax Systems");
     expect(makers).toContain("Telenot");
 
-    const signals = new Set(security.flatMap((t) => t.ports.map((p) => p.signalType)));
+    // Telenot's com2BUS, BUS-1 and DSS2 devices are in the list of what FACE buys and sells.
+    const signals = new Set([...security, ...securityFace].flatMap((t) => t.ports.map((p) => p.signalType)));
     for (const bus of ALARM_BUSES) expect(signals, bus).toContain(bus);
   });
 
