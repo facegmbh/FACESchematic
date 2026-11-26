@@ -1,20 +1,20 @@
 export default function OverviewPage() {
   return (
     <>
-      <h1>EasySchematic</h1>
+      <h1>FACESchematic</h1>
 
       <p>
-        EasySchematic ist ein browserbasiertes Werkzeug zum Entwerfen von <strong>AV-Signalflussdiagrammen</strong>
+        FACESchematic ist ein browserbasiertes Werkzeug zum Entwerfen von <strong>AV-Signalflussdiagrammen</strong>
         (Verkabelungsplänen). Es ist für Broadcast-Ingenieure, Live-Produktionsteams und AV-Integratoren gemacht, die schnell
         darstellen müssen, wie Geräte verbunden sind.
       </p>
       <p>
-        Alles läuft im Browser — keine Installation nötig. Die Arbeit wird automatisch im localStorage gespeichert; mit einem
-        kostenlosen Konto lassen sich Schaltpläne in der Cloud speichern und von jedem Browser aus öffnen.
+        Alles läuft im Browser — keine Installation nötig. Die Arbeit wird automatisch im localStorage gespeichert; nach der
+        Anmeldung mit dem Odoo-Konto lassen sich Zeichnungen an Odoo-Projekten speichern und von jedem Rechner aus öffnen.
       </p>
       <p>
         <strong>
-          <a href="https://easyschematic.live/">EasySchematic öffnen &rarr;</a>
+          <a href="/" target="_blank" rel="noopener noreferrer">FACESchematic öffnen &rarr;</a>
         </strong>
       </p>
 
@@ -62,10 +62,10 @@ export default function OverviewPage() {
           <strong>Raumgestaltung</strong> — Hintergrundfarbe, Rahmenstil und Schriftgröße über das Rechtsklick-Kontextmenü anpassen
         </li>
         <li>
-          <strong>Cloud-Speicher</strong> — mit einem kostenlosen Konto bis zu 10 Schaltpläne in der Cloud speichern; Zugriff von jedem Browser aus
+          <strong>Speichern in Odoo</strong> — Zeichnungen liegen an Odoo-Projekten und sind von jedem Rechner aus erreichbar; es gelten die eigenen Odoo-Rechte
         </li>
         <li>
-          <strong>Freigabe</strong> — einen Link erzeugen, um einen in der Cloud gespeicherten Schaltplan mit beliebigen Personen zu teilen
+          <strong>Sperre beim Bearbeiten</strong> — wer eine Zeichnung zuerst öffnet, bearbeitet sie; alle anderen sehen sie so lange nur lesend
         </li>
         <li>
           <strong>Dunkler Modus</strong> — in der Menüleiste zwischen hellem und dunklem Design wechseln; die Einstellung wird automatisch gespeichert und folgt beim ersten Besuch der Einstellung des Betriebssystems
@@ -166,10 +166,7 @@ export default function OverviewPage() {
           <strong>Mobile Nutzung</strong> — Erkennung von Mobilgeräten mit Hamburger-Menü und touchfreundlicher Bedienung
         </li>
         <li>
-          <strong>Google OAuth</strong> — Anmeldung mit Google oder per Magic-Link-E-Mail
-        </li>
-        <li>
-          <strong>Offline-Cache für die Cloud</strong> — Cloud-Schaltpläne werden für den Offline-Zugriff in IndexedDB zwischengespeichert
+          <strong>Anmeldung mit Odoo</strong> — Odoo-E-Mail und persönlicher API-Schlüssel; ohne Anmeldung öffnet die App nicht
         </li>
         <li>
           <strong>Physische Abmessungen</strong> — Höhe, Breite, Tiefe (mm) und Gewicht (kg) eines Geräts bestimmen die Einstufung für den automatischen Fachboden, Tiefenkonflikte in der Seitenansicht und die Kennzahlen je Rack (belegte HE, Gesamtgewicht, Leistung)

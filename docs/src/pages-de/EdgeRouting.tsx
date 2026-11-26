@@ -5,7 +5,7 @@ export default function EdgeRoutingPage() {
 
       <h2>Intelligentes Routing</h2>
       <p>
-        EasySchematic verwendet einen <strong>A*-Pfadsuchalgorithmus</strong>, um Verbindungen um
+        FACESchematic verwendet einen <strong>A*-Pfadsuchalgorithmus</strong>, um Verbindungen um
         Geräte herumzuführen. Statt einfacher gerader Linien oder schlichter Stufenpfade finden die Verbindungen intelligente Wege, die:
       </p>
       <ul>

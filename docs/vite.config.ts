@@ -49,7 +49,7 @@ function localizedPages() {
       if (docsLocale !== "de") return html;
       return html
         .replace('<html lang="en">', '<html lang="de">')
-        .replace("<title>EasySchematic Docs</title>", "<title>EasySchematic Handbuch</title>");
+        .replace("<title>EasySchematic Docs</title>", "<title>FACESchematic Handbuch</title>");
     },
   };
 }

@@ -99,7 +99,7 @@ export default function DeviceLibraryPage() {
 
       <h2>Automatische Nummerierung</h2>
       <p>
-        Werden mehrere Exemplare derselben Gerätevorlage platziert, nummeriert EasySchematic sie automatisch:
+        Werden mehrere Exemplare derselben Gerätevorlage platziert, nummeriert FACESchematic sie automatisch:
         „Camera 1“, „Camera 2“ usw. Wird ein Gerät von Hand umbenannt, fällt es aus der automatischen Nummerierung heraus.
       </p>
 
@@ -130,35 +130,15 @@ export default function DeviceLibraryPage() {
 
       <h2>Community-Gerätedatenbank</h2>
       <p>
-        In der <a href="https://devices.easyschematic.live" target="_blank" rel="noopener noreferrer">Community-Gerätedatenbank</a> kann
-        jeder Gerätevorlagen durchstöbern, durchsuchen und beitragen.
+        Die Vorlagen stammen aus der <a href="https://devices.easyschematic.live" target="_blank" rel="noopener noreferrer">Community-Gerätedatenbank</a>{" "}
+        des ursprünglichen EasySchematic. FACESchematic liest sie nur: Aus der App heraus lässt sich nichts dorthin einreichen,
+        und Zeichnungen oder eigene Vorlagen werden nie dorthin übertragen.
       </p>
-      <ul>
-        <li><strong>Neue Geräte einreichen</strong> — mit der E-Mail-Adresse anmelden, das Geräteformular mit Ports und technischen Daten ausfüllen
-          und eine Referenz-URL zur Produktseite des Herstellers angeben. Eine Live-Vorschau über dem Formular zeigt das
-          Gerät genau so, wie es auf der Zeichenfläche des Schaltplans erscheinen wird — samt Port-Farben und Abschnittsgruppen —,
-          sodass sich das Layout vor dem Einreichen prüfen lässt. Ports lassen sich durch Ziehen an ihrem Griff
-          (oder mit den Auf-/Ab-Schaltflächen) umsortieren, und das Ziehen eines Ports in eine andere Gruppe ändert seine Richtung</li>
-        <li><strong>Änderungen vorschlagen</strong> — ein Fehler oder ein fehlender Port entdeckt? Änderungen lassen sich zu jeder bestehenden Vorlage vorschlagen</li>
-        <li><strong>Moderation</strong> — Einreichungen werden vor der Veröffentlichung von Moderatoren geprüft, um die Richtigkeit sicherzustellen</li>
-        <li><strong>Referenz-URLs</strong> — Markengeräte verlinken direkt auf die Produktseite des Herstellers, sodass
-          Moderatoren (und du) die technischen Daten prüfen können</li>
-        <li><strong>Nennung der Beitragenden</strong> — freigegebene Einreichungen werden dir auf der Geräteseite und in der
-          Ruhmeshalle der Beitragenden zugeschrieben</li>
-        <li><strong>Aus der App einreichen</strong> — Rechtsklick auf ein beliebiges eigenes Gerät auf der Zeichenfläche und
-          „An die Community senden“ wählen, um es direkt einzureichen, ohne die Angaben auf der Geräte-Website erneut einzugeben.
-          Das funktioniert auch für Verbesserungen an bestehenden Bibliotheksgeräten: Ein platziertes Gerät bearbeiten (einen Port korrigieren,
-          einen fehlenden Steckverbinder ergänzen), und dieselbe Aktion erscheint im Speichern-Menü des Geräte-Editors, sobald Änderungen vorgenommen wurden</li>
-        <li><strong>Von einem bestehenden Gerät klonen</strong> — auf der Geräte-Website hat das Formular „Submit a device“ eine
-          Option <em>Clone existing device</em>; eine beliebige vorhandene Vorlage wählen, und das Formular wird mit deren Ports,
-          Steckverbindern und Metadaten vorausgefüllt. Anpassen, was abweicht (ein Schwestermodell, eine regionale Variante), und einreichen — die
-          Moderationswarteschlange erhält so einen deutlich saubereren Diff als bei einem frisch abgetippten Formular</li>
-        <li><strong>Funktioniert offline</strong> — die Geräte-Website einmal online besuchen, und sie funktioniert auch ohne
-          Verbindung weiter: Durchstöbern, Suche, Filter und jede Geräteseite werden aus einer lokal gespeicherten Kopie der
-          Bibliothek bedient. Ein Banner „offline“ zeigt an, wenn die gespeicherte Kopie zu sehen ist, und sie aktualisiert sich automatisch,
-          sobald wieder eine Verbindung besteht. Die Website lässt sich außerdem aus dem Browser als App installieren, genauso wie die
-          eigentliche EasySchematic-App</li>
-      </ul>
+      <p>
+        Fehlt ein Gerät, wird es als eigene Vorlage angelegt (siehe oben) oder über{" "}
+        <a href="/import-devices">Geräte importieren</a> eingelesen. An Kolleginnen und Kollegen weitergeben lassen sich eigene
+        Vorlagen als Gerätearchiv — siehe <a href="/import-export">Dateien &amp; Exporte</a>.
+      </p>
     </>
   );
 }

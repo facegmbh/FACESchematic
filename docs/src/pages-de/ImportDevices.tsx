@@ -24,7 +24,7 @@ export default function ImportDevicesPage() {
       <h1>Geräte importieren</h1>
 
       <p>
-        EasySchematic kann Gerätevorlagen gesammelt aus JSON oder CSV importieren. Das lohnt sich,
+        FACESchematic kann Gerätevorlagen gesammelt aus JSON oder CSV importieren. Das lohnt sich,
         sobald mehr als zwei oder drei Geräte hinzukommen sollen — ein Herstellerkatalog, die Preisliste
         eines Lieferanten, eine Tabelle mit dem gesamten Gerätebestand eines Veranstaltungsorts oder alles andere,
         was sich nur mühsam Gerät für Gerät über den Geräte-Editor eingeben ließe.
@@ -93,11 +93,7 @@ export default function ImportDevicesPage() {
           Bei Zeilen, die nicht importiert werden sollen, den Haken entfernen. Zeilen mit Fehlern sind von vornherein gesperrt.
         </li>
         <li>
-          (Optional) Eine Notiz zur Einreichung ergänzen — sie wird nur verwendet, wenn in der Community-Bibliothek eingereicht wird.
-        </li>
-        <li>
-          Auf <strong>Zur Bibliothek hinzufügen</strong> klicken, um die gewählten Vorlagen in der Bibliothek der eigenen Vorlagen zu speichern,
-          oder auf <strong>Hinzufügen &amp; einreichen</strong>, um sie zusätzlich zur Prüfung an die Community-Bibliothek zu übergeben.
+          Auf <strong>Zur Bibliothek hinzufügen</strong> klicken, um die gewählten Vorlagen in der Bibliothek der eigenen Vorlagen zu speichern.
         </li>
       </ol>
 
@@ -159,7 +155,7 @@ export default function ImportDevicesPage() {
         <li>Es kann ein <strong>einzelnes Objekt</strong> oder ein <strong>Array von Objekten</strong> übergeben werden. Beides funktioniert.</li>
         <li>
           Unbekannte Felder werden <strong>stillschweigend ignoriert</strong>. Zusätzliche Metadaten, die die eigenen Werkzeuge
-          mitführen und die EasySchematic nicht kennt, dürfen also gefahrlos enthalten sein.
+          mitführen und die FACESchematic nicht kennt, dürfen also gefahrlos enthalten sein.
         </li>
         <li><code>id</code>-Felder (Vorlage und Port) werden <strong>automatisch erzeugt</strong>, wenn sie fehlen.</li>
         <li>
@@ -224,29 +220,17 @@ export default function ImportDevicesPage() {
         Eigene Vorlagen liegen im lokalen Speicher des Browsers und gelten nur für diesen Rechner und diese Domain.
         Sie werden <strong>nicht</strong> automatisch mit jemandem geteilt — weder mit anderen Benutzern noch mit anderen
         Geräten, auf denen du dich anmeldest. Zum Sichern oder Umziehen dient{" "}
-        <a href="/import-export">Datei → Gerätearchiv speichern</a>. Soll eine Vorlage allen
-        EasySchematic-Benutzern zur Verfügung stehen, wird sie in der Community-Bibliothek eingereicht (nächster Abschnitt).
+        <a href="/import-export">Datei → Gerätearchiv speichern</a>. Das Gerätearchiv ist auch der Weg,
+        Vorlagen an Kolleginnen und Kollegen weiterzugeben.
       </p>
 
-      <h2>In der Community-Bibliothek einreichen</h2>
+      <h2>Einreichen in der Community-Bibliothek</h2>
 
       <p>
-        Im Importdialog erledigt die Schaltfläche <strong>Hinzufügen &amp; einreichen</strong> zwei Dinge mit einem Klick:
-        Sie fügt die gewählten Vorlagen zur eigenen Bibliothek hinzu <em>und</em> stellt sie zur Prüfung in die Warteschlange
-        der Community-Bibliothek. Freigegebene Vorlagen stehen jedem EasySchematic-Benutzer zur Verfügung.
+        Die Schaltfläche <strong>Hinzufügen &amp; einreichen</strong> des Importdialogs übergibt Vorlagen an die
+        Community-Bibliothek des ursprünglichen EasySchematic. In FACESchematic ist dieser Weg gesperrt — von hier aus wird nichts
+        nach außen übertragen. Vorlagen bleiben in der eigenen Bibliothek.
       </p>
-
-      <p>Gut zu wissen:</p>
-      <ul>
-        <li>Eine Anmeldung ist erforderlich (die API weist anonyme Einreichungen ab)</li>
-        <li>Jedes gewählte Gerät wird zu einem eigenen Eintrag in der Warteschlange</li>
-        <li>
-          Vor der Freigabe gleicht ein Prüfer die Daten mit den Herstellerangaben ab — eine Notiz zur
-          Einreichung hilft dabei (z. B. „alle fünf DTP2-Sender der aktuellen Produktlinie, geprüft gegen
-          Datenblatt 2024.03“)
-        </li>
-        <li>Abgelehnte Einreichungen bleiben in der lokalen Bibliothek; nur die Kopie in der Community-Bibliothek wird verworfen</li>
-      </ul>
 
       <h2>Häufige Fehler und ihre Behebung</h2>
 

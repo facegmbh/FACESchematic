@@ -54,7 +54,7 @@ export default function RacksPage() {
         wo das Gerät landet — grün für gültig, rot für blockiert.
       </p>
       <p>
-        EasySchematic entscheidet anhand der physischen Abmessungen jedes Geräts (<strong>widthMm</strong>,{" "}
+        FACESchematic entscheidet anhand der physischen Abmessungen jedes Geräts (<strong>widthMm</strong>,{" "}
         <strong>heightMm</strong>, <strong>depthMm</strong>, gesetzt im Geräte-Editor oder in der
         Community-Vorlage), wie es passt:
       </p>
@@ -199,7 +199,7 @@ export default function RacksPage() {
         Steckersymbole werden nach Herstellerangaben in realen Millimetermaßen gezeichnet. Die
         Rackansicht wählt je nach Zoom einen passenden Detailgrad: Punkte bei weiter Entfernung, Silhouetten bei
         mittlerem Zoom und detaillierte Symbole (mit Pinbildern, Ausrichtung der Schlitze usw.) bei starker
-        Vergrößerung. EasySchematic bringt 59 Steckertypen mit, die praktisch jeden Stecker abdecken,
+        Vergrößerung. FACESchematic bringt 59 Steckertypen mit, die praktisch jeden Stecker abdecken,
         der an AV-Geräten vorkommt.
       </p>
 
@@ -207,7 +207,7 @@ export default function RacksPage() {
       <p>
         Wer bisher an der Hürde „aber dieses Gerät lässt sich nicht ins Rack schrauben“ hängen geblieben ist —
         DI-Boxen, DSPs in halber Breite, Leitungstreiber, Ansteckmikrofon-Empfänger, alles in Tischgerätegröße —, legt
-        das Gerät trotzdem auf einem leeren Rackplatz ab. EasySchematic legt einen 1-HE-Fachboden an und zentriert das Gerät darauf
+        das Gerät trotzdem auf einem leeren Rackplatz ab. FACESchematic legt einen 1-HE-Fachboden an und zentriert das Gerät darauf
         in seiner echten Breite. Keine 90-mm-Kästchen mehr, die als volle 19&quot;-Frontplatten gezeichnet werden.
       </p>
 
@@ -222,7 +222,7 @@ export default function RacksPage() {
       <h2>Speichern und Rückgängig</h2>
       <p>
         Rack-Seiten, Racks, Einbauplätze und Zubehör werden zusammen mit dem Schaltplan in
-        derselben Datei gespeichert (und im Cloud-Speicher). Jede wesentliche Änderung legt einen Rückgängig-Schritt an —
+        derselben Datei gespeichert — auch beim Speichern in Odoo. Jede wesentliche Änderung legt einen Rückgängig-Schritt an —
         Ctrl+Z funktioniert wie auf der Schaltplanseite, auch über Seitengrenzen hinweg.
       </p>
     </>

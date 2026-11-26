@@ -4,7 +4,7 @@ export default function AiAssistantPage() {
       <h1>KI-Assistent (MCP)</h1>
 
       <p>
-        EasySchematic lässt sich mit einem KI-Assistenten (etwa Claude) verbinden, der dann{" "}
+        FACESchematic lässt sich mit einem KI-Assistenten (etwa Claude) verbinden, der dann{" "}
         <strong>den Schaltplan live lesen und bearbeiten</strong> kann — die
         Gerätebibliothek durchsuchen, Geräte hinzufügen, Geräteeigenschaften setzen
         und Verbindungen ziehen; die Ergebnisse erscheinen während der Arbeit auf
@@ -19,7 +19,7 @@ export default function AiAssistantPage() {
         <strong>So funktioniert es:</strong> Ein kleines Programm, der{" "}
         <em>MCP-Server</em>, läuft auf dem eigenen Rechner. Der Assistent spricht
         mit diesem Server, und der Server spricht mit dem offenen
-        EasySchematic-Tab über eine Verbindung, die den Rechner nicht verlässt
+        FACESchematic-Tab über eine Verbindung, die den Rechner nicht verlässt
         (nur <code>127.0.0.1</code>). Die Zeichnung ist nur erreichbar, solange
         die Einstellung eingeschaltet ist, und erst, nachdem ein einmaliges{" "}
         <strong>Kopplungs-Token</strong> abgeglichen wurde.
@@ -86,7 +86,7 @@ node dist/index.js`}</code>
         auf dem er lauscht (Standard: <code>8765</code>).
       </p>
 
-      <h2>2. In EasySchematic einschalten</h2>
+      <h2>2. In FACESchematic einschalten</h2>
 
       <ol>
         <li>
@@ -239,7 +239,7 @@ node dist/index.js`}</code>
       >
         <strong>Sicherheit:</strong> Die Verbindung verlässt den eigenen Rechner
         nie, ist aus, bis du sie einschaltest, und verlangt das Kopplungs-Token.
-        Wird EasySchematic unter einer Adresse betrieben, die nicht localhost
+        Wird FACESchematic unter einer Adresse betrieben, die nicht localhost
         ist, auf dem Server{" "}
         <code>EASYSCHEMATIC_MCP_ORIGINS</code> setzen, um diesen Origin zuzulassen.
       </div>

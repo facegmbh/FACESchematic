@@ -3,36 +3,26 @@ export default function ImportExportPage() {
     <>
       <h1>Dateien & Exporte</h1>
 
-      <h2>Cloud-Speicher</h2>
+      <h2>Speichern in Odoo</h2>
       <p>
-        Der Cloud-Speicher ist vom Dateiexport getrennt — er legt den vollständigen Schaltplan auf den Servern von EasySchematic ab, sodass
-        er aus jedem Browser erreichbar ist.
+        Das Speichern in Odoo ist vom Dateiexport getrennt — es legt die vollständige Zeichnung an einem Odoo-Projekt ab, sodass
+        sie von jedem Rechner aus erreichbar ist und beim Projekt liegt, zu dem sie gehört.
       </p>
       <ul>
-        <li>Ein kostenloses Konto per Magic-Link-E-Mail oder Google-Anmeldung anlegen (kein Passwort nötig)</li>
-        <li>Über <strong>Datei → In Cloud speichern</strong> speichern oder alle gespeicherten Schaltpläne über <strong>Datei → Meine Schaltpläne</strong> verwalten</li>
-        <li>Bis zu 10 Schaltpläne je Konto</li>
-        <li>Cloud-Schaltpläne werden für den <strong>Offline-Zugriff</strong> in IndexedDB zwischengespeichert — zuletzt geöffnete Cloud-Dateien stehen auch ohne Internet zur Verfügung</li>
-        <li>In „Meine Schaltpläne“ lässt sich für jeden gespeicherten Schaltplan die Freigabe einschalten; das erzeugt einen Link, den jeder öffnen kann</li>
+        <li>Oben rechts <strong>Mit Odoo anmelden</strong>: Odoo-E-Mail und ein persönlicher Odoo-API-Schlüssel (nicht das Passwort — in Odoo unter Avatar → Mein Profil → Kontosicherheit → Neuer API-Schlüssel)</li>
+        <li>Über <strong>Datei → In Odoo speichern unter…</strong> die Zeichnung an einem Odoo-Projekt ablegen; <strong>Datei → Aus Odoo öffnen…</strong> zeigt die Zeichnungen der Projekte. Ein Projekt kann mehrere Zeichnungen haben</li>
+        <li>Danach speichert Ctrl+S zurück an das Projekt. Speichern überschreibt — es gibt keine Versionen</li>
+        <li>Es gelten die eigenen Odoo-Rechte: Wer ein Projekt in Odoo nicht sieht, sieht auch dessen Zeichnungen nicht</li>
+        <li>Wer eine Zeichnung zuerst öffnet, bearbeitet sie; alle anderen sehen sie so lange nur lesend. Eine Leiste zeigt, wer sie geöffnet hat. Die Sperre endet, wenn der Tab geschlossen wird</li>
       </ul>
-
-      <h3>Vorlage für neue Dateien</h3>
       <p>
-        Jeder in der Cloud gespeicherte Schaltplan kann als <strong>Vorlage für neue Dateien</strong> festgelegt werden. Bei einem
-        Klick auf <strong>Datei → Neu</strong> wird die Vorlage mit allen Geräten, den Einstellungen des Schriftfelds,
-        dem Drucklayout und den eigenen Geräten vorausgefüllt geladen — dieselben Angaben müssen also nicht jedes Mal neu eingegeben werden.
+        Die Cloud-Funktionen des ursprünglichen EasySchematic — Konto, „Meine Schaltpläne“, Freigabe-Links — gibt es in
+        FACESchematic nicht: Unsere Zeichnungen enthalten Kundenanlagen und verlassen das Haus nicht.
       </p>
-      <ul>
-        <li><strong>Datei → Meine Schaltpläne</strong> öffnen und bei einem beliebigen Schaltplan auf das <strong>Sternsymbol</strong> klicken, um ihn als Vorlage festzulegen</li>
-        <li>Ein erneuter Klick auf den Stern hebt die Festlegung als Vorlage wieder auf</li>
-        <li>Es kann immer nur eine Vorlage aktiv sein — eine neue ersetzt die bisherige</li>
-        <li>Der Vorlagen-Schaltplan selbst bleibt unberührt — er steht weiterhin als normal gespeicherte Datei in der Dateiliste</li>
-        <li>Ist keine Vorlage festgelegt, legt <strong>Datei → Neu</strong> wie gewohnt einen leeren Schaltplan an</li>
-      </ul>
 
       <h2>JSON (eigenes Format)</h2>
       <p>
-        Das JSON-Format ist das eigene Dateiformat von EasySchematic. Es enthält den vollständigen Schaltplan — alle Geräte,
+        Das JSON-Format ist das eigene Dateiformat von FACESchematic. Es enthält den vollständigen Schaltplan — alle Geräte,
         Verbindungen, Räume und die Konfiguration.
       </p>
 
@@ -171,10 +161,10 @@ export default function ImportExportPage() {
           </tr>
         </thead>
         <tbody>
-          <tr><td><code>EasySchematic-Devices</code></td><td>Geräterechtecke und Beschriftungen</td></tr>
-          <tr><td><code>EasySchematic-Rooms</code></td><td>Umrisse und Beschriftungen der Raum-Container</td></tr>
-          <tr><td><code>EasySchematic-Connections-SDI</code></td><td>SDI-Verbindungen (ein Layer je Signalart)</td></tr>
-          <tr><td><code>EasySchematic-Connections-HDMI</code></td><td>HDMI-Verbindungen</td></tr>
+          <tr><td><code>FACESchematic-Devices</code></td><td>Geräterechtecke und Beschriftungen</td></tr>
+          <tr><td><code>FACESchematic-Rooms</code></td><td>Umrisse und Beschriftungen der Raum-Container</td></tr>
+          <tr><td><code>FACESchematic-Connections-SDI</code></td><td>SDI-Verbindungen (ein Layer je Signalart)</td></tr>
+          <tr><td><code>FACESchematic-Connections-HDMI</code></td><td>HDMI-Verbindungen</td></tr>
           <tr><td>...</td><td>Ein Layer je verwendeter Signalart</td></tr>
         </tbody>
       </table>

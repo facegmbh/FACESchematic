@@ -16,6 +16,7 @@ const DOCS_SRC = path.resolve(__dirname, "..", "src");
 // DOCS_LOCALE=de indexes the German edition: the translated page where there is one
 // (src/pages-de/, same rule as docs/vite.config.ts) and the German page titles.
 const LOCALE = process.env.DOCS_LOCALE === "de" ? "de" : "en";
+const HIDDEN = LOCALE === "de" ? JSON.parse(fs.readFileSync(path.join(DOCS_SRC, "locale-de-hidden.json"), "utf8")) : [];
 const TITLES = LOCALE === "de" ? JSON.parse(fs.readFileSync(path.join(DOCS_SRC, "locale-de.json"), "utf8")) : {};
 
 // ---- 1. Pull the routes map out of DocsApp.tsx --------------------------------
@@ -131,6 +132,7 @@ for (const [slug, { componentName }] of Object.entries(routes)) {
 const seenComponents = new Set();
 for (const [slug, { title: routeTitle, componentName }] of Object.entries(routes)) {
   const title = TITLES[routeTitle] ?? routeTitle;
+  if (HIDDEN.includes(slug)) continue;
   if (seenComponents.has(componentName)) continue;
   if (componentToPreferredSlug[componentName] !== slug) continue;
   seenComponents.add(componentName);

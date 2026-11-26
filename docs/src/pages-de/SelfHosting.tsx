@@ -4,7 +4,7 @@ export default function SelfHostingPage() {
       <h1>Self-Hosting</h1>
 
       <p>
-        EasySchematic lässt sich mit Docker selbst hosten. Es gibt zwei
+        FACESchematic lässt sich mit Docker selbst hosten. Es gibt zwei
         Compose-Profile: ein <strong>Produktions</strong>-Image, das das Frontend
         baut und mit nginx ausliefert, und ein <strong>Entwicklungs</strong>-Image,
         das das Repository beim Start des Containers klont und den
@@ -35,7 +35,7 @@ export default function SelfHostingPage() {
 
       <pre>
         <code>{`git clone https://github.com/duremovich/EasySchematic.git
-cd EasySchematic
+cd FACESchematic
 docker compose up -d`}</code>
       </pre>
 
@@ -114,7 +114,7 @@ docker compose up -d`}</code>
 
       <pre>
         <code>{`git clone https://github.com/duremovich/EasySchematic.git
-cd EasySchematic
+cd FACESchematic
 make dev`}</code>
       </pre>
 
@@ -207,7 +207,7 @@ make dev`}</code>
 
       <ol>
         <li>
-          Im geklonten EasySchematic-Verzeichnis eine Datei namens{" "}
+          Im geklonten FACESchematic-Verzeichnis eine Datei namens{" "}
           <code>.env</code> anlegen.
         </li>
         <li>
@@ -278,7 +278,7 @@ make dev`}</code>
       <h2>Reverse Proxy</h2>
 
       <p>
-        Um EasySchematic hinter einem Reverse Proxy (nginx, Caddy, Traefik)
+        Um FACESchematic hinter einem Reverse Proxy (nginx, Caddy, Traefik)
         auszuliefern, den Proxy auf den Container-Port zeigen lassen. Für den
         Produktions-Container genügt ein einfacher HTTP-Proxy, da er nur
         statische Dateien ausliefert. Für den Entwicklungsserver muss der Proxy

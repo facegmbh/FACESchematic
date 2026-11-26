@@ -105,9 +105,7 @@ export default function FloorplansPage() {
       <p>
         Das Speichern des Projekts <strong>in eine Datei</strong> schreibt diese Bytes hinein, sodass auch eine Kollegin
         oder ein Kollege, der die Datei öffnet, den Plan neu zeichnen kann — die Seite wechseln, die Ebenen ändern, die
-        Auflösung erhöhen. Die Datei wächst entsprechend, und ein Speichern über 20 MB weist darauf hin. Ein
-        <em> Cloud</em>-Speichern nimmt sie nicht mit: Dieser Weg hat eine Obergrenze von 10 MB je Schaltplan,
-        die das PDF eines Architekten allein aufbrauchen würde.
+        Auflösung erhöhen. Die Datei wächst entsprechend, und ein Speichern über 20 MB weist darauf hin.
       </p>
       <p>
         Eine Grenze sollte man kennen: Eine Quelle über 25 MB wird gar nicht aufbewahrt, und die App sagt das beim

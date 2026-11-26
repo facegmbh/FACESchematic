@@ -6,7 +6,7 @@ export default function GettingStartedPage() {
       <h2>Schnellstart</h2>
       <ol>
         <li>
-          <a href="https://easyschematic.live/">EasySchematic</a> im Browser <strong>öffnen</strong>
+          <a href="/" target="_blank" rel="noopener noreferrer">FACESchematic</a> im Browser <strong>öffnen</strong> und mit dem Odoo-Konto anmelden
         </li>
         <li>
           <strong>Ein Gerät</strong> aus der Bibliothek in der linken Seitenleiste auf die Zeichenfläche <strong>ziehen</strong>
@@ -18,8 +18,8 @@ export default function GettingStartedPage() {
           <strong>Ports verbinden</strong>: einen Ausgangs-Port anklicken, dann einen passenden Eingangs-Port anklicken
         </li>
         <li>
-          <strong>Gespeichert</strong> wird automatisch im localStorage des Browsers. Wahlweise lässt sich ein kostenloses
-          Konto anlegen, um in der Cloud zu speichern
+          <strong>Gespeichert</strong> wird automatisch im localStorage des Browsers. Über <strong>Datei → In Odoo speichern unter…</strong>{" "}
+          wird die Zeichnung an einem Odoo-Projekt abgelegt
         </li>
       </ol>
 
@@ -83,11 +83,7 @@ export default function GettingStartedPage() {
       <p>
         Ein Klick auf das <strong>Sonne/Mond-Symbol</strong> rechts in der Menüleiste wechselt zwischen hellem und dunklem
         Design. Die Einstellung wird im Browser gespeichert und bei späteren Besuchen automatisch angewendet. Beim ersten Besuch
-        folgt EasySchematic der Dunkelmodus-Einstellung des Betriebssystems.
-      </p>
-      <p>
-        Der Umschalter für den dunklen Modus steht auch in der <strong>Gerätedatenbank</strong> (devices.easyschematic.live)
-        über dasselbe Symbol in der oberen Navigationsleiste zur Verfügung.
+        folgt FACESchematic der Dunkelmodus-Einstellung des Betriebssystems.
       </p>
 
       <h2>Einstellungen</h2>
@@ -216,14 +212,12 @@ export default function GettingStartedPage() {
       <h2>Arbeit speichern</h2>
       <ul>
         <li>
-          <strong>Automatisches Speichern</strong> — speichert nach jeder Änderung im localStorage (immer aktiv, kein Konto nötig)
+          <strong>Automatisches Speichern</strong> — speichert nach jeder Änderung im localStorage (immer aktiv)
         </li>
         <li>
-          <strong>Cloud-Speicher</strong> — mit einem kostenlosen Konto (Magic-Link per E-Mail oder Google-Anmeldung, kein Passwort nötig) lassen sich bis zu
-          10 Schaltpläne in der Cloud speichern. Der Zugriff ist von jedem Browser aus über <strong>Datei → Meine Schaltpläne</strong> möglich
-        </li>
-        <li>
-          <strong>Freigeben</strong> — die Freigabe eines in der Cloud gespeicherten Schaltplans einschalten, um einen Link zu erzeugen, den jeder öffnen kann
+          <strong>In Odoo speichern</strong> — <strong>Datei → In Odoo speichern unter…</strong> legt die Zeichnung an einem Odoo-Projekt ab,{" "}
+          <strong>Datei → Aus Odoo öffnen…</strong> holt sie auf jedem Rechner wieder. Wer zuerst öffnet, bearbeitet; alle anderen lesen so lange nur.
+          Einzelheiten unter <a href="/import-export">Dateien &amp; Exporte</a>
         </li>
         <li>
           <strong>Als Datei speichern</strong> — exportiert eine <code>.json</code>-Datei, die sich später wieder importieren lässt

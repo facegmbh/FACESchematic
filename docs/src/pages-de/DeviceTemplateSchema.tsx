@@ -47,7 +47,7 @@ export default function DeviceTemplateSchemaPage() {
     <>
       <h1>Schema der Gerätevorlagen</h1>
       <p>
-        Dies ist die maßgebliche Referenz für das Format der EasySchematic-Gerätevorlagen.
+        Dies ist die maßgebliche Referenz für das Format der FACESchematic-Gerätevorlagen.
         Mit ihr lässt sich jede externe Quelle (Visio-Schablonen der Hersteller,
         Tabellen, ausgelesene Katalogdaten) in ein Format umwandeln, das sich über
         {" "}<strong>Gerätebibliothek → Importieren</strong> gesammelt importieren lässt.
@@ -284,11 +284,6 @@ export default function DeviceTemplateSchemaPage() {
         Importierte Geräte landen in den <strong>eigenen Vorlagen</strong> (Abschnitt „Eigene Vorlagen“
         der Gerätebibliothek). Sie werden im Browser gespeichert und gelten nur für den eigenen Rechner.
         Von dort lassen sie sich wie jedes andere Gerät in Schaltpläne ziehen.
-      </p>
-      <p>
-        Wahlweise lassen sich aus dem Importdialog auch <strong>einzelne Vorlagen in der Community-Bibliothek einreichen</strong>.
-        Einreichungen kommen in eine Moderationswarteschlange und stehen nach der Freigabe allen
-        Benutzern zur Verfügung.
       </p>
     </>
   );

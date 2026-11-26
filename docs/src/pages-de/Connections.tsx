@@ -81,7 +81,7 @@ export default function ConnectionsPage() {
 
       <h3>Geschätzte Kabellänge</h3>
       <p>
-        Liegen beide Endpunkte einer Verbindung in <strong>platzierten Räumen</strong>, schätzt EasySchematic eine
+        Liegen beide Endpunkte einer Verbindung in <strong>platzierten Räumen</strong>, schätzt FACESchematic eine
         Kabellänge aus der Geometrie zwischen den beiden Räumen (Abstand von Raum zu Raum plus eine kleine Reserve). Die
         Schätzung steht in einer eigenen Spalte <strong>Gesch. Länge</strong> in der Kabelliste und in der
         Patchfeld-Belegung. So lässt sie sich mit der manuellen Spalte <strong>Kabellänge</strong> vergleichen oder als
@@ -100,7 +100,7 @@ export default function ConnectionsPage() {
 
       <h2>Multicable-Verbindungen</h2>
       <p>
-        EasySchematic unterstützt <strong>Multicable-Zubehör</strong> — Kabel-Snakes, Socapex und ähnliche gebündelte
+        FACESchematic unterstützt <strong>Multicable-Zubehör</strong> — Kabel-Snakes, Socapex und ähnliche gebündelte
         Kabelsysteme. Dafür gibt es besondere Gerätevorlagen mit <strong>Trunk-Ports</strong>, die mehrere
         Signale über ein einziges physisches Kabel führen.
       </p>
@@ -151,7 +151,7 @@ export default function ConnectionsPage() {
       </p>
       <p>
         Bündeln ist das bewusste Gegenteil der üblichen Aufgabe des Auto-Routers: Statt Verbindungen unterscheidbar zu halten,
-        wird EasySchematic damit mitgeteilt, dass genau diese Kabel einen gemeinsamen physischen Weg nehmen <em>sollen</em>.
+        wird FACESchematic damit mitgeteilt, dass genau diese Kabel einen gemeinsamen physischen Weg nehmen <em>sollen</em>.
       </p>
 
       <h2>Multi-Connect-Ports (1:n)</h2>
@@ -198,7 +198,7 @@ export default function ConnectionsPage() {
 
       <h2>Adapter</h2>
       <p>
-        Werden Ports mit unverträglichen Signalarten oder unterschiedlichen Steckertypen verbunden, kann EasySchematic
+        Werden Ports mit unverträglichen Signalarten oder unterschiedlichen Steckertypen verbunden, kann FACESchematic
         automatisch ein <strong>Adapter</strong>-Gerät dazwischen einfügen. Eine eigene Aktion
         „Adapter hinzufügen“ gibt es nicht — es genügt, die Verbindung zwischen den beiden nicht passenden Ports zu zeichnen. Enthält
         die Gerätebibliothek einen passenden Adapter, wird er eingefügt (oder in einem Dialog angeboten, wenn
@@ -333,7 +333,7 @@ export default function ConnectionsPage() {
 
       <h2>Kabel-IDs &amp; Beschriftungen</h2>
       <p>
-        Jede Verbindung kann eine <strong>Kabel-ID</strong> als Beschriftung auf der Zeichenfläche tragen. EasySchematic bietet zwei
+        Jede Verbindung kann eine <strong>Kabel-ID</strong> als Beschriftung auf der Zeichenfläche tragen. FACESchematic bietet zwei
         Benennungsschemata:
       </p>
       <ul>
@@ -357,7 +357,7 @@ export default function ConnectionsPage() {
 
       <h2>Leitungssprünge</h2>
       <p>
-        Wo sich Verbindungen kreuzen, kann EasySchematic an jedem Kreuzungspunkt kleine <strong>Bogenmarkierungen</strong>
+        Wo sich Verbindungen kreuzen, kann FACESchematic an jedem Kreuzungspunkt kleine <strong>Bogenmarkierungen</strong>
         zeichnen. Einzelne Wege lassen sich damit in einem dichten Schaltplan deutlich leichter verfolgen. Die
         Leitungssprünge werden im Menü <strong>Ansicht</strong> ein- oder ausgeschaltet.
       </p>
@@ -478,7 +478,7 @@ export default function ConnectionsPage() {
         als Stub — genau so, als würde eine Verbindung gezeichnet und dann im Rechtsklick-Menü <strong>Als Stub darstellen</strong>
         gewählt —, und ein einziges Rückgängig entfernt weiterhin die ganze Verbindung. Bereits bestehende Verbindungen bleiben
         beim Ändern der Einstellung unberührt. Die einzige Ausnahme ist eine Verbindung, die einen Adapter braucht: Fügt
-        EasySchematic einen ein, bleiben die beiden Hälften links und rechts des Adapters Leitungen, denn als Stubs
+        FACESchematic einen ein, bleiben die beiden Hälften links und rechts des Adapters Leitungen, denn als Stubs
         würden sie vier Stub-Beschriftungen um ein Gerät verstreuen, das gar nicht selbst platziert wurde. Wird eine solche Verbindung mit{" "}
         <strong>Trotzdem verbinden</strong> erzwungen, wird sie wie jede andere als Stub dargestellt.
       </p>
@@ -486,7 +486,7 @@ export default function ConnectionsPage() {
       <h2>Stecker-Kompatibilität</h2>
       <p>
         Ports haben zusätzlich zu ihrer Signalart einen <strong>Steckertyp</strong> (XLR-3, RJ45, HDMI usw.).
-        EasySchematic berücksichtigt die Stecker-Kompatibilität automatisch:
+        FACESchematic berücksichtigt die Stecker-Kompatibilität automatisch:
       </p>
       <ul>
         <li>
@@ -495,7 +495,7 @@ export default function ConnectionsPage() {
         </li>
         <li>
           <strong>Adapter erforderlich</strong> — haben zwei Ports dieselbe Signalart, aber unterschiedliche Stecker
-          (z. B. IEC auf Edison, USB-C auf USB-A), fordert EasySchematic dazu auf, ein Adapter-Gerät einzufügen,
+          (z. B. IEC auf Edison, USB-C auf USB-A), fordert FACESchematic dazu auf, ein Adapter-Gerät einzufügen,
           oder fügt es automatisch ein, wenn genau eines passt.
         </li>
         <li>

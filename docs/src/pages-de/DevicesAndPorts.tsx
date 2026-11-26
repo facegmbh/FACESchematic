@@ -5,7 +5,7 @@ export default function DevicesAndPortsPage() {
 
       <h2>Geräte</h2>
       <p>
-        Jedes Gerät in EasySchematic ist ein Kasten auf der Zeichenfläche mit beschrifteten{" "}
+        Jedes Gerät in FACESchematic ist ein Kasten auf der Zeichenfläche mit beschrifteten{" "}
         <strong>Ports</strong> an der linken und rechten Seite:
       </p>
       <ul>
@@ -23,7 +23,7 @@ export default function DevicesAndPortsPage() {
         Verbinden lassen sich nur Ports <strong>derselben Signalart</strong>, mit Ausnahmen dort, wo die echte Hardware
         zusammenarbeitet: Ein <strong>SLink</strong>-Port von Allen &amp; Heath lässt sich direkt mit <strong>dSnake</strong>-,
         <strong> DX5</strong>- und <strong>GigaACE</strong>-Ports verbinden, da SLink alle drei Protokolle automatisch erkennt.
-        EasySchematic bringt 72 eingebaute Signalarten für Video, Audio, Daten, Strom und Steuerung mit:
+        FACESchematic bringt 72 eingebaute Signalarten für Video, Audio, Daten, Strom und Steuerung mit:
       </p>
       <table>
         <thead>
@@ -168,7 +168,7 @@ export default function DevicesAndPortsPage() {
       <p>
         Jeder Port kann einen <strong>Steckverbinder-Typ</strong> (XLR-3, HDMI, RJ45 usw.) haben, der die physische
         Kabelkompatibilität bestimmt. Manche Steckverbinder sind <strong>Kombi-Typen</strong> — eine XLR/TRS-Combo-Buchse
-        nimmt zum Beispiel sowohl XLR-3- als auch 1/4"-TRS-Stecker auf. EasySchematic berücksichtigt das automatisch: Ein TRS-Kabel
+        nimmt zum Beispiel sowohl XLR-3- als auch 1/4"-TRS-Stecker auf. FACESchematic berücksichtigt das automatisch: Ein TRS-Kabel
         an einer Combo-Buchse zeigt keinen Konflikt, und die Kabelliste beschriftet es korrekt.
       </p>
       <table>
@@ -272,12 +272,12 @@ export default function DevicesAndPortsPage() {
       <p>
         <strong>Steckverbinder für blanke Adern</strong> — Ports vom Typ Phoenix und Terminal Block sind mit jedem
         anderen Steckverbinder-Typ kompatibel, da am Panel kein physischer Steckverbinder sitzt — das Kabel wird direkt
-        in der Klemme aufgelegt. EasySchematic überspringt bei diesen Verbindungen die Adapter-Abfrage.
+        in der Klemme aufgelegt. FACESchematic überspringt bei diesen Verbindungen die Adapter-Abfrage.
       </p>
 
       <h2>Steckerausführung</h2>
       <p>
-        Die meisten Steckverbinder haben eine <strong>Ausführung</strong> (männlich oder weiblich), von der abhängt, welches Kabel tatsächlich gebraucht wird. EasySchematic
+        Die meisten Steckverbinder haben eine <strong>Ausführung</strong> (männlich oder weiblich), von der abhängt, welches Kabel tatsächlich gebraucht wird. FACESchematic
         leitet die Ausführung automatisch aus Steckverbinder-Typ und Richtung ab — ein XLR-3-Eingang ist zum Beispiel weiblich und
         ein XLR-3-Ausgang männlich, während powerCON-Eingänge männlich und -Ausgänge weiblich sind. Steckverbinder mit fester Ausführung
         (RJ45, HDMI, USB-C usw.) sind unabhängig von der Richtung immer gleich.
@@ -304,7 +304,7 @@ export default function DevicesAndPortsPage() {
       <h2>Patchpanels</h2>
       <p>
         Patchpanels (RJ45-Panels, BNC-Videofelder, XLR-Audiofelder, Glasfaser-Panels, TT-Bantam-Patchfelder) sind bidirektionale
-        Durchführungen mit Ports auf zwei physischen Seiten. EasySchematic bildet sie als besonderen Gerätetyp ab:
+        Durchführungen mit Ports auf zwei physischen Seiten. FACESchematic bildet sie als besonderen Gerätetyp ab:
       </p>
       <ul>
         <li>Der Port-Editor zeigt die beiden Seiten als <strong>Rückseite</strong> und <strong>Front</strong> statt „Eingänge“ und „Ausgänge“</li>
@@ -503,7 +503,7 @@ export default function DevicesAndPortsPage() {
           <strong>Automatische Einordnung</strong> — eine Heuristik entscheidet anhand von Breite und Höhe,
           ob ein Gerät die volle Rackbreite (Frontplatte ≈482 mm) oder die halbe Rackbreite (≈220 mm) einnimmt, nur auf
           einen Fachboden gehört (kleine Tischgeräte) oder übergroß ist (passt nicht in ein 19&quot;-Rack). Wird ein kleines Gerät auf einen
-          leeren Platz gezogen, legt EasySchematic einen 1-HE-Fachboden an und zentriert das Gerät darauf in seiner natürlichen Breite.
+          leeren Platz gezogen, legt FACESchematic einen 1-HE-Fachboden an und zentriert das Gerät darauf in seiner natürlichen Breite.
         </li>
         <li>
           <strong>Tiefenkonflikte in der Seitenansicht</strong> werden sichtbar, wenn ein tieferes Gerät über die
@@ -523,7 +523,7 @@ export default function DevicesAndPortsPage() {
 
       <h2>Frontblenden-Editor</h2>
       <p>
-        EasySchematic zeichnet die Frontplatte jedes Geräts in der
+        FACESchematic zeichnet die Frontplatte jedes Geräts in der
         <a href="/racks"> Rack-Ansicht</a> mit echten Steckverbinder-Symbolen. Ein Rechtsklick auf ein Gerät im Rack und{" "}
         <strong>Frontblenden-Layout bearbeiten</strong> erlaubt die Feinarbeit am Layout — Ports an eigene Positionen ziehen,
         am Raster einrasten, mehrere auswählen zum Ausrichten / Verteilen, eigene Beschriftungen hinzufügen und auf das

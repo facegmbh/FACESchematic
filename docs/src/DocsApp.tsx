@@ -91,7 +91,7 @@ export default function DocsApp() {
   const Page = route.component;
 
   useEffect(() => {
-    document.title = `${tr(route.title)} — EasySchematic ${tr("Docs")}`;
+    document.title = `${tr(route.title)} — ${tr("EasySchematic")} ${tr("Docs")}`;
     document.querySelector("main")?.scrollTo(0, 0);
 
     // Update JSON-LD structured data per page

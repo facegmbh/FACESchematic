@@ -4,7 +4,7 @@ export default function PrintingPage() {
       <h1>Drucken &amp; Schriftfeld</h1>
 
       <p>
-        EasySchematic bringt einen vollständigen Druckablauf mit: Seiteneinrichtung, ein konfigurierbares Schriftfeld und mehrseitigen PDF-Export.
+        FACESchematic bringt einen vollständigen Druckablauf mit: Seiteneinrichtung, ein konfigurierbares Schriftfeld und mehrseitigen PDF-Export.
         Diese Seite behandelt den Druck des <strong>Signalfluss-Schaltplans</strong>. Papierbasierte
         Rack-Ansichtszeichnungen — mehrere Rackansichten auf einem Bogen angeordnet, Vektor-PDF-Export — beschreibt die Seite{" "}
         <a href="/print-sheets">Druckbögen</a>.

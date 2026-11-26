@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { BASE, navigateTo, getPath, onNavigate, withBase } from "../navigate";
 import SearchBar from "./SearchBar";
-import { tr } from "../locale";
+import { HIDDEN_PAGES, LOCALE, tr } from "../locale";
 
 const navItems = [
   { hash: "overview", label: "Overview" },
@@ -55,7 +55,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="flex flex-col gap-0.5">
-        {navItems.map((item) =>
+        {navItems.filter((item) => !("hash" in item && item.hash && HIDDEN_PAGES.includes(item.hash))).map((item) =>
           "children" in item && item.children ? (
             <div key={item.label} className="mt-3 mb-1">
               <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
@@ -97,20 +97,25 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             {tr("Developer Reference")} &rarr;
           </a>
         )}
-        <a
-          href="mailto:support@easyschematic.live"
-          className="block text-sm text-blue-600 hover:text-blue-800"
-        >
-          Support &rarr;
-        </a>
-        <a
-          href="https://discord.gg/dxXn3Jk2a6"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block text-sm text-blue-600 hover:text-blue-800"
-        >
-          Discord &rarr;
-        </a>
+        {/* Upstream's support address and Discord — not where a FACE colleague gets help. */}
+        {LOCALE === "en" && (
+          <>
+          <a
+            href="mailto:support@easyschematic.live"
+            className="block text-sm text-blue-600 hover:text-blue-800"
+          >
+            Support &rarr;
+          </a>
+          <a
+            href="https://discord.gg/dxXn3Jk2a6"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-sm text-blue-600 hover:text-blue-800"
+          >
+            Discord &rarr;
+          </a>
+          </>
+        )}
       </div>
     </>
   );
@@ -144,7 +149,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           className="flex items-center gap-2 text-lg font-bold text-gray-900 mb-4 px-3"
         >
           <img src={withBase("favicon.svg")} alt="" className="w-6 h-6" />
-          EasySchematic
+          {tr("EasySchematic")}
         </a>
         <SearchBar />
         <NavContent />
@@ -173,7 +178,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           className="flex items-center gap-2 text-base font-bold text-gray-900 ml-2"
         >
           <img src={withBase("favicon.svg")} alt="" className="w-5 h-5" />
-          EasySchematic
+          {tr("EasySchematic")}
         </a>
       </div>
 
