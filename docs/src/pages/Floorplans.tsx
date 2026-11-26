@@ -121,12 +121,48 @@ export default function FloorplansPage() {
         underlay so the building keeps its real size on the sheet.
       </p>
       <p>
+        An architect&apos;s PDF is the exception, because it <em>is</em> the sheet. The import reads
+        the scale the plan states in its text (&quot;M 1:50&quot;) and sets it; if the plan names
+        several scales or none, you are told and pick it yourself. As long as the PDF lies on the
+        sheet at its plotted size, choosing another scale only says what the plan is drawn at —
+        the drawing stays where it is and keeps covering the sheet, and only the distances taken
+        off it change. Once you have moved or resized the underlay, the scale re-fits it as
+        described above.
+      </p>
+      <p>
         <strong>📏 Calibrate</strong> makes the underlay dimensionally true. Click the two ends of a
         dimension you know — a room width, a grid spacing, a dimension line on the drawing — and
         type that distance in metres. The underlay is resized so the reference measures correctly at
         the page scale, and the toolbar then reports the drawing&apos;s resolution in mm per pixel.
         Until you calibrate, the plan is placed at its nominal size and distances taken off it are
         only as good as the source.
+      </p>
+
+      <h2>Measuring and dimension lines</h2>
+      <p>
+        <strong>📐 Measure</strong> reads a distance off the plan: click two points and the bar at
+        the top shows the distance in metres at the page&apos;s scale, with its horizontal and
+        vertical share. A third click starts the next measurement. Nothing is drawn onto the plan
+        — it is the quick check that an imported plan really has the scale it claims: measure a
+        dimension the architect wrote down.
+      </p>
+      <p>
+        The points catch what is drawn, within about ten screen pixels at any zoom: the corners of
+        a wall, the faces of a wall (so you measure the clear width, not axis to axis) and the ends
+        of existing dimension lines. The second point also holds the horizontal or vertical through
+        the first; where that line crosses a wall face it lands on the face, level with the first
+        point. An orange marker shows what was caught before you click — a square for a corner, a
+        diamond for a wall face, a ring for the level alone. Hold <kbd>Alt</kbd> to place a point
+        freely. The lines of the architect&apos;s drawing itself are a picture and are not caught;
+        take the walls over from the PDF first if you need them.
+      </p>
+      <p>
+        <strong>Draw dimension</strong>, offered once both points are set, keeps the measurement on
+        the plan as a dimension line with end ticks and the figure above it. Only the two points
+        are stored: the figure is worked out from the scale every time, so correcting the scale
+        corrects every dimension. Dimension lines are exported to the PDF and copied when the page
+        is duplicated. To remove one, click it with the Select tool and press <kbd>Delete</kbd>;
+        they cannot be moved yet — delete and measure again.
       </p>
 
       <h2>The two panels</h2>
