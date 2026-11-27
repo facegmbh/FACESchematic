@@ -658,13 +658,17 @@ steigender `version` bei jedem Schreiben von `data`, Archivieren, Liste und Form
 eigenem Menü, Rechten (intern: lesen/anlegen/schreiben, Löschen nur `base.group_system`).
 
 **Acceptance criteria:**
-- [ ] Doppelter `key` und ungültiges JSON scheitern mit einer deutschen Meldung
-- [ ] `version` steigt nur, wenn sich `data` ändert; der Chatter zeigt Name, Version, Artikel und Archiv
-- [ ] Portal-Benutzer sehen nichts; interne Benutzer können nicht löschen, aber archivieren
+- [x] Doppelter `key` und ungültiges JSON scheitern mit einer deutschen Meldung (Code + Test)
+- [x] `version` steigt nur, wenn sich `data` ändert; der Chatter verfolgt Name, Version, Artikel und Archiv (Code + Test)
+- [x] Portal-Benutzer sehen nichts; interne Benutzer können nicht löschen, aber archivieren (Code + Test)
+- [x] Zusätzlich: `expected_version` im Kontext verweigert das Schreiben, wenn inzwischen jemand anderes geändert hat; Name, Hersteller, Modell und Typ kommen aus dem JSON
+
+Stand 27.11.: Commit `595cbc2c` auf Branch `feat/schematic-library` (Worktree `~/dev/Odoo-schematic-library`), nicht gepusht. Lokal geprüft: Python-Syntax, XML, Manifest.
 
 **Verification:**
-- [ ] `face_schematic_library/tests/test_template.py` grün im Odoo.sh-Build
-- [ ] Manuell nach Installation: Menü sichtbar, Datensatz von Hand anlegbar
+- [ ] `face_schematic_library/tests/test_template.py` grün im Odoo.sh-Build (12 Tests), steht aus: Branch pushen
+- [ ] Manuell nach Installation: Menü „FACESchematic → Gerätevorlagen“ sichtbar
+- Abweichung: Im Formular kann man keinen Datensatz von Hand anlegen (`create="false"`). Bearbeitet wird im Editor.
 
 **Dependencies:** keine (parallel zu 39)
 **Files:** `__manifest__.py`, `models/face_schematic_template.py`, `security/ir.model.access.csv`, `views/…xml`, `tests/test_template.py` · **Scope:** M
