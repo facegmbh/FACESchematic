@@ -31,6 +31,12 @@ function effectiveTemplates(): DeviceTemplate[] {
   return [...cached, ...bundledFloor];
 }
 
+/** The library as far as it is known right now — the community library once loaded, with the
+ *  bundled templates as a floor — without going to the network. */
+export function getKnownLibraryTemplates(): DeviceTemplate[] {
+  return effectiveTemplates();
+}
+
 /** Look up a card template by ID from cached API data, bundled fallback, or caller-supplied extras (user's custom templates). */
 export function getTemplateById(id: string, extra: DeviceTemplate[] = []): DeviceTemplate | undefined {
   return effectiveTemplates().find((t) => t.id === id) ?? extra.find((t) => t.id === id);

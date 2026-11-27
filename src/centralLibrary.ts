@@ -289,3 +289,80 @@ export function setTemplateProduct(key: string, productId: number | null): Promi
     if (failure) throw failure;
   });
 }
+
+// --- for Claude's commands (SPEC-device-template.md) -----------------------------------------
+
+/** Where a template Claude created or changed ended up. */
+export type StoredIn = "odoo" | "browser";
+
+/** Odoo is where Claude's templates go: signed in and the library module is there. */
+export function claudeWritesToOdoo(): boolean {
+  return writesGoToOdoo();
+}
+
+/** Run one write for `key` in the template's queue and hand its result (or error) back. */
+function queued<T>(key: string, write: () => Promise<T>): Promise<T> {
+  let result: T | undefined;
+  let failure: unknown = null;
+  return enqueue(key, async () => {
+    try {
+      result = await write();
+    } catch (err) {
+      failure = err;
+    }
+  }).then(() => {
+    if (failure) throw failure;
+    return result as T;
+  });
+}
+
+/**
+ * A new template from Claude: into the central library when Claude may write there (origin
+ * claude), else into this browser like a device made in the editor. Throws the backend's
+ * sentence when Odoo refuses — then nothing was stored.
+ */
+export async function createTemplateForClaude(
+  template: DeviceTemplate,
+  productId: number | undefined,
+): Promise<{ stored: StoredIn; entry: CentralEntry | null }> {
+  if (!writesGoToOdoo()) {
+    store().addCustomTemplate(template);
+    return { stored: "browser", entry: null };
+  }
+  const entry = await queued(keyOf(template), () =>
+    faceApi<CentralEntry>("/face/api/library", {
+      method: "POST",
+      body: { template, origin: "claude", ...(productId ? { productId } : {}) },
+    }),
+  );
+  store().upsertCentralTemplate(entry);
+  return { stored: "odoo", entry };
+}
+
+/**
+ * Claude's change to an own template. Central ones go to Odoo with the version Claude read
+ * (Odoo refuses when someone changed it since); local ones change in this browser.
+ * `template` undefined changes only the product.
+ */
+export async function updateTemplateForClaude(
+  key: string,
+  template: DeviceTemplate | undefined,
+  baseVersion: number | undefined,
+  productId: number | null | undefined,
+): Promise<{ stored: StoredIn; entry: CentralEntry | null }> {
+  if (!isCentral(key)) {
+    if (template) store().updateCustomTemplate(key, template);
+    return { stored: "browser", entry: null };
+  }
+  if (!writesGoToOdoo()) {
+    throw new Error(t("This template lives in the central library in Odoo, which this tab cannot reach right now."));
+  }
+  const entry = await queued(key, () =>
+    faceApi<CentralEntry>(`/face/api/library/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: { ...(template ? { template, baseVersion } : {}), ...(productId !== undefined ? { productId } : {}) },
+    }),
+  );
+  store().upsertCentralTemplate(entry);
+  return { stored: "odoo", entry };
+}

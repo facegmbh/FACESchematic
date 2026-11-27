@@ -21,3 +21,20 @@ test("the instructions say: status first, never discard or overwrite without bei
   assert.match(SERVER_INSTRUCTIONS, /discardChanges/);
   assert.match(SERVER_INSTRUCTIONS, /force/);
 });
+
+// FACE: device templates (SPEC-device-template.md).
+test("TOOLS describe the three device-template commands", () => {
+  const byName = new Map(TOOLS.map((t) => [t.name, t]));
+  const schema = (name: string) => byName.get(name)!.inputSchema as { required?: string[]; properties: Record<string, unknown> };
+  for (const name of ["get_device_template", "create_device_template", "update_device_template"]) assert.ok(byName.has(name), name);
+  assert.deepEqual(schema("get_device_template").required, ["templateId"]);
+  assert.deepEqual(schema("create_device_template").required, ["label"]);
+  assert.deepEqual(schema("update_device_template").required, ["templateId"]);
+  for (const field of ["baseTemplateId", "ports", "speakerLoad", "ampLoad", "detection", "micCoverage", "productId", "allowDuplicate"]) {
+    assert.ok(field in schema("create_device_template").properties, `create: ${field}`);
+  }
+  assert.ok("baseVersion" in schema("update_device_template").properties);
+  assert.ok(!("baseTemplateId" in schema("update_device_template").properties));
+  assert.match(byName.get("create_device_template")!.description, /never guess/);
+  assert.match(byName.get("update_device_template")!.description, /baseVersion/);
+});

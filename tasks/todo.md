@@ -809,13 +809,14 @@ entfernt Ports nach `id`.
 `removedPorts` mit `connectedInOpenDrawing` und Einträge in `TOOLS`.
 
 **Acceptance criteria:**
-- [ ] Anlegen, dann `search_templates` und `add_device` mit den richtigen Ports; Dublette nur mit `allowDuplicate`
-- [ ] Abgeleitete Endstufe: `speaker_load_report` bewertet wie bei der Basis
-- [ ] Ändern mit alter `baseVersion` meldet den Konflikt; Bibliotheksvorlagen werden mit Vorschlag abgelehnt
-- [ ] `/face/service/call` nimmt die drei Befehle an
+- [x] Anlegen, dann `search_templates` und `add_device` mit den richtigen Ports; Dublette (Hersteller+Modell, auch gegen die mitgelieferte Bibliothek) nur mit `allowDuplicate`
+- [x] Abgeleitete Endstufe: `speaker_load_report` bewertet wie bei der Basis (Blaze mit angeschlossenem Lautsprecher, gleiche Werte)
+- [x] Ändern mit alter `baseVersion` meldet den Konflikt (Satz aus Odoo); Bibliotheksvorlagen werden mit Vorschlag `create_device_template` + `baseTemplateId` abgelehnt
+- [x] `/face/service/call` nimmt die drei Befehle an
+- Zusätzlich: ohne Anmeldung `stored: "browser"`; `productId` nur zentral; nur Artikel ändern geht ohne Version; `connectedInOpenDrawing` über `templatePortId` der platzierten Geräte; Geräte in der Zeichnung bleiben unverändert. Die Befehle prüfen gegen die bekannte Bibliothek ohne Netz (`getKnownLibraryTemplates`).
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/mcpDeviceTemplate.test.ts`, `cd mcp-server && npm test`, `npx tsc -b`
+- [x] `npx vitest run src/__tests__/mcpDeviceTemplate.test.ts` (19), ganze Suite 2575 grün, `cd mcp-server && npm test` 119 grün, `npx tsc -b` grün
 
 **Dependencies:** 44, 46
 **Files:** `src/mcpBridge.ts`, `src/mcp/protocol.ts`, `mcp-server/src/tools.ts`, Test · **Scope:** M

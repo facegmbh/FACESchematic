@@ -123,6 +123,13 @@ test("a failing command is an answer, not a server error", async () => {
   assert.deepEqual(await res.json(), { ok: false, error: "Gerät nicht gefunden." });
 });
 
+test("the device-template commands are accepted like every other command", async () => {
+  for (const command of ["get_device_template", "create_device_template", "update_device_template"]) {
+    const res = await call({ uid: 8, command, params: { templateId: "x" } });
+    assert.notEqual(res.status, 400, command);
+  }
+});
+
 test("bad input → 400: uid, unknown command, params not an object", async () => {
   for (const body of [
     { uid: "8", command: "list_devices" },

@@ -38,7 +38,9 @@ import {
   LockedError,
 } from "./faceDrawings";
 import { getPortAbsolutePositions } from "./snapUtils";
-import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates } from "./templateApi";
+import { getBundledTemplates, getTemplateById, getCardsByFamily, fetchTemplates, getKnownLibraryTemplates } from "./templateApi";
+import { parseTemplateInput } from "./mcp/templateValidation";
+import { createTemplateForClaude, updateTemplateForClaude, claudeWritesToOdoo, isCentral, type StoredIn } from "./centralLibrary";
 import { inferRackForm, inferRackHeightU } from "./rackUtils";
 import {
   DEFAULT_BRIDGE_PORT,
@@ -69,6 +71,7 @@ import {
   type ConnectDevicesBatchParams,
   type GetDeviceParams,
   type SearchTemplatesParams,
+  type GetDeviceTemplateParams,
   type DeleteDeviceParams,
   type MoveDeviceParams,
   type DeleteConnectionParams,
@@ -193,6 +196,62 @@ export type BridgeStatus = "off" | "connecting" | "connected" | "error";
 
 /** Raised inside a command handler to return ok:false with a readable message. */
 class CommandError extends Error {}
+
+// ── Device templates for Claude (SPEC-device-template.md) ───────────────────────
+
+const templateKeyOf = (t: DeviceTemplate) => t.id ?? t.deviceType;
+
+/** Maker + model, the way two people would write the same device. */
+const modelKey = (t: { manufacturer?: unknown; modelNumber?: unknown }) => {
+  const maker = typeof t.manufacturer === "string" ? t.manufacturer.trim().toLowerCase() : "";
+  const model = typeof t.modelNumber === "string" ? t.modelNumber.trim().toLowerCase() : "";
+  return maker && model ? `${maker}|${model}` : null;
+};
+
+/** Every template Claude can know without the network: own devices first, then the library. */
+function knownTemplates(): DeviceTemplate[] {
+  const own = st().customTemplates;
+  const ownKeys = new Set(own.map(templateKeyOf));
+  return [...own, ...getKnownLibraryTemplates().filter((t) => !ownKeys.has(templateKeyOf(t)))];
+}
+
+function findKnownTemplate(templateId: unknown): DeviceTemplate | undefined {
+  if (typeof templateId !== "string" || !templateId) throw new CommandError("templateId is required. Use search_templates first.");
+  return knownTemplates().find((t) => templateKeyOf(t) === templateId);
+}
+
+function productIdParam(value: unknown, allowNull: boolean): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null && allowNull) return null;
+  if (Number.isInteger(value) && (value as number) > 0) return value as number;
+  throw new CommandError(`productId must be an Odoo product id${allowNull ? " or null" : ""}.`);
+}
+
+function templatePortSummary(template: DeviceTemplate) {
+  return template.ports.map((p) => ({ id: p.id, label: p.label, signalType: p.signalType, direction: p.direction }));
+}
+
+/** Whether a template port is wired on any device of that template in the open drawing. */
+function portsWiredInDrawing(templateId: string, templatePortIds: string[]): boolean {
+  if (!templatePortIds.length) return false;
+  const wanted = new Set(templatePortIds);
+  const wiredPorts = new Set<string>();
+  for (const node of st().nodes) {
+    if (node.type !== "device" || (node.data as DeviceData).templateId !== templateId) continue;
+    for (const port of (node.data as DeviceData).ports) {
+      if (port.templatePortId && wanted.has(port.templatePortId)) wiredPorts.add(`${node.id} ${port.id}`);
+    }
+  }
+  const base = (handle: string | null | undefined) => (handle ?? "").replace(/-(in|out|rear|front)$/, "");
+  return st().edges.some(
+    (e) => wiredPorts.has(`${e.source} ${base(e.sourceHandle)}`) || wiredPorts.has(`${e.target} ${base(e.targetHandle)}`),
+  );
+}
+
+/** Odoo's sentence (conflict, refusal) or the network's, for Claude to pass on. */
+function libraryError(err: unknown): CommandError {
+  return new CommandError(err instanceof Error ? err.message : String(err));
+}
 
 function st() {
   return useSchematicStore.getState();
@@ -1012,6 +1071,127 @@ function placeDeviceInRackRaw(p: PlaceDeviceInRackParams) {
 // Command handlers — each returns a JSON-serializable result or throws CommandError.
 // ---------------------------------------------------------------------------
 export const handlers: Record<CommandType, (params: Record<string, unknown>) => unknown | Promise<unknown>> = {
+  // --- FACE: device templates (SPEC-device-template.md) ---------------------------
+  get_device_template: (params) => {
+    const { templateId } = (params ?? {}) as unknown as GetDeviceTemplateParams;
+    const template = findKnownTemplate(templateId);
+    if (!template) throw new CommandError(`No template found for "${templateId}". Use search_templates first.`);
+    const key = templateKeyOf(template);
+    const own = st().customTemplates.some((t) => templateKeyOf(t) === key);
+    const meta = st().libraryMeta[key];
+    const stored: StoredIn | "library" = meta ? "odoo" : own ? "browser" : "library";
+    return {
+      templateId: key,
+      stored,
+      version: meta?.version ?? template.version ?? null,
+      productId: meta?.productId ?? null,
+      productName: meta?.productName ?? null,
+      template,
+    };
+  },
+
+  create_device_template: async (params) => {
+    const p = (params ?? {}) as Record<string, unknown>;
+    let base: DeviceTemplate | undefined;
+    if (p.baseTemplateId !== undefined) {
+      base = findKnownTemplate(p.baseTemplateId);
+      if (!base) throw new CommandError(`No template found for baseTemplateId "${String(p.baseTemplateId)}". Use search_templates first.`);
+    }
+    const parsed = parseTemplateInput(p, { mode: "create", base: base as unknown as Record<string, unknown> | undefined });
+    if ("error" in parsed) throw new CommandError(parsed.error);
+    const productId = productIdParam(p.productId, false) ?? undefined;
+    if (productId !== undefined && !claudeWritesToOdoo()) {
+      throw new CommandError("productId needs the central library in Odoo, which this tab is not signed in to.");
+    }
+
+    if (p.allowDuplicate !== true) {
+      const wanted = modelKey(parsed.template);
+      const same = wanted ? knownTemplates().filter((t) => modelKey(t) === wanted) : [];
+      if (same.length) {
+        throw new CommandError(
+          `A template for this maker and model exists already: ${same.map((t) => `${templateKeyOf(t)} („${t.label}“)`).join(", ")}. ` +
+            "Use it, change it with update_device_template, or pass allowDuplicate: true if the user wants a second one.",
+        );
+      }
+    }
+
+    const taken = new Set(knownTemplates().map(templateKeyOf));
+    let id = `custom-${Date.now()}`;
+    for (let n = 2; taken.has(id); n++) id = `custom-${Date.now()}-${n}`;
+    const template = { ...parsed.template, id } as unknown as DeviceTemplate;
+
+    let result: Awaited<ReturnType<typeof createTemplateForClaude>>;
+    try {
+      result = await createTemplateForClaude(template, productId);
+    } catch (err) {
+      throw libraryError(err);
+    }
+    return {
+      templateId: id,
+      version: result.entry?.version ?? null,
+      stored: result.stored,
+      label: template.label,
+      deviceType: template.deviceType,
+      ...(base ? { basedOn: templateKeyOf(base) } : {}),
+      ...(result.entry?.productName ? { productName: result.entry.productName } : {}),
+      ports: templatePortSummary(template),
+    };
+  },
+
+  update_device_template: async (params) => {
+    const p = (params ?? {}) as Record<string, unknown>;
+    const templateId = p.templateId;
+    const current = findKnownTemplate(templateId);
+    if (!current) throw new CommandError(`No template found for "${String(templateId)}". Use search_templates first.`);
+    if (!st().customTemplates.some((t) => templateKeyOf(t) === templateId)) {
+      throw new CommandError(
+        `"${String(templateId)}" belongs to the built-in or community library and cannot be changed. ` +
+          "Make your own from it with create_device_template and baseTemplateId instead.",
+      );
+    }
+    const key = String(templateId);
+    const central = isCentral(key);
+    const productId = productIdParam(p.productId, true);
+    const parsed = parseTemplateInput(p, { mode: "update", base: current as unknown as Record<string, unknown> });
+    if ("error" in parsed) throw new CommandError(parsed.error);
+
+    const before = current as unknown as Record<string, unknown>;
+    const after = parsed.template;
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+      (k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]),
+    );
+    if (!changed.length && productId === undefined) throw new CommandError("Nothing to change: pass the fields to change.");
+    if (productId !== undefined && !central) {
+      throw new CommandError("productId needs a template in the central library in Odoo; this one is only in this browser.");
+    }
+    if (changed.length && central && !Number.isInteger(p.baseVersion)) {
+      throw new CommandError("baseVersion is required for a template in the central library — call get_device_template first and pass its version.");
+    }
+
+    let result: Awaited<ReturnType<typeof updateTemplateForClaude>>;
+    try {
+      result = await updateTemplateForClaude(
+        key,
+        changed.length ? (after as unknown as DeviceTemplate) : undefined,
+        changed.length ? (p.baseVersion as number) : undefined,
+        productId,
+      );
+    } catch (err) {
+      throw libraryError(err);
+    }
+    return {
+      templateId: key,
+      version: result.entry?.version ?? null,
+      stored: result.stored,
+      changed: productId !== undefined ? [...changed, "productId"] : changed,
+      ...(result.entry ? { productName: result.entry.productName } : {}),
+      addedPorts: parsed.addedPorts,
+      removedPorts: parsed.removedPorts,
+      connectedInOpenDrawing: portsWiredInDrawing(key, parsed.removedPorts),
+      note: "Devices already placed keep their old version; the editor shows them as out of date and offers the update.",
+    };
+  },
+
   get_schematic: () => {
     const devices = deviceNodes().map((n) => {
       const d = n.data as DeviceData;

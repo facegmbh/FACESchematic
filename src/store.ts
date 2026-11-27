@@ -736,6 +736,9 @@ interface SchematicState {
   markCentral: (entry: Pick<CentralEntry, "key" | "version" | "productId" | "productName">) => void;
   /** Odoo archived this template: it is no longer central. */
   unmarkCentral: (key: string) => void;
+  /** Put a template Odoo just stored (Claude's create/update) into the own devices as central —
+   *  added or replaced, without telling the template sink again. */
+  upsertCentralTemplate: (entry: CentralEntry) => void;
   reorderCustomTemplate: (deviceType: string, targetIndex: number) => void;
   moveCustomTemplateToGroup: (deviceType: string, groupId: string | null) => void;
   addCustomTemplateGroup: (label: string) => string;
@@ -6263,6 +6266,20 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ libraryMeta, customTemplates: templates });
     saveLibraryMeta(libraryMeta);
     saveCustomTemplates(templates);
+  },
+
+  upsertCentralTemplate: (entry) => {
+    const next = { ...entry.template, version: entry.version } as DeviceTemplate;
+    const before = withStoredCustomTemplates(get().customTemplates);
+    const exists = before.some((t) => templateKey(t) === entry.key);
+    const templates = exists ? before.map((t) => (templateKey(t) === entry.key ? next : t)) : [...before, next];
+    const beforeOrder = withStoredCustomTemplateOrder(get().customTemplateOrder);
+    const order = beforeOrder.includes(entry.key) ? beforeOrder : [...beforeOrder, entry.key];
+    const libraryMeta = { ...get().libraryMeta, [entry.key]: { version: entry.version, productId: entry.productId, productName: entry.productName } };
+    set({ customTemplates: templates, customTemplateOrder: order, libraryMeta });
+    saveCustomTemplates(templates);
+    saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
+    saveLibraryMeta(libraryMeta);
   },
 
   unmarkCentral: (key) => {

@@ -25,6 +25,23 @@ export interface ToolDef {
 
 const noArgs = { type: "object", properties: {}, additionalProperties: false };
 
+/** One port as create_/update_device_template take it. */
+const PORT_ITEM = {
+  type: "object",
+  properties: {
+    id: { type: "string", description: "Leave out for a new port (ids become p1, p2 …). On update_device_template: the id of an existing port to keep or change." },
+    label: { type: "string" },
+    signalType: { type: "string", description: "A signal type of the app, e.g. analog-audio, speaker-level, ethernet, dante, hdmi, serial, power." },
+    direction: { type: "string", enum: ["input", "output", "bidirectional"] },
+    connectorType: { type: "string", description: "e.g. xlr-3, combo-xlr-trs, phoenix, rj45, hdmi, db9, iec, speakon." },
+    section: { type: "string", description: "Group heading on the device, e.g. \"Eingänge\"." },
+    multiConnect: { type: "boolean" },
+    poeDrawW: { type: "number" },
+    notes: { type: "string" },
+  },
+  additionalProperties: false,
+};
+
 export const TOOLS: ToolDef[] = [
   {
     name: "get_schematic",
@@ -1162,6 +1179,132 @@ export const TOOLS: ToolDef[] = [
         discardChanges: { type: "boolean", description: "Start empty even though the tab holds unsaved work. Only on the user's explicit wish." },
       },
       required: ["projectId", "name"],
+      additionalProperties: false,
+    },
+  },
+
+
+  // --- FACE: device templates (SPEC-device-template.md) ------------------------------------
+  {
+    name: "get_device_template",
+    description:
+      "Read a device template in full — ports with their ids, load / detector / microphone data — plus where it lives (odoo = the central library every colleague shares, browser = only this browser, library = built-in or community, read-only), its version and its Odoo product. Call it before update_device_template and pass the version on as baseVersion.",
+    inputSchema: {
+      type: "object",
+      properties: { templateId: { type: "string", description: "From search_templates." } },
+      required: ["templateId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "create_device_template",
+    description:
+      "Create a device template when search_templates finds nothing that fits. Prefer deriving from a related device with baseTemplateId: its slots, load data and plan symbol carry over and you replace only what differs (ports, when given, replace the base's completely). Before calling, tell the user the ports and datasheet figures in one sentence — never guess them. Signed in, the template goes into the central library in Odoo for everyone (stored: odoo); otherwise into this browser (stored: browser). A template with the same maker and model is refused with the existing templateId unless allowDuplicate is true. Unknown fields and values out of range are refused with a sentence naming them. Returns templateId and the ports, ready for add_device and connect_devices.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        baseTemplateId: { type: "string", description: "Template to derive from (search_templates). Without it, deviceType and ports are required." },
+        label: { type: "string", description: "Name shown in the library and on the device, 1–120 characters." },
+        deviceType: { type: "string", description: "A device type of the app (e.g. amplifier, speaker, switch, motion-detector, ceiling-microphone). An unknown one is refused with the closest matches." },
+        manufacturer: { type: "string" },
+        modelNumber: { type: "string" },
+        shortName: { type: "string" },
+        ports: {
+          type: "array",
+          maxItems: 256,
+          description: "The device's ports, 1–256. Ask for or read them from the datasheet — never guess.",
+          items: PORT_ITEM,
+        },
+        powerDrawW: { type: "number" },
+        poeBudgetW: { type: "number" },
+        poeDrawW: { type: "number" },
+        unitCost: { type: "number" },
+        heightMm: { type: "number" },
+        widthMm: { type: "number" },
+        depthMm: { type: "number" },
+        weightKg: { type: "number" },
+        voltage: { type: "string" },
+        installCable: { type: "string", description: "Fixed install cable as on a plan legend, e.g. \"Kabel aus Decke: 2x2,5 mm²\"." },
+        installNotes: { type: "string" },
+        referenceUrl: { type: "string", description: "https link to the datasheet or product page." },
+        imageUrl: { type: "string", description: "https link to a product image." },
+        searchTerms: { type: "array", items: { type: "string" }, maxItems: 20 },
+        speakerLoad: {
+          type: ["object", "null"],
+          description: "Loudspeaker: impedanceOhm (2–64), rmsPowerW, tapsW (70/100 V transformer taps, highest first), profile FR/LF/MF/HF/SW. From the datasheet.",
+        },
+        ampLoad: {
+          type: ["object", "null"],
+          description: "Amplifier: channels, ratedW { ohm2, ohm4, ohm8, v70, v100 } per channel, totalRatedW, maxBurstPerChannelW, maxBurstTotalW, maxAvgTotalW, peakVoltageV, peakCurrentA, minImpedanceOhm, hiZBridgesPairs. From the datasheet.",
+        },
+        detection: {
+          type: ["object", "null"],
+          description: "Detector reach: shape sector | circle | rect, rangeM (0.5–200); a sector needs apertureDeg, a corridor (rect) widthM. From the datasheet.",
+        },
+        micCoverage: {
+          type: ["object", "null"],
+          description: "Ceiling microphone: areaM { w, d } (0.5–30 m), minSideM, fixed, maxAreas, dedicatedAreaM, maxTalkerDistanceM, maxMountHeightM.",
+        },
+        productId: { type: "number", description: "Odoo product (product.product id) to link the template to — find it with the Odoo connector's search_records; only when maker and model match or the user says so." },
+        allowDuplicate: { type: "boolean", description: "Create even though a template with this maker and model exists — only when the user wants a second one." },
+      },
+      required: ["label"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_device_template",
+    description:
+      "Change an own device template — in the central library in Odoo (needs baseVersion from get_device_template; refused if someone changed it since, then read again) or one only this browser has. Only the fields you pass change; a load / detector / microphone block is replaced whole and null removes it. ports is the new complete list: an entry with the id of an existing port changes only what it names, one without id is a new port, existing ports you leave out are removed — the answer lists addedPorts and removedPorts and whether a removed port is wired in the open drawing. productId links the template to an Odoo product (null unlinks) without changing its version. Built-in and community templates cannot be changed — derive with create_device_template instead. Devices already placed keep the old version; the editor shows them as out of date. Tell the user when other drawings may use the template.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string" },
+        baseVersion: { type: "number", description: "The version get_device_template returned. Required for templates in the central library." },
+        label: { type: "string", description: "Name shown in the library and on the device, 1–120 characters." },
+        deviceType: { type: "string", description: "A device type of the app (e.g. amplifier, speaker, switch, motion-detector, ceiling-microphone). An unknown one is refused with the closest matches." },
+        manufacturer: { type: "string" },
+        modelNumber: { type: "string" },
+        shortName: { type: "string" },
+        ports: {
+          type: "array",
+          maxItems: 256,
+          description: "The device's ports, 1–256. Ask for or read them from the datasheet — never guess.",
+          items: PORT_ITEM,
+        },
+        powerDrawW: { type: "number" },
+        poeBudgetW: { type: "number" },
+        poeDrawW: { type: "number" },
+        unitCost: { type: "number" },
+        heightMm: { type: "number" },
+        widthMm: { type: "number" },
+        depthMm: { type: "number" },
+        weightKg: { type: "number" },
+        voltage: { type: "string" },
+        installCable: { type: "string", description: "Fixed install cable as on a plan legend, e.g. \"Kabel aus Decke: 2x2,5 mm²\"." },
+        installNotes: { type: "string" },
+        referenceUrl: { type: "string", description: "https link to the datasheet or product page." },
+        imageUrl: { type: "string", description: "https link to a product image." },
+        searchTerms: { type: "array", items: { type: "string" }, maxItems: 20 },
+        speakerLoad: {
+          type: ["object", "null"],
+          description: "Loudspeaker: impedanceOhm (2–64), rmsPowerW, tapsW (70/100 V transformer taps, highest first), profile FR/LF/MF/HF/SW. From the datasheet.",
+        },
+        ampLoad: {
+          type: ["object", "null"],
+          description: "Amplifier: channels, ratedW { ohm2, ohm4, ohm8, v70, v100 } per channel, totalRatedW, maxBurstPerChannelW, maxBurstTotalW, maxAvgTotalW, peakVoltageV, peakCurrentA, minImpedanceOhm, hiZBridgesPairs. From the datasheet.",
+        },
+        detection: {
+          type: ["object", "null"],
+          description: "Detector reach: shape sector | circle | rect, rangeM (0.5–200); a sector needs apertureDeg, a corridor (rect) widthM. From the datasheet.",
+        },
+        micCoverage: {
+          type: ["object", "null"],
+          description: "Ceiling microphone: areaM { w, d } (0.5–30 m), minSideM, fixed, maxAreas, dedicatedAreaM, maxTalkerDistanceM, maxMountHeightM.",
+        },
+        productId: { type: ["number", "null"], description: "Odoo product (product.product id) to link the template to — find it with the Odoo connector's search_records; only when maker and model match or the user says so." },
+      },
+      required: ["templateId"],
       additionalProperties: false,
     },
   },

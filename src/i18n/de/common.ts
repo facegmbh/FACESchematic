@@ -217,6 +217,7 @@ export const DE_COMMON: Record<string, string> = {
   "Only in this browser — not yet in the central library in Odoo": "Nur in diesem Browser – noch nicht in der zentralen Bibliothek in Odoo",
   "Odoo is not reachable": "Odoo ist nicht erreichbar",
   "Upload to Odoo ({n})": "Nach Odoo hochladen ({n})",
+  "This template lives in the central library in Odoo, which this tab cannot reach right now.": "Diese Vorlage liegt in der zentralen Bibliothek in Odoo, die dieser Tab gerade nicht erreicht.",
   "Odoo product (template)": "Odoo-Artikel (Vorlage)",
   "Unlink": "Lösen",
   "Search product name or reference": "Artikelname oder Artikelnummer suchen",

@@ -99,7 +99,11 @@ export type CommandType =
   | "choose_port_sides"
   | "set_connection_path"
   | "renumber_ports"
-  | "straighten_lines";
+  | "straighten_lines"
+  // FACE: device templates (SPEC-device-template.md)
+  | "get_device_template"
+  | "create_device_template"
+  | "update_device_template";
 
 /** Max items accepted by a single batch tool call (input arrives over the bridge,
  *  so it is capped). The mcp-server tool schemas mirror this as `maxItems`. */
@@ -283,6 +287,12 @@ export interface ConnectDevicesParams {
 
 export interface GetDeviceParams {
   nodeId: string;
+}
+
+/** get_device_template. create_ and update_device_template take the template fields of
+ *  SPEC-device-template.md, checked by parseTemplateInput (src/mcp/templateValidation.ts). */
+export interface GetDeviceTemplateParams {
+  templateId: string;
 }
 
 export interface SearchTemplatesParams {
