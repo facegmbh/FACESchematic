@@ -1,4 +1,5 @@
 dist/
 node_modules/
-# Single-source: generated from ../src/mcp/protocol.ts by scripts/sync-protocol.mjs
+# Single-source: generated from ../src/mcp/*.ts by scripts/sync-protocol.mjs
 src/protocol.generated.ts
+src/templateValidation.generated.ts

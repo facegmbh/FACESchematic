@@ -1,6 +1,6 @@
-# Implementation Plan: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan + schaltplan-layout
+# Implementation Plan: backend-deploy + face-identity + odoo-drawings + cloud-bridge + odoo-mcp-schaltplan + schaltplan-layout + odoo-device-library + device-template
 
-Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md`, `SPEC-cloud-bridge.md`, `SPEC-odoo-mcp-schaltplan.md`, `SPEC-schaltplan-layout.md` · Karte: `CAPABILITY-MAP.md`
+Specs: `SPEC-backend-deploy.md`, `SPEC-face-identity.md`, `SPEC-odoo-drawings.md`, `SPEC-cloud-bridge.md`, `SPEC-odoo-mcp-schaltplan.md`, `SPEC-schaltplan-layout.md`, `SPEC-odoo-device-library.md`, `SPEC-device-template.md` · Karte: `CAPABILITY-MAP.md`
 
 ## Overview
 
@@ -198,6 +198,56 @@ Ausgangsmessung Jean-Lucs Kapelle (Odoo, 22.11.): 7 Leitungen auf Rahmen, 3 durc
 ### Checkpoint I (Freigabe, Push)
 - [ ] Jean-Luc gibt frei; FACESchematic master, Odoo main
 
+### Phase 9: odoo-device-library (SPEC-odoo-device-library.md, Plan 27.11.)
+
+Entscheidungen beim Planen:
+- **Zwei Prüfstufen in einer Datei** `src/mcp/templateValidation.ts`, die nur `protocol.ts`
+  importiert und von `sync-protocol` ins Backend kopiert wird:
+  - `checkStoredTemplate` ist locker. Sie prüft Form, Größe und bekannte Listen und nimmt jede
+    gültige Vorlage aus dem Editor an, auch mit Slots und `passthrough`.
+  - `parseTemplateInput` ist streng und gilt für Claude (Phase 10).
+- **Erlaubte Werte als Konstanten in `protocol.ts`:** Signaltypen, Stecker und Gerätetypen. Ein
+  App-Test vergleicht sie mit `DEFAULT_SIGNAL_COLORS`, `CONNECTOR_TO_CABLE` und
+  `DEVICE_TYPE_TO_CATEGORY`, damit keine Liste unbemerkt abweicht. Die App-Module selbst kann das
+  Backend nicht importieren.
+- **Schreiben sofort, Rückweg bei Fehler:** Die Store-Aktionen bleiben synchron und rufen eine
+  Senke, die `faceLibrary.ts` beim Start anmeldet (der Store importiert `faceLibrary` nicht, sonst
+  gäbe es einen Kreis). Schlägt Odoo fehl, nimmt die Senke die Änderung zurück und zeigt den
+  Fehler.
+- **Angemeldet, aber Backend nicht erreichbar:** Zentrale Vorlagen lassen sich dann nicht ändern.
+  Die Änderung wird zurückgenommen. Neue Geräte entstehen lokal und lassen sich später hochladen.
+- **Odoo-Arbeit in einem Worktree von `origin/main`** (`~/dev/Odoo-main-wt`), nicht im alten
+  `prelive`-Checkout. Odoo-Tests laufen nur auf Odoo.sh.
+
+- [x] Task 39: Gemeinsame Vorlagen-Prüfung (`checkStoredTemplate`, Werte-Listen, sync)
+- [ ] Task 40: Odoo-Modul `face_schematic_library` (Modell, Rechte, Ansichten, Chatter, Tests)
+- [ ] Task 41: Backend `/face/api/library` mit Mock-Odoo-Tests
+
+### Checkpoint J1 (Zwischenstand, Odoo-Modul installiert)
+- [ ] `cd mcp-server && npm test`, `npx vitest run`, `npx tsc -b` grün
+- [ ] Odoo-Modul auf main, Odoo.sh-Build grün, Jean-Luc installiert es in Produktion
+- [ ] Freigabe für Push der Backend-Routen (Editor nutzt sie noch nicht)
+
+- [ ] Task 42: Editor lädt die zentrale Bibliothek (`faceLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
+- [ ] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
+- [ ] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
+- [ ] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz
+
+### Checkpoint J (Freigabe, Push)
+- [ ] Alle Tests und Build grün
+- [ ] Jean-Luc: zwei Browser, anlegen und sehen; ändern und Drift; hochladen; Artikel verknüpfen; Chatter in Odoo
+- [ ] Freigabe, FACESchematic master
+
+### Phase 10: device-template (SPEC-device-template.md)
+- [ ] Task 46: Strenge Eingabeprüfung `parseTemplateInput` und Port-Abgleich
+- [ ] Task 47: Befehle `get_device_template`, `create_device_template`, `update_device_template`
+- [ ] Task 48: Leitfaden, Handbuch, Ende-zu-Ende über den Dienst
+
+### Checkpoint K (Freigabe, Push)
+- [ ] Alle Tests grün; über `/face/service/call` angelegt, gesetzt, verbunden, geändert
+- [ ] Jean-Luc in claude.ai: fehlende Endstufe anlegen, Melderreichweite nachtragen, Artikel verknüpfen
+- [ ] Freigabe, FACESchematic master (Odoo unverändert)
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -218,6 +268,13 @@ Ausgangsmessung Jean-Lucs Kapelle (Odoo, 22.11.): 7 Leitungen auf Rahmen, 3 durc
 | Gerätegrößen nur im DOM gemessen, Linienverläufe nur in der Ansicht berechnet | Hoch | Task 22 als Spike zuerst; notfalls Größen aus Ports schätzen wie der Editor beim Einfügen |
 | Bild-Export braucht sichtbaren Tab | Mittel | Spike in Task 22; sonst Export aus dem Datenmodell (SVG) statt DOM |
 | Auto-Anordnen zerstört eine von Hand geordnete Zeichnung | Mittel | Undo; Leitfaden: nur auf Wunsch bei bestehenden Zeichnungen |
+| Odoo-Tests laufen nur auf Odoo.sh | Mittel | Modul klein halten und früh bauen (Task 40 vor dem Editor); Backend-Tests mit Mock-Odoo decken die Aufrufe ab |
+| Werte-Listen in `protocol.ts` laufen der App davon | Mittel | Gleichheitstest gegen die App-Tabellen (Task 39) |
+| Sechs Schreibwege im Editor, einer wird vergessen | Hoch | Senke sitzt in den Store-Aktionen, nicht in den Komponenten; je Aktion ein Test (Task 43) |
+| Zwei Leute ändern dieselbe Vorlage | Mittel | Version mit 409 und Name des anderen; Editor lädt neu und zeigt den Hinweis |
+| Zentrale Vorlage überschreibt eine lokale Änderung beim Laden | Mittel | Höhere Version gewinnt; lokale Änderungen an zentralen Vorlagen gibt es nur über Odoo |
+| Claude ändert eine Vorlage, die viele Zeichnungen nutzen | Mittel | Geräte in Zeichnungen ändern sich nie selbst (Drift); Leitfaden: vorher nennen; Chatter zeigt die Änderung |
+| Fremde OneDrive-Ausführbar-Bits und parallele Sitzungen | Mittel | Nur eigene Dateien stagen, nie `git add -A` |
 
 ## Open Questions
 

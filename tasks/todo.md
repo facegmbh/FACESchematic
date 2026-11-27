@@ -626,3 +626,201 @@ Entschieden: für alle Zeichnungen.
 
 ## Checkpoint I — Freigabe, Push (FACESchematic master, Odoo main)
 
+
+---
+
+# Phase 9: odoo-device-library (SPEC-odoo-device-library.md)
+
+## Task 39: Gemeinsame Vorlagen-Prüfung
+
+**Description:** `src/mcp/templateValidation.ts` mit `checkStoredTemplate(template)`. Die Funktion
+prüft Form (`key`, `label`, `deviceType`, Ports mit `id`/`label`/`signalType`/`direction`, eindeutige
+Port-IDs), Größe (≤ 256 KB als JSON) und die bekannten Werte. Die Werte stehen als Konstanten in
+`protocol.ts`. `sync-protocol.mjs` kopiert beide Dateien ins Backend.
+
+**Acceptance criteria:**
+- [x] Alle 899 mitgelieferten Vorlagen bestehen die Prüfung, auch mit Slots, `passthrough` und Lastdaten
+- [x] Kaputte Vorlagen werden mit einem deutschen Satz abgelehnt, der Vorlage, Feld und Grund nennt; Links nur `http(s)` (geteilte Vorlage, sonst `javascript:` beim Kollegen)
+- [x] Ein Gleichheitstest vergleicht die Listen in `protocol.ts` mit `DEFAULT_SIGNAL_COLORS` und `CONNECTOR_TO_CABLE`. Die Gerätetyp-Liste wandert nach Task 46: Im Editor ist der Gerätetyp freier Text, deshalb prüft nur die strenge Prüfung für Claude ihn.
+
+**Verification:**
+- [x] `npx vitest run src/__tests__/templateValidation.test.ts` (21 Tests), ganze Suite 2496 grün, `tsc -b` grün
+- [x] `cd mcp-server && npm test` (102 grün, die Kopie läuft unter Node); `Dockerfile.cloud` kopiert die Datei mit
+
+**Dependencies:** keine
+**Files:** `src/mcp/protocol.ts`, `src/mcp/templateValidation.ts`, `mcp-server/scripts/sync-protocol.mjs`, `mcp-server/.gitignore`, Test · **Scope:** M
+
+## Task 40: Odoo-Modul `face_schematic_library`
+
+**Description:** Im Repo `facegmbh/Odoo` (Worktree von `origin/main`): Modell
+`face.schematic.template` wie in der Spec, mit `mail.thread`, eindeutigem `key`, JSON-Prüfung,
+steigender `version` bei jedem Schreiben von `data`, Archivieren, Liste und Formular unter
+eigenem Menü, Rechten (intern: lesen/anlegen/schreiben, Löschen nur `base.group_system`).
+
+**Acceptance criteria:**
+- [ ] Doppelter `key` und ungültiges JSON scheitern mit einer deutschen Meldung
+- [ ] `version` steigt nur, wenn sich `data` ändert; der Chatter zeigt Name, Version, Artikel und Archiv
+- [ ] Portal-Benutzer sehen nichts; interne Benutzer können nicht löschen, aber archivieren
+
+**Verification:**
+- [ ] `face_schematic_library/tests/test_template.py` grün im Odoo.sh-Build
+- [ ] Manuell nach Installation: Menü sichtbar, Datensatz von Hand anlegbar
+
+**Dependencies:** keine (parallel zu 39)
+**Files:** `__manifest__.py`, `models/face_schematic_template.py`, `security/ir.model.access.csv`, `views/…xml`, `tests/test_template.py` · **Scope:** M
+
+## Task 41: Backend `/face/api/library`
+
+**Description:** `mcp-server/src/cloud/library.ts` mit den sechs Routen aus der Spec, eingehängt in
+`server.ts` hinter `requireUser`. Alle Odoo-Aufrufe laufen mit `odooFor` des Nutzers. Prüfung mit
+`checkStoredTemplate`. `mockOdoo.ts` lernt `face.schematic.template` und `product.product`
+(`search_read`, `create`, `write`).
+
+**Acceptance criteria:**
+- [ ] `GET` liefert alle aktiven Vorlagen mit Version, Artikel, `writtenBy` und `writeDate`
+- [ ] `POST` legt an (201) oder meldet 409 bei bekanntem `key`; `PUT` mit älterer `baseVersion` meldet 409 mit Name und Zeit
+- [ ] `upload` meldet `added` und `skipped` (gleich oder abweichend); `archive` und `products?q=` funktionieren
+- [ ] Ungültige Vorlagen bekommen 400 mit dem Satz aus der Prüfung; ohne Anmeldung 401
+
+**Verification:**
+- [ ] `cd mcp-server && npm test` (`library.test.ts`)
+
+**Dependencies:** 39 (Odoo-Felder wie in 40, Mock statt echtem Odoo)
+**Files:** `mcp-server/src/cloud/library.ts`, `server.ts`, `mockOdoo.ts`, `library.test.ts` · **Scope:** M
+
+## Checkpoint J1 — Zwischenstand
+
+## Task 42: Editor lädt die zentrale Bibliothek
+
+**Description:** `src/faceLibrary.ts` (Muster `faceDrawings.ts`) holt die Bibliothek beim Start,
+nach der Anmeldung und bei Fokus nach mehr als 5 Minuten. Sie führt die Vorlagen in
+`customTemplates` zusammen (höhere Version gewinnt) und füllt `libraryMeta` im Store. Die
+Bibliothek kennzeichnet Geräte, die nur in diesem Browser liegen.
+
+**Acceptance criteria:**
+- [ ] Angemeldet erscheinen zentrale Vorlagen in „Eigene Geräte“; nach Neuladen ohne Netz sind sie noch da (Zwischenspeicher)
+- [ ] Lokale Geräte bleiben und tragen das Kennzeichen; abgemeldet verhält sich alles wie heute
+- [ ] Ohne `VITE_FACE_BACKEND` wird nie geladen
+
+**Verification:**
+- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
+- [ ] `npx tsc -b`
+
+**Dependencies:** 41
+**Files:** `src/faceLibrary.ts`, `src/store.ts`, `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
+
+## Task 43: Editor schreibt zentral
+
+**Description:** `addCustomTemplate`, `updateCustomTemplate`, `removeCustomTemplate` und
+`importCustomTemplates` rufen eine Senke, die `faceLibrary` anmeldet. Angemeldet schreibt sie
+nach Odoo (anlegen, ändern mit `baseVersion`, archivieren) und setzt `template.version` und
+`libraryMeta`. Bei einem Fehler nimmt sie die Änderung zurück und zeigt den Satz an.
+
+**Acceptance criteria:**
+- [ ] Jeder der vier Schreibwege landet in Odoo, mit je einem Test
+- [ ] Fehler oder Konflikt: Der Store ist danach wie vorher, und die Meldung nennt bei 409 den anderen Nutzer
+- [ ] Nach einer Änderung zeigt eine Zeichnung mit dem alten Stand Drift (`templateSync.ts`)
+
+**Verification:**
+- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts`
+- [ ] `npx tsc -b`
+
+**Dependencies:** 42
+**Files:** `src/faceLibrary.ts`, `src/store.ts`, Test, i18n · **Scope:** M
+
+## Task 44: Hochladen und eingebettete Vorlagen
+
+**Description:** In der Bibliothek gibt es „Nach Odoo hochladen (n)“ für lokale Geräte. Der
+Browser filtert vorher mitgelieferte Dubletten heraus, danach kommt eine Ergebnisliste. Beim Laden
+einer Zeichnung werden eingebettete Vorlagen mit einem zentralen `key` durch die zentrale ersetzt,
+wenn deren Version gleich oder neuer ist.
+
+**Acceptance criteria:**
+- [ ] Hochladen verdoppelt nichts und listet Abweichungen; danach haben die Geräte kein Kennzeichen mehr
+- [ ] Eine Zeichnung mit älterer eingebetteter Vorlage zeigt nach dem Laden die zentrale (und Drift an Geräten)
+- [ ] Unbekannte eingebettete Vorlagen bleiben lokal und tragen das Kennzeichen
+
+**Verification:**
+- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
+
+**Dependencies:** 43
+**Files:** `src/faceLibrary.ts`, `src/store.ts` (Laden), `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
+
+## Task 45: Odoo-Artikel und Handbuch
+
+**Description:** Im Geräte-Editor gibt es das Feld „Odoo-Artikel“ mit Suche über `/library/products`,
+nur angemeldet. Es speichert `productId` über die Senke. Dazu kommt ein Absatz im Handbuch (de/en)
+zu zentralen Geräten, Hochladen und Artikel.
+
+**Acceptance criteria:**
+- [ ] Artikel setzen, ändern und lösen; der Name steht in der Bibliothek am Gerät
+- [ ] Ohne Anmeldung ist das Feld nicht da
+- [ ] Handbuch-Seite in beiden Sprachen
+
+**Verification:**
+- [ ] `npx vitest run`, `npx tsc -b`, Docs-Build
+
+**Dependencies:** 43
+**Files:** `src/components/DeviceEditor.tsx`, `src/faceLibrary.ts`, i18n, `docs/src/pages{,-de}/DeviceLibrary.tsx` · **Scope:** M
+
+## Checkpoint J — Freigabe, Push
+
+---
+
+# Phase 10: device-template (SPEC-device-template.md)
+
+## Task 46: Strenge Eingabeprüfung und Port-Abgleich
+
+**Description:** `parseTemplateInput(params, base?)` in `templateValidation.ts` prüft die
+Parameter aus der Spec streng, auch `speakerLoad`, `ampLoad`, `detection` und `micCoverage` mit
+ihren Grenzen. Sie leitet von einer Basis ab. `mergePorts(old, next)` behält, ändert, ergänzt und
+entfernt Ports nach `id`.
+
+**Acceptance criteria:**
+- [ ] `deviceType` aus `DEVICE_TYPE_TO_CATEGORY` (Liste `DEVICE_TYPES_WIRE` in `protocol.ts` mit Gleichheitstest, aus Task 39 hierher verschoben)
+- [ ] Unbekannte Felder, `passthrough`, Werte außerhalb der Grenzen (Sektor ohne Winkel, aufsteigende Taps) werden mit Feld und Grund abgelehnt
+- [ ] Ableiten behält Slots und Lastdaten und entfernt `id` und `version` der Basis
+- [ ] Das Ergebnis besteht immer `checkStoredTemplate`
+
+**Verification:**
+- [ ] `npx vitest run src/__tests__/templateValidation.test.ts`
+
+**Dependencies:** 39
+**Files:** `src/mcp/templateValidation.ts`, `src/mcp/protocol.ts`, Test · **Scope:** M
+
+## Task 47: Die drei Befehle
+
+**Description:** Handler in `mcpBridge.ts` für `get_device_template`, `create_device_template` und
+`update_device_template` über `faceLibrary` (angemeldet nach Odoo, sonst Browser mit `stored:
+"browser"`). Dazu Dubletten-Prüfung, Schutz der mitgelieferten und Community-Bibliothek,
+`removedPorts` mit `connectedInOpenDrawing` und Einträge in `TOOLS`.
+
+**Acceptance criteria:**
+- [ ] Anlegen, dann `search_templates` und `add_device` mit den richtigen Ports; Dublette nur mit `allowDuplicate`
+- [ ] Abgeleitete Endstufe: `speaker_load_report` bewertet wie bei der Basis
+- [ ] Ändern mit alter `baseVersion` meldet den Konflikt; Bibliotheksvorlagen werden mit Vorschlag abgelehnt
+- [ ] `/face/service/call` nimmt die drei Befehle an
+
+**Verification:**
+- [ ] `npx vitest run src/__tests__/mcpDeviceTemplate.test.ts`, `cd mcp-server && npm test`, `npx tsc -b`
+
+**Dependencies:** 44, 46
+**Files:** `src/mcpBridge.ts`, `src/mcp/protocol.ts`, `mcp-server/src/tools.ts`, Test · **Scope:** M
+
+## Task 48: Leitfaden, Handbuch, Ende-zu-Ende
+
+**Description:** Ein Abschnitt in `prompts.ts`: erst suchen, dann ableiten, Werte nennen, vor dem
+Ändern lesen, Drift ansagen. Dazu ein Handbuch-Absatz. Ende-zu-Ende über `/face/service/call` gegen
+das lokale Backend mit einem verbundenen Tab.
+
+**Acceptance criteria:**
+- [ ] Der Katalog enthält den Abschnitt; die Odoo-Seite zeigt ihn ohne Codeänderung
+- [ ] Ende-zu-Ende: Vorlage anlegen, setzen, verbinden, Melderreichweite nachtragen, Artikel verknüpfen
+
+**Verification:**
+- [ ] `cd mcp-server && npm test` (`prompts.test.ts`), Ende-zu-Ende-Protokoll im Checkpoint
+
+**Dependencies:** 47
+**Files:** `mcp-server/src/prompts.ts`, Test, `docs/src/pages{,-de}/…` · **Scope:** S
+
+## Checkpoint K — Freigabe, Push

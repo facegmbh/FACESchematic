@@ -117,6 +117,49 @@ export const RACK_TYPES = ["floor-19", "wall-mount", "desktop", "open-2post", "o
 /** Symbol shapes a floorplan group may use, mirroring `FloorplanSymbolShape` in `src/types.ts`. */
 export const FLOORPLAN_SHAPES = ["circle", "square", "triangle", "diamond", "projector", "rack", "display", "camera"] as const;
 
+// ── Device templates (SPEC-odoo-device-library.md) ─────────────────
+// The central library in Odoo checks every template against these lists, in the editor and
+// in the backend. The backend cannot import the app's tables, so they are repeated here;
+// src/__tests__/templateValidation.test.ts keeps them equal.
+
+/** Every `SignalType` in `src/types.ts`. A test keeps it equal to `DEFAULT_SIGNAL_COLORS`. */
+export const SIGNAL_TYPES_WIRE = [
+  "sdi", "hdmi", "ndi", "dante", "avb", "analog-audio", "speaker-level", "bluetooth", "digilink",
+  "aes", "dmx", "madi", "usb", "ethernet", "fiber", "displayport", "hdbaset", "srt", "genlock",
+  "gpio", "contact-closure", "rs422", "rs485", "serial", "thunderbolt", "composite",
+  "component-video", "s-video", "vga", "dvi", "power", "power-l1", "power-l2", "power-l3",
+  "power-neutral", "power-ground", "midi", "tally", "spdif", "adat", "ultranet", "aes50",
+  "stageconnect", "wordclock", "aes67", "ydif", "rf", "st2110", "artnet", "sacn", "ir", "timecode",
+  "gigaace", "dx5", "slink", "soundgrid", "fibreace", "dsnake", "dxlink", "gps", "dars", "rtmp",
+  "rtsp", "mpeg-ts", "ebus", "control-voltage", "extron-exp", "pots", "blu-link", "cresnet",
+  "dali", "knx", "fibra", "jeweller", "bus-2", "com2bus", "bus-1", "dss2", "nlight", "sensor",
+  "custom",
+] as const;
+
+/** Every `ConnectorType` in `src/types.ts`. A test keeps it equal to `CONNECTOR_TO_CABLE`. */
+export const CONNECTOR_TYPES_WIRE = [
+  "bnc", "hdmi", "displayport", "vga", "xlr-3", "xlr-4", "xlr-5", "trs-quarter", "ts-quarter",
+  "trs-eighth", "combo-xlr-trs", "rj45", "ethercon", "sfp", "lc", "sc", "st", "usb-a", "usb-b",
+  "usb-c", "usb-mini", "trs-2.5mm", "db7w2", "db9", "db15", "db25", "din-5", "mini-din-4",
+  "mini-din-7", "mini-din-8", "phoenix", "terminal-block", "powercon", "edison", "iec", "iec-c5",
+  "iec-c7", "iec-c15", "iec-c20", "schuko", "french-power", "europlug", "uk-power", "speakon",
+  "socapex", "multipin", "rca", "rj11", "rj12", "toslink", "barrel", "d-tap", "v-mount",
+  "f-connector", "banana", "binding-post", "binding-post-banana", "dvi", "mini-hdmi", "micro-hdmi",
+  "mini-displayport", "mini-xlr", "opticalcon", "l5-20", "l6-20", "l6-30", "l21-30", "cam-lok",
+  "powercon-true1", "qsfp", "qsfp28", "mpo", "wireless", "usb-micro", "reverse-tnc", "sma", "db37",
+  "digilink", "pcie-6pin", "lemo-2pin", "lemo-4pin", "lemo-5pin", "kycon-4pin", "solder-cup",
+  "punch-down-110", "punch-down-66", "krone-idc", "d-hole-insert", "none", "other",
+] as const;
+
+/** Every `PortDirection` in `src/types.ts`. */
+export const PORT_DIRECTIONS_WIRE = ["input", "output", "bidirectional", "passthrough"] as const;
+
+/** Largest template, as UTF-8 JSON, the central library stores. The biggest bundled one is ~25 KB. */
+export const MAX_TEMPLATE_BYTES = 256 * 1024;
+
+/** Most ports one template may carry (the largest bundled one has a few hundred). */
+export const MAX_TEMPLATE_PORTS = 1024;
+
 // ---------------------------------------------------------------------------
 // App -> server: handshake. The app proves it is the real editor (token) and the
 // server validates token + Origin before accepting any commands.
