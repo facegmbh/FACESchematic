@@ -828,11 +828,19 @@ entfernt Ports nach `id`.
 das lokale Backend mit einem verbundenen Tab.
 
 **Acceptance criteria:**
-- [ ] Der Katalog enthält den Abschnitt; die Odoo-Seite zeigt ihn ohne Codeänderung
-- [ ] Ende-zu-Ende: Vorlage anlegen, setzen, verbinden, Melderreichweite nachtragen, Artikel verknüpfen
+- [x] Der Katalog enthält den Abschnitt; die Odoo-Seite zeigt ihn ohne Codeänderung (fünftes Playbook
+  `device-template` + Absatz in den Anweisungen; `/face/service/catalog` liefert beides)
+- [x] Ende-zu-Ende (27.11., `/face/service/call`, Tab mit `VITE_FACE_BACKEND=1`, Mock-Odoo; 25 Prüfungen,
+  61 Aufrufe): MotionCam Outdoor ohne Basis angelegt (Odoo, Herkunft claude), gesetzt, mit Ajax Hub 2 Plus
+  verbunden, Reichweite mit `baseVersion` nachgetragen (Version 2), veraltete Version abgelehnt; MFA208 als
+  vorhandene Vorlage erkannt und Doppel abgelehnt; Variante von Blaze PowerZone 504D abgeleitet, mit Bose
+  FS2C verbunden, Lastprüfung sieht ihn; Artikel 9001 verknüpft ohne Versionssprung; verbundener Port aus
+  der Vorlage entfernt → `connectedInOpenDrawing`, Gerät und Verbindung bleiben
+- [x] Fund im Lauf: gesetzte Geräte haben eigene Port-IDs. Die Beschreibung von `create_device_template`
+  versprach Ports „ready for connect_devices“; jetzt sagen sie und das Playbook: erst `get_device`
 
 **Verification:**
-- [ ] `cd mcp-server && npm test` (`prompts.test.ts`), Ende-zu-Ende-Protokoll im Checkpoint
+- [x] `cd mcp-server && npm test` (123, davon 4 neue in `prompts.test.ts`), Docs-Typecheck ohne neue Fehler
 
 **Dependencies:** 47
 **Files:** `mcp-server/src/prompts.ts`, Test, `docs/src/pages{,-de}/…` · **Scope:** S

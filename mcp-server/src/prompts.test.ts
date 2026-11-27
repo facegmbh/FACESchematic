@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { PROMPTS, getPrompt, SERVER_INSTRUCTIONS } from "./prompts.js";
 
-test("PROMPTS: exposes the four named playbooks", () => {
+test("PROMPTS: exposes the five named playbooks", () => {
   assert.deepEqual(
     PROMPTS.map((p) => p.name).sort(),
-    ["build-schematic", "floorplan", "modular-chassis", "rack-elevation"],
+    ["build-schematic", "device-template", "floorplan", "modular-chassis", "rack-elevation"],
   );
   // Every prompt the list advertises must be resolvable by getPrompt.
   for (const p of PROMPTS) {
@@ -34,8 +34,8 @@ test("getPrompt: an unknown name throws an MCP InvalidParams error", () => {
   );
 });
 
-test("SERVER_INSTRUCTIONS: names the four playbooks", () => {
-  for (const name of ["build-schematic", "rack-elevation", "modular-chassis", "floorplan"]) {
+test("SERVER_INSTRUCTIONS: names the five playbooks", () => {
+  for (const name of ["build-schematic", "rack-elevation", "modular-chassis", "floorplan", "device-template"]) {
     assert.ok(SERVER_INSTRUCTIONS.includes(name));
   }
 });
@@ -87,4 +87,61 @@ test("build-schematic: Jean-Luc's wishes (22.11.) — off frames, not through ot
   assert.match(text, /side by side/i);
   assert.match(text, /straighten_lines/);
   assert.match(SERVER_INSTRUCTIONS, /straighten_lines/);
+});
+
+test("device-template: search first, derive, name the values, read before changing, announce drift (SPEC-device-template)", () => {
+  const text = (getPrompt("device-template").messages[0].content as { text: string }).text;
+  // Order: search, then read, then create (derived) or update.
+  const order = ["search_templates", "get_device_template", "create_device_template", "baseTemplateId", "update_device_template", "baseVersion"];
+  let last = -1;
+  for (const step of order) {
+    const at = text.indexOf(step, last + 1);
+    assert.ok(at > last, `${step} should come after the previous step`);
+    last = at;
+  }
+  // Values come from the datasheet or the user, are named before writing, never guessed.
+  assert.match(text, /datasheet/i);
+  assert.match(text, /never guess/i);
+  assert.match(text, /before you (create|write)/i);
+  // Drawings never change by themselves; the user is told about drift.
+  assert.match(text, /drift/i);
+  assert.match(text, /removedPorts/);
+  assert.match(text, /connectedInOpenDrawing/);
+  // A product is linked only when maker and model match or the user says so.
+  assert.match(text, /productId/);
+  assert.match(text, /maker and model/i);
+  // Archiving and deleting stay with the user.
+  assert.match(text, /archive/i);
+});
+
+test("device-template: a missing argument asks what device to describe", () => {
+  const text = (getPrompt("device-template").messages[0].content as { text: string }).text;
+  assert.match(text, /ask the user which device/i);
+});
+
+test("SERVER_INSTRUCTIONS: own devices — search first, never invent a template", () => {
+  assert.match(SERVER_INSTRUCTIONS, /create_device_template/);
+  assert.match(SERVER_INSTRUCTIONS, /get_device_template/);
+});
+
+test("device-template: every tool and parameter it names exists in the tool list", async () => {
+  const { TOOLS } = await import("./tools.js");
+  const text = (getPrompt("device-template").messages[0].content as { text: string }).text;
+  const tools = new Map(TOOLS.map((t: { name: string; inputSchema: { properties?: Record<string, unknown> } }) => [t.name, t]));
+  for (const name of ["search_templates", "get_device_template", "create_device_template", "update_device_template", "add_devices"]) {
+    assert.ok(tools.has(name), `${name} is a tool`);
+  }
+  const params = new Set<string>();
+  for (const name of ["create_device_template", "update_device_template"]) {
+    for (const key of Object.keys(tools.get(name)!.inputSchema.properties ?? {})) params.add(key);
+  }
+  for (const word of ["baseTemplateId", "baseVersion", "allowDuplicate", "productId", "speakerLoad", "ampLoad", "detection", "micCoverage", "referenceUrl", "imageUrl", "ports", "deviceType"]) {
+    assert.ok(text.includes(word), `the playbook names ${word}`);
+    assert.ok(params.has(word), `${word} is a parameter`);
+  }
+  assert.doesNotMatch(text, /removePorts/);
+  // Found in the end-to-end run: a placed device has its own port ids, not the template's.
+  assert.match(text, /own port ids[^.]*get_device/);
+  const create = tools.get("create_device_template") as unknown as { description: string };
+  assert.match(create.description, /own port ids[^.]*get_device/);
 });

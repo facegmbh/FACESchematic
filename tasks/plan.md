@@ -241,7 +241,7 @@ Entscheidungen beim Planen:
 ### Phase 10: device-template (SPEC-device-template.md)
 - [x] Task 46: Strenge Eingabeprüfung `parseTemplateInput` und Port-Abgleich
 - [x] Task 47: Befehle `get_device_template`, `create_device_template`, `update_device_template`
-- [ ] Task 48: Leitfaden, Handbuch, Ende-zu-Ende über den Dienst
+- [x] Task 48: Leitfaden, Handbuch, Ende-zu-Ende über den Dienst
 
 ### Checkpoint K (Freigabe, Push)
 - [ ] Alle Tests grün; über `/face/service/call` angelegt, gesetzt, verbunden, geändert

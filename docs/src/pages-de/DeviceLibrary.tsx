@@ -106,6 +106,14 @@ export default function DeviceLibraryPage() {
           die Vorlage mit einem Artikel aus Odoo. Das gilt für das Modell, nicht für ein einzelnes Gerät, und
           wird sofort gespeichert. Der Artikel steht danach in der Bibliothek an der Vorlage.
         </li>
+        <li>
+          <strong>Claude:</strong> Über den Odoo-Connector legt Claude eigene Vorlagen an und ändert sie, zum
+          Beispiel „Leg den Ajax MotionCam Outdoor als Vorlage an, Reichweite laut Datenblatt“. Claude sucht
+          zuerst in der Bibliothek, leitet möglichst von einem ähnlichen Gerät ab und nennt Ports und Werte,
+          bevor es speichert. Die Vorlage landet in Odoo mit der Herkunft <em>Claude</em>, Änderungen laufen
+          unter dem eigenen Odoo-Namen. Mitgelieferte Vorlagen ändert Claude nicht, es leitet eine eigene ab.
+          Archivieren und Löschen bleiben beim Nutzer.
+        </li>
       </ul>
 
       <h2>Favoriten</h2>

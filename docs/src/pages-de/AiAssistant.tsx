@@ -138,6 +138,12 @@ node dist/index.js`}</code>
           <strong>Ein Gerät hinzufügen</strong>, ausgehend von einer Vorlage aus der Bibliothek.
         </li>
         <li>
+          <strong>Eigene Vorlagen anlegen und ändern</strong>, wenn die Bibliothek kein passendes Gerät hat —
+          mit Ports, Lautsprecher- und Verstärkerlast, Melderreichweite und Odoo-Artikel. Angemeldet liegen sie
+          zentral in Odoo (siehe <em>Gerätebibliothek → Zentrale Bibliothek in Odoo</em>). Geräte in
+          Zeichnungen ändern sich dadurch nicht von selbst.
+        </li>
+        <li>
           <strong>Geräteeigenschaften setzen</strong> — eine sichere Auswahl wie
           Beschriftung, Kurzname, Hersteller, Modellnummer, Notiz, Seriennummer,
           Stückpreis und Leistungswerte. Strukturfelder (Ports, Slots) sind noch

@@ -4,7 +4,7 @@
  * Two things ship here, both available to ANY paired MCP client (Claude Desktop,
  * claude.ai, Claude Code) — not just Claude Code:
  *   - SERVER_INSTRUCTIONS: a short always-on overview surfaced at initialize time.
- *   - PROMPTS / getPrompt: three named, parameterized playbooks for the common
+ *   - PROMPTS / getPrompt: named, parameterized playbooks for the common
  *     multi-step jobs, so the assistant follows the right tool order instead of
  *     rediscovering it each time.
  *
@@ -28,7 +28,9 @@ FACE — layout: a schematic is organised by location (rooms are physical places
 
 FACE — drawings on Odoo projects: call get_editor_status first to see what is open and whether this tab may edit it. open_odoo_drawing, new_odoo_drawing and save_odoo_drawing never throw away unsaved work or overwrite a newer version on their own: when one refuses, tell the user why and ask. Pass discardChanges: true or force: true only after the user said so. Save only when the user asks.
 
-Four prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), and "floorplan" (annotate an architect's plan with device symbols, legend and drawing block).`;
+FACE — own devices: when search_templates finds no fitting Device, create one with create_device_template (preferably derived from a similar template via baseTemplateId); read it with get_device_template before changing it with update_device_template. Signed in, templates are stored centrally in Odoo and every colleague sees them. Name the ports and datasheet values before you write, never guess them. The "device-template" playbook has the steps.
+
+Five prompts hold step-by-step playbooks: "build-schematic" (lay out and wire a system), "rack-elevation" (build and populate a rack), "modular-chassis" (fit cards into a chassis), "floorplan" (annotate an architect's plan with device symbols, legend and drawing block), and "device-template" (create or change an own Device template).`;
 
 /** Definitions returned by the prompts/list handler. */
 export const PROMPTS: Prompt[] = [
@@ -51,6 +53,13 @@ export const PROMPTS: Prompt[] = [
     description: "Playbook for fitting expansion cards into a modular device's slots (get_device → list_slot_cards → install_card_batch).",
     arguments: [
       { name: "chassis", description: "Which chassis to configure and which cards to fit (e.g. 'fill the DM matrix with 4 HDMI input cards').", required: false },
+    ],
+  },
+  {
+    name: "device-template",
+    description: "Playbook for creating or changing an own Device template (search_templates → get_device_template → create_device_template with baseTemplateId, or update_device_template with baseVersion).",
+    arguments: [
+      { name: "device", description: "Which device to describe or what to change (e.g. 'Ajax MotionCam Outdoor, reach 15 m, 90°' or 'add a second Dante port to our amp').", required: false },
     ],
   },
   {
@@ -112,6 +121,18 @@ const FLOORPLAN = `You are annotating an architect's floor plan in EasySchematic
 7b. If the user wants the architect's own legend, revision table or title block gone from the print, cover them with set_floorplan_masks (paper mm) and place ours over the same spots — ask for the rough position on the sheet if you cannot infer it.
 8. Finish by calling list_floorplans once more and summarising what is on the sheet; remind the user to export the PDF from the floorplan toolbar.`;
 
+const DEVICE_TEMPLATE = `You are creating or changing an own Device template (an "Eigenes Gerät") in EasySchematic through the live MCP bridge. Signed in, own templates live centrally in Odoo: every colleague's library shows them, and drawings that already use one are affected when you change it. Work in this order:
+
+1. Search first: search_templates by maker and model, and by what the device does. If a template fits, use it — do not create a second one. create_device_template refuses a maker and model that already exist and names that template; pass allowDuplicate only when the user wants a second one.
+2. Read a candidate with get_device_template: its ports with their ids, its load and detector data, where it is stored (odoo, browser or library), its version and its linked Odoo product.
+3. Agree before you write. Take the ports and values from the manufacturer's datasheet or from the user — never guess a port, an impedance, a power rating or a reach. Before you create or write anything, name in one sentence the port list (count, signal, direction) and the values you will set, with where they come from. If the datasheet is not at hand, ask.
+4. Create with create_device_template. Derive from a similar template whenever one exists: baseTemplateId copies everything (slots, load data, plan symbol, ports) and you pass only what differs — ports, when given, replace the base's ports completely — this is also how you adapt a built-in or community template, which cannot be edited. Without a base, deviceType and ports are required; an unknown deviceType is refused with the closest matches. Give speakerLoad (loudspeaker), ampLoad (amplifier), detection (detector reach: sector, circle or rect) or micCoverage (ceiling microphone) when the device has them — the load reports and the floorplan coverage read them. referenceUrl and imageUrl are https links.
+5. Change with update_device_template: call get_device_template first and pass its version as baseVersion. If someone else changed the template meanwhile, the command refuses and says who and when — read again, check the change still makes sense, then retry. Only the fields you pass change; a load, detector or microphone block is replaced whole and null removes it. ports is the new complete list: an entry with an existing port's id changes only what it names, an entry without id is a new port, and existing ports you leave out are removed — so pass every port you want to keep.
+6. Drawings never change by themselves. Placed devices keep their old copy; the editor shows drift ("template changed") and the user updates them there. Tell the user which change you made and that drawings using this template will show drift. When the result lists removedPorts and connectedInOpenDrawing is true, say which connections in the open drawing hang on those ports.
+7. Odoo product: link one with productId (find it with the Odoo connector's search_records on product.product) only when maker and model match the product or the user says so. Changing only the product needs no baseVersion.
+8. You cannot archive or delete a template — the user does that in the editor's device library or in Odoo. Not signed in, the template is saved in this browser only; say so.
+9. To use the new template, add it with add_devices and its templateId as with any other Device. A placed Device gets its own port ids, not the template's: read them with get_device before you connect it.`;
+
 const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: string }> = {
   "build-schematic": {
     body: BUILD_SCHEMATIC,
@@ -127,6 +148,11 @@ const PLAYBOOKS: Record<string, { body: string; argName: string; noArgFallback: 
     body: MODULAR_CHASSIS,
     argName: "chassis",
     noArgFallback: "No chassis was named — list the modular Devices with get_schematic / get_device and ask the user which one to configure.",
+  },
+  "device-template": {
+    body: DEVICE_TEMPLATE,
+    argName: "device",
+    noArgFallback: "No device was named — ask the user which device to describe or which own template to change, and for its datasheet.",
   },
   floorplan: {
     body: FLOORPLAN,

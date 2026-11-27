@@ -103,6 +103,14 @@ export default function DeviceLibraryPage() {
           template to a product in Odoo. It applies to the model, not to one device, and is saved at once.
           The library then shows the product on the template.
         </li>
+        <li>
+          <strong>Claude:</strong> through the Odoo connector Claude creates and changes own templates, for
+          example “Add the Ajax MotionCam Outdoor as a template, reach from the datasheet”. Claude searches the
+          library first, derives from a similar device where it can and names the ports and values before it
+          saves. The template lands in Odoo with the origin <em>Claude</em>; changes run under your own Odoo
+          name. Claude does not change built-in templates, it derives an own one. Archiving and deleting stay
+          with you.
+        </li>
       </ul>
 
       <h2>Favorites</h2>

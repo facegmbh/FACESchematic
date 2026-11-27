@@ -133,6 +133,12 @@ node dist/index.js`}</code>
           <strong>Add a device</strong> from a library template.
         </li>
         <li>
+          <strong>Create and change own templates</strong> when the library has no matching device — with
+          ports, loudspeaker and amplifier load, detector reach and Odoo product. Signed in, they are stored
+          centrally in Odoo (see <em>Device Library → Central Library in Odoo</em>). Devices in drawings do not
+          change by themselves.
+        </li>
+        <li>
           <strong>Set device properties</strong> — a safe set such as label,
           short name, manufacturer, model number, note, serial number, unit cost,
           and power figures. Structural fields (ports, slots) are not editable yet
