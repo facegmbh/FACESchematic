@@ -220,8 +220,8 @@ Entscheidungen beim Planen:
   `prelive`-Checkout. Odoo-Tests laufen nur auf Odoo.sh.
 
 - [x] Task 39: Gemeinsame Vorlagen-Prüfung (`checkStoredTemplate`, Werte-Listen, sync)
-- [ ] Task 40: Odoo-Modul `face_schematic_library` (Modell, Rechte, Ansichten, Chatter, Tests)
-- [ ] Task 41: Backend `/face/api/library` mit Mock-Odoo-Tests
+- [x] Task 40: Odoo-Modul `face_schematic_library` (Modell, Rechte, Ansichten, Chatter, Tests) — Branch `feat/schematic-library` gepusht, Odoo.sh-Tests stehen aus
+- [x] Task 41: Backend `/face/api/library` mit Mock-Odoo-Tests
 
 ### Checkpoint J1 (Zwischenstand, Odoo-Modul installiert)
 - [ ] `cd mcp-server && npm test`, `npx vitest run`, `npx tsc -b` grün

@@ -63,7 +63,7 @@ Jeder Aufruf läuft mit dem Odoo-Schlüssel des angemeldeten Nutzers (`odooFor`)
 | `POST /library` | anlegen `{ template, origin, productId? }` → 201. Bei bekanntem `key` kommt 409. |
 | `PUT /library/:key` | ändern `{ template, baseVersion, productId? }`. Ist die Version in Odoo neuer, kommt 409 mit `writtenBy` und `writeDate`. |
 | `POST /library/:key/archive` | archivieren |
-| `POST /library/upload` | Liste aus dem Browser → `{ added, skipped: [{ key, reason }] }` |
+| `POST /library/upload` | Liste aus dem Browser → `{ added, same, skipped: [{ key, label, reason, error? }] }`. `same` sind Vorlagen, die mit gleichem Inhalt schon in Odoo liegen. |
 | `GET /library/products?q=` | Artikel für die Verknüpfung suchen (Name, `default_code`), höchstens 20 |
 
 - **Prüfung vor dem Schreiben:** Das Backend prüft die Vorlage mit derselben reinen Funktion
@@ -75,6 +75,11 @@ Jeder Aufruf läuft mit dem Odoo-Schlüssel des angemeldeten Nutzers (`odooFor`)
   - Gibt es den `key` schon, wird übersprungen, außer der Inhalt ist gleich. Abweichungen werden
     gemeldet und nicht überschrieben.
 - **Fehler:** als deutsche Sätze, wie bei den Zeichnungen.
+- **Odoo-Modul fehlt:** Ist `face_schematic_library` noch nicht installiert, antworten die Routen
+  mit 503 und einem Satz. Der Editor bleibt dann bei den Geräten im Browser.
+- **Doppelte Sicherung gegen Überschreiben:** Das Backend vergleicht `baseVersion` selbst und
+  gibt sie Odoo als `expected_version` mit. Schreibt jemand zwischen Lesen und Schreiben, lehnt
+  Odoo ab, und auch das endet als 409.
 
 ## Editor
 

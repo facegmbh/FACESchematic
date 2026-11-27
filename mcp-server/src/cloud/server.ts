@@ -13,6 +13,7 @@ import { createAuth, type AuthOptions } from "./auth.js";
 import { setOdooDb } from "./odoo.js";
 import { Store } from "./store.js";
 import { createDrawingsRouter } from "./drawings.js";
+import { createLibraryRouter } from "./library.js";
 import { Presence } from "./presence.js";
 import { Relay, createBridgeRouter } from "./relay.js";
 import { createServiceRouter } from "./service.js";
@@ -43,6 +44,7 @@ export function createApp(config: Config, opts: AppOptions = {}): express.Expres
 
   app.use("/face/api", auth.router);
   app.use("/face/api", auth.requireUser, createDrawingsRouter(auth.odooFor, new Presence(opts.now)));
+  app.use("/face/api", auth.requireUser, createLibraryRouter(auth.odooFor));
 
   app.use("/face/bridge", auth.requireFaceHeader, auth.requireUser, createBridgeRouter(relay));
   app.use(

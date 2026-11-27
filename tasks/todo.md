@@ -681,13 +681,14 @@ Stand 27.11.: Commit `595cbc2c` auf Branch `feat/schematic-library` (Worktree `~
 (`search_read`, `create`, `write`).
 
 **Acceptance criteria:**
-- [ ] `GET` liefert alle aktiven Vorlagen mit Version, Artikel, `writtenBy` und `writeDate`
-- [ ] `POST` legt an (201) oder meldet 409 bei bekanntem `key`; `PUT` mit älterer `baseVersion` meldet 409 mit Name und Zeit
-- [ ] `upload` meldet `added` und `skipped` (gleich oder abweichend); `archive` und `products?q=` funktionieren
-- [ ] Ungültige Vorlagen bekommen 400 mit dem Satz aus der Prüfung; ohne Anmeldung 401
+- [x] `GET` liefert alle aktiven Vorlagen mit Version, Artikel, `writtenBy` und `writeDate`; die Version steht auch in der Vorlage selbst (für die Drift-Anzeige)
+- [x] `POST` legt an (201) oder meldet 409 bei bekanntem `key` (auch archiviert); `PUT` mit älterer `baseVersion` meldet 409 mit Name und Zeit, ebenso Odoos eigene Sperre (`expected_version`)
+- [x] `upload` meldet `added`, `same` und `skipped` (abweichend oder ungültig, in Eingabe-Reihenfolge); `archive` und `products?q=` funktionieren; Artikel setzen und lösen ändert die Version nicht
+- [x] Ungültige Vorlagen bekommen 400 mit dem Satz aus der Prüfung; ohne Anmeldung 401; ohne Odoo-Modul 503; fehlende Rechte 403
+- Nebenbei: `OdooError` behält den Namen der Odoo-Ausnahme (`odooName`), damit `UserError` und `ValidationError` unterscheidbar sind
 
 **Verification:**
-- [ ] `cd mcp-server && npm test` (`library.test.ts`)
+- [x] `cd mcp-server && npm test`: 117 grün, davon 15 in `library.test.ts`
 
 **Dependencies:** 39 (Odoo-Felder wie in 40, Mock statt echtem Odoo)
 **Files:** `mcp-server/src/cloud/library.ts`, `server.ts`, `mockOdoo.ts`, `library.test.ts` · **Scope:** M

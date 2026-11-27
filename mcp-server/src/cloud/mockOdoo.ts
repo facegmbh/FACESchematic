@@ -32,13 +32,49 @@ export interface MockAttachment {
   file_size: number;
 }
 
+/** A row of face.schematic.template (Odoo module face_schematic_library). */
+export interface MockTemplate {
+  id: number;
+  key: string;
+  data: string;
+  version: number;
+  product_id: Many2one;
+  origin: "editor" | "claude" | "upload";
+  active: boolean;
+  write_date: string;
+  write_uid: Many2one;
+}
+
+export interface MockProduct {
+  id: number;
+  display_name: string;
+  name: string;
+  default_code: string | false;
+}
+
 export interface MockOdoo {
   url: string;
   /** Every authenticate call, in order — to prove the backend held back after a failure. */
   authCalls: { login: string; key: string }[];
   projects: MockProject[];
   attachments: MockAttachment[];
+  templates: MockTemplate[];
+  products: MockProduct[];
   close: () => Promise<void>;
+}
+
+/** Thrown by a handler to answer the way Odoo answers a raised exception. */
+export class MockOdooError extends Error {
+  constructor(readonly odooName: string, message: string) {
+    super(message);
+  }
+}
+
+export function seedProducts(): MockProduct[] {
+  return [
+    { id: 9001, name: "Audac MFA208 Mischverstärker", display_name: "[MFA208] Audac MFA208 Mischverstärker", default_code: "MFA208" },
+    { id: 9002, name: "Bose DesignMax DM6SE", display_name: "[DM6SE] Bose DesignMax DM6SE", default_code: "DM6SE" },
+  ];
 }
 
 const b64 = (value: unknown) => Buffer.from(JSON.stringify(value), "utf8").toString("base64");
@@ -131,6 +167,32 @@ export async function startMockOdoo(
   const authCalls: { login: string; key: string }[] = [];
   const projects = seedProjects();
   const attachments = seedAttachments();
+  const templates: MockTemplate[] = [];
+  const products = seedProducts();
+
+  const userOf = (uid: number): Many2one => {
+    const user = USERS.find((u) => u.uid === uid)!;
+    return [user.uid, user.name];
+  };
+  /** Odoo hides archived rows unless the context says active_test: false. */
+  const visibleTemplates = (kw: Record<string, unknown>) => {
+    const ctx = (kw.context ?? {}) as Record<string, unknown>;
+    return ctx.active_test === false ? templates : templates.filter((t) => t.active);
+  };
+  const productRef = (id: unknown): Many2one => {
+    if (!id) return false;
+    const p = products.find((x) => x.id === id);
+    if (!p) throw new MockOdooError("odoo.exceptions.ValidationError", `Artikel ${String(id)} gibt es nicht.`);
+    return [p.id, p.display_name];
+  };
+  /** The module's constraint: valid JSON object whose id is the key. */
+  const checkData = (key: string, data: string) => {
+    let parsed: unknown;
+    try { parsed = JSON.parse(data); } catch { throw new MockOdooError("odoo.exceptions.ValidationError", "Kein gültiges JSON."); }
+    if (!parsed || typeof parsed !== "object" || (parsed as { id?: unknown }).id !== key) {
+      throw new MockOdooError("odoo.exceptions.ValidationError", "Die id im JSON passt nicht zur Vorlagen-ID.");
+    }
+  };
 
   const builtin: Record<string, Handler> = {
     "res.users.read": (args) => {
@@ -169,6 +231,59 @@ export async function startMockOdoo(
       });
       return id;
     },
+    "face.schematic.template.search_read": (args, kw) =>
+      visibleTemplates(kw)
+        .filter((t) => matchDomain(t as unknown as Record<string, unknown>, (args[0] ?? []) as Domain))
+        .map((t) => pick(t, kw.fields as string[])),
+    "face.schematic.template.search_count": (args, kw) =>
+      visibleTemplates(kw).filter((t) => matchDomain(t as unknown as Record<string, unknown>, (args[0] ?? []) as Domain)).length,
+    "face.schematic.template.read": (args, kw) => {
+      const ids = args[0] as number[];
+      return templates.filter((t) => ids.includes(t.id)).map((t) => pick(t, kw.fields as string[]));
+    },
+    "face.schematic.template.create": (args, _kw, uid) => {
+      const list = (Array.isArray(args[0]) ? args[0] : [args[0]]) as Record<string, unknown>[];
+      const ids = list.map((v) => {
+        const key = String(v.key);
+        // Odoo turns the UNIQUE(key) violation into a ValidationError for RPC callers.
+        if (templates.some((t) => t.key === key)) throw new MockOdooError("odoo.exceptions.ValidationError", "Diese Vorlagen-ID gibt es schon.");
+        checkData(key, String(v.data));
+        const id = Math.max(0, ...templates.map((t) => t.id)) + 1;
+        templates.push({
+          id, key, data: String(v.data), version: 1, product_id: productRef(v.product_id),
+          origin: (v.origin as MockTemplate["origin"]) ?? "editor", active: true, write_date: odooNow(), write_uid: userOf(uid),
+        });
+        return id;
+      });
+      return Array.isArray(args[0]) ? ids : ids[0];
+    },
+    "face.schematic.template.write": (args, kw, uid) => {
+      const [ids, v] = args as [number[], Record<string, unknown>];
+      const expected = ((kw.context ?? {}) as Record<string, unknown>).expected_version;
+      const rows = templates.filter((t) => ids.includes(t.id));
+      for (const t of rows) {
+        if (expected !== undefined && t.version !== expected) {
+          throw new MockOdooError("odoo.exceptions.UserError", `Die Vorlage wurde inzwischen geändert (Version ${t.version}).`);
+        }
+      }
+      for (const t of rows) {
+        if (typeof v.data === "string") {
+          checkData(t.key, v.data);
+          if (v.data !== t.data) t.version += 1;
+          t.data = v.data;
+        }
+        if ("product_id" in v) t.product_id = productRef(v.product_id);
+        if ("active" in v) t.active = Boolean(v.active);
+        t.write_date = odooNow();
+        t.write_uid = userOf(uid);
+      }
+      return true;
+    },
+    "product.product.search_read": (args, kw) =>
+      products
+        .filter((p) => matchDomain(p as unknown as Record<string, unknown>, (args[0] ?? []) as Domain))
+        .slice(0, Number(kw.limit ?? 80))
+        .map((p) => pick(p, kw.fields as string[])),
     "ir.attachment.write": (args, _kw, uid) => {
       const [ids, v] = args as [number[], Partial<MockAttachment>];
       const user = USERS.find((u) => u.uid === uid)!;
@@ -202,7 +317,14 @@ export async function startMockOdoo(
       const err = errors[`${model}.${fn}`];
       if (err) return fail(res, err[0], err[1]);
       const handler = extra[`${model}.${fn}`] ?? builtin[`${model}.${fn}`];
-      if (handler) return reply(res, handler(fnArgs, kwargs ?? {}, uid));
+      if (handler) {
+        try {
+          return reply(res, handler(fnArgs, kwargs ?? {}, uid));
+        } catch (e) {
+          if (e instanceof MockOdooError) return fail(res, e.odooName, e.message);
+          throw e;
+        }
+      }
       return fail(res, "builtins.NotImplementedError", `mock: ${model}.${fn} not handled`);
     }
     return fail(res, "builtins.NotImplementedError", `mock: ${service}.${method} not handled`);
@@ -217,6 +339,8 @@ export async function startMockOdoo(
     authCalls,
     projects,
     attachments,
+    templates,
+    products,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }
