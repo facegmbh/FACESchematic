@@ -211,7 +211,7 @@ Entscheidungen beim Planen:
   `DEVICE_TYPE_TO_CATEGORY`, damit keine Liste unbemerkt abweicht. Die App-Module selbst kann das
   Backend nicht importieren.
 - **Schreiben sofort, Rückweg bei Fehler:** Die Store-Aktionen bleiben synchron und rufen eine
-  Senke, die `faceLibrary.ts` beim Start anmeldet (der Store importiert `faceLibrary` nicht, sonst
+  Senke, die `centralLibrary.ts` beim Start anmeldet (der Store importiert `centralLibrary` nicht, sonst
   gäbe es einen Kreis). Schlägt Odoo fehl, nimmt die Senke die Änderung zurück und zeigt den
   Fehler.
 - **Angemeldet, aber Backend nicht erreichbar:** Zentrale Vorlagen lassen sich dann nicht ändern.
@@ -226,9 +226,9 @@ Entscheidungen beim Planen:
 ### Checkpoint J1 (Zwischenstand, Odoo-Modul installiert)
 - [ ] `cd mcp-server && npm test`, `npx vitest run`, `npx tsc -b` grün
 - [ ] Odoo-Modul auf main, Odoo.sh-Build grün, Jean-Luc installiert es in Produktion
-- [ ] Freigabe für Push der Backend-Routen (Editor nutzt sie noch nicht)
+- [x] Freigabe für Push der Backend-Routen (Editor nutzt sie noch nicht) — gepusht 27.11. (52afb07)
 
-- [ ] Task 42: Editor lädt die zentrale Bibliothek (`faceLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
+- [x] Task 42: Editor lädt die zentrale Bibliothek (`centralLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
 - [ ] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
 - [ ] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
 - [ ] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz

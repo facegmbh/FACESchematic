@@ -697,27 +697,29 @@ Stand 27.11.: Commit `595cbc2c` auf Branch `feat/schematic-library` (Worktree `~
 
 ## Task 42: Editor lädt die zentrale Bibliothek
 
-**Description:** `src/faceLibrary.ts` (Muster `faceDrawings.ts`) holt die Bibliothek beim Start,
+**Description:** `src/centralLibrary.ts` (Muster `faceDrawings.ts`) holt die Bibliothek beim Start,
 nach der Anmeldung und bei Fokus nach mehr als 5 Minuten. Sie führt die Vorlagen in
 `customTemplates` zusammen (höhere Version gewinnt) und füllt `libraryMeta` im Store. Die
 Bibliothek kennzeichnet Geräte, die nur in diesem Browser liegen.
 
 **Acceptance criteria:**
-- [ ] Angemeldet erscheinen zentrale Vorlagen in „Eigene Geräte“; nach Neuladen ohne Netz sind sie noch da (Zwischenspeicher)
-- [ ] Lokale Geräte bleiben und tragen das Kennzeichen; abgemeldet verhält sich alles wie heute
-- [ ] Ohne `VITE_FACE_BACKEND` wird nie geladen
+- [x] Angemeldet erscheinen zentrale Vorlagen in „Eigene Geräte“; nach Neuladen ohne Netz sind sie noch da (Zwischenspeicher `face-central-library-meta` neben den eigenen Geräten)
+- [x] Lokale Geräte bleiben und tragen das Kennzeichen „lokal“; abgemeldet verhält sich alles wie heute; ohne Odoo-Modul (503) Status `unavailable`, kein Kennzeichen
+- [x] Ohne `VITE_FACE_BACKEND` wird nie geladen
+- Zusätzlich: Was ein Kollege archiviert hat, verschwindet beim nächsten Laden aus der Bibliothek (nur was vorher zentral war). Der Baustein heißt `centralLibrary.ts`, weil `faceLibrary` schon die FACE-Hausbibliothek meint.
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
-- [ ] `npx tsc -b`
+- [x] `npx vitest run src/__tests__/centralLibrary.test.ts` (14), ganze Suite grün
+- [x] `npx tsc -b`
+- [ ] Sichtprüfung im FACE-Build (Kennzeichen „lokal“) bei Checkpoint J
 
 **Dependencies:** 41
-**Files:** `src/faceLibrary.ts`, `src/store.ts`, `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
+**Files:** `src/centralLibrary.ts`, `src/store.ts`, `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
 
 ## Task 43: Editor schreibt zentral
 
 **Description:** `addCustomTemplate`, `updateCustomTemplate`, `removeCustomTemplate` und
-`importCustomTemplates` rufen eine Senke, die `faceLibrary` anmeldet. Angemeldet schreibt sie
+`importCustomTemplates` rufen eine Senke, die `centralLibrary` anmeldet. Angemeldet schreibt sie
 nach Odoo (anlegen, ändern mit `baseVersion`, archivieren) und setzt `template.version` und
 `libraryMeta`. Bei einem Fehler nimmt sie die Änderung zurück und zeigt den Satz an.
 
@@ -727,11 +729,11 @@ nach Odoo (anlegen, ändern mit `baseVersion`, archivieren) und setzt `template.
 - [ ] Nach einer Änderung zeigt eine Zeichnung mit dem alten Stand Drift (`templateSync.ts`)
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts`
+- [ ] `npx vitest run src/__tests__/centralLibrary.test.ts`
 - [ ] `npx tsc -b`
 
 **Dependencies:** 42
-**Files:** `src/faceLibrary.ts`, `src/store.ts`, Test, i18n · **Scope:** M
+**Files:** `src/centralLibrary.ts`, `src/store.ts`, Test, i18n · **Scope:** M
 
 ## Task 44: Hochladen und eingebettete Vorlagen
 
@@ -746,10 +748,10 @@ wenn deren Version gleich oder neuer ist.
 - [ ] Unbekannte eingebettete Vorlagen bleiben lokal und tragen das Kennzeichen
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/faceLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
+- [ ] `npx vitest run src/__tests__/centralLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
 
 **Dependencies:** 43
-**Files:** `src/faceLibrary.ts`, `src/store.ts` (Laden), `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
+**Files:** `src/centralLibrary.ts`, `src/store.ts` (Laden), `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M
 
 ## Task 45: Odoo-Artikel und Handbuch
 
@@ -766,7 +768,7 @@ zu zentralen Geräten, Hochladen und Artikel.
 - [ ] `npx vitest run`, `npx tsc -b`, Docs-Build
 
 **Dependencies:** 43
-**Files:** `src/components/DeviceEditor.tsx`, `src/faceLibrary.ts`, i18n, `docs/src/pages{,-de}/DeviceLibrary.tsx` · **Scope:** M
+**Files:** `src/components/DeviceEditor.tsx`, `src/centralLibrary.ts`, i18n, `docs/src/pages{,-de}/DeviceLibrary.tsx` · **Scope:** M
 
 ## Checkpoint J — Freigabe, Push
 
@@ -796,7 +798,7 @@ entfernt Ports nach `id`.
 ## Task 47: Die drei Befehle
 
 **Description:** Handler in `mcpBridge.ts` für `get_device_template`, `create_device_template` und
-`update_device_template` über `faceLibrary` (angemeldet nach Odoo, sonst Browser mit `stored:
+`update_device_template` über `centralLibrary` (angemeldet nach Odoo, sonst Browser mit `stored:
 "browser"`). Dazu Dubletten-Prüfung, Schutz der mitgelieferten und Community-Bibliothek,
 `removedPorts` mit `connectedInOpenDrawing` und Einträge in `TOOLS`.
 

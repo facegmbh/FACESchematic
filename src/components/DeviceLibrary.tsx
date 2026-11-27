@@ -11,6 +11,7 @@ import { inventoryKeyFromDeviceData, inventoryKeyFromTemplate } from "../invento
 import DeviceCreatorPicker from "./DeviceCreatorPicker";
 import ImportDevicesDialog from "./ImportDevicesDialog";
 import { useT } from "../i18n";
+import { useCentralLibrary } from "../centralLibrary";
 
 const APP_VERSION = __APP_VERSION__;
 const BUILD_HASH = __BUILD_HASH__;
@@ -282,6 +283,10 @@ function DraggableTemplateItem({
   const t = useT();
   const [dropLine, setDropLine] = useState<"above" | "below" | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
+  // Signed in with a working central library: mark what Odoo does not have yet.
+  const notCentral = useSchematicStore((s) => !((template.id ?? template.deviceType) in s.libraryMeta));
+  const libraryOk = useCentralLibrary((s) => s.status === "ok");
+  const localOnly = notCentral && libraryOk;
 
   const signalText = getUniqueSignalTypes(template)
     .map((t) => SIGNAL_LABELS[t as keyof typeof SIGNAL_LABELS])
@@ -353,8 +358,18 @@ function DraggableTemplateItem({
           </div>
         )}
         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-          <span className="text-xs text-[var(--color-text-heading)] font-medium truncate">
-            <HighlightedText text={template.label} query={query} />
+          <span className="flex items-center gap-1 min-w-0">
+            <span className="text-xs text-[var(--color-text-heading)] font-medium truncate">
+              <HighlightedText text={template.label} query={query} />
+            </span>
+            {localOnly && (
+              <span
+                className="shrink-0 rounded px-1 text-[9px] leading-tight border border-[var(--color-border)] text-[var(--color-text-muted)]"
+                title={t("Only in this browser — not yet in the central library in Odoo")}
+              >
+                {t("local")}
+              </span>
+            )}
           </span>
           {template.manufacturer && (
             <span className="text-[9px] text-[var(--color-text-muted)] opacity-70 truncate">

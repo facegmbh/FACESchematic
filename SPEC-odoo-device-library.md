@@ -83,7 +83,7 @@ Jeder Aufruf läuft mit dem Odoo-Schlüssel des angemeldeten Nutzers (`odooFor`)
 
 ## Editor
 
-Neuer Baustein `src/faceLibrary.ts`, nach dem Muster von `faceDrawings.ts`.
+Neuer Baustein `src/centralLibrary.ts`, nach dem Muster von `faceDrawings.ts`.
 
 - **Laden:** beim Start, bei der Anmeldung, wenn das Fenster nach mehr als 5 Minuten wieder den
   Fokus bekommt, und nach jedem eigenen Schreiben.
@@ -127,7 +127,7 @@ Neuer Baustein `src/faceLibrary.ts`, nach dem Muster von `faceDrawings.ts`.
 ## Commands
 
 ```
-npx vitest run src/__tests__/faceLibrary.test.ts src/__tests__/customTemplateImport.test.ts
+npx vitest run src/__tests__/centralLibrary.test.ts src/__tests__/customTemplateImport.test.ts
 npx tsc -b
 cd mcp-server && npm test
 # Odoo: Odoo.sh-Staging-Build des Branches (lokal laufen die Odoo-Tests nicht)
@@ -143,7 +143,7 @@ cd mcp-server && npm test
   - Portal-Benutzer sehen nichts.
 - **Backend** (`library.test.ts`, mit `mockOdoo.ts`): alle Routen, 409 bei Versionskonflikt und
   doppeltem `key`, Hochladen mit gleich/abweichend/mitgeliefert, Fehlersätze.
-- **Editor** (`faceLibrary.test.ts`):
+- **Editor** (`centralLibrary.test.ts`):
   - Laden zusammenführen (höhere Version gewinnt, lokale bleiben);
   - Schreiben angemeldet und abgemeldet;
   - fehlgeschlagenes Schreiben ändert nichts;

@@ -31,7 +31,7 @@ User Stories:
 Alle drei stehen in `TOOLS` (`mcp-server/src/tools.ts`). Damit kommen sie über den Katalog in
 `schaltplan_befehl`, und die Freigabeliste `known` des Backends wird aus `TOOLS` gebaut. **Am Odoo-Modul
 `face_mcp_server` ändert sich kein Code.** Die Befehle laufen im verbundenen Tab und speichern über
-`faceLibrary.ts` (siehe `SPEC-odoo-device-library.md`) mit der Odoo-Anmeldung des Nutzers.
+`centralLibrary.ts` (siehe `SPEC-odoo-device-library.md`) mit der Odoo-Anmeldung des Nutzers.
 Ist der Tab nicht angemeldet, zum Beispiel über die lokale Brücke in Claude Desktop, speichert der
 Befehl im Browser wie der Editor. Die Antwort sagt dann `stored: "browser"`.
 
@@ -135,7 +135,7 @@ cd mcp-server && npm test
 
 - `src/mcp/protocol.ts`: Parametertypen und Befehlsnamen.
 - `src/mcp/templateValidation.ts`: `parseTemplateInput`, Port-Abgleich für `update`.
-- `src/mcpBridge.ts`: drei Handler über `faceLibrary.ts`.
+- `src/mcpBridge.ts`: drei Handler über `centralLibrary.ts`.
 - `mcp-server/src/tools.ts`, `mcp-server/src/prompts.ts`: Beschreibungen und Leitfaden.
 - `docs/src/pages{,-de}/`: Absatz zu Claude und eigenen Geräten.
 
@@ -147,7 +147,7 @@ cd mcp-server && npm test
   - Grenzen der Last-, Melder- und Mikrofonwerte (`sector` ohne Winkel, absteigende Taps);
   - `passthrough` wird abgelehnt;
   - Port-Abgleich (behalten, ändern, neu, entfallen).
-- **`mcpDeviceTemplate.test.ts`** gegen den echten Store und ein gemocktes `faceLibrary`:
+- **`mcpDeviceTemplate.test.ts`** gegen den echten Store und ein gemocktes `centralLibrary`:
   - anlegen, dann `search_templates` und `add_device`;
   - Dublette mit und ohne `allowDuplicate`;
   - Ableiten behält Lastdaten, und `speaker_load_report` bewertet wie bei der Basis;

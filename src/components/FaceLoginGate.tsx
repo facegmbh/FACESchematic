@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { isEmbedded } from "../embed";
 import { FACE_BACKEND, faceGate, loadFaceSession, useFaceSession, wasSignedInHere } from "../faceBackend";
+import { startCentralLibrary } from "../centralLibrary";
 import { useT } from "../i18n";
 import { loadSymbolLibrary } from "../symbolLibrary";
 import FaceLoginDialog from "./FaceLoginDialog";
@@ -28,6 +29,12 @@ export default function FaceLoginGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (gated) void loadFaceSession();
+  }, [gated]);
+
+  // The own devices come from the central library in Odoo once somebody is signed in
+  // (SPEC-odoo-device-library.md); it reloads at every sign-in and on focus.
+  useEffect(() => {
+    if (gated) startCentralLibrary();
   }, [gated]);
 
   // The server only hands the BHE symbols to a signed-in browser, so the catalogue asked

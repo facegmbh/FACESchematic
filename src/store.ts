@@ -123,6 +123,7 @@ import { simplifyWaypoints, waypointsToSvgPath, waypointsToSvgPathWithHops } fro
 import { areConnectorsCompatible, needsAdapter, findAdaptersForConnectorBridge, findAdaptersForSignalBridge, resolveSignalBridgePorts, resolveConnectorBridgePorts, NETWORK_SIGNAL_TYPES, BARE_WIRE_CONNECTORS, areSignalsCompatibleViaConnector, areSignalPairsCompatible, effectiveSignalType, migrateLegacyConnectorTypes } from "./connectorTypes";
 import { inferRackHeightU, inferRackForm, shelfFootprintMm, shelfInnerWidthMm } from "./rackUtils";
 import { mergeCustomTemplates } from "./templateExport";
+import { mergeCentralLibrary, type CentralEntry, type LibraryMeta } from "./centralLibraryMerge";
 import { DEVICE_TEMPLATES } from "./deviceLibrary";
 import { createDefaultLayout } from "./titleBlockLayout";
 import { sanitizeNoteHtml } from "./sanitizeHtml";
@@ -168,6 +169,8 @@ function resolveEdgeStroke(data: ConnectionData | undefined): string {
 const STORAGE_KEY = "easyschematic-autosave";
 const TEMPLATES_KEY = "easyschematic-custom-templates";
 const TEMPLATE_META_KEY = "easyschematic-custom-template-meta";
+/** Which own devices come from the central library in Odoo, at which version (SPEC-odoo-device-library). */
+const LIBRARY_META_KEY = "face-central-library-meta";
 const CATEGORY_ORDER_KEY = "easyschematic-category-order";
 const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
 const COMPANY_PROFILE_KEY = "easyschematic-company-profile";
@@ -705,6 +708,11 @@ interface SchematicState {
   customTemplateGroups: CustomTemplateGroup[];
   customTemplateOrder: string[];
   customTemplateGroupAssignments: Record<string, string>;
+  /** Own devices that live in the central library in Odoo, with their version and product.
+   *  A key missing here is a device only this browser has (SPEC-odoo-device-library). */
+  libraryMeta: LibraryMeta;
+  /** Fold the central library just loaded from Odoo into the own devices (centralLibrary.ts). */
+  applyCentralLibrary: (entries: CentralEntry[]) => { added: number; updated: number; removed: number };
   reorderCustomTemplate: (deviceType: string, targetIndex: number) => void;
   moveCustomTemplateToGroup: (deviceType: string, groupId: string | null) => void;
   addCustomTemplateGroup: (label: string) => string;
@@ -2487,6 +2495,24 @@ function loadCustomTemplateMeta(templates: DeviceTemplate[]): CustomTemplateMeta
   return { groups: [], order: templates.map((t) => templateKey(t)), groupAssignments: {} };
 }
 
+function loadLibraryMeta(): LibraryMeta {
+  try {
+    const raw = localStorage.getItem(LIBRARY_META_KEY);
+    const meta = raw ? (JSON.parse(raw) as LibraryMeta) : null;
+    return meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLibraryMeta(meta: LibraryMeta) {
+  try {
+    localStorage.setItem(LIBRARY_META_KEY, JSON.stringify(meta));
+  } catch {
+    // silently fail
+  }
+}
+
 function saveCustomTemplateMeta(meta: CustomTemplateMeta) {
   try {
     localStorage.setItem(TEMPLATE_META_KEY, JSON.stringify(meta));
@@ -2526,6 +2552,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   customTemplateGroups: _initCustomMeta.groups,
   customTemplateOrder: _initCustomMeta.order,
   customTemplateGroupAssignments: _initCustomMeta.groupAssignments,
+  libraryMeta: loadLibraryMeta(),
   categoryOrder: loadCategoryOrder(),
   routedEdges: {},
   routingDebugData: null,
@@ -6144,6 +6171,22 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     return structuredClone(get().customTemplates);
   },
 
+  applyCentralLibrary: (entries) => {
+    const r = mergeCentralLibrary(
+      withStoredCustomTemplates(get().customTemplates),
+      withStoredCustomTemplateOrder(get().customTemplateOrder),
+      get().libraryMeta,
+      entries,
+    );
+    const groupAssignments = { ...get().customTemplateGroupAssignments };
+    for (const key of r.removedKeys) delete groupAssignments[key];
+    set({ customTemplates: r.templates, customTemplateOrder: r.order, customTemplateGroupAssignments: groupAssignments, libraryMeta: r.meta });
+    saveCustomTemplates(r.templates);
+    saveCustomTemplateMeta({ groups: get().customTemplateGroups, order: r.order, groupAssignments });
+    saveLibraryMeta(r.meta);
+    return { added: r.added, updated: r.updated, removed: r.removed };
+  },
+
   importCustomTemplates: (templates) => {
     migrateLegacyConnectorTypes(templates); // a template file exported before the switch to "schuko"
     const incoming = dropBundledDuplicates(templates);
@@ -9513,6 +9556,7 @@ export function reloadCustomTemplatesFromStorage(): void {
   const customTemplates = loadCustomTemplates();
   const meta = loadCustomTemplateMeta(customTemplates);
   useSchematicStore.setState({
+    libraryMeta: loadLibraryMeta(),
     customTemplates,
     customTemplateGroups: meta.groups,
     customTemplateOrder: meta.order,
@@ -9525,7 +9569,7 @@ export function reloadCustomTemplatesFromStorage(): void {
 // page restored from the back/forward cache missed any events while frozen, so it re-reads.
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
-    if (e.key === TEMPLATES_KEY || e.key === TEMPLATE_META_KEY) reloadCustomTemplatesFromStorage();
+    if (e.key === TEMPLATES_KEY || e.key === TEMPLATE_META_KEY || e.key === LIBRARY_META_KEY) reloadCustomTemplatesFromStorage();
   });
   window.addEventListener("pageshow", (e) => {
     if (e.persisted) reloadCustomTemplatesFromStorage();

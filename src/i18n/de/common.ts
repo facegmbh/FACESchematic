@@ -213,6 +213,8 @@ export const DE_COMMON: Record<string, string> = {
   "Show Info": "Show-Infos",
   "Cancelled": "Storniert",
   "Ungrouped": "Ohne Gruppe",
+  "local": "lokal",
+  "Only in this browser — not yet in the central library in Odoo": "Nur in diesem Browser – noch nicht in der zentralen Bibliothek in Odoo",
   "Speed": "Speed",
   "Source": "Quelle",
   "Use": "Einsatz",
