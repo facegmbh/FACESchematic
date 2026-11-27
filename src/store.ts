@@ -171,6 +171,25 @@ const TEMPLATES_KEY = "easyschematic-custom-templates";
 const TEMPLATE_META_KEY = "easyschematic-custom-template-meta";
 /** Which own devices come from the central library in Odoo, at which version (SPEC-odoo-device-library). */
 const LIBRARY_META_KEY = "face-central-library-meta";
+
+/**
+ * A change to the own devices, as the central library in Odoo needs to hear of it
+ * (SPEC-odoo-device-library.md). The store applies every change at once and stays synchronous
+ * for its six callers; centralLibrary.ts registers itself here and writes to Odoo. `undo` puts
+ * back exactly this one device, leaving whatever else changed in the meantime.
+ */
+export type TemplateChange =
+  | { kind: "add"; template: DeviceTemplate }
+  | { kind: "update"; key: string; template: DeviceTemplate; undo: () => void }
+  | { kind: "remove"; key: string; template: DeviceTemplate; undo: () => void }
+  | { kind: "import"; templates: DeviceTemplate[] };
+
+let templateSink: ((change: TemplateChange) => void) | null = null;
+
+/** centralLibrary.ts registers here; the store must not import it (it imports the store). */
+export function setTemplateSink(sink: ((change: TemplateChange) => void) | null): void {
+  templateSink = sink;
+}
 const CATEGORY_ORDER_KEY = "easyschematic-category-order";
 const MINIMAP_PREF_KEY = "easyschematic-show-minimap";
 const COMPANY_PROFILE_KEY = "easyschematic-company-profile";
@@ -713,6 +732,10 @@ interface SchematicState {
   libraryMeta: LibraryMeta;
   /** Fold the central library just loaded from Odoo into the own devices (centralLibrary.ts). */
   applyCentralLibrary: (entries: CentralEntry[]) => { added: number; updated: number; removed: number };
+  /** Odoo took this template (created, changed, uploaded): remember it as central at its version. */
+  markCentral: (entry: Pick<CentralEntry, "key" | "version" | "productId" | "productName">) => void;
+  /** Odoo archived this template: it is no longer central. */
+  unmarkCentral: (key: string) => void;
   reorderCustomTemplate: (deviceType: string, targetIndex: number) => void;
   moveCustomTemplateToGroup: (deviceType: string, groupId: string | null) => void;
   addCustomTemplateGroup: (label: string) => string;
@@ -4968,12 +4991,31 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ customTemplates: updated, customTemplateOrder: order });
     saveCustomTemplates(updated);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
+    templateSink?.({ kind: "add", template });
   },
 
   updateCustomTemplate: (id, template) => {
-    const updated = withStoredCustomTemplates(get().customTemplates).map((t) => (t.id === id ? template : t));
+    const before = withStoredCustomTemplates(get().customTemplates);
+    const previous = before.find((t) => t.id === id);
+    const updated = before.map((t) => (t.id === id ? template : t));
     set({ customTemplates: updated });
     saveCustomTemplates(updated);
+    if (!previous) return;
+    templateSink?.({
+      kind: "update",
+      key: id,
+      template,
+      undo: () => {
+        // Only while this change is still what the library holds — a later edit wins. Compared
+        // by content: the stored list is read back from localStorage as fresh objects.
+        const now = withStoredCustomTemplates(get().customTemplates);
+        const sent = JSON.stringify(template);
+        if (!now.some((t) => t.id === id && JSON.stringify(t) === sent)) return;
+        const restored = now.map((t) => (t.id === id ? previous : t));
+        set({ customTemplates: restored });
+        saveCustomTemplates(restored);
+      },
+    });
   },
 
   addOwnedGear: (template, quantity = 1) => {
@@ -5041,12 +5083,37 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   },
 
   removeCustomTemplate: (key) => {
-    const updated = withStoredCustomTemplates(get().customTemplates).filter((t) => templateKey(t) !== key);
-    const order = withStoredCustomTemplateOrder(get().customTemplateOrder).filter((k) => k !== key);
+    const before = withStoredCustomTemplates(get().customTemplates);
+    const beforeOrder = withStoredCustomTemplateOrder(get().customTemplateOrder);
+    const index = before.findIndex((t) => templateKey(t) === key);
+    const removed = index >= 0 ? before[index] : undefined;
+    const orderIndex = beforeOrder.indexOf(key);
+    const groupId = get().customTemplateGroupAssignments[key];
+    const updated = before.filter((t) => templateKey(t) !== key);
+    const order = beforeOrder.filter((k) => k !== key);
     const { [key]: _, ...groupAssignments } = get().customTemplateGroupAssignments;
     set({ customTemplates: updated, customTemplateOrder: order, customTemplateGroupAssignments: groupAssignments });
     saveCustomTemplates(updated);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments });
+    if (!removed) return;
+    templateSink?.({
+      kind: "remove",
+      key,
+      template: removed,
+      undo: () => {
+        // Back where it was, unless it came back some other way meanwhile.
+        const now = withStoredCustomTemplates(get().customTemplates);
+        if (now.some((t) => templateKey(t) === key)) return;
+        const templates = [...now];
+        templates.splice(Math.min(index, templates.length), 0, removed);
+        const nowOrder = withStoredCustomTemplateOrder(get().customTemplateOrder).filter((k) => k !== key);
+        nowOrder.splice(orderIndex >= 0 ? Math.min(orderIndex, nowOrder.length) : nowOrder.length, 0, key);
+        const assignments = groupId ? { ...get().customTemplateGroupAssignments, [key]: groupId } : get().customTemplateGroupAssignments;
+        set({ customTemplates: templates, customTemplateOrder: nowOrder, customTemplateGroupAssignments: assignments });
+        saveCustomTemplates(templates);
+        saveCustomTemplateMeta({ groups: get().customTemplateGroups, order: nowOrder, groupAssignments: assignments });
+      },
+    });
   },
 
   clearAllCustomTemplates: () => {
@@ -6187,6 +6254,24 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     return { added: r.added, updated: r.updated, removed: r.removed };
   },
 
+  markCentral: ({ key, version, productId, productName }) => {
+    const libraryMeta = { ...get().libraryMeta, [key]: { version, productId, productName } };
+    // The version goes into the template too: the drift check (templateSync.ts) reads it there.
+    const templates = withStoredCustomTemplates(get().customTemplates).map((t) =>
+      templateKey(t) === key && t.version !== version ? { ...t, version } : t,
+    );
+    set({ libraryMeta, customTemplates: templates });
+    saveLibraryMeta(libraryMeta);
+    saveCustomTemplates(templates);
+  },
+
+  unmarkCentral: (key) => {
+    if (!(key in get().libraryMeta)) return;
+    const { [key]: _, ...libraryMeta } = get().libraryMeta;
+    set({ libraryMeta });
+    saveLibraryMeta(libraryMeta);
+  },
+
   importCustomTemplates: (templates) => {
     migrateLegacyConnectorTypes(templates); // a template file exported before the switch to "schuko"
     const incoming = dropBundledDuplicates(templates);
@@ -6200,6 +6285,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     set({ customTemplates: merged, customTemplateOrder: order });
     saveCustomTemplates(merged);
     saveCustomTemplateMeta({ groups: get().customTemplateGroups, order, groupAssignments: get().customTemplateGroupAssignments });
+    templateSink?.({ kind: "import", templates: incoming });
 
     return { added, updated, skipped };
   },

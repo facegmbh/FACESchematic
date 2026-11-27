@@ -724,13 +724,14 @@ nach Odoo (anlegen, ändern mit `baseVersion`, archivieren) und setzt `template.
 `libraryMeta`. Bei einem Fehler nimmt sie die Änderung zurück und zeigt den Satz an.
 
 **Acceptance criteria:**
-- [ ] Jeder der vier Schreibwege landet in Odoo, mit je einem Test
-- [ ] Fehler oder Konflikt: Der Store ist danach wie vorher, und die Meldung nennt bei 409 den anderen Nutzer
-- [ ] Nach einer Änderung zeigt eine Zeichnung mit dem alten Stand Drift (`templateSync.ts`)
+- [x] Jeder der vier Schreibwege landet in Odoo, mit je einem Test (anlegen → `POST`, ändern → `PUT` mit `baseVersion`, entfernen → archivieren, Import → Hochladen)
+- [x] Fehler oder Konflikt beim Ändern/Entfernen: genau diese Vorlage zurück (andere Änderungen bleiben), Meldung nennt bei 409 den anderen Nutzer und lädt neu. Ein neues Gerät, das Odoo nicht erreicht, bleibt lokal mit Hinweis.
+- [x] Nach einer Änderung zeigt eine Zeichnung mit dem alten Stand Drift (`templateSync.ts`)
+- Zusätzlich: Schreibvorgänge an derselben Vorlage laufen nacheinander. Lokale Geräte bleiben beim Ändern und Entfernen lokal. „Alle eigenen Geräte löschen“ wirkt nur im Browser und archiviert nichts in Odoo (ein Klick darf nicht die Bibliothek aller leeren); die zentralen kommen beim nächsten Laden wieder.
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/centralLibrary.test.ts`
-- [ ] `npx tsc -b`
+- [x] `npx vitest run src/__tests__/centralLibrary.test.ts` (26), ganze Suite 2522 grün
+- [x] `npx tsc -b`
 
 **Dependencies:** 42
 **Files:** `src/centralLibrary.ts`, `src/store.ts`, Test, i18n · **Scope:** M

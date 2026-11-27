@@ -9,8 +9,10 @@
  */
 import { create } from "zustand";
 import { faceApi, FaceApiError, FACE_BACKEND, useFaceSession } from "./faceBackend";
-import { useSchematicStore } from "./store";
+import { useSchematicStore, setTemplateSink, type TemplateChange } from "./store";
 import type { CentralEntry } from "./centralLibraryMerge";
+import type { DeviceTemplate } from "./types";
+import { t } from "./i18n";
 
 const STALE_AFTER_MS = 5 * 60_000;
 
@@ -79,3 +81,132 @@ export function startCentralLibrary(): void {
   });
   if (typeof window !== "undefined") window.addEventListener("focus", () => void refreshIfStale());
 }
+
+// --- writing ---------------------------------------------------------------------------------
+
+interface UploadAnswer {
+  added: CentralEntry[];
+  same: CentralEntry[];
+  skipped: { key: string; label: string; reason: "different" | "invalid"; error?: string }[];
+}
+
+const store = () => useSchematicStore.getState();
+const keyOf = (tpl: DeviceTemplate) => tpl.id ?? tpl.deviceType;
+
+/** Signed in, and Odoo has the library (or was reachable before): changes go there. */
+function writesGoToOdoo(): boolean {
+  const status = useCentralLibrary.getState().status;
+  return Boolean(useFaceSession.getState().user) && (status === "ok" || status === "loading" || status === "error");
+}
+
+/** A sentence for the user: the backend's own, or one for a network that is not there. */
+function reasonOf(err: unknown): string {
+  if (err instanceof FaceApiError) return err.message;
+  return t("Odoo is not reachable");
+}
+
+const queues = new Map<string, Promise<void>>();
+const pending = new Set<Promise<void>>();
+
+/** One template's writes go out one after another, so each is based on the version before. */
+function enqueue(key: string, job: () => Promise<void>): void {
+  const run = (queues.get(key) ?? Promise.resolve()).then(job).catch((err) => console.error("[central library]", err));
+  queues.set(key, run);
+  pending.add(run);
+  void run.finally(() => {
+    pending.delete(run);
+    if (queues.get(key) === run) queues.delete(key);
+  });
+}
+
+/** Resolves once every write sent so far has been answered (tests, and before an upload). */
+export async function flushCentralWrites(): Promise<void> {
+  while (pending.size) await Promise.all([...pending]);
+}
+
+function error(message: string): void {
+  store().addToast(message, "error");
+}
+
+function writeTemplate(change: TemplateChange): void {
+  if (!writesGoToOdoo()) return;
+  switch (change.kind) {
+    case "add": {
+      const { template } = change;
+      enqueue(keyOf(template), async () => {
+        try {
+          const entry = await faceApi<CentralEntry>("/face/api/library", { method: "POST", body: { template, origin: "editor" } });
+          store().markCentral(entry);
+        } catch (err) {
+          // A new device is never thrown away: it stays here and can be uploaded later.
+          error(t("“{label}” is only saved in this browser: {reason}", { label: template.label, reason: reasonOf(err) }));
+        }
+      });
+      return;
+    }
+    case "update": {
+      if (!isCentral(change.key)) return;
+      const { key, template, undo } = change;
+      enqueue(key, async () => {
+        const baseVersion = store().libraryMeta[key]?.version;
+        if (baseVersion === undefined) return;
+        try {
+          const entry = await faceApi<CentralEntry>(`/face/api/library/${encodeURIComponent(key)}`, {
+            method: "PUT",
+            body: { template, baseVersion },
+          });
+          store().markCentral(entry);
+        } catch (err) {
+          undo();
+          error(t("“{label}” was not changed: {reason}", { label: template.label, reason: reasonOf(err) }));
+          // Someone else changed it: show their version.
+          if (err instanceof FaceApiError && err.status === 409) await loadCentralLibrary();
+        }
+      });
+      return;
+    }
+    case "remove": {
+      if (!isCentral(change.key)) return;
+      const { key, template, undo } = change;
+      enqueue(key, async () => {
+        try {
+          await faceApi<void>(`/face/api/library/${encodeURIComponent(key)}/archive`, { method: "POST" });
+          store().unmarkCentral(key);
+        } catch (err) {
+          // Already gone from Odoo is what we wanted.
+          if (err instanceof FaceApiError && err.status === 404) {
+            store().unmarkCentral(key);
+            return;
+          }
+          undo();
+          error(t("“{label}” was not removed: {reason}", { label: template.label, reason: reasonOf(err) }));
+        }
+      });
+      return;
+    }
+    case "import": {
+      const { templates } = change;
+      if (!templates.length) return;
+      enqueue("\u0000import", async () => {
+        try {
+          const answer = await faceApi<UploadAnswer>("/face/api/library/upload", { method: "POST", body: { templates } });
+          for (const entry of [...answer.added, ...answer.same]) store().markCentral(entry);
+          const differing = answer.skipped.filter((s) => s.reason === "different").map((s) => s.label);
+          const invalid = answer.skipped.filter((s) => s.reason === "invalid").map((s) => s.label);
+          if (differing.length) {
+            store().addToast(
+              t("Odoo has a different version of {labels}; it applies from the next load.", { labels: differing.join(", ") }),
+              "info",
+              10_000,
+            );
+          }
+          if (invalid.length) error(t("Only saved in this browser: {labels}", { labels: invalid.join(", ") }));
+        } catch (err) {
+          error(t("The imported devices are only saved in this browser: {reason}", { reason: reasonOf(err) }));
+        }
+      });
+    }
+  }
+}
+
+setTemplateSink(writeTemplate);

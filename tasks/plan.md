@@ -229,7 +229,7 @@ Entscheidungen beim Planen:
 - [x] Freigabe für Push der Backend-Routen (Editor nutzt sie noch nicht) — gepusht 27.11. (52afb07)
 
 - [x] Task 42: Editor lädt die zentrale Bibliothek (`centralLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
-- [ ] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
+- [x] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
 - [ ] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
 - [ ] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz
 

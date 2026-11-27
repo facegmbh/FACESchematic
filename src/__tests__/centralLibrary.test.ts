@@ -196,3 +196,159 @@ describe("loadCentralLibrary", () => {
     expect(store.getState().libraryMeta).not.toHaveProperty("custom-b");
   });
 });
+
+// --- Task 43: writing --------------------------------------------------------------------------
+
+describe("writing own devices to the central library", () => {
+  const callsOf = () => fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  const bodyOf = (i: number) => JSON.parse((fetchMock.mock.calls[i][1] as RequestInit).body as string);
+  const toasts = () => store.getState().toasts.map((t) => `${t.type}: ${t.message}`);
+  const labelOf = (key: string) => store.getState().customTemplates.find((t) => t.id === key)?.label;
+
+  async function withCentral(...entries: CentralEntry[]) {
+    fetchMock.mockReturnValueOnce(respond(200, entries));
+    await lib.loadCentralLibrary();
+    fetchMock.mockReset();
+  }
+
+  beforeAll(async () => {
+    (await import("../i18n")).setLocale("de");
+  });
+
+  beforeEach(() => {
+    store.setState({ toasts: [] });
+    lib.useCentralLibrary.setState({ status: "ok", loadedAt: Date.now(), error: null });
+  });
+
+  it("a new device goes to Odoo and is central with version 1", async () => {
+    fetchMock.mockReturnValueOnce(respond(201, entry("custom-new", 1, "Neu")));
+    store.getState().addCustomTemplate(tpl("custom-new", "Neu"));
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual(["POST /face/api/library"]);
+    expect(bodyOf(0)).toEqual({ template: tpl("custom-new", "Neu"), origin: "editor" });
+    expect(store.getState().libraryMeta["custom-new"].version).toBe(1);
+    expect(store.getState().customTemplates.find((t) => t.id === "custom-new")?.version).toBe(1);
+  });
+
+  it("a new device that cannot reach Odoo stays in this browser, with a hint", async () => {
+    fetchMock.mockReturnValueOnce(Promise.reject(new TypeError("Failed to fetch")));
+    store.getState().addCustomTemplate(tpl("custom-new", "Neu"));
+    await lib.flushCentralWrites();
+    expect(labelOf("custom-new")).toBe("Neu");
+    expect(lib.isCentral("custom-new")).toBe(false);
+    expect(toasts().join()).toMatch(/error: .*Neu.*nur in diesem Browser/);
+  });
+
+  it("a change to a central device is written with the version it was based on, and raises it", async () => {
+    await withCentral(entry("custom-a", 3, "A"));
+    fetchMock.mockReturnValueOnce(respond(200, entry("custom-a", 4, "A geändert")));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "A geändert"));
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual(["PUT /face/api/library/custom-a"]);
+    expect(bodyOf(0)).toEqual({ template: tpl("custom-a", "A geändert"), baseVersion: 3 });
+    expect(store.getState().libraryMeta["custom-a"].version).toBe(4);
+    expect(store.getState().customTemplates.find((t) => t.id === "custom-a")?.version).toBe(4);
+  });
+
+  it("a change someone else beat is taken back, names them, and reloads the library", async () => {
+    await withCentral(entry("custom-a", 3, "A"));
+    fetchMock
+      .mockReturnValueOnce(respond(409, { reason: "stale", writtenBy: "Max Mustermann", version: 4, error: "Max Mustermann hat die Vorlage inzwischen geändert (Version 4)." }))
+      .mockReturnValueOnce(respond(200, [entry("custom-a", 4, "A von Max")]));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "Mein Stand"));
+    expect(labelOf("custom-a")).toBe("Mein Stand");
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual(["PUT /face/api/library/custom-a", "GET /face/api/library"]);
+    expect(labelOf("custom-a")).toBe("A von Max");
+    expect(toasts().join()).toMatch(/error: .*Max Mustermann/);
+  });
+
+  it("a failed change goes back to exactly the previous device and leaves other edits alone", async () => {
+    await withCentral(entry("custom-a", 3, "A"));
+    fetchMock.mockReturnValueOnce(respond(502, { error: "Odoo hat die Anfrage nicht verarbeitet." }));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "Kaputt"));
+    store.getState().addCustomTemplate(tpl("custom-other", "Anderes"));
+    fetchMock.mockReturnValueOnce(Promise.reject(new TypeError("offline")));
+    await lib.flushCentralWrites();
+    expect(labelOf("custom-a")).toBe("A");
+    expect(labelOf("custom-other")).toBe("Anderes");
+  });
+
+  it("changes to one device go out one after another, each on the version before", async () => {
+    await withCentral(entry("custom-a", 1, "A"));
+    fetchMock.mockReturnValueOnce(respond(200, entry("custom-a", 2, "B"))).mockReturnValueOnce(respond(200, entry("custom-a", 3, "C")));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "B"));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "C"));
+    await lib.flushCentralWrites();
+    expect(bodyOf(0).baseVersion).toBe(1);
+    expect(bodyOf(1).baseVersion).toBe(2);
+    expect(store.getState().libraryMeta["custom-a"].version).toBe(3);
+  });
+
+  it("removing a central device archives it in Odoo", async () => {
+    await withCentral(entry("custom-a", 1, "A"));
+    fetchMock.mockReturnValueOnce(respond(204));
+    store.getState().removeCustomTemplate("custom-a");
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual(["POST /face/api/library/custom-a/archive"]);
+    expect(labelOf("custom-a")).toBeUndefined();
+    expect(lib.isCentral("custom-a")).toBe(false);
+  });
+
+  it("a removal Odoo refuses puts the device back where it was", async () => {
+    await withCentral(entry("custom-a", 1, "A"), entry("custom-b", 1, "B"));
+    fetchMock.mockReturnValueOnce(respond(403, { error: "Keine Berechtigung in Odoo: Archivieren nicht erlaubt." }));
+    store.getState().removeCustomTemplate("custom-a");
+    await lib.flushCentralWrites();
+    expect(store.getState().customTemplates.map((t) => t.id)).toEqual(["custom-a", "custom-b"]);
+    expect(store.getState().customTemplateOrder).toEqual(["custom-a", "custom-b"]);
+    expect(lib.isCentral("custom-a")).toBe(true);
+    expect(toasts().join()).toMatch(/error: .*Keine Berechtigung/);
+  });
+
+  it("devices only this browser has stay local when changed or removed", async () => {
+    // Made while Odoo had no library: it stays a device of this browser only.
+    lib.useCentralLibrary.setState({ status: "unavailable" });
+    store.getState().addCustomTemplate(tpl("custom-local", "Lokal"));
+    await lib.flushCentralWrites();
+    lib.useCentralLibrary.setState({ status: "ok" });
+    store.getState().updateCustomTemplate("custom-local", tpl("custom-local", "Lokal 2"));
+    store.getState().removeCustomTemplate("custom-local");
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual([]);
+  });
+
+  it("without the Odoo module or signed out, nothing is sent", async () => {
+    lib.useCentralLibrary.setState({ status: "unavailable" });
+    store.getState().addCustomTemplate(tpl("custom-x"));
+    lib.useCentralLibrary.setState({ status: "ok" });
+    session.setState({ user: null, loaded: true, unreachable: false });
+    store.getState().addCustomTemplate(tpl("custom-y"));
+    await lib.flushCentralWrites();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("imported devices are uploaded; what differs from Odoo is reported", async () => {
+    fetchMock.mockReturnValueOnce(
+      respond(200, { added: [entry("custom-i1", 1, "I1")], same: [entry("custom-i2", 5, "I2")], skipped: [{ key: "custom-i3", label: "I3", reason: "different" }] }),
+    );
+    store.getState().importCustomTemplates([tpl("custom-i1", "I1"), tpl("custom-i2", "I2"), tpl("custom-i3", "I3")]);
+    await lib.flushCentralWrites();
+    expect(callsOf()).toEqual(["POST /face/api/library/upload"]);
+    expect(bodyOf(0).templates.map((t: DeviceTemplate) => t.id)).toEqual(["custom-i1", "custom-i2", "custom-i3"]);
+    expect(lib.isCentral("custom-i1")).toBe(true);
+    expect(store.getState().libraryMeta["custom-i2"].version).toBe(5);
+    expect(lib.isCentral("custom-i3")).toBe(false);
+    expect(toasts().join()).toMatch(/I3/);
+  });
+
+  it("after a change, a drawing on the old version sees drift", async () => {
+    const { getTemplateDrift } = await import("../templateSync");
+    await withCentral(entry("custom-a", 1, "A"));
+    fetchMock.mockReturnValueOnce(respond(200, entry("custom-a", 2, "A2")));
+    store.getState().updateCustomTemplate("custom-a", tpl("custom-a", "A2"));
+    await lib.flushCentralWrites();
+    const drift = getTemplateDrift({ templateId: "custom-a", templateVersion: 1 } as never, store.getState().customTemplates);
+    expect(drift?.currentVersion).toBe(2);
+  });
+});
