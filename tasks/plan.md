@@ -224,14 +224,14 @@ Entscheidungen beim Planen:
 - [x] Task 41: Backend `/face/api/library` mit Mock-Odoo-Tests
 
 ### Checkpoint J1 (Zwischenstand, Odoo-Modul installiert)
-- [ ] `cd mcp-server && npm test`, `npx vitest run`, `npx tsc -b` grün
-- [ ] Odoo-Modul auf main, Odoo.sh-Build grün, Jean-Luc installiert es in Produktion
+- [x] `cd mcp-server && npm test`, `npx vitest run`, `npx tsc -b` grün
+- [ ] Odoo-Modul auf main, Odoo.sh-Build grün, Jean-Luc installiert es in Produktion (Branch `feat/schematic-library` gepusht 27.11.)
 - [x] Freigabe für Push der Backend-Routen (Editor nutzt sie noch nicht) — gepusht 27.11. (52afb07)
 
 - [x] Task 42: Editor lädt die zentrale Bibliothek (`centralLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
 - [x] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
 - [x] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
-- [ ] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz
+- [x] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz
 
 ### Checkpoint J (Freigabe, Push)
 - [ ] Alle Tests und Build grün

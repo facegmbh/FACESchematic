@@ -52,6 +52,7 @@ import { buildDeviceTemplate, buildTemplatePreset, type PortDraft } from "../dev
 import { carriesPowerCapacity } from "../deviceTypeCategories";
 import { visibleSaveActions, SAVE_ACTION_LABELS, SAVE_ACTION_TITLES, type SaveActionId } from "../deviceEditorActions";
 import { visiblePortRowControls, PORT_ROW_CONTROL_TITLES, type PortRowControlId } from "../portRowControls";
+import TemplateProductField from "./TemplateProductField";
 
 const ALL_SIGNAL_TYPES = (Object.keys(SIGNAL_LABELS) as SignalType[]).sort(
   (a, b) => SIGNAL_LABELS[a].localeCompare(SIGNAL_LABELS[b]),
@@ -1472,6 +1473,7 @@ export default function DeviceEditor() {
                 {odooLink?.orderRef ? ` · Auftrag ${odooLink.orderRef}` : ""}
               </div>
             )}
+            <TemplateProductField templateKey={node?.data.templateId} />
           </div>
 
           {/* Header color picker */}

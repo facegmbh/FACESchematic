@@ -37,7 +37,10 @@ export default function DeviceLibraryPage() {
         <li>Unten im Editor auf <strong>Als eigene Vorlage speichern</strong> klicken</li>
         <li>Die Vorlage erscheint in der Bibliothek in einer Kategorie „Eigene Vorlagen“</li>
       </ol>
-      <p>Eigene Vorlagen bleiben im localStorage des Browsers gespeichert.</p>
+      <p>
+        Wer mit Odoo angemeldet ist, speichert eigene Vorlagen in der zentralen Bibliothek (siehe
+        unten). Ohne Anmeldung bleiben sie im localStorage des Browsers.
+      </p>
 
       <h2>Eine Vorlage aktualisieren</h2>
       <p>
@@ -65,6 +68,45 @@ export default function DeviceLibraryPage() {
         Entfernte Ports, deren Verbindungen noch in Gebrauch sind, bleiben als verwaiste Ports erhalten, damit keine Verkabelung
         stillschweigend verloren geht; sie lassen sich von Hand aufräumen.
       </p>
+
+      <h2>Zentrale Bibliothek in Odoo</h2>
+      <p>
+        Eigene Vorlagen liegen in Odoo, für alle gleich. Was jemand anlegt oder ändert, sehen die anderen
+        beim nächsten Anmelden oder spätestens, wenn ihr Fenster nach fünf Minuten wieder in den
+        Vordergrund kommt. In Odoo stehen die Vorlagen unter <strong>FACESchematic → Gerätevorlagen</strong>,
+        dort zeigt der Verlauf, wer was geändert hat.
+      </p>
+      <ul>
+        <li>
+          <strong>Ändern:</strong> Jede Änderung an einer Vorlage erhöht ihre Version. Zeichnungen mit einem
+          älteren Stand zeigen das am Gerät an und bieten die Aktualisierung an. Geräte in Zeichnungen
+          ändern sich nie von selbst.
+        </li>
+        <li>
+          <strong>Gleichzeitig ändern:</strong> Hat ein Kollege dieselbe Vorlage inzwischen geändert, wird die
+          eigene Änderung nicht gespeichert. Eine Meldung nennt ihn, und seine Fassung wird geladen.
+        </li>
+        <li>
+          <strong>Entfernen:</strong> Eine Vorlage aus der Bibliothek zu entfernen, archiviert sie in Odoo.
+          „Alle eigenen Vorlagen löschen“ leert dagegen nur den eigenen Browser; die Vorlagen aus Odoo kommen
+          beim nächsten Laden wieder.
+        </li>
+        <li>
+          <strong>Ohne Netz:</strong> Der Browser behält den letzten Stand. Neue Vorlagen, die Odoo nicht
+          erreichen, bleiben im Browser und tragen das Kennzeichen <em>lokal</em>.
+        </li>
+        <li>
+          <strong>Hochladen:</strong> Vorlagen mit dem Kennzeichen <em>lokal</em> – ältere aus dem Browser oder
+          welche, die eine Zeichnung mitgebracht hat – lädt <strong>Nach Odoo hochladen</strong> im Abschnitt
+          der eigenen Vorlagen einmal hoch. Was es in Odoo schon gibt, wird nicht verdoppelt; liegt dort eine
+          andere Fassung, bleibt die eigene im Browser und wird gemeldet.
+        </li>
+        <li>
+          <strong>Odoo-Artikel:</strong> Im Geräte-Editor verknüpft das Feld <strong>Odoo-Artikel (Vorlage)</strong>{" "}
+          die Vorlage mit einem Artikel aus Odoo. Das gilt für das Modell, nicht für ein einzelnes Gerät, und
+          wird sofort gespeichert. Der Artikel steht danach in der Bibliothek an der Vorlage.
+        </li>
+      </ul>
 
       <h2>Favoriten</h2>
       <p>

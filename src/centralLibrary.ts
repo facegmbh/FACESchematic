@@ -108,8 +108,9 @@ function reasonOf(err: unknown): string {
 const queues = new Map<string, Promise<void>>();
 const pending = new Set<Promise<void>>();
 
-/** One template's writes go out one after another, so each is based on the version before. */
-function enqueue(key: string, job: () => Promise<void>): void {
+/** One template's writes go out one after another, so each is based on the version before.
+ *  The returned promise settles when this job is done; it never rejects. */
+function enqueue(key: string, job: () => Promise<void>): Promise<void> {
   const run = (queues.get(key) ?? Promise.resolve()).then(job).catch((err) => console.error("[central library]", err));
   queues.set(key, run);
   pending.add(run);
@@ -117,6 +118,7 @@ function enqueue(key: string, job: () => Promise<void>): void {
     pending.delete(run);
     if (queues.get(key) === run) queues.delete(key);
   });
+  return run;
 }
 
 /** Resolves once every write sent so far has been answered (tests, and before an upload). */
@@ -251,4 +253,39 @@ export async function uploadLocalDevices(): Promise<UploadSummary | null> {
     else summary.invalid.push(s.error ?? s.label);
   }
   return summary;
+}
+
+// --- Odoo product on a central template -----------------------------------------------------
+
+export interface ProductHit {
+  id: number;
+  name: string;
+  code: string | null;
+}
+
+/** Odoo products whose name or internal reference matches (at most 20). */
+export function searchProducts(query: string): Promise<ProductHit[]> {
+  return faceApi<ProductHit[]>(`/face/api/library/products?q=${encodeURIComponent(query)}`);
+}
+
+/**
+ * Link a central template to an Odoo product, or unlink it with null. It belongs to the
+ * model, not to one device, and never changes the template or its version. Queued with the
+ * template's other writes; rejects with the backend's sentence when Odoo refuses.
+ */
+export function setTemplateProduct(key: string, productId: number | null): Promise<void> {
+  if (!isCentral(key)) {
+    return Promise.reject(new Error(t("Only devices in the central library can be linked to an Odoo product.")));
+  }
+  let failure: unknown = null;
+  return enqueue(key, async () => {
+    try {
+      const entry = await faceApi<CentralEntry>(`/face/api/library/${encodeURIComponent(key)}`, { method: "PUT", body: { productId } });
+      store().markCentral(entry);
+    } catch (err) {
+      failure = err;
+    }
+  }).then(() => {
+    if (failure) throw failure;
+  });
 }

@@ -285,6 +285,7 @@ function DraggableTemplateItem({
   const rowRef = useRef<HTMLDivElement>(null);
   // Signed in with a working central library: mark what Odoo does not have yet.
   const notCentral = useSchematicStore((s) => !((template.id ?? template.deviceType) in s.libraryMeta));
+  const productName = useSchematicStore((s) => s.libraryMeta[template.id ?? template.deviceType]?.productName ?? null);
   const libraryOk = useCentralLibrary((s) => s.status === "ok");
   const localOnly = notCentral && libraryOk;
 
@@ -374,6 +375,11 @@ function DraggableTemplateItem({
           {template.manufacturer && (
             <span className="text-[9px] text-[var(--color-text-muted)] opacity-70 truncate">
               <HighlightedText text={template.manufacturer} query={query} />
+            </span>
+          )}
+          {productName && (
+            <span className="text-[9px] text-[var(--color-text-muted)] opacity-70 truncate" title={t("Odoo product (template)")}>
+              Odoo: {productName}
             </span>
           )}
           <span className="text-[10px] text-[var(--color-text-muted)]">

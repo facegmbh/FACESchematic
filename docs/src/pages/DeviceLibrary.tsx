@@ -37,7 +37,10 @@ export default function DeviceLibraryPage() {
         <li>Click <strong>Save as User Template</strong> at the bottom of the editor</li>
         <li>The template appears in a "User Templates" category in the library</li>
       </ol>
-      <p>User templates persist in your browser's localStorage.</p>
+      <p>
+        Signed in with Odoo (FACE build), user templates are saved to the central library (see
+        below). Otherwise they persist in your browser's localStorage.
+      </p>
 
       <h2>Updating a template</h2>
       <p>
@@ -65,6 +68,42 @@ export default function DeviceLibraryPage() {
         Removed ports whose connections are still in use are kept as orphaned ports so no cabling is
         silently lost; you can clean them up manually.
       </p>
+
+      <h2>Central Library in Odoo</h2>
+      <p>
+        In the FACE build, user templates live in Odoo and are the same for everyone. What one person
+        creates or changes, the others see at their next sign-in, or at the latest when their window comes
+        back to the front after five minutes. In Odoo they are under{" "}
+        <strong>FACESchematic → Gerätevorlagen</strong>, where the history shows who changed what.
+      </p>
+      <ul>
+        <li>
+          <strong>Changing:</strong> every change to a template raises its version. Drawings with an older
+          version show that on the device and offer the update. Devices in drawings never change by themselves.
+        </li>
+        <li>
+          <strong>Changing at the same time:</strong> if a colleague changed the same template meanwhile, your
+          change is not saved; a message names them and their version is loaded.
+        </li>
+        <li>
+          <strong>Removing:</strong> removing a template from the library archives it in Odoo. <em>Delete all user
+          templates</em> only empties your own browser; the templates from Odoo come back on the next load.
+        </li>
+        <li>
+          <strong>Offline:</strong> the browser keeps the last copy. New templates that cannot reach Odoo stay in
+          the browser and are marked <em>local</em>.
+        </li>
+        <li>
+          <strong>Uploading:</strong> <strong>Upload to Odoo</strong> in the user templates section sends every
+          template marked <em>local</em> once — older ones from the browser, or ones a drawing brought along.
+          Nothing is duplicated; if Odoo has a different version, yours stays in the browser and is reported.
+        </li>
+        <li>
+          <strong>Odoo product:</strong> in the device editor, <strong>Odoo product (template)</strong> links the
+          template to a product in Odoo. It applies to the model, not to one device, and is saved at once.
+          The library then shows the product on the template.
+        </li>
+      </ul>
 
       <h2>Favorites</h2>
       <p>

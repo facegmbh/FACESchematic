@@ -468,3 +468,53 @@ describe("uploading this browser's devices and opening drawings", () => {
     expect(lib.localOnlyTemplates().map((t) => t.id)).toEqual(["custom-from-drawing"]);
   });
 });
+
+// --- Task 45: Odoo product on a central template ----------------------------------------------
+
+describe("linking a central template to an Odoo product", () => {
+  const callsOf = () => fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  const bodyOf = (i: number) => JSON.parse((fetchMock.mock.calls[i][1] as RequestInit).body as string);
+
+  async function withCentral(...entries: CentralEntry[]) {
+    fetchMock.mockReturnValueOnce(respond(200, entries));
+    await lib.loadCentralLibrary();
+    fetchMock.mockReset();
+  }
+
+  beforeEach(() => {
+    lib.useCentralLibrary.setState({ status: "ok", loadedAt: Date.now(), error: null });
+  });
+
+  it("searches Odoo products by what was typed", async () => {
+    fetchMock.mockReturnValueOnce(respond(200, [{ id: 9001, name: "[MFA208] Audac MFA208", code: "MFA208" }]));
+    const found = await lib.searchProducts("MFA 208");
+    expect(callsOf()).toEqual(["GET /face/api/library/products?q=MFA%20208"]);
+    expect(found).toEqual([{ id: 9001, name: "[MFA208] Audac MFA208", code: "MFA208" }]);
+  });
+
+  it("sets and clears the product without touching the template", async () => {
+    await withCentral(entry("custom-a", 3, "A"));
+    fetchMock.mockReturnValueOnce(respond(200, entry("custom-a", 3, "A", [9001, "[MFA208] Audac MFA208"])));
+    await lib.setTemplateProduct("custom-a", 9001);
+    expect(callsOf()).toEqual(["PUT /face/api/library/custom-a"]);
+    expect(bodyOf(0)).toEqual({ productId: 9001 });
+    expect(store.getState().libraryMeta["custom-a"]).toEqual({ version: 3, productId: 9001, productName: "[MFA208] Audac MFA208" });
+
+    fetchMock.mockReturnValueOnce(respond(200, entry("custom-a", 3, "A")));
+    await lib.setTemplateProduct("custom-a", null);
+    expect(bodyOf(1)).toEqual({ productId: null });
+    expect(store.getState().libraryMeta["custom-a"].productId).toBeNull();
+  });
+
+  it("a refused link changes nothing and says why", async () => {
+    await withCentral(entry("custom-a", 3, "A"));
+    fetchMock.mockReturnValueOnce(respond(400, { error: "Artikel 77 gibt es nicht." }));
+    await expect(lib.setTemplateProduct("custom-a", 77)).rejects.toThrow(/Artikel 77/);
+    expect(store.getState().libraryMeta["custom-a"].productId).toBeNull();
+  });
+
+  it("only central templates can be linked", async () => {
+    await expect(lib.setTemplateProduct("custom-nowhere", 9001)).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

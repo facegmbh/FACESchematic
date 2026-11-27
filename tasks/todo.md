@@ -764,12 +764,13 @@ nur angemeldet. Es speichert `productId` über die Senke. Dazu kommt ein Absatz 
 zu zentralen Geräten, Hochladen und Artikel.
 
 **Acceptance criteria:**
-- [ ] Artikel setzen, ändern und lösen; der Name steht in der Bibliothek am Gerät
-- [ ] Ohne Anmeldung ist das Feld nicht da
-- [ ] Handbuch-Seite in beiden Sprachen
+- [x] Artikel setzen, ändern und lösen; der Name steht in der Bibliothek am Gerät („Odoo: …“). Feld „Odoo-Artikel (Vorlage)“ im Geräte-Editor (`TemplateProductField.tsx`), wirkt sofort, nicht mit dem Formular, weil es die Vorlage betrifft und nicht dieses Gerät
+- [x] Ohne Anmeldung, ohne Odoo-Modul oder bei lokalen Vorlagen ist das Feld nicht da
+- [x] Handbuch-Seite in beiden Sprachen: Abschnitt „Zentrale Bibliothek in Odoo“, der localStorage-Satz ist richtiggestellt
 
 **Verification:**
-- [ ] `npx vitest run`, `npx tsc -b`, Docs-Build
+- [x] `npx vitest run` (2534 grün, davon 38 in `centralLibrary.test.ts`), `npx tsc -b` grün, Docs-Build grün (in den Scratchpad gebaut; `tsc` im Docs-Paket meldet zwei Fehler in `SearchBar.tsx`, die es schon vorher gab)
+- [ ] Sichtprüfung des Felds bei Checkpoint J
 
 **Dependencies:** 43
 **Files:** `src/components/DeviceEditor.tsx`, `src/centralLibrary.ts`, i18n, `docs/src/pages{,-de}/DeviceLibrary.tsx` · **Scope:** M
