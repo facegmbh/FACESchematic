@@ -667,7 +667,7 @@ Stand 27.11.: Commit `595cbc2c` auf Branch `feat/schematic-library` (Worktree `~
 
 **Verification:**
 - [ ] `face_schematic_library/tests/test_template.py` grün im Odoo.sh-Build (12 Tests), steht aus: Branch pushen
-- [ ] Manuell nach Installation: Menü „FACESchematic → Gerätevorlagen“ sichtbar
+- [x] Manuell nach Installation: Menü sichtbar (27.11.: statt eigener App jetzt unter „Wartung → Konfiguration → Gerätevorlagen (Schaltplan)“, Odoo 19.0.1.1.0)
 - Abweichung: Im Formular kann man keinen Datensatz von Hand anlegen (`create="false"`). Bearbeitet wird im Editor.
 
 **Dependencies:** keine (parallel zu 39)

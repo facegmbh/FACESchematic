@@ -74,7 +74,7 @@ export default function DeviceLibraryPage() {
         In the FACE build, user templates live in Odoo and are the same for everyone. What one person
         creates or changes, the others see at their next sign-in, or at the latest when their window comes
         back to the front after five minutes. In Odoo they are under{" "}
-        <strong>FACESchematic → Gerätevorlagen</strong>, where the history shows who changed what.
+        <strong>Wartung → Konfiguration → Gerätevorlagen (Schaltplan)</strong>, where the history shows who changed what.
       </p>
       <ul>
         <li>

@@ -73,7 +73,7 @@ export default function DeviceLibraryPage() {
       <p>
         Eigene Vorlagen liegen in Odoo, für alle gleich. Was jemand anlegt oder ändert, sehen die anderen
         beim nächsten Anmelden oder spätestens, wenn ihr Fenster nach fünf Minuten wieder in den
-        Vordergrund kommt. In Odoo stehen die Vorlagen unter <strong>FACESchematic → Gerätevorlagen</strong>,
+        Vordergrund kommt. In Odoo stehen die Vorlagen unter <strong>Wartung → Konfiguration → Gerätevorlagen (Schaltplan)</strong>,
         dort zeigt der Verlauf, wer was geändert hat.
       </p>
       <ul>
