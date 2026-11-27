@@ -160,6 +160,47 @@ export const MAX_TEMPLATE_BYTES = 256 * 1024;
 /** Most ports one template may carry (the largest bundled one has a few hundred). */
 export const MAX_TEMPLATE_PORTS = 1024;
 
+/** Every device type with a category (`DEVICE_TYPE_TO_CATEGORY` in src/deviceTypeCategories.ts). Claude may
+  *  only create templates of these; the device editor allows free text. A test keeps the list equal. */
+export const DEVICE_TYPES_WIRE = [
+  "camera", "ptz-camera", "camera-ccu", "graphics", "computer", "media-player",
+  "pattern-generator", "mouse", "keyboard", "video-bar", "touch-screen", "screen", "switcher",
+  "router", "converter", "scaler", "adapter", "frame-sync", "multiviewer", "capture-card",
+  "chromakey", "da", "video-wall-controller", "monitor", "tv", "projector", "recorder",
+  "audio-mixer", "audio-embedder", "audio-interface", "interface", "audio-dsp", "equalizer",
+  "synthesizer", "stage-box", "audio-splitter", "wireless-mic-receiver", "speaker", "amplifier",
+  "headphone-amplifier", "monitor-controller", "personal-monitor", "ndi-encoder", "ndi-decoder",
+  "network-switch", "streaming-encoder", "av-over-ip", "kvm-extender", "usb-extender",
+  "hdbaset-extender", "wireless-video", "intercom", "led-processor", "led-cabinet", "media-server",
+  "lighting-console", "moving-light", "led-fixture", "dmx-splitter", "dmx-node",
+  "control-processor", "gateway", "tally-system", "ptz-controller", "sync-generator",
+  "timecode-generator", "midi-device", "control-expansion", "cable-accessory", "wired-mic",
+  "iem-transmitter", "change-over", "expansion-card", "fiber-transmitter", "company-switch",
+  "frame", "power-distribution", "patch-panel", "wall-plate", "presentation-system",
+  "wireless-presentation", "cloud-service", "codec", "expansion-chassis", "power-mixer",
+  "hdmi-splitter", "network-router", "nas", "external-storage", "storage-media",
+  "lighting-processor", "lighting-relay", "network-wifi", "access-point", "intercom-transceiver",
+  "controller", "button-panel", "dock", "studio-monitor", "video-scope", "audio-meter",
+  "assistive-listening", "battery", "commentary-box", "phone-hybrid", "interpreter-desk",
+  "table-box", "antenna", "antenna-distribution", "conference-system", "di-box", "display",
+  "charging-station", "audio-bar", "mtr-pc", "touch-controller", "occupancy-sensor",
+  "knx-power-supply", "knx-ip-router", "knx-ip-interface", "knx-actuator", "knx-dimmer",
+  "knx-blind-actuator", "knx-sensor", "knx-dali-gateway", "dali-power-supply", "dali-gateway",
+  "dali-driver", "dali-sensor", "alarm-panel", "alarm-expander", "alarm-keypad",
+  "alarm-transmitter", "radio-extender", "motion-detector", "opening-detector",
+  "glass-break-detector", "smoke-detector", "water-leak-detector", "siren-indoor", "siren-outdoor",
+  "transponder-reader", "heat-detector", "panic-button", "alarm-power-supply", "alarm-distributor",
+  "ip-camera", "nvr", "siren", "door-strike", "magnetic-sensor", "v-lock", "turret-camera",
+  "pir-sensor", "keypad", "dry-contact", "bus-power-supply", "24vdc-power-supply",
+  "dali-power-supply-and-line-break", "ups", "hard-drive", "rf-to-ethernet-integrator",
+  "subwoofer", "hdmi-extender", "audio-over-cat-extender", "audio-matrix", "streaming-decoder",
+  "streaming-transceiver", "video-transceiver", "avoip-encoder", "avoip-decoder",
+  "conferencing-bridge", "digital-signage-player", "power-supply", "fog-machine", "camera-tracker",
+] as const;
+
+/** `SpeakerLoadProfile` in src/types.ts. */
+export const SPEAKER_PROFILES_WIRE = ["FR", "LF", "MF", "HF", "SW"] as const;
+
 // ---------------------------------------------------------------------------
 // App -> server: handshake. The app proves it is the real editor (token) and the
 // server validates token + Origin before accepting any commands.

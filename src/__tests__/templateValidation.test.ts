@@ -3,9 +3,11 @@
 // mcp-server/scripts/sync-protocol.mjs), so it may import nothing but protocol.ts.
 
 import { describe, it, expect } from "vitest";
-import { checkStoredTemplate } from "../mcp/templateValidation";
-import { SIGNAL_TYPES_WIRE, CONNECTOR_TYPES_WIRE, MAX_TEMPLATE_BYTES } from "../mcp/protocol";
+import { checkStoredTemplate, parseTemplateInput } from "../mcp/templateValidation";
+import { SIGNAL_TYPES_WIRE, CONNECTOR_TYPES_WIRE, MAX_TEMPLATE_BYTES, DEVICE_TYPES_WIRE, SPEAKER_PROFILES_WIRE } from "../mcp/protocol";
 import { DEFAULT_SIGNAL_COLORS } from "../signalColors";
+import { DEVICE_TYPE_TO_CATEGORY } from "../deviceTypeCategories";
+import { SPEAKER_LOAD_PROFILES } from "../types";
 import { CONNECTOR_TO_CABLE } from "../connectorTypes";
 import { getBundledTemplates } from "../templateApi";
 
@@ -31,6 +33,14 @@ describe("value lists in protocol.ts", () => {
 
   it("CONNECTOR_TYPES_WIRE is exactly the app's connector types", () => {
     expect([...CONNECTOR_TYPES_WIRE].sort()).toEqual(Object.keys(CONNECTOR_TO_CABLE).sort());
+  });
+
+  it("DEVICE_TYPES_WIRE is exactly the app's device types with a category", () => {
+    expect([...DEVICE_TYPES_WIRE].sort()).toEqual(Object.keys(DEVICE_TYPE_TO_CATEGORY).sort());
+  });
+
+  it("SPEAKER_PROFILES_WIRE is exactly the app's speaker profiles", () => {
+    expect([...SPEAKER_PROFILES_WIRE]).toEqual(SPEAKER_LOAD_PROFILES);
   });
 });
 
@@ -155,5 +165,221 @@ describe("checkStoredTemplate refuses with a sentence naming the field", () => {
     const t = editorTemplate();
     t.ports[0] = { ...t.ports[0], signalType: "telepathy" };
     expect(checkStoredTemplate(t)).toMatch(/Audac MFA208/);
+  });
+});
+
+// --- Task 46: what Claude may send (SPEC-device-template.md) -------------------------------------
+
+type Result = ReturnType<typeof parseTemplateInput>;
+const ok = (r: Result) => {
+  if ("error" in r) throw new Error(`expected a template, got: ${r.error}`);
+  return r;
+};
+const fails = (r: Result, mentions: RegExp) => {
+  expect("error" in r ? r.error : "no error").toMatch(mentions);
+};
+
+const mfa = () => ({
+  label: "Audac MFA208",
+  deviceType: "amplifier",
+  manufacturer: "Audac",
+  modelNumber: "MFA208",
+  ports: [
+    { label: "Mic/Line 1", signalType: "analog-audio", direction: "input", connectorType: "combo-xlr-trs" },
+    { label: "Line Out", signalType: "analog-audio", direction: "output", connectorType: "rca" },
+    { label: "Speaker A", signalType: "speaker-level", direction: "output", connectorType: "phoenix" },
+    { label: "RS-232", signalType: "serial", direction: "bidirectional", connectorType: "db9" },
+  ],
+});
+
+/** A bundled-style amplifier to derive from: load data, slots, plan symbol. */
+const blaze122 = () => ({
+  id: "blaze-pzc-122",
+  version: 7,
+  label: "Blaze PowerZone Connect 122",
+  deviceType: "amplifier",
+  manufacturer: "Blaze",
+  modelNumber: "PZC-122",
+  ports: [
+    { id: "out1", label: "Out 1", signalType: "speaker-level", direction: "output", connectorType: "phoenix" },
+    { id: "out2", label: "Out 2", signalType: "speaker-level", direction: "output", connectorType: "phoenix" },
+    { id: "lan", label: "LAN", signalType: "ethernet", direction: "bidirectional", connectorType: "rj45" },
+  ],
+  ampLoad: { channels: 2, ratedW: { ohm4: 125, ohm8: 125, v70: 250 }, hiZBridgesPairs: true },
+  planSymbol: { shape: "square" },
+  slots: [{ id: "s1", label: "Slot", slotFamily: "x" }],
+});
+
+describe("parseTemplateInput — creating", () => {
+  it("builds a template that passes the stored check, with port ids p1…pn", () => {
+    const r = ok(parseTemplateInput(mfa(), { mode: "create" }));
+    expect(r.template.ports).toHaveLength(4);
+    expect((r.template.ports as { id: string }[]).map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4"]);
+    expect(checkStoredTemplate({ ...r.template, id: "custom-1" })).toBeNull();
+  });
+
+  it("keeps given port ids and numbers the others around them", () => {
+    const input = mfa();
+    (input.ports[1] as Record<string, unknown>).id = "p1";
+    const r = ok(parseTemplateInput(input, { mode: "create" }));
+    expect((r.template.ports as { id: string }[]).map((p) => p.id)).toEqual(["p2", "p1", "p3", "p4"]);
+  });
+
+  it("needs label, deviceType and ports without a base", () => {
+    fails(parseTemplateInput({ ...mfa(), label: "" }, { mode: "create" }), /label/);
+    fails(parseTemplateInput({ ...mfa(), deviceType: undefined }, { mode: "create" }), /deviceType/);
+    fails(parseTemplateInput({ ...mfa(), ports: [] }, { mode: "create" }), /ports/);
+  });
+
+  it("refuses an unknown device type and names close ones", () => {
+    fails(parseTemplateInput({ ...mfa(), deviceType: "amplifer" }, { mode: "create" }), /amplifer.*amplifier/);
+  });
+
+  it("refuses unknown fields instead of dropping them", () => {
+    fails(parseTemplateInput({ ...mfa(), colour: "red" }, { mode: "create" }), /colour/);
+    const input = mfa();
+    (input.ports[0] as Record<string, unknown>).gain = 3;
+    fails(parseTemplateInput(input, { mode: "create" }), /Port 1.*gain/);
+  });
+
+  it("ignores the command's own fields", () => {
+    ok(parseTemplateInput({ ...mfa(), baseTemplateId: undefined, productId: 9001, allowDuplicate: true }, { mode: "create" }));
+  });
+
+  it("refuses passthrough, unknown signals and connectors, and duplicate ids", () => {
+    const pass = mfa();
+    pass.ports[0].direction = "passthrough";
+    fails(parseTemplateInput(pass, { mode: "create" }), /passthrough/);
+    const sig = mfa();
+    sig.ports[0].signalType = "telepathy";
+    fails(parseTemplateInput(sig, { mode: "create" }), /telepathy/);
+    const con = mfa();
+    con.ports[0].connectorType = "warp";
+    fails(parseTemplateInput(con, { mode: "create" }), /warp/);
+    const dup = mfa();
+    (dup.ports[0] as Record<string, unknown>).id = "x";
+    (dup.ports[1] as Record<string, unknown>).id = "x";
+    fails(parseTemplateInput(dup, { mode: "create" }), /x.*doppelt/);
+  });
+
+  it("refuses more than 256 ports, long text, negative numbers and http-less links", () => {
+    const many = { ...mfa(), ports: Array.from({ length: 257 }, (_, i) => ({ label: `P${i}`, signalType: "ethernet", direction: "bidirectional" })) };
+    fails(parseTemplateInput(many, { mode: "create" }), /256/);
+    fails(parseTemplateInput({ ...mfa(), label: "x".repeat(121) }, { mode: "create" }), /label.*120/);
+    fails(parseTemplateInput({ ...mfa(), powerDrawW: -5 }, { mode: "create" }), /powerDrawW/);
+    fails(parseTemplateInput({ ...mfa(), imageUrl: "http://audac.eu/a.png" }, { mode: "create" }), /imageUrl.*https/);
+    fails(parseTemplateInput({ ...mfa(), searchTerms: Array.from({ length: 21 }, (_, i) => `t${i}`) }, { mode: "create" }), /searchTerms/);
+  });
+
+  it("accepts speaker load data within its limits", () => {
+    const r = ok(parseTemplateInput(
+      { ...mfa(), deviceType: "speaker", speakerLoad: { impedanceOhm: 8, rmsPowerW: 60, tapsW: [30, 15, 7.5], profile: "FR" } },
+      { mode: "create" },
+    ));
+    expect(r.template.speakerLoad).toEqual({ impedanceOhm: 8, rmsPowerW: 60, tapsW: [30, 15, 7.5], profile: "FR" });
+    fails(parseTemplateInput({ ...mfa(), speakerLoad: { impedanceOhm: 1 } }, { mode: "create" }), /impedanceOhm/);
+    fails(parseTemplateInput({ ...mfa(), speakerLoad: { tapsW: [7.5, 15, 30] } }, { mode: "create" }), /tapsW.*absteigend/);
+    fails(parseTemplateInput({ ...mfa(), speakerLoad: { profile: "XX" } }, { mode: "create" }), /profile/);
+    fails(parseTemplateInput({ ...mfa(), speakerLoad: { impedance: 8 } }, { mode: "create" }), /speakerLoad.*impedance/);
+  });
+
+  it("accepts amplifier load data within its limits", () => {
+    const amp = { channels: 4, ratedW: { ohm4: 120, v100: 240 }, totalRatedW: 480, hiZBridgesPairs: true };
+    expect(ok(parseTemplateInput({ ...mfa(), ampLoad: amp }, { mode: "create" })).template.ampLoad).toEqual(amp);
+    fails(parseTemplateInput({ ...mfa(), ampLoad: { channels: 0 } }, { mode: "create" }), /channels/);
+    fails(parseTemplateInput({ ...mfa(), ampLoad: { ratedW: { ohm16: 10 } } }, { mode: "create" }), /ohm16/);
+  });
+
+  it("accepts a detector's reach and insists on the angle of a sector and the width of a corridor", () => {
+    const pir = { shape: "sector", rangeM: 12, apertureDeg: 88.5 };
+    expect(ok(parseTemplateInput({ ...mfa(), deviceType: "motion-detector", detection: pir }, { mode: "create" })).template.detection).toEqual(pir);
+    fails(parseTemplateInput({ ...mfa(), detection: { shape: "sector", rangeM: 12 } }, { mode: "create" }), /apertureDeg/);
+    fails(parseTemplateInput({ ...mfa(), detection: { shape: "rect", rangeM: 12 } }, { mode: "create" }), /widthM/);
+    fails(parseTemplateInput({ ...mfa(), detection: { shape: "circle", rangeM: 0.1 } }, { mode: "create" }), /rangeM/);
+    fails(parseTemplateInput({ ...mfa(), detection: { shape: "blob", rangeM: 5 } }, { mode: "create" }), /shape/);
+  });
+
+  it("accepts a ceiling microphone's coverage within its limits", () => {
+    const mic = { areaM: { w: 9, d: 9 }, maxAreas: 8, maxTalkerDistanceM: 7, maxMountHeightM: 9 };
+    expect(ok(parseTemplateInput({ ...mfa(), micCoverage: mic }, { mode: "create" })).template.micCoverage).toEqual(mic);
+    fails(parseTemplateInput({ ...mfa(), micCoverage: { areaM: { w: 40, d: 9 } } }, { mode: "create" }), /areaM/);
+    fails(parseTemplateInput({ ...mfa(), micCoverage: { maxAreas: 3 } }, { mode: "create" }), /areaM/);
+  });
+
+  it("derives from a base: keeps load data, slots and symbol, drops the base's id and version", () => {
+    const r = ok(parseTemplateInput(
+      {
+        label: "Blaze PowerZone Connect 172",
+        modelNumber: "PZC-172",
+        ports: [1, 2, 3, 4].map((n) => ({ label: `Out ${n}`, signalType: "speaker-level", direction: "output", connectorType: "phoenix" })),
+      },
+      { mode: "create", base: blaze122() },
+    ));
+    expect(r.template.id).toBeUndefined();
+    expect(r.template.version).toBeUndefined();
+    expect(r.template.deviceType).toBe("amplifier");
+    expect(r.template.manufacturer).toBe("Blaze");
+    expect(r.template.ampLoad).toEqual(blaze122().ampLoad);
+    expect(r.template.slots).toEqual(blaze122().slots);
+    expect(r.template.planSymbol).toEqual({ shape: "square" });
+    expect((r.template.ports as unknown[]).length).toBe(4);
+    expect(checkStoredTemplate({ ...r.template, id: "custom-2" })).toBeNull();
+  });
+
+  it("with a base, ports and deviceType may be left out; null removes a block", () => {
+    const r = ok(parseTemplateInput({ label: "Blaze ohne Last", ampLoad: null }, { mode: "create", base: blaze122() }));
+    expect((r.template.ports as unknown[]).length).toBe(3);
+    expect(r.template.ampLoad).toBeUndefined();
+    fails(parseTemplateInput({ modelNumber: "X" }, { mode: "create", base: blaze122() }), /label/);
+  });
+
+  it("never lets the input touch blocks that may only come from a base", () => {
+    fails(parseTemplateInput({ ...mfa(), slots: [] }, { mode: "create" }), /slots/);
+    fails(parseTemplateInput({ ...mfa(), wifi: {} }, { mode: "create" }), /wifi/);
+    fails(parseTemplateInput({ ...mfa(), planSymbol: { shape: "circle" } }, { mode: "create" }), /planSymbol/);
+  });
+});
+
+describe("parseTemplateInput — changing", () => {
+  const current = () => ({ ...blaze122(), id: "custom-blaze", version: 3 });
+
+  it("changes only what is given and keeps id and version", () => {
+    const r = ok(parseTemplateInput({ installNotes: "Lüfter frei halten" }, { mode: "update", base: current() }));
+    expect(r.template).toEqual({ ...current(), installNotes: "Lüfter frei halten" });
+    expect(r.addedPorts).toEqual([]);
+    expect(r.removedPorts).toEqual([]);
+  });
+
+  it("ports is the new full list: known ids are changed, new ones added, missing ones removed", () => {
+    const r = ok(parseTemplateInput(
+      {
+        ports: [
+          { id: "out1", label: "Ausgang 1" },
+          { id: "lan" },
+          { label: "Out 3", signalType: "speaker-level", direction: "output", connectorType: "phoenix" },
+        ],
+      },
+      { mode: "update", base: current() },
+    ));
+    const ports = r.template.ports as { id: string; label: string; signalType: string }[];
+    expect(ports.map((p) => [p.id, p.label])).toEqual([["out1", "Ausgang 1"], ["lan", "LAN"], ["p1", "Out 3"]]);
+    expect(ports[0].signalType).toBe("speaker-level");
+    expect(r.addedPorts).toEqual(["p1"]);
+    expect(r.removedPorts).toEqual(["out2"]);
+  });
+
+  it("refuses a port id that does not exist", () => {
+    fails(parseTemplateInput({ ports: [{ id: "out9", label: "X" }] }, { mode: "update", base: current() }), /out9/);
+  });
+
+  it("replaces a load block whole, and null removes it", () => {
+    const r = ok(parseTemplateInput({ ampLoad: { channels: 4 } }, { mode: "update", base: current() }));
+    expect(r.template.ampLoad).toEqual({ channels: 4 });
+    expect(ok(parseTemplateInput({ ampLoad: null }, { mode: "update", base: current() })).template.ampLoad).toBeUndefined();
+  });
+
+  it("ignores templateId, baseVersion and productId, and refuses baseTemplateId", () => {
+    ok(parseTemplateInput({ templateId: "custom-blaze", baseVersion: 3, productId: null, label: "Neu" }, { mode: "update", base: current() }));
+    fails(parseTemplateInput({ baseTemplateId: "x" }, { mode: "update", base: current() }), /baseTemplateId/);
   });
 });

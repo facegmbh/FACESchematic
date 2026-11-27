@@ -239,7 +239,7 @@ Entscheidungen beim Planen:
 - [ ] Freigabe, FACESchematic master
 
 ### Phase 10: device-template (SPEC-device-template.md)
-- [ ] Task 46: Strenge Eingabeprüfung `parseTemplateInput` und Port-Abgleich
+- [x] Task 46: Strenge Eingabeprüfung `parseTemplateInput` und Port-Abgleich
 - [ ] Task 47: Befehle `get_device_template`, `create_device_template`, `update_device_template`
 - [ ] Task 48: Leitfaden, Handbuch, Ende-zu-Ende über den Dienst
 

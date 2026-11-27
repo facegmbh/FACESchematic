@@ -789,13 +789,14 @@ ihren Grenzen. Sie leitet von einer Basis ab. `mergePorts(old, next)` behält, �
 entfernt Ports nach `id`.
 
 **Acceptance criteria:**
-- [ ] `deviceType` aus `DEVICE_TYPE_TO_CATEGORY` (Liste `DEVICE_TYPES_WIRE` in `protocol.ts` mit Gleichheitstest, aus Task 39 hierher verschoben)
-- [ ] Unbekannte Felder, `passthrough`, Werte außerhalb der Grenzen (Sektor ohne Winkel, aufsteigende Taps) werden mit Feld und Grund abgelehnt
-- [ ] Ableiten behält Slots und Lastdaten und entfernt `id` und `version` der Basis
-- [ ] Das Ergebnis besteht immer `checkStoredTemplate`
+- [x] `deviceType` aus `DEVICE_TYPE_TO_CATEGORY` (Liste `DEVICE_TYPES_WIRE` in `protocol.ts` mit Gleichheitstest, aus Task 39 hierher verschoben); bei Tippfehlern nennt der Fehler nahe Typen
+- [x] Unbekannte Felder, `passthrough`, Werte außerhalb der Grenzen (Sektor ohne Winkel, aufsteigende Taps) werden mit Feld und Grund abgelehnt; Slots, WLAN, Plan-Symbol nur über eine Basis
+- [x] Ableiten behält Slots und Lastdaten und entfernt `id` und `version` der Basis; `null` entfernt einen Block
+- [x] Das Ergebnis besteht immer `checkStoredTemplate` (zum Schluss geprüft)
+- Ändern: `ports` ist die neue vollständige Liste (bekannte id ändert nur Genanntes, ohne id neu, fehlende entfallen), Antwort mit `addedPorts`/`removedPorts`; unbekannte Port-id ist ein Fehler. `templateId`, `baseVersion` und `productId` überspringt die Prüfung, `baseTemplateId` lehnt sie beim Ändern ab.
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/templateValidation.test.ts`
+- [x] `npx vitest run src/__tests__/templateValidation.test.ts` (43), ganze Suite grün, `tsc -b` grün, `mcp-server` 117 grün (Kopie kompiliert)
 
 **Dependencies:** 39
 **Files:** `src/mcp/templateValidation.ts`, `src/mcp/protocol.ts`, Test · **Scope:** M
