@@ -210,3 +210,45 @@ function writeTemplate(change: TemplateChange): void {
 }
 
 setTemplateSink(writeTemplate);
+
+// --- uploading this browser's devices -------------------------------------------------------
+
+/** Own devices the central library does not have — what „Nach Odoo hochladen“ offers. */
+export function localOnlyTemplates(): DeviceTemplate[] {
+  const { customTemplates, libraryMeta } = store();
+  return customTemplates.filter((tpl) => !(keyOf(tpl) in libraryMeta));
+}
+
+export interface UploadSummary {
+  added: string[];
+  /** Odoo already had them with the same content; they are central now. */
+  same: string[];
+  /** Odoo has another version under the same id; the browser's copy stays local. */
+  different: string[];
+  /** Sentences saying why a device was refused. */
+  invalid: string[];
+}
+
+/**
+ * Send every device only this browser has to the central library, once. Never overwrites
+ * Odoo. Null when there is nowhere to upload to (signed out, no Odoo module); throws the
+ * backend's error when the upload itself fails, and then nothing has changed.
+ */
+export async function uploadLocalDevices(): Promise<UploadSummary | null> {
+  if (!useFaceSession.getState().user || useCentralLibrary.getState().status === "unavailable" || useCentralLibrary.getState().status === "off") {
+    return null;
+  }
+  await flushCentralWrites();
+  const templates = localOnlyTemplates();
+  const summary: UploadSummary = { added: [], same: [], different: [], invalid: [] };
+  if (!templates.length) return summary;
+  const answer = await faceApi<UploadAnswer>("/face/api/library/upload", { method: "POST", body: { templates } });
+  for (const entry of [...answer.added, ...answer.same]) store().markCentral(entry);
+  summary.added = answer.added.map((e) => e.template.label);
+  summary.same = answer.same.map((e) => e.template.label);
+  for (const s of answer.skipped) {
+    if (s.reason === "different") summary.different.push(s.label);
+    else summary.invalid.push(s.error ?? s.label);
+  }
+  return summary;
+}

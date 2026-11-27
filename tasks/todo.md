@@ -744,12 +744,15 @@ einer Zeichnung werden eingebettete Vorlagen mit einem zentralen `key` durch die
 wenn deren Version gleich oder neuer ist.
 
 **Acceptance criteria:**
-- [ ] Hochladen verdoppelt nichts und listet Abweichungen; danach haben die Geräte kein Kennzeichen mehr
-- [ ] Eine Zeichnung mit älterer eingebetteter Vorlage zeigt nach dem Laden die zentrale (und Drift an Geräten)
-- [ ] Unbekannte eingebettete Vorlagen bleiben lokal und tragen das Kennzeichen
+- [x] Hochladen verdoppelt nichts und listet Abweichungen; danach haben die Geräte kein Kennzeichen mehr (Knopf „Nach Odoo hochladen (n)“ mit Ergebnis im Abschnitt „Eigene Geräte“)
+- [x] Eine Zeichnung mit älterer eingebetteter Vorlage zeigt nach dem Laden die zentrale (und Drift an Geräten). Brauchte keinen neuen Code: Das Laden behält die vorhandene Kopie, und fehlt sie, ersetzt das nächste Laden der Bibliothek die ältere.
+- [x] Unbekannte eingebettete Vorlagen bleiben lokal und tragen das Kennzeichen
+- Zusätzlich: Der Dialog „Alle eigenen Geräte löschen“ sagt angemeldet, dass zentrale Geräte in Odoo bleiben und wiederkommen.
+- Grenze: Geräte, die vor der zentralen Bibliothek aus einer Vorlage ohne Version gesetzt wurden, haben keine `templateVersion` und zeigen deshalb nie Drift.
 
 **Verification:**
-- [ ] `npx vitest run src/__tests__/centralLibrary.test.ts src/__tests__/customTemplateImport.test.ts`
+- [x] `npx vitest run src/__tests__/centralLibrary.test.ts` (34), ganze Suite 2530 grün, `tsc -b` grün
+- [ ] Sichtprüfung Knopf und Ergebnisliste bei Checkpoint J
 
 **Dependencies:** 43
 **Files:** `src/centralLibrary.ts`, `src/store.ts` (Laden), `src/components/DeviceLibrary.tsx`, i18n, Test · **Scope:** M

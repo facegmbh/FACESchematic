@@ -352,3 +352,119 @@ describe("writing own devices to the central library", () => {
     expect(drift?.currentVersion).toBe(2);
   });
 });
+
+// --- Task 44: upload and drawings ------------------------------------------------------------
+
+describe("uploading this browser's devices and opening drawings", () => {
+  const callsOf = () => fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  const bodyOf = (i: number) => JSON.parse((fetchMock.mock.calls[i][1] as RequestInit).body as string);
+
+  async function withCentral(...entries: CentralEntry[]) {
+    fetchMock.mockReturnValueOnce(respond(200, entries));
+    await lib.loadCentralLibrary();
+    fetchMock.mockReset();
+  }
+
+  /** Devices made while Odoo had no library — they live only in this browser. */
+  async function localDevices(...templates: DeviceTemplate[]) {
+    lib.useCentralLibrary.setState({ status: "unavailable" });
+    for (const t of templates) store.getState().addCustomTemplate(t);
+    await lib.flushCentralWrites();
+    lib.useCentralLibrary.setState({ status: "ok" });
+  }
+
+  beforeAll(async () => {
+    (await import("../i18n")).setLocale("de");
+  });
+
+  beforeEach(() => {
+    store.setState({ toasts: [] });
+    lib.useCentralLibrary.setState({ status: "ok", loadedAt: Date.now(), error: null });
+  });
+
+  it("lists exactly the devices only this browser has", async () => {
+    await withCentral(entry("custom-central", 1));
+    await localDevices(tpl("custom-l1"), tpl("custom-l2"));
+    expect(lib.localOnlyTemplates().map((t) => t.id)).toEqual(["custom-l1", "custom-l2"]);
+  });
+
+  it("uploads only those, marks what Odoo took or already had, and reports the rest", async () => {
+    await withCentral(entry("custom-central", 1));
+    await localDevices(tpl("custom-l1", "Eins"), tpl("custom-l2", "Zwei"), tpl("custom-l3", "Drei"));
+    fetchMock.mockReturnValueOnce(
+      respond(200, {
+        added: [entry("custom-l1", 1, "Eins")],
+        same: [entry("custom-l2", 4, "Zwei")],
+        skipped: [{ key: "custom-l3", label: "Drei", reason: "different" }],
+      }),
+    );
+
+    const result = await lib.uploadLocalDevices();
+
+    expect(callsOf()).toEqual(["POST /face/api/library/upload"]);
+    expect(bodyOf(0).templates.map((t: DeviceTemplate) => t.id)).toEqual(["custom-l1", "custom-l2", "custom-l3"]);
+    expect(lib.isCentral("custom-l1")).toBe(true);
+    expect(store.getState().libraryMeta["custom-l2"].version).toBe(4);
+    expect(lib.isCentral("custom-l3")).toBe(false);
+    expect(lib.localOnlyTemplates().map((t) => t.id)).toEqual(["custom-l3"]);
+    expect(result).toEqual({ added: ["Eins"], same: ["Zwei"], different: ["Drei"], invalid: [] });
+  });
+
+  it("names invalid devices with the reason", async () => {
+    await localDevices(tpl("custom-bad", "Kaputt"));
+    fetchMock.mockReturnValueOnce(
+      respond(200, { added: [], same: [], skipped: [{ key: "custom-bad", label: "Kaputt", reason: "invalid", error: "Vorlage „Kaputt“: referenceUrl muss mit http:// oder https:// beginnen." }] }),
+    );
+    const result = await lib.uploadLocalDevices();
+    expect(result?.invalid).toEqual(["Vorlage „Kaputt“: referenceUrl muss mit http:// oder https:// beginnen."]);
+  });
+
+  it("does not upload while signed out, without the Odoo module, or with nothing to upload", async () => {
+    expect(await lib.uploadLocalDevices()).toEqual({ added: [], same: [], different: [], invalid: [] });
+    await localDevices(tpl("custom-l1"));
+    lib.useCentralLibrary.setState({ status: "unavailable" });
+    expect(await lib.uploadLocalDevices()).toBeNull();
+    lib.useCentralLibrary.setState({ status: "ok" });
+    session.setState({ user: null, loaded: true, unreachable: false });
+    expect(await lib.uploadLocalDevices()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a failed upload changes nothing and says why", async () => {
+    await localDevices(tpl("custom-l1", "Eins"));
+    fetchMock.mockReturnValueOnce(respond(502, { error: "Odoo hat die Anfrage nicht verarbeitet." }));
+    await expect(lib.uploadLocalDevices()).rejects.toThrow(/Odoo hat/);
+    expect(lib.isCentral("custom-l1")).toBe(false);
+  });
+
+  it("a drawing with an older copy of a central device keeps the central one, and its devices show drift", async () => {
+    const { getTemplateDrift } = await import("../templateSync");
+    // The drawing was saved while the device was at version 1.
+    store.getState().newSchematic();
+    store.getState().addDevice(tpl("custom-a", "Alt", 1), { x: 0, y: 0 });
+    const drawing = { ...store.getState().exportToJSON(), customTemplates: [tpl("custom-a", "Alt", 1)] };
+
+    await withCentral(entry("custom-a", 2, "Neu"));
+    store.getState().importFromJSON(drawing);
+
+    expect(store.getState().customTemplates.find((t) => t.id === "custom-a")).toMatchObject({ label: "Neu", version: 2 });
+    const device = store.getState().nodes.find((n) => n.type === "device")!;
+    expect(getTemplateDrift(device.data as never, store.getState().customTemplates)?.currentVersion).toBe(2);
+  });
+
+  it("a central device the browser had lost comes back from Odoo even if a drawing brought an older copy first", async () => {
+    await withCentral(entry("custom-a", 2, "Neu"));
+    store.getState().clearAllCustomTemplates();
+    store.getState().importFromJSON({ ...store.getState().exportToJSON(), customTemplates: [tpl("custom-a", "Alt", 1)] });
+    expect(store.getState().customTemplates.find((t) => t.id === "custom-a")?.label).toBe("Alt");
+    fetchMock.mockReturnValueOnce(respond(200, [entry("custom-a", 2, "Neu")]));
+    await lib.loadCentralLibrary();
+    expect(store.getState().customTemplates.find((t) => t.id === "custom-a")?.label).toBe("Neu");
+  });
+
+  it("an unknown device a drawing brings stays in this browser and can be uploaded", async () => {
+    await withCentral(entry("custom-central", 1));
+    store.getState().importFromJSON({ ...store.getState().exportToJSON(), customTemplates: [tpl("custom-from-drawing", "Mitgebracht")] });
+    expect(lib.localOnlyTemplates().map((t) => t.id)).toEqual(["custom-from-drawing"]);
+  });
+});

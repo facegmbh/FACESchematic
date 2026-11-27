@@ -11,7 +11,7 @@ import { inventoryKeyFromDeviceData, inventoryKeyFromTemplate } from "../invento
 import DeviceCreatorPicker from "./DeviceCreatorPicker";
 import ImportDevicesDialog from "./ImportDevicesDialog";
 import { useT } from "../i18n";
-import { useCentralLibrary } from "../centralLibrary";
+import { useCentralLibrary, uploadLocalDevices, type UploadSummary } from "../centralLibrary";
 
 const APP_VERSION = __APP_VERSION__;
 const BUILD_HASH = __BUILD_HASH__;
@@ -601,6 +601,25 @@ function CustomTemplatesSection({
   const [newGroupLabel, setNewGroupLabel] = useState("");
   const [ungroupedOpen, setUngroupedOpen] = useState(true);
   const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // Central library in Odoo (SPEC-odoo-device-library): offer to upload what only this browser has.
+  const libraryOk = useCentralLibrary((s) => s.status === "ok");
+  const libraryMeta = useSchematicStore((s) => s.libraryMeta);
+  const allCustomTemplates = useSchematicStore((s) => s.customTemplates);
+  const localCount = useMemo(
+    () => allCustomTemplates.filter((tpl) => !((tpl.id ?? tpl.deviceType) in libraryMeta)).length,
+    [allCustomTemplates, libraryMeta],
+  );
+  const [upload, setUpload] = useState<{ busy: boolean; summary?: UploadSummary; error?: string } | null>(null);
+  const runUpload = async () => {
+    setUpload({ busy: true });
+    try {
+      const summary = await uploadLocalDevices();
+      setUpload(summary ? { busy: false, summary } : null);
+    } catch (err) {
+      setUpload({ busy: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  };
   const newGroupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -723,6 +742,11 @@ function CustomTemplatesSection({
               <p className="text-[var(--color-text-muted)]">
                 {t("Devices already placed on the canvas are not affected. This cannot be undone.")}
               </p>
+              {libraryOk && (
+                <p className="text-[var(--color-text-muted)]">
+                  {t("Devices from the central library stay in Odoo and come back on the next load.")}
+                </p>
+              )}
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-border)]">
               <button
@@ -744,6 +768,43 @@ function CustomTemplatesSection({
 
       {isOpen && (
         <div className="ml-2">
+          {libraryOk && (localCount > 0 || upload) && (
+            <div className="px-1 mb-1 space-y-1">
+              {localCount > 0 && (
+                <button
+                  onClick={() => void runUpload()}
+                  disabled={upload?.busy}
+                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 cursor-pointer transition-colors"
+                  title={t("Only in this browser — not yet in the central library in Odoo")}
+                >
+                  {upload?.busy ? t("Uploading…") : t("Upload to Odoo ({n})", { n: localCount })}
+                </button>
+              )}
+              {upload && !upload.busy && (
+                <div role="status" className="relative text-[10px] rounded border border-[var(--color-border)] px-2 py-1 pr-5 space-y-0.5 text-[var(--color-text-muted)]">
+                  <button
+                    onClick={() => setUpload(null)}
+                    className="absolute top-0 right-1 text-sm leading-none cursor-pointer hover:text-[var(--color-text)]"
+                    aria-label={t("Close")}
+                  >
+                    &times;
+                  </button>
+                  {upload.error && <p className="text-red-500">{upload.error}</p>}
+                  {upload.summary && (
+                    <>
+                      <p>{t("{n} uploaded, {m} already in Odoo", { n: upload.summary.added.length, m: upload.summary.same.length })}</p>
+                      {upload.summary.different.length > 0 && (
+                        <p>{t("Different version in Odoo, kept in this browser: {labels}", { labels: upload.summary.different.join(", ") })}</p>
+                      )}
+                      {upload.summary.invalid.map((reason) => (
+                        <p key={reason} className="text-red-500">{reason}</p>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {/* New group inline input */}
           {creatingGroup && (
             <div className="flex items-center gap-1 px-1 mb-1">

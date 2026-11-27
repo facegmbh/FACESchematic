@@ -230,7 +230,7 @@ Entscheidungen beim Planen:
 
 - [x] Task 42: Editor lädt die zentrale Bibliothek (`centralLibrary.ts`, `libraryMeta`, Kennzeichen „nur in diesem Browser“)
 - [x] Task 43: Editor schreibt zentral (Senke in den Store-Aktionen, Rückweg, Versionskonflikt)
-- [ ] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
+- [x] Task 44: Hochladen der Browser-Geräte und eingebettete Vorlagen beim Laden einer Zeichnung
 - [ ] Task 45: Odoo-Artikel im Geräte-Editor und Handbuch-Absatz
 
 ### Checkpoint J (Freigabe, Push)
